@@ -43,6 +43,13 @@
       "when": 1793232010746,
       "tag": "0005_finance_payments",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793273895387,
+      "tag": "0006_tasks",
+      "breakpoints": true
     }
   ]
 }

@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { EmptyState, RestrictedState } from "@/components/ui/empty-state";
 import { BookingsMiniList } from "@/features/bookings/components/bookings-table";
 import { ClientTimeline, relationshipLabel } from "@/features/clients/components/client-timeline";
+import { PaymentHistoryList } from "@/features/finance/components/payment-history";
 import { AssignClientPanel, ClientFollowUpsPanel, ClientNotePanel, EditClientForm } from "@/features/clients/components/detail-panels";
 import { clientsContext } from "@/features/clients/context";
 import { StagePill } from "@/features/leads/components/chips";
@@ -15,6 +16,8 @@ import { PanelCard } from "@/features/leads/components/detail-panels";
 import { formatDateTime } from "@/features/leads/format";
 import { bookingsFor } from "@/modules/bookings/queries";
 import { getClientDetail } from "@/modules/clients/queries";
+import { canSeeItemisedPayments } from "@/modules/finance/policy";
+import { bookingPaymentHistory } from "@/modules/finance/queries";
 import { assignableUsers, leadLookups } from "@/modules/leads/queries";
 import { AppError } from "@/server/errors";
 
@@ -46,6 +49,16 @@ export default async function ClientDetailPage({ params }: PageProps<"/dashboard
     bookingsFor(db, actor, { clientId: id }),
   ]);
   const { client } = detail;
+  // FR-204 per-client history across the client's bookings, for roles that may see itemised payments.
+  const paymentHistory = canSeeItemisedPayments(actor)
+    ? (
+        await Promise.all(
+          investments.map(async (b) =>
+            ((await bookingPaymentHistory(db, actor, b.id)) ?? []).map((p) => ({ ...p, bookingLabel: `Unit ${b.unitNo}` })),
+          ),
+        )
+      ).flat()
+    : null;
 
   return (
     <section className="space-y-6" aria-label={client.name}>
@@ -107,8 +120,13 @@ export default async function ClientDetailPage({ params }: PageProps<"/dashboard
           <PanelCard title="Investments">
             <BookingsMiniList rows={investments} empty="No bookings linked to this client (within your access)." />
           </PanelCard>
-          <PanelCard title="Payments & contracts">
-            <EmptyState size="sm">Payment history arrives with the Finance module; contract documents with the client&apos;s templates.</EmptyState>
+          {paymentHistory ? (
+            <PanelCard title={`Payment history · ${paymentHistory.length}`}>
+              <PaymentHistoryList rows={paymentHistory} empty="No payments posted on this client's bookings." showBooking />
+            </PanelCard>
+          ) : null}
+          <PanelCard title="Contracts">
+            <EmptyState size="sm">Contract documents arrive with the client&apos;s templates.</EmptyState>
           </PanelCard>
 
           <ClientTimeline activities={detail.activities} />

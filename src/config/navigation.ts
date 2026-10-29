@@ -10,6 +10,7 @@ import {
   SquareCheckBig,
   Target,
   Users,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 
@@ -19,6 +20,8 @@ export type NavItem = {
   icon: LucideIcon;
   /** One-line page description, taken from the reference module headers. */
   description: string;
+  /** Roles that see the item; omitted = everyone (all reference items). */
+  roles?: string[];
 };
 
 export type NavGroup = {
@@ -27,8 +30,8 @@ export type NavGroup = {
 };
 
 /**
- * Sidebar groups and order exactly as observed in the reference CRM.
- * Accounts & Finance is intentionally absent until its requirements are approved.
+ * Sidebar groups and order exactly as observed in the reference CRM, plus Accounts & Finance
+ * (not in the reference). Its placement under Management, after Bookings, is an assumption (Q-F14).
  */
 export const navigation: NavGroup[] = [
   {
@@ -118,10 +121,18 @@ export const navigation: NavGroup[] = [
           "Lead → negotiation → forms & payments → confirmed. Units stay aligned with inventory.",
       },
       {
+        label: "Finance",
+        href: "/dashboard/finance",
+        icon: Wallet,
+        description: "Booking payments, receipts, reversals and outstanding balances.",
+        roles: ["super_admin", "admin", "accountant", "manager"],
+      },
+      {
         label: "Tasks",
         href: "/dashboard/tasks",
         icon: SquareCheckBig,
         description: "Create, assign, and track CRM tasks including printable plans.",
+        roles: ["super_admin", "admin", "manager", "agent"],
       },
       {
         label: "Meetings",

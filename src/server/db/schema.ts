@@ -86,6 +86,8 @@ export const paymentDocsStatus = pgEnum("payment_docs_status", ["not_submitted",
 export const bookingPaymentKind = pgEnum("booking_payment_kind", ["payment", "reversal"]);
 export const bookingPaymentType = pgEnum("booking_payment_type", ["token", "down_payment", "installment", "other"]);
 export const reversalRequestStatus = pgEnum("reversal_request_status", ["pending", "approved", "rejected"]);
+export const taskType = pgEnum("task_type", ["general", "payment_plan", "proposal"]);
+export const taskStatus = pgEnum("task_status", ["open", "in_progress", "done", "cancelled"]);
 export const clientActivityType = pgEnum("client_activity_type", [
   "created",
   "note",
@@ -549,6 +551,119 @@ export const paymentReversalRequests = pgTable(
 
 /** Configurable finance display settings (receipt / reversal prefixes; final format pending Q-F3). */
 export const financeSettings = pgTable("finance_settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedById: uuid("updated_by_id").references(() => users.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ─── Tasks ────────────────────────────────────────────────────────────────────
+
+/**
+ * Proposal / payment-plan details kept on the task (DATA_MODEL.md §6). Figures are recomputed on
+ * the server on every save; the snapshot keeps what was printed even if the unit later changes.
+ */
+export type TaskProposal = {
+  customerName: string;
+  preparedDate: string | null;
+  preparedByName: string | null;
+  preparedByTitle: string | null;
+  projectId: string | null;
+  printTitle: string | null;
+  clientName: string | null;
+  customHeader: string | null;
+  unitId: string | null;
+  unitDescription: string | null;
+  apartmentNo: string | null;
+  areaSqft: number | null;
+  pricePerSqft: number | null;
+  totalList: number | null;
+  discountPct: number;
+  afterDiscount: number | null;
+  downPaymentPct: number;
+  downPayment: number | null;
+  installmentCount: number;
+  eachInstallment: number | null;
+  recurringLabel: string;
+  freeNightVouchers: number | null;
+  roiPerSqft: number | null;
+  roiAnnual: number | null;
+  bonuses: string | null;
+  whyActNow: string | null;
+  nextSteps: string | null;
+};
+
+/** FR-090 tasks. A proposal is a plan on paper only: it never posts or changes Finance records. */
+export const tasks = pgTable(
+  "tasks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    title: text("title").notNull(),
+    type: taskType("type").notNull().default("general"),
+    status: taskStatus("status").notNull().default("open"),
+    dueAt: timestamp("due_at", { withTimezone: true }),
+    assigneeId: uuid("assignee_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
+    leadId: uuid("lead_id").references(() => leads.id, { onDelete: "restrict" }),
+    bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "restrict" }),
+    description: text("description"),
+    proposal: jsonb("proposal").$type<TaskProposal>(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [
+    index("tasks_assignee_status_due_idx").on(t.assigneeId, t.status, t.dueAt),
+    index("tasks_created_by_idx").on(t.createdById),
+    index("tasks_lead_idx").on(t.leadId),
+    index("tasks_booking_idx").on(t.bookingId),
+    index("tasks_updated_idx").on(t.updatedAt),
+    check("tasks_title_not_blank", sql`length(btrim(${t.title})) > 0`),
+    // General tasks carry no plan; proposal / payment-plan tasks always do.
+    check("tasks_proposal_matches_type", sql`(${t.type} = 'general') = (${t.proposal} is null)`),
+    check("tasks_done_fields", sql`(${t.status} = 'done') = (${t.completedAt} is not null)`),
+  ],
+);
+
+/** FR-091 proposed schedule rows (editable). Not payments, not used for Finance "overdue". */
+export const taskInstallmentRows = pgTable(
+  "task_installment_rows",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    taskId: uuid("task_id")
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    seq: integer("seq").notNull(),
+    label: text("label").notNull(),
+    description: text("description"),
+    progress: text("progress"),
+    amount: numeric("amount", { precision: 16, scale: 2, mode: "number" }).notNull(),
+  },
+  (t) => [
+    uniqueIndex("task_installment_rows_task_seq_uq").on(t.taskId, t.seq),
+    check("task_installment_rows_seq_positive", sql`${t.seq} > 0`),
+    check("task_installment_rows_amount_non_negative", sql`${t.amount} >= 0`),
+  ],
+);
+
+export const taskHistory = pgTable(
+  "task_history",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    taskId: uuid("task_id")
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    actorId: uuid("actor_id").references(() => users.id, { onDelete: "set null" }),
+    action: text("action").notNull(),
+    data: jsonb("data").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("task_history_task_created_idx").on(t.taskId, t.createdAt)],
+);
+
+/** FR-009 admin app settings (key / value). Proposal defaults live here; values pending Q-B6. */
+export const appSettings = pgTable("app_settings", {
   key: text("key").primaryKey(),
   value: text("value").notNull(),
   updatedById: uuid("updated_by_id").references(() => users.id, { onDelete: "set null" }),

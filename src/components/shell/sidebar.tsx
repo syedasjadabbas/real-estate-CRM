@@ -91,14 +91,18 @@ export function Sidebar({
 
   const groups = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return navigation;
-    return navigation
+    // Items with a role list (Finance) are shown only to those roles; the reference items to everyone.
+    const visible = navigation
+      .map((group) => ({ ...group, items: group.items.filter((item) => !item.roles || (user ? item.roles.includes(user.role) : false)) }))
+      .filter((group) => group.items.length > 0);
+    if (!q) return visible;
+    return visible
       .map((group) => ({
         ...group,
         items: group.items.filter((item) => item.label.toLowerCase().includes(q)),
       }))
       .filter((group) => group.items.length > 0);
-  }, [query]);
+  }, [query, user]);
 
   return (
     <div className="flex h-full flex-col">

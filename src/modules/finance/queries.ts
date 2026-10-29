@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, lte, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, inArray, lte, or, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { Database } from "@/server/db";
 import { bookingPayments, bookings, financeSettings, leads, paymentMethods, paymentReversalRequests, projects, units, users } from "@/server/db/schema";
@@ -111,31 +111,73 @@ export async function bookingPaymentHistory(db: Database, actor: Actor, bookingI
 export type PaymentHistoryRow = NonNullable<Awaited<ReturnType<typeof bookingPaymentHistory>>>[number];
 
 const listQuerySchema = z.object({
+  q: z.string().trim().max(100).optional().catch(undefined),
+  project: z.uuid().optional().catch(undefined),
   type: z.enum(PAYMENT_TYPES).optional().catch(undefined),
+  kind: z.enum(["payment", "reversal"]).optional().catch(undefined),
   from: z.iso.date().optional().catch(undefined),
   to: z.iso.date().optional().catch(undefined),
   bookingId: z.uuid().optional().catch(undefined),
   page: z.coerce.number().int().min(1).max(10_000).catch(1),
 });
 
-/** All payments and reversals (finance roles), newest first. */
+/** Search by lead name / code, unit, payment reference, or receipt / reversal number (digits). */
+function searchCondition(q: string | undefined): SQL | undefined {
+  if (!q) return undefined;
+  const term = `%${q.replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
+  const parts: SQL[] = [ilike(leads.name, term), ilike(leads.code, term), ilike(units.unitNo, term), ilike(bookingPayments.reference, term)];
+  const digits = q.replace(/\D/g, "");
+  if (digits && digits.length <= 9) parts.push(eq(bookingPayments.receiptNo, Number(digits)), eq(bookingPayments.reversalRef, Number(digits)));
+  return or(...parts);
+}
+
+/** All payments and reversals (finance roles), newest first; each payment says whether it was reversed. */
 export async function listPayments(db: Database, actor: Actor, rawQuery: unknown) {
   if (!canDoFinance(actor, "viewAll")) throw forbidden();
   const q = listQuerySchema.parse(rawQuery ?? {});
   const where = and(
     q.type ? eq(bookingPayments.type, q.type) : undefined,
+    q.kind ? eq(bookingPayments.kind, q.kind) : undefined,
     q.from ? gte(bookingPayments.receivedOn, q.from) : undefined,
     q.to ? lte(bookingPayments.receivedOn, q.to) : undefined,
     q.bookingId ? eq(bookingPayments.bookingId, q.bookingId) : undefined,
+    q.project ? eq(bookings.projectId, q.project) : undefined,
+    searchCondition(q.q),
   );
-  const [{ total }] = await db.select({ total: sql<number>`count(*)::int` }).from(bookingPayments).where(where);
+  const [{ total }] = await db
+    .select({ total: sql<number>`count(*)::int` })
+    .from(bookingPayments)
+    .innerJoin(bookings, eq(bookings.id, bookingPayments.bookingId))
+    .innerJoin(leads, eq(leads.id, bookings.leadId))
+    .innerJoin(units, eq(units.id, bookings.unitId))
+    .where(where);
+  const pageCount = Math.max(1, Math.ceil(total / PAYMENT_PAGE_SIZE));
+  const page = Math.min(q.page, pageCount);
   const rows = await baseQuery(db)
     .where(where)
     .orderBy(desc(bookingPayments.recordedAt))
     .limit(PAYMENT_PAGE_SIZE)
-    .offset((q.page - 1) * PAYMENT_PAGE_SIZE);
-  return { total, page: q.page, rows: await withReferences(db, rows) };
+    .offset((page - 1) * PAYMENT_PAGE_SIZE);
+  const ids = rows.filter((r) => r.kind === "payment").map((r) => r.id);
+  const reversed = new Set(
+    ids.length
+      ? (
+          await db
+            .select({ id: bookingPayments.reversalOfId })
+            .from(bookingPayments)
+            .where(inArray(bookingPayments.reversalOfId, ids))
+        ).map((r) => r.id)
+      : [],
+  );
+  return {
+    query: { ...q, page },
+    total,
+    page,
+    pageCount,
+    rows: (await withReferences(db, rows)).map((r) => ({ ...r, reversed: reversed.has(r.id) })),
+  };
 }
+export type PaymentListRow = Awaited<ReturnType<typeof listPayments>>["rows"][number];
 
 /** Reversal requests the actor may decide (managers: own team's bookings; admins and super admins: all). */
 export async function reversalRequestsForActor(db: Database, actor: Actor, status: "pending" | "approved" | "rejected" = "pending") {

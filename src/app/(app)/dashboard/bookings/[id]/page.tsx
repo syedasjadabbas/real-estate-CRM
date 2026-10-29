@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { EmptyState, RestrictedState } from "@/components/ui/empty-state";
 import { BookingDetailsPanel, BookingStagePanel } from "@/features/bookings/components/booking-panels";
 import { BookingStagePill, HoldOverdueChip } from "@/features/bookings/components/stage-pill";
+import { PaymentHistoryList } from "@/features/finance/components/payment-history";
 import { formatArea, formatListedOn, formatPrice } from "@/features/inventory/format";
 import { PanelCard } from "@/features/leads/components/detail-panels";
 import { formatDateTime } from "@/features/leads/format";
@@ -16,6 +17,9 @@ import { BOOKING_STAGE_LABELS, MILESTONE_RATIO, PAYMENT_DOCS_LABELS, type Bookin
 import { canDoBooking } from "@/modules/bookings/policy";
 import { getBookingDetail } from "@/modules/bookings/queries";
 import { businessToday } from "@/modules/bookings/today";
+import { PAYABLE_STAGES } from "@/modules/finance/constants";
+import { canDoFinance } from "@/modules/finance/policy";
+import { bookingPaymentHistory } from "@/modules/finance/queries";
 import { requirePageUser } from "@/server/auth/current-user";
 import { getDb } from "@/server/db";
 import { AppError } from "@/server/errors";
@@ -50,6 +54,8 @@ export default async function BookingDetailPage({ params, searchParams }: PagePr
     throw error;
   }
   const { booking, lead, unit, client, money } = detail;
+  const payments = await bookingPaymentHistory(getDb(), actor, booking.id);
+  const canRecord = canDoFinance(actor, "record") && (PAYABLE_STAGES as readonly string[]).includes(booking.stage) && money.outstanding > 0;
 
   return (
     <section className="space-y-6" aria-label={`Booking for ${lead.name}`}>
@@ -168,6 +174,19 @@ export default async function BookingDetailPage({ params, searchParams }: PagePr
             </div>
             <div className="space-y-6">
               <BookingStagePanel detail={detail} />
+              {payments ? (
+                <PanelCard title={`Payments · ${payments.length}`}>
+                  <PaymentHistoryList rows={payments} empty="No payments posted yet." />
+                  {canRecord ? (
+                    <Link
+                      href={`/dashboard/finance/record?booking=${booking.id}`}
+                      className={buttonClasses({ variant: "secondary", size: "lg", className: "mt-3" })}
+                    >
+                      Record payment →
+                    </Link>
+                  ) : null}
+                </PanelCard>
+              ) : null}
               {detail.permissions.editDetails ? <BookingDetailsPanel detail={detail} /> : null}
             </div>
           </div>

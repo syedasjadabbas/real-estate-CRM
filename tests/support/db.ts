@@ -17,6 +17,10 @@ export function connectTestDb() {
 
 const TABLES = [
   "audit_logs",
+  "task_history",
+  "task_installment_rows",
+  "tasks",
+  "app_settings",
   "payment_reversal_requests",
   "booking_payments",
   "finance_settings",

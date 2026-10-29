@@ -220,3 +220,21 @@ Verification data (dev database, labelled VERIFY): account `verify.accountant@mz
 ### 9.4 Next
 
 F2 (Finance screens: Payments list, Record payment, payment detail with reverse request, approval queue, Outstanding; booking Payments panel; client payment history; sidebar entry — placement Q-F14) after the client confirms or adjusts §9.1.
+
+## 10. F2 — Finance screens (29 Oct 2026)
+
+Delivered (no schema change; same proposed defaults as §9.1):
+
+- Sidebar: "Finance" under Management after Bookings (placement assumed, Q-F14), shown only to super admin, admin, accountant and manager. Nav items may now carry an optional `roles` list; reference items have none and are unchanged.
+- `/dashboard/finance` (Payments: search lead / code / unit / reference / receipt no., project, type, payments vs reversals, date range; Posted / Reversed / Reversal status), `/record` (payable bookings only, live total / paid / outstanding, active methods, one idempotency key per form), `/payments/[id]` (entry, original / reversal links, request history, audit trail, Request reversal or Approve / Reject), `/approvals` (pending queue scoped to the viewer + recently decided), `/outstanding` (per-booking total / paid / outstanding / milestone with reconciling totals), `/settings` (prefixes and methods; editable by super admin only). Tabs are filtered by role; managers land on Approvals. Each route has a `loading.tsx`.
+- Booking detail: Payments panel (itemised for finance roles and the team's manager; "Record payment →" when the booking can take one). Client detail: payment history across the client's bookings (FR-204).
+
+Verification:
+
+| Check | Result |
+|---|---|
+| Tests | 126/126 (Finance PostgreSQL 16: +3 for list filters / reversed flag, detail permissions and scope, outstanding reconciliation and payable bookings) |
+| Server-rendered pages per role (real sessions) | accountant: all tabs and entries; manager: redirected to Approvals, only that tab, other team's payment → not found; agent: Access denied, no sidebar entry, booking shows Paid total but no itemised panel; super admin: settings editable |
+| Typecheck, lint, build | Pass |
+| Browser click-through (window visible) | Accountant: record form showed total / paid / outstanding; 12,000,000 rejected on the field (outstanding 11,700,000); 2,000,000 posted as receipt 4 after a deliberate double-click (one row, idempotency key set); payment detail → Request reversal saved as pending. Manager: /dashboard/finance redirected to Approvals (only tab), approved with a note → reversal 2 posted, queue emptied, history and audit trail updated |
+| Layout | 375 / 768 / 1440 px on Payments, Record, payment detail, Approvals, Outstanding, Settings, booking and client pages: no horizontal page overflow. Fixed: at 375 px the record form's Total / Paid / Outstanding tiles truncated amounts ("PKR 16,…"); they now stack in one column on phones |

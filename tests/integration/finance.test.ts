@@ -4,6 +4,7 @@ import { advanceBooking, cancelBooking, createBooking } from "@/modules/bookings
 import { getBookingDetail, listBookings } from "@/modules/bookings/queries";
 import { addPaymentMethod, decideReversal, recordPayment, requestReversal, setPaymentMethodActive, updateFinanceSettings } from "@/modules/finance/commands";
 import { bookingPaymentHistory, listPaymentMethods, listPayments, reversalRequestsForActor } from "@/modules/finance/queries";
+import { getPaymentDetail, outstandingBookings, payableBookings } from "@/modules/finance/views";
 import { createUnit } from "@/modules/inventory/commands";
 import { createLead } from "@/modules/leads/commands";
 import { hashPassword } from "@/server/auth/password";
@@ -258,6 +259,69 @@ describe.skipIf(!hasTestDb)("Finance F1: booking payments (PostgreSQL integratio
       await updateFinanceSettings(db, f.actors.superAdmin, { receipt_prefix: "RCPT-" });
       expect((await listPayments(db, admin, { bookingId })).rows[0].displayRef).toBe(`RCPT-${receiptNo}`);
       expect((await errorOf(addPaymentMethod(db, f.actors.superAdmin, { name: "Cash" })))?.fields).toHaveProperty("name");
+    });
+  });
+
+  describe("F2 screens' queries", () => {
+    it("searches and filters the payments list and marks reversed payments", async () => {
+      const a = await bookingAt();
+      const b = await bookingAt();
+      const first = await pay(a, "1000", { reference: "CHQ-778899" });
+      await pay(b, "2000", { type: "down_payment" });
+      const { requestId } = await requestReversal(db, accountant, first.paymentId, { reason: "Cheque bounced at the bank" });
+      await decideReversal(db, admin, requestId, { approve: true });
+
+      const list = async (q: Record<string, string>) => (await listPayments(db, accountant, q)).rows;
+      expect((await list({})).map((r) => r.kind)).toEqual(["reversal", "payment", "payment"]);
+      expect((await list({ kind: "payment" })).find((r) => r.id === first.paymentId)?.reversed).toBe(true);
+      expect((await list({ q: "CHQ-778" })).map((r) => r.id)).toEqual([first.paymentId]);
+      expect((await list({ q: String(first.receiptNo) })).some((r) => r.id === first.paymentId)).toBe(true);
+      expect((await list({ type: "down_payment" })).map((r) => r.amount)).toEqual([2000]);
+      expect(await list({ from: "2099-01-01" })).toEqual([]);
+      expect((await listPayments(db, accountant, { project: f.otherProjectId })).total).toBe(0);
+    });
+
+    it("shows a payment's detail, reversal state and audit trail only within the viewer's reach", async () => {
+      const bookingId = await bookingAt();
+      const { paymentId } = await pay(bookingId, "1000");
+      const before = await getPaymentDetail(db, accountant, paymentId);
+      expect(before.permissions).toEqual({ requestReversal: true, decide: false });
+      const { requestId } = await requestReversal(db, accountant, paymentId, { reason: "Recorded twice by mistake" });
+
+      const forManager = await getPaymentDetail(db, f.actors.manager, paymentId);
+      expect(forManager.permissions).toEqual({ requestReversal: false, decide: true });
+      expect((await getPaymentDetail(db, accountant, paymentId)).permissions).toEqual({ requestReversal: false, decide: false });
+      expect(await errorCode(getPaymentDetail(db, f.actors.agent1, paymentId))).toBe("FORBIDDEN");
+
+      const decision = await decideReversal(db, f.actors.manager, requestId, { approve: true });
+      const reversal = await getPaymentDetail(db, accountant, decision.reversalId!);
+      expect(reversal.entry.kind).toBe("reversal");
+      expect(reversal.original.id).toBe(paymentId);
+      expect(reversal.trail.map((t) => t.action)).toEqual(["payment.reversal_approved", "payment.reversal_requested", "payment.record"]);
+
+      const outside = await bookingAt(["token_pending"], f.actors.outsideAgent);
+      const other = await pay(outside, "500");
+      expect(await errorCode(getPaymentDetail(db, f.actors.manager, other.paymentId))).toBe("NOT_FOUND");
+    });
+
+    it("reconciles Outstanding totals with the rows and lists only bookings that can take a payment", async () => {
+      const a = await bookingAt();
+      const b = await bookingAt();
+      await bookingAt([]); // Negotiation: listed in Outstanding, not payable
+      await pay(a, "3750000"); // 30% of 12.5M
+      await pay(b, "12500000"); // fully paid
+
+      const out = await outstandingBookings(db, accountant, {});
+      expect(out.rows).toHaveLength(3);
+      const sum = (pick: (r: (typeof out.rows)[number]) => number) => out.rows.reduce((acc, r) => acc + pick(r), 0);
+      expect(out.totals).toEqual({ total: sum((r) => r.totalSale), paid: sum((r) => r.paid), outstanding: sum((r) => r.outstanding) });
+      expect(out.totals.paid).toBe(16_250_000);
+      expect((await outstandingBookings(db, accountant, { milestone: "met" })).rows.map((r) => r.bookingId).sort()).toEqual([a, b].sort());
+      expect(await errorCode(outstandingBookings(db, f.actors.manager, {}))).toBe("FORBIDDEN");
+
+      const payable = (await payableBookings(db, accountant)).map((r) => r.id);
+      expect(payable).toEqual([a]);
+      expect(await errorCode(payableBookings(db, admin))).toBe("FORBIDDEN");
     });
   });
 });
