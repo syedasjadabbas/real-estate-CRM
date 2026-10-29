@@ -1,0 +1,147 @@
+import { and, asc, count, desc, eq, ilike, isNotNull, or, sql, type SQL } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
+import type { Database } from "@/server/db";
+import { auditLogs, projects, units, users } from "@/server/db/schema";
+import type { Actor } from "@/server/auth/types";
+import { forbidden, notFound } from "@/server/errors";
+import { UNIT_PAGE_SIZE } from "./constants";
+import { canDoInventory } from "./policy";
+import { unitListQuerySchema } from "./validation";
+
+function searchCondition(q: string | undefined): SQL | undefined {
+  if (!q) return undefined;
+  const term = `%${q.replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
+  return or(
+    ilike(units.unitNo, term),
+    ilike(units.floor, term),
+    ilike(units.block, term),
+    ilike(units.category, term),
+    ilike(units.type, term),
+    ilike(units.comment, term),
+  );
+}
+
+const rowSelection = {
+  id: units.id,
+  projectId: units.projectId,
+  projectName: projects.name,
+  unitNo: units.unitNo,
+  floor: units.floor,
+  block: units.block,
+  saleModel: units.saleModel,
+  areaSqft: units.areaSqft,
+  basePrice: units.basePrice,
+  nature: units.nature,
+  category: units.category,
+  type: units.type,
+  bedrooms: units.bedrooms,
+  premium: units.premium,
+  status: units.status,
+  statusChangedAt: units.statusChangedAt,
+  comment: units.comment,
+  listedOn: units.listedOn,
+  createdAt: units.createdAt,
+  updatedAt: units.updatedAt,
+};
+
+export type UnitRow = Awaited<ReturnType<typeof listUnits>>["rows"][number];
+
+/**
+ * FR-073 list: search, project, status, nature, sale model. `defaultProjectId` is the header
+ * project, used when the URL names none (ASSUMED: the reference scopes lists by the header project
+ * and also offers a Project filter); `project=all` lists every project.
+ */
+export async function listUnits(db: Database, actor: Actor, rawQuery: unknown, defaultProjectId: string | null) {
+  if (!canDoInventory(actor, "view")) throw forbidden();
+  const query = unitListQuerySchema.parse(rawQuery ?? {});
+  const projectId = query.project === "all" ? null : (query.project ?? defaultProjectId);
+  const where = and(
+    projectId ? eq(units.projectId, projectId) : undefined,
+    searchCondition(query.q),
+    query.status ? eq(units.status, query.status) : undefined,
+    query.saleModel ? eq(units.saleModel, query.saleModel) : undefined,
+    query.nature ? sql`lower(${units.nature}) = lower(${query.nature})` : undefined,
+  );
+
+  const [[{ total }], natures, byStatus] = await Promise.all([
+    db.select({ total: count() }).from(units).where(where),
+    db
+      .selectDistinct({ nature: units.nature })
+      .from(units)
+      .where(and(isNotNull(units.nature), projectId ? eq(units.projectId, projectId) : undefined))
+      .orderBy(asc(units.nature)),
+    db
+      .select({ status: units.status, n: count() })
+      .from(units)
+      .where(projectId ? eq(units.projectId, projectId) : undefined)
+      .groupBy(units.status),
+  ]);
+  const pageCount = Math.max(1, Math.ceil(total / UNIT_PAGE_SIZE));
+  const page = Math.min(query.page, pageCount);
+  const rows = await db
+    .select(rowSelection)
+    .from(units)
+    .innerJoin(projects, eq(projects.id, units.projectId))
+    .where(where)
+    .orderBy(asc(projects.name), asc(sql`lower(${units.floor})`), asc(sql`lower(${units.unitNo})`))
+    .limit(UNIT_PAGE_SIZE)
+    .offset((page - 1) * UNIT_PAGE_SIZE);
+
+  return {
+    query: { ...query, page },
+    projectId,
+    total,
+    page,
+    pageCount,
+    pageSize: UNIT_PAGE_SIZE,
+    natures: natures.map((n) => n.nature as string),
+    statusCounts: Object.fromEntries(byStatus.map((s) => [s.status, s.n])) as Partial<Record<(typeof units.$inferSelect)["status"], number>>,
+    rows,
+  };
+}
+
+/** FR-074 unit detail. Booking history arrives with Bookings; status and edit history come from the audit log. */
+export async function getUnitDetail(db: Database, actor: Actor, unitId: string) {
+  if (!canDoInventory(actor, "view")) throw forbidden();
+  if (!/^[0-9a-f-]{36}$/i.test(unitId)) throw notFound("Unit");
+  const [row] = await db.select(rowSelection).from(units).innerJoin(projects, eq(projects.id, units.projectId)).where(eq(units.id, unitId));
+  if (!row) throw notFound("Unit");
+  const [project] = await db.select({ dimensionConfig: projects.dimensionConfig }).from(projects).where(eq(projects.id, row.projectId));
+  const actorUser = alias(users, "history_actor");
+  const history = await db
+    .select({
+      id: auditLogs.id,
+      action: auditLogs.action,
+      before: auditLogs.before,
+      after: auditLogs.after,
+      createdAt: auditLogs.createdAt,
+      actorName: actorUser.name,
+    })
+    .from(auditLogs)
+    .leftJoin(actorUser, eq(actorUser.id, auditLogs.actorId))
+    .where(and(eq(auditLogs.entity, "unit"), eq(auditLogs.entityId, unitId)))
+    .orderBy(desc(auditLogs.createdAt))
+    .limit(100);
+  return {
+    unit: row,
+    dimensions: project.dimensionConfig,
+    history,
+    permissions: { manage: canDoInventory(actor, "manage") },
+  };
+}
+export type UnitDetail = Awaited<ReturnType<typeof getUnitDetail>>;
+
+/** Projects for the inventory Project filter and the unit form (all statuses; inactive ones labelled). */
+export async function inventoryProjects(db: Database) {
+  const rows = await db
+    .select({ id: projects.id, name: projects.name, status: projects.status, dimensionConfig: projects.dimensionConfig })
+    .from(projects)
+    .orderBy(asc(projects.status), asc(projects.name));
+  return rows.map((p) => ({ ...p, label: p.status === "active" ? p.name : `${p.name} (inactive)` }));
+}
+
+/** Units per project (Projects KPI "Units tracked"). */
+export async function unitCounts(db: Database) {
+  const rows = await db.select({ projectId: units.projectId, n: count() }).from(units).groupBy(units.projectId);
+  return new Map(rows.map((r) => [r.projectId, r.n]));
+}

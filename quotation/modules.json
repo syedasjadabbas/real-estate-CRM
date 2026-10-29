@@ -1,0 +1,16 @@
+[
+  ["Dashboard", ["Sales overview", "Lead & pipeline statistics", "Lead source reports", "Charts & analytics", "Recent leads", "Notifications & follow-up alerts"]],
+  ["Leads", ["Lead management", "Sales pipeline (Kanban & table)", "Lead status / stages", "Lead source", "Lead assignment", "Follow-ups & notes", "Lead history"]],
+  ["Clients", ["Client profiles", "Investment history", "Payment history", "Follow-ups", "Filters"]],
+  ["Projects", ["Project management", "Project details", "Project type & status", "Inventory linking"]],
+  ["Inventory", ["Unit management", "Pricing", "Unit status (available / reserved / sold)", "Unit specifications", "Project linking"]],
+  ["Bookings", ["Create bookings", "Unit selection", "Token & unit hold", "Booking status", "Payment tracking", "Receipts & sales order"]],
+  ["Tasks", ["Task management", "Assignments", "Due dates", "Task status", "Proposal & payment plan printing"]],
+  ["Meetings", ["Schedule meetings", "Meeting details", "Linked leads", "Meeting status"]],
+  ["Targets", ["Daily / weekly / monthly targets", "Individual targets", "Calls, meetings & sales targets"]],
+  ["Teams", ["Team management", "Team members", "Team performance", "Daily reports", "Duty roster"]],
+  ["HR", ["Employee records", "Holidays", "Leave requests & approvals", "Leave balances"]],
+  ["My Workplace", ["My leaves", "Upcoming holidays", "Sign-in history"]],
+  ["Performance", ["Agent performance", "Lead conversion", "Calls & follow-ups", "Meetings", "Attendance", "Performance charts"]],
+  ["Accounts & Finance (additional module)", ["Income records", "Expense records", "Booking payments", "Outstanding balances", "Payment history", "Financial reports"]]
+]

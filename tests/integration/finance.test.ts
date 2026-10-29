@@ -1,0 +1,263 @@
+import { and, eq, sql } from "drizzle-orm";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { advanceBooking, cancelBooking, createBooking } from "@/modules/bookings/commands";
+import { getBookingDetail, listBookings } from "@/modules/bookings/queries";
+import { addPaymentMethod, decideReversal, recordPayment, requestReversal, setPaymentMethodActive, updateFinanceSettings } from "@/modules/finance/commands";
+import { bookingPaymentHistory, listPaymentMethods, listPayments, reversalRequestsForActor } from "@/modules/finance/queries";
+import { createUnit } from "@/modules/inventory/commands";
+import { createLead } from "@/modules/leads/commands";
+import { hashPassword } from "@/server/auth/password";
+import { loadActor } from "@/server/auth/session-store";
+import { auditLogs, bookingPayments, paymentReversalRequests, users } from "@/server/db/schema";
+import type { Database } from "@/server/db";
+import type { Actor, Role } from "@/server/auth/types";
+import { AppError } from "@/server/errors";
+import { connectTestDb, hasTestDb, leadInput, resetDb, seedFixture, type Fixture } from "../support/db";
+
+const errorOf = async (p: Promise<unknown>) => {
+  try {
+    await p;
+    return null;
+  } catch (e) {
+    if (e instanceof AppError) return e;
+    throw e;
+  }
+};
+const errorCode = async (p: Promise<unknown>) => (await errorOf(p))?.code ?? "ok";
+const TODAY = "2026-10-29";
+
+describe.skipIf(!hasTestDb)("Finance F1: booking payments (PostgreSQL integration)", () => {
+  let db: Database;
+  let close: () => Promise<void>;
+  let f: Fixture;
+  let accountant: Actor;
+  let admin: Actor;
+  let cashId: string;
+
+  beforeAll(() => {
+    ({ db, close } = connectTestDb());
+  });
+  afterAll(async () => close());
+  beforeEach(async () => {
+    await resetDb(db);
+    f = await seedFixture(db);
+    const make = async (name: string, email: string, role: Role) => {
+      const [u] = await db.insert(users).values({ name, email, role, passwordHash: await hashPassword("x-y-z-w-v") }).returning();
+      return loadActor(db, { id: u.id, name: u.name, email: u.email, role: u.role });
+    };
+    accountant = await make("Accountant", "acc@test.local", "accountant");
+    admin = await make("Admin", "admin@test.local", "admin");
+    // Methods are seeded by migration 0005 (not truncated between tests).
+    cashId = (await listPaymentMethods(db, { activeOnly: true })).find((m) => m.name === "Cash")!.id;
+  });
+
+  /** A booking for agent1's lead on a 500 sq ft unit at 25,000 → total 12,500,000, moved to `stages`. */
+  const bookingAt = async (stages: string[] = ["token_pending"], owner: Actor = f.actors.agent1) => {
+    const { unitId } = await createUnit(db, f.actors.superAdmin, { projectId: f.projectId, unitNo: `U-${Math.random().toString(36).slice(2, 8)}`, areaSqft: "500", basePrice: "1" });
+    const lead = await createLead(db, owner, leadInput(f));
+    if (lead.outcome !== "created") throw new Error("setup");
+    const { bookingId } = await createBooking(db, owner, { projectId: f.projectId, leadId: lead.leadId, unitId, ratePerSqft: "25000", tokenAmount: "500000" });
+    for (const s of stages) await advanceBooking(db, f.actors.superAdmin, bookingId, { toStage: s });
+    return bookingId;
+  };
+  const pay = (bookingId: string, amount: string, extra: Record<string, unknown> = {}, actor: Actor = accountant) =>
+    recordPayment(db, actor, { bookingId, type: "token", amount, receivedOn: TODAY, methodId: cashId, ...extra });
+  const paidOf = async (bookingId: string) => (await getBookingDetail(db, f.actors.superAdmin, bookingId, TODAY)).money;
+
+  describe("recording", () => {
+    it("posts a payment with a receipt number; Bookings derives Paid, outstanding and the milestone from it", async () => {
+      const bookingId = await bookingAt();
+      expect(await paidOf(bookingId)).toEqual({ paid: 0, total: 12_500_000, outstanding: 12_500_000, milestoneMet: false });
+
+      const { paymentId, receiptNo } = await pay(bookingId, "500,000", { reference: "TXN-1" });
+      expect(receiptNo).toBeGreaterThan(0);
+      expect(await paidOf(bookingId)).toMatchObject({ paid: 500_000, outstanding: 12_000_000, milestoneMet: false });
+      const listed = (await listBookings(db, f.actors.agent1, {}, f.projectId, TODAY)).rows.find((r) => r.id === bookingId);
+      expect(listed).toMatchObject({ paid: 500_000 });
+
+      const [audit] = await db.select().from(auditLogs).where(and(eq(auditLogs.entityId, paymentId), eq(auditLogs.action, "payment.record")));
+      expect(audit.after).toMatchObject({ amount: 500_000, receiptNo, paidBefore: 0, paidAfter: 500_000, method: "Cash" });
+    });
+
+    it("turns the 30% milestone on exactly at 30% of the total", async () => {
+      const bookingId = await bookingAt();
+      await pay(bookingId, "3749999.99", { type: "down_payment" });
+      expect((await paidOf(bookingId)).milestoneMet).toBe(false);
+      await pay(bookingId, "0.01", { type: "down_payment" });
+      expect((await paidOf(bookingId)).milestoneMet).toBe(true);
+    });
+
+    it("rejects payments by stage, amount, date, method and role", async () => {
+      const negotiation = await bookingAt([]);
+      expect(await errorCode(pay(negotiation, "1000"))).toBe("BUSINESS_RULE");
+
+      const bookingId = await bookingAt();
+      const over = await errorOf(pay(bookingId, "12500000.01"));
+      expect(over?.fields).toHaveProperty("amount");
+      expect((await errorOf(pay(bookingId, "1000", { receivedOn: "2099-01-01" })))?.fields).toHaveProperty("receivedOn");
+      expect((await errorOf(pay(bookingId, "0")))?.fields).toHaveProperty("amount");
+      expect((await errorOf(pay(bookingId, "1.234")))?.fields).toHaveProperty("amount");
+
+      const { methodId } = await addPaymentMethod(db, f.actors.superAdmin, { name: `Test method ${Math.random().toString(36).slice(2, 7)}` });
+      await setPaymentMethodActive(db, f.actors.superAdmin, methodId, false);
+      expect((await errorOf(pay(bookingId, "1000", { methodId })))?.fields).toHaveProperty("methodId");
+
+      for (const actor of [admin, f.actors.manager, f.actors.agent1, f.actors.hr]) {
+        expect(await errorCode(pay(bookingId, "1000", {}, actor))).toBe("FORBIDDEN");
+      }
+      expect(await errorCode(pay(bookingId, "1000", {}, f.actors.superAdmin))).toBe("ok");
+
+      await pay(bookingId, "12499000");
+      expect((await errorOf(pay(bookingId, "1")))?.fields?.amount).toBe("This booking is fully paid");
+      expect(await db.select().from(bookingPayments).where(eq(bookingPayments.bookingId, bookingId))).toHaveLength(2);
+    });
+
+    it("accepts payments on Confirmed bookings and refuses them on Cancelled ones", async () => {
+      const confirmed = await bookingAt(["token_pending", "token_received", "provisional_receipt", "sales_order", "booking_form", "down_payment", "agreement_pending", "confirmed"]);
+      expect(await errorCode(pay(confirmed, "1000", { type: "installment" }))).toBe("ok");
+      const cancelled = await bookingAt();
+      await cancelBooking(db, f.actors.manager, cancelled, { reason: "Changed mind" });
+      expect(await errorCode(pay(cancelled, "1000"))).toBe("BUSINESS_RULE");
+    });
+  });
+
+  describe("concurrency and idempotency", () => {
+    it("never lets concurrent payments exceed the outstanding balance", async () => {
+      const bookingId = await bookingAt();
+      // Each alone fits (7M ≤ 12.5M) but together they don't.
+      const results = await Promise.allSettled([pay(bookingId, "7000000"), pay(bookingId, "7000000")]);
+      expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+      const rejected = results.find((r) => r.status === "rejected") as PromiseRejectedResult;
+      expect((rejected.reason as AppError).fields).toHaveProperty("amount");
+      expect((await paidOf(bookingId)).paid).toBe(7_000_000);
+    });
+
+    it("gives concurrent payments that both fit distinct, increasing receipt numbers", async () => {
+      const bookingId = await bookingAt();
+      const results = await Promise.all([pay(bookingId, "1000"), pay(bookingId, "2000"), pay(bookingId, "3000")]);
+      const numbers = results.map((r) => r.receiptNo);
+      expect(new Set(numbers).size).toBe(3);
+      expect((await paidOf(bookingId)).paid).toBe(6000);
+    });
+
+    it("returns the first result for a repeated idempotency key, even when the repeats race", async () => {
+      const bookingId = await bookingAt();
+      const key = "submit-abc-123";
+      const results = await Promise.all([pay(bookingId, "1000", { idempotencyKey: key }), pay(bookingId, "1000", { idempotencyKey: key })]);
+      expect(results[0].paymentId).toBe(results[1].paymentId);
+      expect(await db.select().from(bookingPayments).where(eq(bookingPayments.bookingId, bookingId))).toHaveLength(1);
+      expect((await pay(bookingId, "1000", { idempotencyKey: key })).replayed).toBe(true);
+      expect(await errorCode(pay(bookingId, "2000", { idempotencyKey: key }))).toBe("CONFLICT");
+    });
+  });
+
+  describe("immutability (database level)", () => {
+    it("rejects UPDATE and DELETE on posted payments and unapproved or mismatched reversals", async () => {
+      const bookingId = await bookingAt();
+      const { paymentId } = await pay(bookingId, "1000");
+      await expect(db.update(bookingPayments).set({ amount: 1 }).where(eq(bookingPayments.id, paymentId))).rejects.toThrow();
+      await expect(db.delete(bookingPayments).where(eq(bookingPayments.id, paymentId))).rejects.toThrow();
+      const forged = {
+        bookingId,
+        kind: "reversal" as const,
+        type: "token" as const,
+        amount: 1000,
+        receivedOn: TODAY,
+        note: "forged",
+        reversalRef: sql`nextval('booking_payment_reversal_ref_seq')`,
+        reversalOfId: paymentId,
+        recordedById: accountant.id,
+      };
+      await expect(db.insert(bookingPayments).values(forged)).rejects.toThrow();
+      expect((await paidOf(bookingId)).paid).toBe(1000);
+    });
+  });
+
+  describe("reversals (request → approve)", () => {
+    it("needs a request by finance and a decision by a manager of the team or an admin; audits both", async () => {
+      const bookingId = await bookingAt();
+      const { paymentId, receiptNo } = await pay(bookingId, "500000");
+
+      expect(await errorCode(requestReversal(db, f.actors.agent1, paymentId, { reason: "wrong amount" }))).toBe("FORBIDDEN");
+      expect(await errorCode(requestReversal(db, accountant, paymentId, { reason: "no" }))).toBe("VALIDATION_FAILED");
+      const { requestId } = await requestReversal(db, accountant, paymentId, { reason: "Entered against the wrong booking" });
+      expect(await errorCode(requestReversal(db, accountant, paymentId, { reason: "Entered twice by mistake" }))).toBe("CONFLICT");
+      expect((await paidOf(bookingId)).paid).toBe(500_000);
+
+      expect(await errorCode(decideReversal(db, accountant, requestId, { approve: true }))).toBe("FORBIDDEN");
+      expect(await errorCode(decideReversal(db, f.actors.agent1, requestId, { approve: true }))).toBe("FORBIDDEN");
+      expect((await reversalRequestsForActor(db, f.actors.manager)).map((r) => r.id)).toEqual([requestId]);
+
+      const decision = await decideReversal(db, f.actors.manager, requestId, { approve: true, note: "Checked bank statement" });
+      expect(decision.status).toBe("approved");
+      expect(decision.reversalRef).toBeGreaterThan(0);
+      expect(await paidOf(bookingId)).toMatchObject({ paid: 0, outstanding: 12_500_000 });
+
+      const history = (await bookingPaymentHistory(db, accountant, bookingId))!;
+      expect(history.map((h) => [h.kind, h.amount])).toEqual([
+        ["payment", 500_000],
+        ["reversal", 500_000],
+      ]);
+      expect(history[0].reversed).toBe(true);
+      expect(history[1].originalReceipt).toBe(String(receiptNo));
+      const actions = (await db.select().from(auditLogs).where(eq(auditLogs.entityId, paymentId))).map((a) => a.action);
+      expect(actions).toEqual(expect.arrayContaining(["payment.record", "payment.reversal_requested", "payment.reversal_approved"]));
+
+      expect(await errorCode(decideReversal(db, admin, requestId, { approve: false }))).toBe("BUSINESS_RULE");
+      expect(await errorCode(requestReversal(db, accountant, paymentId, { reason: "Again please" }))).toBe("BUSINESS_RULE");
+      expect(await errorCode(requestReversal(db, accountant, decision.reversalId!, { reason: "Reverse the reversal" }))).toBe("BUSINESS_RULE");
+      await expect(db.update(paymentReversalRequests).set({ status: "pending", decidedAt: null }).where(eq(paymentReversalRequests.id, requestId))).rejects.toThrow();
+    });
+
+    it("keeps the payment when a reversal is rejected, and hides other teams' requests from a manager", async () => {
+      const outside = await bookingAt(["token_pending"], f.actors.outsideAgent);
+      const { paymentId } = await pay(outside, "1000");
+      const { requestId } = await requestReversal(db, accountant, paymentId, { reason: "Possible duplicate" });
+      expect(await reversalRequestsForActor(db, f.actors.manager)).toEqual([]);
+      expect(await errorCode(decideReversal(db, f.actors.manager, requestId, { approve: true }))).toBe("NOT_FOUND");
+      expect(await errorCode(bookingPaymentHistory(db, f.actors.manager, outside))).toBe("NOT_FOUND");
+
+      expect((await decideReversal(db, admin, requestId, { approve: false, note: "Not a duplicate" })).status).toBe("rejected");
+      expect((await paidOf(outside)).paid).toBe(1000);
+      const [audit] = await db.select().from(auditLogs).where(and(eq(auditLogs.entityId, paymentId), eq(auditLogs.action, "payment.reversal_rejected")));
+      expect(audit).toBeTruthy();
+    });
+
+    it("lets a super admin approve their own request as an audited emergency action", async () => {
+      const bookingId = await bookingAt();
+      const { paymentId } = await pay(bookingId, "1000", {}, f.actors.superAdmin);
+      const { requestId } = await requestReversal(db, f.actors.superAdmin, paymentId, { reason: "Emergency correction" });
+      expect((await decideReversal(db, f.actors.superAdmin, requestId, { approve: true })).status).toBe("approved");
+      const [audit] = await db.select().from(auditLogs).where(and(eq(auditLogs.entityId, paymentId), eq(auditLogs.action, "payment.reversal_approved_emergency")));
+      expect(audit).toBeTruthy();
+    });
+  });
+
+  describe("bookings integration and settings", () => {
+    it("blocks cancelling a booking with net payments; allows it once every payment is reversed", async () => {
+      const bookingId = await bookingAt();
+      const { paymentId } = await pay(bookingId, "500000");
+      const blocked = await errorOf(cancelBooking(db, f.actors.manager, bookingId, { reason: "Buyer withdrew" }));
+      expect(blocked?.code).toBe("BUSINESS_RULE");
+      expect(blocked?.details).toMatchObject({ paid: 500_000 });
+
+      const { requestId } = await requestReversal(db, accountant, paymentId, { reason: "Recorded on the wrong booking" });
+      await decideReversal(db, f.actors.manager, requestId, { approve: true });
+      expect(await errorCode(cancelBooking(db, f.actors.manager, bookingId, { reason: "Buyer withdrew" }))).toBe("ok");
+    });
+
+    it("limits itemised history to finance roles and the team's manager; applies the configured prefixes", async () => {
+      const bookingId = await bookingAt();
+      const { receiptNo } = await pay(bookingId, "1000");
+      expect(await bookingPaymentHistory(db, f.actors.agent1, bookingId)).toBeNull();
+      expect(await bookingPaymentHistory(db, f.actors.manager, bookingId)).toHaveLength(1);
+      expect(await errorCode(listPayments(db, f.actors.manager, {}))).toBe("FORBIDDEN");
+
+      expect(await errorCode(updateFinanceSettings(db, accountant, { receipt_prefix: "X-" }))).toBe("FORBIDDEN");
+      expect(await errorCode(updateFinanceSettings(db, f.actors.superAdmin, { receipt_prefix: "<bad>" }))).toBe("VALIDATION_FAILED");
+      await updateFinanceSettings(db, f.actors.superAdmin, { receipt_prefix: "RCPT-" });
+      expect((await listPayments(db, admin, { bookingId })).rows[0].displayRef).toBe(`RCPT-${receiptNo}`);
+      expect((await errorOf(addPaymentMethod(db, f.actors.superAdmin, { name: "Cash" })))?.fields).toHaveProperty("name");
+    });
+  });
+});

@@ -1,0 +1,89 @@
+# User Roles and Permissions
+
+## 1. Observed in the reference CRM
+
+| Evidence | Where | Label |
+|---|---|---|
+| Role badge "Sales Agent" on the inspection account | Dashboard header | OBSERVED |
+| "HOD Sales / All teams" selector | Dashboard → executive essentials | OBSERVED (suggests an HOD Sales / manager role) |
+| "Managers and admins can approve team lost requests from Approvals" | Leads → Lost | OBSERVED |
+| "Reviews on leads assigned to you … Manager reviews" | Leads → Reviews | OBSERVED |
+| Daily report: "Managers enter … Admins can review … Admins see all teams; managers see their own" | Teams → Daily Report | OBSERVED |
+| "Agents: discount editable up to 5% (app settings)" | Tasks → proposal | OBSERVED |
+| "Access denied" for Teams list, Project detail, HR Employees, HR Holidays | Respective pages | OBSERVED |
+| Add lead page stuck on "Checking access…" | Leads → new | UNKNOWN (permission or slow load) |
+| Lead lists scoped to "your lead scope" / "My leads" | Dashboard, Reviews | OBSERVED (agents see their own leads) |
+| Targets "for your user" | Targets | OBSERVED |
+| Performance "for your scope" | Performance | OBSERVED |
+
+### Roles evidenced
+
+- **Sales Agent:** OBSERVED.
+- **Manager / HOD Sales:** INFERRED from the text above.
+- **Admin:** INFERRED from the text above.
+- **HR, Finance, Super-admin:** UNKNOWN.
+
+### Data scope
+
+- **INFERRED:** agents see their own leads, managers see their team's, admins see everything. Every list is also limited to the selected project.
+
+---
+
+## 2. Proposed roles for the new CRM (PROPOSED, needs confirmation)
+
+| Role | Description |
+|---|---|
+| **Super Admin** | Owner / IT. Full access, settings, users, roles, integrations. |
+| **Admin** | Operations head. All modules and all teams; cannot change system integrations. |
+| **Sales Manager (HOD)** | Manages one or more teams: assigns and reassigns leads, approves lost requests, writes reviews, sets targets, daily reports, roster. |
+| **Sales Agent** | Works own leads, follow-ups, meetings, tasks, bookings and proposals. |
+| **HR** | Employees, holidays, leave approvals. |
+| **Accountant** | Accounts & Finance module; records payments; views bookings read-only. |
+
+Users can hold **one role**. PROPOSED: permissions are role-based, with optional per-user overrides **not** in V1.
+
+### Permission matrix (PROPOSED)
+
+Legend: **F** full · **T** own team · **O** own records · **R** read-only · **—** none
+
+| Module / action | Super Admin | Admin | Manager | Agent | HR | Accountant |
+|---|---|---|---|---|---|---|
+| Dashboard | F | F | T | O | — | R (finance KPIs) |
+| Leads: view | F | F | T | O | — | — |
+| Leads: create | F | F | T | O | — | — |
+| Leads: reassign | F | F | T | — | — | — |
+| Leads: mark lost | F | F | T (approve) | O (request) | — | — |
+| Leads: delete | F | — | — | — | — | — |
+| Leads: merge duplicates | F | F | T | — | — | — |
+| Clients | F | F | T | O | — | R |
+| Projects: view | F | F | R | R | — | R |
+| Projects: create / edit | F | F | — | — | — | — |
+| Inventory: view | F | F | R | R | — | R |
+| Inventory: edit / import | F | F | — | — | — | — |
+| Bookings: create | F | F | T | O | — | — |
+| Bookings: change stage | F | F | T | O (up to Sales order) | — | R |
+| Bookings: confirm / cancel | F | F | T | — | — | — |
+| Tasks | F | F | T | O | — | — |
+| Proposal discount | any | any | ≤ manager cap | ≤ agent cap (5%) | — | — |
+| Meetings | F | F | T | O | — | — |
+| Targets: set | F | F | T | — | — | — |
+| Targets: view | F | F | T | O | — | — |
+| Teams / daily report / roster | F | F | T | R (own roster) | R | — |
+| HR employees / holidays | F | F | R | — | F | — |
+| Leave: request | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Leave: approve | F | F | T | — | F | — |
+| Performance | F | F | T | O | — | — |
+| Accounts & Finance | F | R | — | — | — | F |
+| Settings, users, roles | F | users only | — | — | — | — |
+| Audit log | F | R | — | — | — | — |
+
+### Enforcement rules (PROPOSED)
+
+1. Permissions are enforced on the **server** for every request. Hiding UI elements is cosmetic only.
+2. **Record scope** is applied in queries: `own` = `ownerId = me`; `team` = owner in the teams I manage; `all` = no filter. The project scope is always applied as well.
+3. Approval actions (lost, leave, discount above the cap) create an approval record with the approver and a timestamp.
+4. Role changes and permission denials are written to the audit log.
+
+## 3. Questions to confirm
+
+See `ASSUMPTIONS_AND_OPEN_QUESTIONS.md`: Q-R1 to Q-R6.

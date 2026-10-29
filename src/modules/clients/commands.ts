@@ -1,0 +1,318 @@
+import { eq } from "drizzle-orm";
+import type { Database } from "@/server/db";
+import { clientFollowUps, clients, leads, users } from "@/server/db/schema";
+import type { Actor } from "@/server/auth/types";
+import { AppError, forbidden, notFound } from "@/server/errors";
+import { normalizePhone } from "@/modules/leads/phone";
+import { canAssignTo } from "@/modules/leads/policy";
+import { isUniqueViolation, loadAccessibleLead, type Tx } from "@/modules/leads/support";
+import { assignSchema, followUpSchema, noteSchema } from "@/modules/leads/validation";
+import { assertCanClient, canAccessClient } from "./policy";
+import {
+  auditClient,
+  loadAccessibleClient,
+  logClientActivity,
+  parse,
+  refreshClientNextFollowUp,
+  teamMemberIds,
+} from "./support";
+import { convertLeadSchema, createClientSchema, updateClientSchema } from "./validation";
+
+const PHONE_TAKEN = "A client with this phone number already exists.";
+
+function phoneOrThrow(countryCode: string, number: string) {
+  const phone = normalizePhone(countryCode, number);
+  if (!phone) {
+    throw new AppError("VALIDATION_FAILED", "Check the highlighted fields.", {
+      fields: { phoneNumber: "Enter a valid phone number" },
+    });
+  }
+  return phone;
+}
+
+/** Validates a prospective owner: an active agent/manager the actor may assign to. */
+async function assertOwner(tx: Tx, actor: Actor, ownerId: string, members: string[]) {
+  const [owner] = await tx
+    .select({ id: users.id, role: users.role, status: users.status })
+    .from(users)
+    .where(eq(users.id, ownerId))
+    .limit(1);
+  if (!owner || owner.status !== "active" || !["agent", "manager"].includes(owner.role)) {
+    throw new AppError("VALIDATION_FAILED", "Check the highlighted fields.", {
+      fields: { ownerId: "Choose an active agent or manager" },
+    });
+  }
+  if (!canAssignTo(actor, ownerId, members)) throw forbidden("You cannot assign clients to that user.");
+}
+
+/**
+ * The client already holding this phone, described only as far as the actor may see it
+ * (one client per person across projects; never reveals another team's client).
+ */
+async function existingByPhone(tx: Tx, actor: Actor, phoneE164: string, members: string[]) {
+  const [existing] = await tx.select().from(clients).where(eq(clients.phoneE164, phoneE164)).limit(1);
+  if (!existing) return null;
+  return { client: existing, visible: canAccessClient(actor, existing.ownerId, members) };
+}
+
+function duplicateError(existing: { client: { id: string; name: string }; visible: boolean }) {
+  return new AppError(
+    "CONFLICT",
+    existing.visible ? PHONE_TAKEN : `${PHONE_TAKEN} It belongs to another team; ask an admin to link it.`,
+    { details: existing.visible ? { existingClientId: existing.client.id, existingName: existing.client.name } : {} },
+  );
+}
+
+/** Manual client (admins; FR-050 "or manually by admin"). */
+export async function createClient(db: Database, actor: Actor, input: unknown) {
+  assertCanClient(actor, "createManual");
+  const data = parse(createClientSchema, input);
+  const phone = phoneOrThrow(data.phoneCountryCode, data.phoneNumber);
+
+  return db.transaction(async (tx) => {
+    const members = await teamMemberIds(tx, actor);
+    const existing = await existingByPhone(tx, actor, phone.e164, members);
+    if (existing) throw duplicateError(existing);
+    if (data.ownerId) await assertOwner(tx, actor, data.ownerId, members);
+
+    const values = {
+      name: data.name,
+      phoneCountryCode: phone.countryCode,
+      phoneNumber: phone.national,
+      phoneE164: phone.e164,
+      email: data.email ?? null,
+      cityId: data.cityId ?? null,
+      relationship: data.relationship ?? null,
+      ownerId: data.ownerId ?? actor.id,
+      createdById: actor.id,
+    };
+    let created: { id: string };
+    try {
+      [created] = await tx.transaction((sp) => sp.insert(clients).values(values).returning({ id: clients.id }));
+    } catch (error) {
+      if (isUniqueViolation(error, "clients_phone_e164_uq")) throw new AppError("CONFLICT", PHONE_TAKEN);
+      throw error;
+    }
+    await logClientActivity(tx, { clientId: created.id, actorId: actor.id, type: "created", data: { mode: "manual" } });
+    await auditClient(tx, actor, "client.create", created.id, null, values);
+    return { clientId: created.id };
+  });
+}
+
+export type ConvertOutcome = { outcome: "created" | "linked"; clientId: string };
+
+/**
+ * Lead → client (managers for their team's leads, admins for any). A lead whose phone already
+ * belongs to a visible client is linked to it on request instead of creating a second client.
+ */
+export async function convertLeadToClient(db: Database, actor: Actor, input: unknown): Promise<ConvertOutcome> {
+  assertCanClient(actor, "convertLead");
+  const { leadId, onExisting } = parse(convertLeadSchema, input);
+
+  return db.transaction(async (tx) => {
+    const { lead, members } = await loadAccessibleLead(tx, actor, leadId, true);
+    if (lead.clientId) throw new AppError("BUSINESS_RULE", "This lead is already linked to a client.");
+    const now = new Date();
+
+    const existing = await existingByPhone(tx, actor, lead.phoneE164, members);
+    if (existing) {
+      if (!existing.visible || onExisting !== "link") throw duplicateError(existing);
+      await tx.update(leads).set({ clientId: existing.client.id }).where(eq(leads.id, lead.id));
+      await tx.update(clients).set({ updatedAt: now, lastActivityAt: now }).where(eq(clients.id, existing.client.id));
+      await logClientActivity(tx, {
+        clientId: existing.client.id,
+        actorId: actor.id,
+        type: "lead_linked",
+        data: { leadId: lead.id, leadCode: lead.code },
+      });
+      await auditClient(tx, actor, "client.link_lead", existing.client.id, null, { leadId: lead.id });
+      return { outcome: "linked", clientId: existing.client.id };
+    }
+
+    const values = {
+      name: lead.name,
+      phoneCountryCode: lead.phoneCountryCode,
+      phoneNumber: lead.phoneNumber,
+      phoneE164: lead.phoneE164,
+      email: lead.email,
+      cityId: lead.cityId,
+      ownerId: lead.ownerId ?? actor.id,
+      createdById: actor.id,
+    };
+    let created: { id: string };
+    try {
+      [created] = await tx.transaction((sp) => sp.insert(clients).values(values).returning({ id: clients.id }));
+    } catch (error) {
+      if (isUniqueViolation(error, "clients_phone_e164_uq")) throw new AppError("CONFLICT", PHONE_TAKEN);
+      throw error;
+    }
+    await tx.update(leads).set({ clientId: created.id }).where(eq(leads.id, lead.id));
+    await logClientActivity(tx, {
+      clientId: created.id,
+      actorId: actor.id,
+      type: "created",
+      data: { mode: "lead", leadId: lead.id, leadCode: lead.code },
+    });
+    await auditClient(tx, actor, "client.convert", created.id, null, { ...values, leadId: lead.id });
+    return { outcome: "created", clientId: created.id };
+  });
+}
+
+export async function updateClient(db: Database, actor: Actor, clientId: string, input: unknown) {
+  assertCanClient(actor, "edit");
+  const data = parse(updateClientSchema, input);
+  return db.transaction(async (tx) => {
+    const { client } = await loadAccessibleClient(tx, actor, clientId, true);
+    const changes: Partial<typeof clients.$inferInsert> = {};
+    if (data.name !== undefined) changes.name = data.name;
+    if (data.phoneNumber !== undefined || data.phoneCountryCode !== undefined) {
+      const phone = phoneOrThrow(data.phoneCountryCode ?? client.phoneCountryCode, data.phoneNumber ?? client.phoneNumber);
+      changes.phoneCountryCode = phone.countryCode;
+      changes.phoneNumber = phone.national;
+      changes.phoneE164 = phone.e164;
+    }
+    if ("email" in data) changes.email = data.email ?? null;
+    if ("cityId" in data) changes.cityId = data.cityId ?? null;
+    if ("relationship" in data) changes.relationship = data.relationship ?? null;
+
+    const changed = Object.keys(changes).filter(
+      (key) => String(changes[key as keyof typeof changes] ?? "") !== String(client[key as keyof typeof client] ?? ""),
+    );
+    if (changed.length === 0) return { changed: [] as string[] };
+
+    const now = new Date();
+    try {
+      await tx.transaction((sp) => sp.update(clients).set({ ...changes, updatedAt: now }).where(eq(clients.id, clientId)));
+    } catch (error) {
+      if (isUniqueViolation(error, "clients_phone_e164_uq")) {
+        throw new AppError("CONFLICT", "Another client already uses this phone number.", {
+          fields: { phoneNumber: "Another client already uses this phone number" },
+        });
+      }
+      throw error;
+    }
+    await logClientActivity(tx, { clientId, actorId: actor.id, type: "update", data: { fields: changed } });
+    await auditClient(
+      tx,
+      actor,
+      "client.update",
+      clientId,
+      Object.fromEntries(changed.map((k) => [k, client[k as keyof typeof client]])),
+      Object.fromEntries(changed.map((k) => [k, changes[k as keyof typeof changes]])),
+    );
+    return { changed };
+  });
+}
+
+export async function assignClient(db: Database, actor: Actor, clientId: string, input: unknown) {
+  assertCanClient(actor, "assign");
+  const { ownerId } = parse(assignSchema, input);
+  return db.transaction(async (tx) => {
+    const { client, members } = await loadAccessibleClient(tx, actor, clientId, true);
+    if (client.ownerId === ownerId) return;
+    await assertOwner(tx, actor, ownerId, members);
+    const now = new Date();
+    await tx.update(clients).set({ ownerId, updatedAt: now }).where(eq(clients.id, clientId));
+    await logClientActivity(tx, { clientId, actorId: actor.id, type: "assignment", data: { from: client.ownerId, to: ownerId } });
+    await auditClient(tx, actor, "client.assign", clientId, { ownerId: client.ownerId }, { ownerId });
+  });
+}
+
+export async function addClientNote(db: Database, actor: Actor, clientId: string, input: unknown) {
+  assertCanClient(actor, "edit");
+  const { body } = parse(noteSchema, input);
+  return db.transaction(async (tx) => {
+    await loadAccessibleClient(tx, actor, clientId, true);
+    const now = new Date();
+    await logClientActivity(tx, { clientId, actorId: actor.id, type: "note", body });
+    await tx.update(clients).set({ lastActivityAt: now, updatedAt: now }).where(eq(clients.id, clientId));
+  });
+}
+
+export async function scheduleClientFollowUp(db: Database, actor: Actor, clientId: string, input: unknown, now = new Date()) {
+  assertCanClient(actor, "edit");
+  const { dueAt, note } = parse(followUpSchema, input);
+  if (dueAt.getTime() < now.getTime() - 60_000) {
+    throw new AppError("VALIDATION_FAILED", "Check the highlighted fields.", { fields: { dueAt: "Pick a time in the future" } });
+  }
+  return db.transaction(async (tx) => {
+    const { client } = await loadAccessibleClient(tx, actor, clientId, true);
+    const [followUp] = await tx
+      .insert(clientFollowUps)
+      .values({ clientId, assigneeId: client.ownerId ?? actor.id, dueAt, note: note ?? null, createdById: actor.id })
+      .returning({ id: clientFollowUps.id });
+    await tx.update(clients).set({ lastActivityAt: now, updatedAt: now }).where(eq(clients.id, clientId));
+    await refreshClientNextFollowUp(tx, clientId);
+    await logClientActivity(tx, {
+      clientId,
+      actorId: actor.id,
+      type: "follow_up_scheduled",
+      body: note ?? null,
+      data: { followUpId: followUp.id, dueAt: dueAt.toISOString() },
+    });
+    return followUp;
+  });
+}
+
+export async function completeClientFollowUp(db: Database, actor: Actor, followUpId: string) {
+  assertCanClient(actor, "edit");
+  if (!/^[0-9a-f-]{36}$/i.test(followUpId)) throw notFound("Follow-up");
+  return db.transaction(async (tx) => {
+    const [followUp] = await tx.select().from(clientFollowUps).where(eq(clientFollowUps.id, followUpId)).limit(1).for("update");
+    if (!followUp) throw notFound("Follow-up");
+    await loadAccessibleClient(tx, actor, followUp.clientId, true);
+    if (followUp.status !== "pending") throw new AppError("BUSINESS_RULE", "This follow-up is already closed.");
+    const now = new Date();
+    await tx
+      .update(clientFollowUps)
+      .set({ status: "done", doneAt: now, doneById: actor.id })
+      .where(eq(clientFollowUps.id, followUpId));
+    await tx.update(clients).set({ lastActivityAt: now, updatedAt: now }).where(eq(clients.id, followUp.clientId));
+    await refreshClientNextFollowUp(tx, followUp.clientId);
+    await logClientActivity(tx, {
+      clientId: followUp.clientId,
+      actorId: actor.id,
+      type: "follow_up_done",
+      data: { followUpId, dueAt: followUp.dueAt.toISOString() },
+    });
+  });
+}
+
+/**
+ * FR-050: a confirmed booking's lead appears in Clients, linked. Uses the lead's existing client,
+ * else the client with the same phone (one client per person), else creates one owned by the
+ * lead's owner. Runs inside the booking transaction; visibility rules don't apply because this is
+ * the system linking records, not a user browsing them.
+ */
+export async function ensureClientForLead(
+  tx: Tx,
+  actor: Actor,
+  lead: { id: string; code: string; name: string; phoneCountryCode: string; phoneNumber: string; phoneE164: string; email: string | null; cityId: string | null; ownerId: string | null; clientId: string | null },
+  bookingId: string,
+): Promise<{ clientId: string; created: boolean }> {
+  if (lead.clientId) return { clientId: lead.clientId, created: false };
+  const now = new Date();
+  const [existing] = await tx.select({ id: clients.id }).from(clients).where(eq(clients.phoneE164, lead.phoneE164)).limit(1).for("update");
+  if (existing) {
+    await tx.update(leads).set({ clientId: existing.id }).where(eq(leads.id, lead.id));
+    await tx.update(clients).set({ updatedAt: now, lastActivityAt: now }).where(eq(clients.id, existing.id));
+    await logClientActivity(tx, { clientId: existing.id, actorId: actor.id, type: "lead_linked", data: { leadId: lead.id, leadCode: lead.code, bookingId } });
+    await auditClient(tx, actor, "client.link_lead", existing.id, null, { leadId: lead.id, bookingId });
+    return { clientId: existing.id, created: false };
+  }
+  const values = {
+    name: lead.name,
+    phoneCountryCode: lead.phoneCountryCode,
+    phoneNumber: lead.phoneNumber,
+    phoneE164: lead.phoneE164,
+    email: lead.email,
+    cityId: lead.cityId,
+    ownerId: lead.ownerId ?? actor.id,
+    createdById: actor.id,
+  };
+  const [created] = await tx.insert(clients).values(values).returning({ id: clients.id });
+  await tx.update(leads).set({ clientId: created.id }).where(eq(leads.id, lead.id));
+  await logClientActivity(tx, { clientId: created.id, actorId: actor.id, type: "created", data: { mode: "booking", leadId: lead.id, leadCode: lead.code, bookingId } });
+  await auditClient(tx, actor, "client.create_from_booking", created.id, null, { ...values, leadId: lead.id, bookingId });
+  return { clientId: created.id, created: true };
+}

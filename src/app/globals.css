@@ -1,0 +1,50 @@
+@import "tailwindcss";
+
+/*
+ * MZ MARKETING design tokens.
+ * Values measured from the reference CRM at 1440×900 (see docs/UI_UX_SPECIFICATION.md).
+ * Neutrals use Tailwind's default zinc scale, which matches the reference exactly.
+ */
+@theme {
+  --color-brand: #107c41;
+  --color-brand-700: #0a5d2b;
+  --color-brand-50: #e7f3ec;
+  --color-canvas: #f6f8f7;
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  /* 1px bottom hairline used on every card, button and input in the reference */
+  --shadow-hairline: 0 1px 0 0 rgb(0 0 0 / 0.05);
+  --shadow-brand-hairline: 0 1px 0 0 color-mix(in oklab, var(--color-brand) 20%, transparent);
+
+  --animate-pulse-soft: pulse-soft 2s ease-in-out infinite;
+
+  @keyframes pulse-soft {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.4;
+    }
+  }
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-canvas font-sans text-zinc-950 antialiased;
+  }
+
+  ::selection {
+    @apply bg-brand/15;
+  }
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-brand;
+  }
+}

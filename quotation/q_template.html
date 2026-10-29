@@ -1,0 +1,236 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Zeploy Tech Real Estate CRM Quotation</title>
+<style>
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Helvetica, Arial, sans-serif; color: #1a1f36; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .page { width: 210mm; height: 297mm; position: relative; overflow: hidden; page-break-after: always; padding: 0 19mm; }
+  .page:last-child { page-break-after: auto; }
+  .topbar { position: absolute; top: 0; left: 0; right: 0; height: 7mm; background: #111c3d; }
+  .runhead { margin-top: 12mm; display: flex; justify-content: space-between; font-size: 8.5pt; padding-bottom: 3mm; border-bottom: 1px solid #d6e2f5; }
+  .runhead b { color: #111c3d; }
+  .runhead span { color: #5b6b8c; }
+  .footer { position: absolute; left: 19mm; right: 19mm; bottom: 11mm; border-top: 1px solid #d6e2f5; padding-top: 3mm; display: flex; justify-content: space-between; font-size: 7.5pt; color: #5b6b8c; }
+
+  .banner { margin-top: 18.5mm; margin-left: 2mm; margin-right: 2mm; background: #111c3d; color: #fff; display: flex; justify-content: space-between; padding: 4mm 5mm 3mm; }
+  .banner .brand { font-size: 19pt; font-weight: bold; letter-spacing: .2px; }
+  .banner .small { font-size: 8pt; margin-top: 4mm; }
+  .banner .right { width: 74mm; font-size: 8pt; display: flex; flex-direction: column; justify-content: space-between; padding-top: 1.5mm; }
+  h1 { font-size: 12pt; margin: 6mm 0 0; color: #111c3d; }
+  h2 { font-size: 12.5pt; margin: 4mm 0 0; color: #111c3d; }
+  p.lead { font-size: 7.6pt; margin: 2.5mm 0 0; }
+  .price { margin-top: 4mm; background: #2a73f0; color: #fff; display: flex; }
+  .price .l { flex: 0 0 102mm; padding: 4mm 6mm 5mm; border-right: 1px solid rgba(255,255,255,.35); }
+  .price .r { flex: 1; padding: 4mm 5mm; }
+  .price .cap { font-size: 7.4pt; font-weight: bold; letter-spacing: .3px; }
+  .price .amt { font-size: 23pt; font-weight: bold; margin-top: 7mm; }
+  .price .r div.lines { font-size: 7.6pt; margin-top: 8mm; line-height: 1.45; }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 2.2mm; row-gap: 2mm; margin-top: 3.5mm; align-items: start; }
+  .box { border: 1px solid #d6e2f5; padding: 3.2mm 3.2mm 2.4mm; }
+  .box h3 { font-size: 9.6pt; margin: 0 0 2.2mm; color: #111c3d; }
+  .box ul { list-style: none; margin: 0; padding: 0; }
+  .box li { font-size: 7.6pt; line-height: 1.3; padding-left: 3mm; position: relative; margin-bottom: 1.75mm; }
+  .box li::before { content: "\2022"; color: #2a73f0; position: absolute; left: 0; top: 0; }
+
+  table.terms { width: 100%; border-collapse: collapse; margin-top: 3.5mm; font-size: 7.6pt; }
+  table.terms td { border: 1px solid #d6e2f5; padding: 2.8mm 3mm; }
+  table.terms td:first-child { background: #eaf2fe; font-weight: bold; width: 54mm; }
+  ul.excl { list-style: none; margin: 3mm 0 0; padding: 0; }
+  ul.excl li { font-size: 7.6pt; line-height: 1.45; margin-bottom: 2.2mm; }
+  ul.excl li::before { content: "\2022\00a0\00a0"; color: #2a73f0; }
+  table.sign { width: 100%; border-collapse: collapse; margin-top: 2mm; font-size: 7.6pt; }
+  table.sign th { background: #eaf2fe; text-align: left; padding: 3.5mm 3mm; border: 1px solid #d6e2f5; color: #111c3d; }
+  table.sign td { border: 1px solid #d6e2f5; padding: 3mm 3mm; line-height: 2.7; vertical-align: top; }
+  p.note { font-size: 7pt; color: #5b6b8c; margin-top: 3mm; line-height: 1.45; }
+</style>
+</head>
+<body>
+
+<!-- PAGE 1 -->
+<div class="page">
+  <div class="topbar"></div>
+  <div class="banner">
+    <div><div class="brand">ZEPLOY TECH</div><div class="small">WE DEPLOY YOUR VISION</div></div>
+    <div class="right"><div>CUSTOM SOFTWARE DEVELOPMENT</div><div>REAL ESTATE CRM</div></div>
+  </div>
+  <h1>QUOTATION</h1>
+  <h2>Custom Real Estate CRM Development</h2>
+  <p class="lead">Custom CRM development for up to 10 users, based on the agreed module list.</p>
+  <div class="price">
+    <div class="l"><div class="cap">ONE-TIME DEVELOPMENT CHARGES</div><div class="amt">PKR 175,000</div></div>
+    <div class="r"><div class="cap">SCOPE</div><div class="lines">Up to 10 users<br>Custom development<br>Client ownership after final payment</div></div>
+  </div>
+  <h2 style="margin-top:5mm">Modules &amp; Features Included</h2>
+  <p class="lead">The following modules and feature names define the quoted Version 1 scope. Any item not listed here is outside the agreed scope unless approved separately.</p>
+  <div class="grid">
+    <div class="box"><h3>Dashboard</h3><ul>
+      <li>Live analytics dashboard with real-time data</li>
+      <li>Pipeline KPIs: total leads, open, won, lost and conversion rate</li>
+      <li>Re-inquiry (regenerated leads) tracking</li>
+      <li>Pipeline health: lead age vs meetings, stale leads</li>
+      <li>Lead source and inbound channel breakdown</li>
+      <li>Top projects by lead volume and recent leads</li>
+      <li>Date range filters (24h, 7d, 30d, MTD, 6m, custom)</li>
+      <li>Project switcher, follow-up alerts and notifications</li>
+    </ul></div>
+    <div class="box"><h3>Leads</h3><ul>
+      <li>All leads table with search, filters and sorting</li>
+      <li>Sales pipeline: Kanban board, table view and analytics</li>
+      <li>Pipeline stages from New Lead to Booked, Lost and Future Opportunity</li>
+      <li>Lead views: To-dos, Favorites, Reviews, Won, Lost, Regenerated, Shared phones and Duplicates</li>
+      <li>Add leads manually or capture from Meta and TikTok lead forms</li>
+      <li>Automatic lead assignment (rotation) with unique lead codes</li>
+      <li>Lead profile with full timeline, notes and stage history</li>
+      <li>Follow-up scheduling with due reminders</li>
+      <li>Call recording and document uploads with AI call analysis</li>
+      <li>Start a booking directly from a lead</li>
+    </ul></div>
+    <div class="box"><h3>Clients</h3><ul>
+      <li>Long-term client profiles</li>
+      <li>Investment history</li>
+      <li>Contracts and payment history</li>
+      <li>Relationship status</li>
+      <li>Next follow-up tracking</li>
+      <li>Search, filters and sorting</li>
+    </ul></div>
+    <div class="box"><h3>Projects</h3><ul>
+      <li>Project portfolio (building, farmhouse, society)</li>
+      <li>Project type, developer and active / inactive status</li>
+      <li>Inventory dimensions per project (floors, block, size, category, type, premium)</li>
+      <li>Units tracked per project</li>
+      <li>Direct link to project inventory</li>
+    </ul></div>
+  </div>
+  <div class="footer"><span>We Deploy Your Vision</span><span>Page 1</span></div>
+</div>
+
+<!-- PAGE 2 -->
+<div class="page">
+  <div class="topbar"></div>
+  <div class="runhead"><b>ZEPLOY TECH</b><span>REAL ESTATE CRM | QUOTATION</span></div>
+  <div class="grid" style="margin-top:6mm">
+    <div class="box"><h3>Inventory</h3><ul>
+      <li>Unit listing by project, floor and unit number</li>
+      <li>Area, base price and per sq ft pricing</li>
+      <li>Sale model: whole unit or SPU (fractional share)</li>
+      <li>Unit nature, category, type and bedrooms</li>
+      <li>Unit status: available, reserved, sold</li>
+      <li>Unit detail page with full dimensions</li>
+      <li>Bulk inventory import (CSV)</li>
+      <li>Filters, sorting and pagination</li>
+    </ul></div>
+    <div class="box"><h3>Bookings</h3><ul>
+      <li>New booking: select project, lead and available unit</li>
+      <li>Per sq ft rate and token amount</li>
+      <li>Automatic unit hold based on token, auto-release on expiry</li>
+      <li>Booking stages: negotiation, forms and payments, confirmed, cancelled</li>
+      <li>Payment tracking (paid vs total) and 30% milestone</li>
+      <li>Payment instructions shown to buyer</li>
+      <li>Provisional receipt and sales order</li>
+      <li>Agreement and payment document status</li>
+    </ul></div>
+    <div class="box"><h3>Tasks</h3><ul>
+      <li>Create, assign and track tasks</li>
+      <li>Task type, status, due date and assignee</li>
+      <li>Link tasks to leads and bookings</li>
+      <li>Printable investment proposal and payment plan</li>
+      <li>Unit pricing auto-fill, capped discount and installment schedule</li>
+      <li>Filters, sorting and pagination</li>
+    </ul></div>
+    <div class="box"><h3>Meetings</h3><ul>
+      <li>Schedule and manage meetings</li>
+      <li>Date and time, organizer and linked lead</li>
+      <li>Meeting status tracking</li>
+      <li>Meetings counted in pipeline and performance reports</li>
+      <li>Filters and sorting</li>
+    </ul></div>
+    <div class="box"><h3>Targets</h3><ul>
+      <li>Daily, weekly and monthly targets</li>
+      <li>Per-agent targets: calls, meetings and sold sq ft</li>
+      <li>Period and anchor date selection</li>
+      <li>Set and edit agent targets</li>
+    </ul></div>
+    <div class="box"><h3>Teams</h3><ul>
+      <li>Sales team management</li>
+      <li>Team members and lead assignment (active / inactive teams)</li>
+      <li>Team performance</li>
+      <li>Manager daily report</li>
+      <li>Duty roster</li>
+    </ul></div>
+    <div class="box"><h3>HR</h3><ul>
+      <li>Employee directory: roles, departments, contacts and profiles</li>
+      <li>Holiday calendar (company-wide and regional)</li>
+      <li>Leave requests and approvals</li>
+      <li>Annual and CPL leave with balances</li>
+      <li>Employee activity</li>
+    </ul></div>
+    <div class="box"><h3>My Workplace</h3><ul>
+      <li>My leave requests and status</li>
+      <li>Upcoming company holidays</li>
+      <li>CRM sign-in and sign-out log</li>
+    </ul></div>
+  </div>
+  <div class="footer"><span>We Deploy Your Vision</span><span>Page 2</span></div>
+</div>
+
+<!-- PAGE 3 -->
+<div class="page">
+  <div class="topbar"></div>
+  <div class="runhead"><b>ZEPLOY TECH</b><span>REAL ESTATE CRM | QUOTATION</span></div>
+  <div class="grid" style="margin-top:6mm">
+    <div class="box"><h3>Performance</h3><ul>
+      <li>Agent KPIs: open leads, booked, lost and win %</li>
+      <li>Calls and talk minutes from call recordings</li>
+      <li>Follow-ups due vs done (follow-up %)</li>
+      <li>Meetings per agent</li>
+      <li>Call quality (verified and qualified calls)</li>
+      <li>Charts: outcome mix, top closers, call volume, calls vs meetings</li>
+      <li>CRM attendance (sign-ins and sign-outs)</li>
+      <li>Critical agent flag and date range filters</li>
+    </ul></div>
+    <div class="box"><h3>Accounts &amp; Finance (additional module)</h3><ul>
+      <li>Income records</li>
+      <li>Expense records</li>
+      <li>Booking payments</li>
+      <li>Outstanding balances</li>
+      <li>Payment history</li>
+      <li>Financial reports</li>
+    </ul></div>
+  </div>
+
+  <h2 style="margin-top:8mm">Commercial Terms</h2>
+  <table class="terms">
+    <tr><td>Development fee</td><td>PKR 175,000 one-time</td></tr>
+    <tr><td>Users</td><td>Up to 10 users</td></tr>
+    <tr><td>Version 1 presentation</td><td>10 November 2026</td></tr>
+    <tr><td>Payment 1</td><td>50% upfront to start the project: PKR 87,500</td></tr>
+    <tr><td>Payment 2</td><td>50% upon completion of Version 1: PKR 87,500</td></tr>
+    <tr><td>Maintenance</td><td>No maintenance charges included</td></tr>
+    <tr><td>Ownership</td><td>Complete system and source code ownership transfers to the client after final payment</td></tr>
+  </table>
+
+  <h2 style="margin-top:7mm">Client-Paid Costs &amp; Exclusions</h2>
+  <ul class="excl">
+    <li>Domain, hosting and server costs will be arranged and paid directly by the client.</li>
+    <li>All third-party API or service charges, including WhatsApp, SMS, email, maps and similar services, will be paid by the client.</li>
+    <li>This quotation covers development charges only. Hosting, domain, server, third-party usage fees and maintenance are not included.</li>
+    <li>Accounts &amp; Finance is an additional requested module included in this quoted scope. Advanced accounting, tax filing, bank integrations, payment gateway integrations, automated commissions, and other financial workflows are not included unless expressly listed.</li>
+    <li>Any additional feature, integration, customization or change beyond the modules and features listed in this quotation will be reviewed and quoted separately before work begins.</li>
+  </ul>
+  <table class="sign">
+    <tr><th>CLIENT APPROVAL</th><th>ZEPLOY TECH</th></tr>
+    <tr>
+      <td>Name: ___________________________<br>Signature: ________________________<br>Date: ____________________________</td>
+      <td>Authorized representative: __________________<br>Signature: _______________________________<br>Date: ___________________________________</td>
+    </tr>
+  </table>
+  <p class="note">This quotation is subject to written approval of the scope above. Work on any additional requirement will begin only after a separate quotation and approval.</p>
+  <div class="footer"><span>We Deploy Your Vision</span><span>Page 3</span></div>
+</div>
+
+</body>
+</html>
