@@ -1,4 +1,4 @@
-import { ArrowLeft, BookText } from "lucide-react";
+import { ArrowLeft, BookText, CalendarPlus } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -23,6 +23,9 @@ import { Timeline } from "@/features/leads/components/timeline";
 import { formatDateTime, formatDuration } from "@/features/leads/format";
 import { canDoBooking } from "@/modules/bookings/policy";
 import { bookingsFor } from "@/modules/bookings/queries";
+import { LeadMeetingsList } from "@/features/meetings/components/lead-meetings";
+import { canDoMeeting } from "@/modules/meetings/policy";
+import { meetingsForLead } from "@/modules/meetings/queries";
 import { clientStatusForLead } from "@/modules/clients/queries";
 import { INBOUND_LABELS } from "@/modules/leads/constants";
 import { assignableUsers, getLeadDetail, leadLookups } from "@/modules/leads/queries";
@@ -50,11 +53,12 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
       throw error;
     }
     const { lead } = detail;
-    const [lookups, owners, clientStatus, leadBookings] = await Promise.all([
+    const [lookups, owners, clientStatus, leadBookings, leadMeetings] = await Promise.all([
       leadLookups(db),
       assignableUsers(db, actor),
       clientStatusForLead(db, actor, lead),
       bookingsFor(db, actor, { leadId: lead.id }),
+      meetingsForLead(db, actor, lead.id),
     ]);
 
     return (
@@ -121,6 +125,17 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
                   >
                     <BookText aria-hidden="true" className="size-4" />
                     Start booking →
+                  </Link>
+                ) : null}
+              </PanelCard>
+            ) : null}
+            {canDoMeeting(actor, "view") ? (
+              <PanelCard title="Meetings">
+                <LeadMeetingsList rows={leadMeetings} />
+                {canDoMeeting(actor, "create") ? (
+                  <Link href={`/dashboard/meetings/new?lead=${lead.id}`} className={buttonClasses({ variant: "secondary", size: "lg", className: "mt-3" })}>
+                    <CalendarPlus aria-hidden="true" className="size-4" />
+                    Schedule meeting →
                   </Link>
                 ) : null}
               </PanelCard>

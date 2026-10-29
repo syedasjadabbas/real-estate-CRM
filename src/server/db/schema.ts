@@ -62,6 +62,7 @@ export const leadActivityType = pgEnum("lead_activity_type", [
   "regenerated",
   "lost_requested",
   "lost_decided",
+  "meeting",
 ]);
 export const followUpStatus = pgEnum("follow_up_status", ["pending", "done", "cancelled"]);
 export const approvalType = pgEnum("approval_type", ["lead_lost"]);
@@ -86,6 +87,7 @@ export const paymentDocsStatus = pgEnum("payment_docs_status", ["not_submitted",
 export const bookingPaymentKind = pgEnum("booking_payment_kind", ["payment", "reversal"]);
 export const bookingPaymentType = pgEnum("booking_payment_type", ["token", "down_payment", "installment", "other"]);
 export const reversalRequestStatus = pgEnum("reversal_request_status", ["pending", "approved", "rejected"]);
+export const meetingStatus = pgEnum("meeting_status", ["scheduled", "completed", "cancelled"]);
 export const taskType = pgEnum("task_type", ["general", "payment_plan", "proposal"]);
 export const taskStatus = pgEnum("task_status", ["open", "in_progress", "done", "cancelled"]);
 export const clientActivityType = pgEnum("client_activity_type", [
@@ -660,6 +662,57 @@ export const taskHistory = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("task_history_task_created_idx").on(t.taskId, t.createdAt)],
+);
+
+// ─── Meetings ─────────────────────────────────────────────────────────────────
+
+/** FR-100 meetings. Always linked to a lead (decision 29 Oct 2026); completed / cancelled are final. */
+export const meetings = pgTable(
+  "meetings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    title: text("title").notNull(),
+    startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+    endsAt: timestamp("ends_at", { withTimezone: true }),
+    location: text("location"),
+    organizerId: uuid("organizer_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    leadId: uuid("lead_id")
+      .notNull()
+      .references(() => leads.id, { onDelete: "restrict" }),
+    notes: text("notes"),
+    status: meetingStatus("status").notNull().default("scheduled"),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
+    ...timestamps,
+  },
+  (t) => [
+    index("meetings_organizer_status_starts_idx").on(t.organizerId, t.status, t.startsAt),
+    index("meetings_lead_idx").on(t.leadId),
+    index("meetings_created_by_idx").on(t.createdById),
+    index("meetings_updated_idx").on(t.updatedAt),
+    check("meetings_title_not_blank", sql`length(btrim(${t.title})) > 0`),
+    check("meetings_ends_after_start", sql`${t.endsAt} is null or ${t.endsAt} > ${t.startsAt}`),
+    check("meetings_completed_fields", sql`(${t.status} = 'completed') = (${t.completedAt} is not null)`),
+    check("meetings_cancelled_fields", sql`(${t.status} = 'cancelled') = (${t.cancelledAt} is not null)`),
+  ],
+);
+
+export const meetingHistory = pgTable(
+  "meeting_history",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    meetingId: uuid("meeting_id")
+      .notNull()
+      .references(() => meetings.id, { onDelete: "cascade" }),
+    actorId: uuid("actor_id").references(() => users.id, { onDelete: "set null" }),
+    action: text("action").notNull(),
+    data: jsonb("data").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("meeting_history_meeting_created_idx").on(t.meetingId, t.createdAt)],
 );
 
 /** FR-009 admin app settings (key / value). Proposal defaults live here; values pending Q-B6. */

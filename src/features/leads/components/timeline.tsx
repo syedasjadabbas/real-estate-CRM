@@ -36,6 +36,10 @@ function describeLead(a: TimelineActivity): { title: string; tag: string } {
       return { title: `Lost requested${d.reason ? ` · ${String(d.reason)}` : ""}`, tag: "Lost request" };
     case "lost_decided":
       return { title: d.approved ? "Lost request approved" : "Lost request rejected", tag: "Decision" };
+    case "meeting": {
+      const verb = d.action === "completed" ? "Meeting completed" : d.action === "cancelled" ? "Meeting cancelled" : "Meeting scheduled";
+      return { title: `${verb}: ${String(d.title ?? "")}${d.startsAt ? ` · ${formatDateTime(String(d.startsAt))}` : ""}`, tag: "Meeting" };
+    }
     default:
       return { title: a.type, tag: "Activity" };
   }

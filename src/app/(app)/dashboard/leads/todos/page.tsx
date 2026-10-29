@@ -12,14 +12,16 @@ import { formatDateTime } from "@/features/leads/format";
 import { flattenParams } from "@/features/leads/url";
 import { cn } from "@/lib/cn";
 import { leadTodos, TODO_BUCKETS, type TodoBucket } from "@/modules/leads/queries";
+import { canDoMeeting } from "@/modules/meetings/policy";
+import { overdueMeetings } from "@/modules/meetings/queries";
 import { TASK_TYPE_LABELS } from "@/modules/tasks/constants";
 import { canDoTask } from "@/modules/tasks/policy";
 import { overdueTasks } from "@/modules/tasks/queries";
 
 export const metadata: Metadata = { title: "To-dos & overdues" };
 
-/** Lead buckets plus FR-092 overdue tasks (shown to roles that work tasks). */
-type Bucket = TodoBucket | "tasks";
+/** Lead buckets plus FR-092 overdue tasks and FR-027 overdue meetings (shown to roles that work them). */
+type Bucket = TodoBucket | "tasks" | "meetings";
 
 const GROUPS: { caption: string; buckets: { key: Bucket; label: string }[] }[] = [
   { caption: "Follow-ups", buckets: [{ key: "today", label: "Today" }, { key: "doneToday", label: "Done today" }] },
@@ -32,7 +34,7 @@ const GROUPS: { caption: string; buckets: { key: Bucket; label: string }[] }[] =
       { key: "30d", label: "30 days" },
     ],
   },
-  { caption: "Overdue", buckets: [{ key: "overdue", label: "Leads" }, { key: "tasks", label: "Tasks" }] },
+  { caption: "Overdue", buckets: [{ key: "overdue", label: "Leads" }, { key: "tasks", label: "Tasks" }, { key: "meetings", label: "Meetings" }] },
   { caption: "Intake", buckets: [{ key: "unattended", label: "Unattended" }] },
 ];
 
@@ -46,27 +48,36 @@ const TITLES: Record<Bucket, string> = {
   overdue: "Overdue lead follow-ups",
   unattended: "New leads unattended 24h+",
   tasks: "Overdue tasks",
+  meetings: "Overdue meetings",
 };
 
 export default function TodosPage({ searchParams }: PageProps<"/dashboard/leads/todos">) {
   return withLeadsAccess(async ({ actor, db, projectId }) => {
     const params = flattenParams(await searchParams);
     const showTasks = canDoTask(actor, "view");
+    const showMeetings = canDoMeeting(actor, "view");
     const bucket: Bucket =
-      showTasks && params.bucket === "tasks" ? "tasks" : (TODO_BUCKETS as readonly string[]).includes(params.bucket) ? (params.bucket as TodoBucket) : "today";
-    const [{ counts: leadCounts, items }, overdue] = await Promise.all([
-      leadTodos(db, actor, projectId, bucket === "tasks" ? "overdue" : bucket),
+      showTasks && params.bucket === "tasks"
+        ? "tasks"
+        : showMeetings && params.bucket === "meetings"
+          ? "meetings"
+          : (TODO_BUCKETS as readonly string[]).includes(params.bucket)
+            ? (params.bucket as TodoBucket)
+            : "today";
+    const [{ counts: leadCounts, items }, overdue, lateMeetings] = await Promise.all([
+      leadTodos(db, actor, projectId, bucket === "tasks" || bucket === "meetings" ? "overdue" : bucket),
       overdueTasks(db, actor),
+      overdueMeetings(db, actor),
     ]);
-    const counts: Record<Bucket, number> = { ...leadCounts, tasks: overdue.count };
-    const groups = GROUPS.map((g) => ({ ...g, buckets: g.buckets.filter((b) => b.key !== "tasks" || showTasks) }));
+    const counts: Record<Bucket, number> = { ...leadCounts, tasks: overdue.count, meetings: lateMeetings.count };
+    const groups = GROUPS.map((g) => ({ ...g, buckets: g.buckets.filter((b) => (b.key !== "tasks" || showTasks) && (b.key !== "meetings" || showMeetings)) }));
 
     return (
       <section className="space-y-6" aria-label="To-dos">
         <PageHeader
           as="h2"
           title="To-dos & overdues"
-          description="Today's lead follow-ups, follow-ups completed today, upcoming (tomorrow, 7 / 15 / 30 days), overdue lead follow-ups and tasks, and new leads unattended 24h+."
+          description="Today's lead follow-ups, follow-ups completed today, upcoming (tomorrow, 7 / 15 / 30 days), overdue lead follow-ups, tasks and meetings, and new leads unattended 24h+."
           actions={
             <Link href={`/dashboard/leads/todos?bucket=${bucket}`} className={buttonClasses({ variant: "secondary", size: "lg" })}>
               <RefreshCw aria-hidden="true" className="size-4" />
@@ -93,7 +104,7 @@ export default function TodosPage({ searchParams }: PageProps<"/dashboard/leads/
                           selected
                             ? "border-brand bg-brand text-white shadow-hairline"
                             : "border-zinc-200/80 bg-white text-zinc-700 hover:bg-zinc-50",
-                          !selected && (b.key === "overdue" || b.key === "tasks") && counts[b.key] > 0 && "border-rose-200 text-rose-700",
+                          !selected && (b.key === "overdue" || b.key === "tasks" || b.key === "meetings") && counts[b.key] > 0 && "border-rose-200 text-rose-700",
                         )}
                       >
                         {b.label}
@@ -107,15 +118,36 @@ export default function TodosPage({ searchParams }: PageProps<"/dashboard/leads/
               </div>
             ))}
           </div>
-          <p className="mt-4 text-[11px] text-zinc-500">Meeting reminders join this queue when that module is built.</p>
         </Card>
 
         <Card className="overflow-hidden">
           <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-3.5">
             <h3 className="text-sm font-black">{TITLES[bucket]}</h3>
-            <span className="text-[11px] font-semibold text-zinc-500">{bucket === "tasks" ? overdue.rows.length : items.length} in this view</span>
+            <span className="text-[11px] font-semibold text-zinc-500">
+              {bucket === "tasks" ? overdue.rows.length : bucket === "meetings" ? lateMeetings.rows.length : items.length} in this view
+            </span>
           </div>
-          {bucket === "tasks" ? (
+          {bucket === "meetings" ? (
+            lateMeetings.rows.length === 0 ? (
+              <div className="p-4">
+                <EmptyState>No overdue meetings. You&apos;re all caught up.</EmptyState>
+              </div>
+            ) : (
+              <ul className="divide-y divide-zinc-100">
+                {lateMeetings.rows.map((m) => (
+                  <li key={m.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-xs">
+                    <div className="min-w-0">
+                      <Link href={`/dashboard/meetings/${m.id}`} className="font-bold break-words hover:text-brand hover:underline">
+                        {m.title}
+                      </Link>
+                      <p className="text-zinc-600">Organizer: {m.organizerName}</p>
+                    </div>
+                    <span className="font-semibold text-rose-600">{formatDateTime(m.startsAt)}</span>
+                  </li>
+                ))}
+              </ul>
+            )
+          ) : bucket === "tasks" ? (
             overdue.rows.length === 0 ? (
               <div className="p-4">
                 <EmptyState>No overdue tasks. You&apos;re all caught up.</EmptyState>

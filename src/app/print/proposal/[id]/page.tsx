@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { buttonClasses } from "@/components/ui/button";
+import { cn } from "@/lib/cn";
 import { brand } from "@/config/brand";
 import { formatArea, formatListedOn, formatPrice } from "@/features/inventory/format";
 import { rowsTotal } from "@/modules/tasks/plan";
@@ -15,11 +16,14 @@ import { PrintButton } from "./print-button";
 
 export const metadata: Metadata = { title: "Proposal" };
 
-/** Printed section in A4 flow; headings are the observed section names. */
-function Section({ title, children }: { title: string; children: ReactNode }) {
+/**
+ * Printed section in A4 flow; headings are the observed section names. Short sections stay on one
+ * page; a long one (the schedule) may break across pages, with its heading kept above the first rows.
+ */
+function Section({ title, children, splittable = false }: { title: string; children: ReactNode; splittable?: boolean }) {
   return (
-    <section className="break-inside-avoid border-t border-zinc-200 pt-5">
-      <h2 className="mb-3 text-[11px] font-black tracking-[0.2em] text-[#107c41] uppercase">{title}</h2>
+    <section className={cn("border-t border-zinc-200 pt-5", !splittable && "break-inside-avoid")}>
+      <h2 className="mb-3 break-after-avoid text-[11px] font-black tracking-[0.2em] text-[#107c41] uppercase">{title}</h2>
       {children}
     </section>
   );
@@ -54,7 +58,9 @@ export default async function ProposalPrintPage({ params }: PageProps<"/print/pr
   const project = p.printTitle || detail.projectName;
 
   return (
-    <div className="min-h-screen bg-zinc-100 py-6 print:bg-white print:py-0">
+    <div className="min-h-screen bg-zinc-100 py-6 print:min-h-0 print:bg-white print:py-0">
+      {/* The app background is grey; printed pages (with "Background graphics" on) must stay white. */}
+      <style>{"@media print { html, body { background: #fff !important; } }"}</style>
       <div className="mx-auto mb-4 flex max-w-[794px] flex-wrap items-center justify-between gap-2 px-4 print:hidden">
         <Link href={`/dashboard/tasks/${detail.task.id}`} className={buttonClasses({ variant: "secondary", size: "lg" })}>
           Back to task
@@ -101,7 +107,7 @@ export default async function ProposalPrintPage({ params }: PageProps<"/print/pr
           </Section>
         ) : null}
 
-        <Section title="Payment Schedule">
+        <Section title="Payment Schedule" splittable>
           {detail.rows.length === 0 ? (
             <p className="text-sm text-zinc-500">No schedule.</p>
           ) : (
@@ -126,7 +132,8 @@ export default async function ProposalPrintPage({ params }: PageProps<"/print/pr
                   </tr>
                 ))}
               </tbody>
-              <tfoot>
+              {/* Footer shown once at the end: a repeating table footer would print "Total" on every page. */}
+              <tfoot className="print:table-row-group">
                 <tr className="border-t-2 border-zinc-300 font-black">
                   <td colSpan={4} className="py-2">
                     Total

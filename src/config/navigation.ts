@@ -139,6 +139,7 @@ export const navigation: NavGroup[] = [
         href: "/dashboard/meetings",
         icon: CalendarDays,
         description: "Schedule, filter, and manage team meetings.",
+        roles: ["super_admin", "admin", "manager", "agent"],
       },
     ],
   },

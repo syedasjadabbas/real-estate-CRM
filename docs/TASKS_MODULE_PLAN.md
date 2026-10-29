@@ -1,11 +1,12 @@
 # Tasks Module (FR-090–092, FR-009) — Plan and Implementation Record
 
 Status: **implemented 29 Oct 2026.**
-- **Verified:** tests, the live server, and the browser for all six roles: agent, manager, admin, super admin, HR and accountant (§7).
-- **Not verified:** real printing (§9).
-- **Needs the client:** the business rules in §1.1.
+- **Verified:** tests, the live server, and the browser for all six roles (§7).
+- **PDF output:** verified with Chrome's own print engine (§7.4).
+- **Not verified:** the browser's interactive print dialog (§9).
+- **Needs the client:** the business rules in §1.1, triaged in §1.2.
 
-Meetings has not started.
+Meetings is now implemented; see `MEETINGS_MODULE_PLAN.md`.
 
 Sources: `REQUIREMENTS.md` (FR-009, FR-090–092), `MODULES_AND_FEATURES.md` §7, `USER_FLOWS.md` §6, `DATA_MODEL.md` §6, `USER_ROLES_AND_PERMISSIONS.md` (Tasks F/F/T/O/—/—; proposal discount any/any/≤ manager cap/≤ agent cap), `API_DESIGN.md` (Tasks and proposals), `SYSTEM_ARCHITECTURE.md` (print routes), `UI_UX_SPECIFICATION.md` (task status tones, S-13). The SaleStorm Tasks page was viewed read-only on 29 Oct 2026 as a Sales Agent. Nothing was created or submitted there. A live "lead assigned to you" popup covered the Filters drawer and was left alone, so the documented filters were used: Status, Type, Assignee.
 
@@ -55,6 +56,34 @@ The code follows the "Current behaviour" column. It has **not** been changed sil
 | C12 | **Snapshot on save** | A saved plan keeps its unit price and ROI rate while the unit stays the same. Agents keep the saved down payment %. Settings changes affect proposals saved afterwards. | FR-009 acceptance, interpreted | Should existing proposals ever re-price? |
 | C13 | **Unit status** | Any unit can be picked, including booked or reserved ones; the status is shown in the picker. | Not documented | Limit proposals to available units? |
 | C14 | **Printed proposal** | Data sections only. Bonuses, Why act now and Next steps print only what the user writes. | Decision 29 Oct 2026; layout pending | The final layout and fixed wording |
+
+### 1.2 Triage of C1–C14 (reviewed 29 Oct 2026; no rule changed)
+
+**Confirm before proposals go to real customers.** These affect the money or the content of the document a customer receives:
+
+| # | Why |
+|---|---|
+| C7 | Final discount caps: the current 5% agent cap is observed but not confirmed |
+| C8 | Down payment %: 30% is seeded and drives every schedule |
+| C10 | Default price per sq ft: unset, so units with no list price produce no total |
+| C14 | Printed layout and fixed wording |
+| C4 | Rounding: the current rule gives exact totals, but the client may expect whole rupees or the remainder on the first row |
+| C6 | Edited rows vs total: a warning only, so a schedule that doesn't add up can still be printed |
+
+**Safe to leave pending or configurable.** The current behaviour is consistent, reversible, and configurable or easy to change:
+
+| # | Why |
+|---|---|
+| C1 | Ownership |
+| C2 | Who can be assigned |
+| C3 | Status changes |
+| C5 | Default discount (0%) |
+| C9 | Installment count: a setting |
+| C11 | ROI per sq ft: a setting; ROI is hidden while it is unset |
+| C12 | Snapshot on save |
+| C13 | Unit status in the picker |
+
+None of these block other modules, Meetings included.
 
 **Implementation details, not business rules:**
 - A linked lead or booking outside the viewer's access isn't named; it shows as "Linked (outside your access)", and editing keeps it.
@@ -233,6 +262,43 @@ The browser pane showed the accountant's Access denied page.
 
 **Regression after this pass:** a new integration test covers the admin role in Tasks (sees all tasks, any assignee, no discount cap, editable down payment, settings). The suite now has **155 / 155** tests; typecheck, lint and `next build` pass.
 
+### 7.4 Print / PDF (pass 4)
+
+**How it was tested.**
+- **No print dialog:** the browser's interactive print dialog wasn't opened. It is a native window that would freeze browser automation.
+- **Real PDF instead:** Chrome's own print engine (DevTools Protocol `Page.printToPDF`, the engine behind "Save as PDF") produced real PDFs.
+- **Setup:** a throwaway headless Chrome profile on A4 with 0.4" margins and backgrounds on. It signed in as `verify.agent` through the real **/login** form.
+- **Scratch only:** the script and PDFs are in the session's scratch folder, not the project.
+- **Workarounds needed:** the protocol had to run over pipes, because a debugging port was unreachable in this environment, and the profile needed a short path, because long ones make Chrome exit.
+
+**Proposals printed:**
+- `f43002e5-…`: 36 installments, 37 rows.
+- `f4a65df5-…`: 12 installments, 13 rows.
+
+**Print styles confirmed in print mode:**
+- The toolbar (Back / Print) is `display: none`.
+- The grey page background turns white.
+- The card shadow is removed.
+- No sidebar or app header.
+- No clipped text, and no console errors.
+
+**Content checked in the PDFs:**
+- Project, client and customer, apartment no and area.
+- Price per sq ft 18,000; total 9,000,000.
+- **Discount 5% → 8,550,000**; **down payment 30% → 2,565,000**; **36 × 166,250**.
+- All 37 rows; **total 8,550,000**.
+- The second proposal: 20% / 25% / 12 → 7,200,000; 1,800,000; 12 × 450,000.
+
+**Print layout defects found in the first PDF, and fixed** (`src/app/print/proposal/[id]/page.tsx`, layout only, no figures touched):
+1. **Page 1 was two-thirds blank.** The whole Payment Schedule section was marked "don't split", so it jumped to page 2. It may now break across pages, with its heading kept above the first rows.
+2. **"Total" printed at the bottom of page 2** while rows 33–37 were still on page 3, because browsers repeat a table footer on every page. The footer now prints once, at the end.
+3. **A large grey block on the last page.** The grey app background printed. The page background is now forced white in print.
+
+**After the fixes:**
+- The 37-row proposal is **2 pages**: the schedule starts on page 1, column headings repeat on page 2, and Total appears once at the end.
+- The 13-row proposal fits on **1 page**.
+- No blank pages, no app chrome, no missing amounts.
+
 ## 8. Test data
 
 **Development database** (nothing reset or deleted):
@@ -250,5 +316,5 @@ The browser pane showed the accountant's Access denied page.
 
 | Check | Why pending |
 |---|---|
-| Real printing / Save as PDF | Only the on-screen print page was checked. The browser's print dialog wasn't opened. |
+| The browser's interactive print dialog and a physical printer | The PDF output was verified with Chrome's print engine (§7.4), but the native dialog can't be driven from automation, and no printer is attached |
 | Client confirmation of §1.1 (C1–C14) | Business decisions |
