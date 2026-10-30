@@ -109,6 +109,11 @@ Rules: UI → server action / route → **policy check** → service → repo. B
 
 Pipeline: GitHub repo (client-owned at handover) → CI (lint, typecheck, tests) → build Docker image → deploy over SSH (`docker compose pull && up -d`) → run migrations.
 
+Production requirements added 30 Oct 2026 (`DEPLOYMENT_PROXY.md`):
+- The app port is reachable only from Caddy; Caddy overwrites `X-Forwarded-For`; the app runs with `TRUST_PROXY=true` (otherwise no client IP is recorded).
+- No worker exists yet, so the host schedules the daily `npm run job:prune-signin-logs` (cron, systemd timer or a Compose one-shot). It deletes nothing until automatic deletion is approved and switched on.
+- CDN / load balancer settings are pending client confirmation.
+
 ## 7. Trade-offs and risks
 
 - **Next.js full-stack vs separate API.** Faster to build and deploy; the API is less reusable for a future mobile app. Mitigation: keep services framework-agnostic and expose REST route handlers for key resources (see `API_DESIGN.md`).

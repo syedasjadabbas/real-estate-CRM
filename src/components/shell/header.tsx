@@ -1,6 +1,7 @@
 "use client";
 
-import { Bell, LogOut, Menu } from "lucide-react";
+import { Bell, LogOut, Menu, ShieldCheck } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { logoutAction, setActiveProjectAction } from "@/features/auth/actions";
@@ -98,6 +99,16 @@ export function Header({
 
         {/* Right: notifications + session action */}
         <div className="ml-auto flex items-center gap-3 sm:ml-0">
+          {user && (user.role === "super_admin" || user.role === "admin") ? (
+            <Link
+              href="/dashboard/settings/security"
+              aria-label="Security settings"
+              title="Security settings"
+              className={buttonClasses({ variant: "secondary", className: "px-2.5" })}
+            >
+              <ShieldCheck aria-hidden="true" className="size-[18px]" />
+            </Link>
+          ) : null}
           <IconButton label="Notifications" size="md">
             <Bell aria-hidden="true" className="size-[18px]" />
           </IconButton>

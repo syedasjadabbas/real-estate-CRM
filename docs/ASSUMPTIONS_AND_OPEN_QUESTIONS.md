@@ -78,7 +78,7 @@ Priority: **Critical** = affects architecture, data model, cost or timeline · *
 | ID | Priority | Question |
 |---|---|---|
 | Q-H1 | High | Leave types beyond Annual and CPL? Is the 30-day quota the same for all? Who approves (manager, HR or both)? |
-| Q-H2 | High | Attendance: are CRM sign-ins enough, or is a clock-in / clock-out needed? |
+| Q-H2 | High | Attendance: CRM sign-ins are **not** attendance (decided 30 Oct 2026, C1). Does the client need attendance at all, and if so how is it recorded (clock-in / clock-out, roster, other)? |
 | Q-H3 | Normal | Daily report: manual entry only, or pre-filled from system data? |
 | Q-H4 | Normal | Targets: is the "sold sq ft" achievement counted at booking creation or at confirmation? |
 

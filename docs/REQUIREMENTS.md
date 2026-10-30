@@ -148,7 +148,7 @@
 | FR-140 | Employee directory: name, role / designation, department, contact, joining date, status. | REF (card) | M | Admin / HR only. |
 | FR-141 | Holiday calendar (company-wide and regional). | REF | M | Holidays appear in My Workplace. |
 | FR-142 | Leave: types Annual and CPL; inclusive dates; reason; approval by manager / HR; annual balance (30 days default). | REF | M | Approved leave reduces the balance; overlapping requests are rejected. |
-| FR-143 | Attendance: sign-in log based (no biometric). | REF-I | M | Confirm whether a clock-in / clock-out is needed. |
+| FR-143 | ~~Attendance: sign-in log based (no biometric).~~ **Superseded 30 Oct 2026:** CRM sign-ins are authentication activity only and are never treated as attendance (no hours, lateness, absences or durations). Attendance is not available until the client approves its rules. | REF-I | M | Q-H2: define attendance (if any) separately. |
 
 ## 13. Performance
 

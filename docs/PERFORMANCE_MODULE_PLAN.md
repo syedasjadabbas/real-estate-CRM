@@ -43,7 +43,7 @@ Status: **implemented and verified 29 Oct 2026** (§5–§9).
 | FR-152 | Call quality buckets (≥30 s verified, ≥60 s qualified) from recording durations; **requires the recording duration to be stored** |
 | FR-153 | "Critical" agent flag based on thresholds; "Critical only" filter. **Rule unknown; thresholds configurable** (Q-L8 default: "set later") |
 | FR-002 | Every sign-in and sign-out is logged and counts in Performance |
-| FR-143 / Q-H2 | Attendance is sign-in-log based; clock-in / clock-out not confirmed |
+| FR-143 / Q-H2 | ~~Attendance is sign-in-log based~~ — superseded 30 Oct 2026: sign-in counts are authentication activity, not attendance |
 | Matrix | Performance F/F/T/O/—/— (admins all, managers team, agents own, HR and accountant none) |
 
 ### 1.3 Data available in this system
@@ -86,7 +86,7 @@ Status: **implemented and verified 29 Oct 2026** (§5–§9).
 | PQ4 | Do meetings count only when completed, or also when scheduled? |
 | PQ5 | Where will call data come from (recordings upload / telephony)? It drives Calls, Call min, Call quality, Meaningful, Call volume and Calls vs meetings. |
 | PQ6 | What is "Pipeline pressure"? |
-| PQ7 (Q-H2) | Is sign-in counting enough for attendance? |
+| PQ7 (Q-H2) | Is attendance needed at all? (Sign-in counts are not attendance.) |
 
 ## 2. Scope
 
@@ -94,7 +94,7 @@ Status: **implemented and verified 29 Oct 2026** (§5–§9).
 - **Page:** `/dashboard/performance` with header, "Updated … · Refresh", and a Filters drawer (Context + From / To + Clear filters + Done).
 - **Team at a glance:** win rate, follow-ups done, pipeline (open / booked / lost + split bar), activity (meetings, CRM sign-ins, per-agent averages).
 - **Charts:** Outcome mix and Top closers.
-- **"Performance & attendance" table:** sortable, paginated, Export CSV.
+- **"Performance & CRM sign-in activity" table** (reference: "Performance & attendance", reworded 30 Oct 2026): sortable, paginated, Export CSV.
 - **Clearly marked as unavailable:** Calls, Call min, Meaningful calls, Call quality, Call volume leaders, Calls vs meetings, Critical flag and filter.
 
 **Out of scope:** call data, AI scoring, the Critical rule, Pipeline pressure, the dashboard widgets, changes to rotation or targets.
@@ -198,6 +198,8 @@ A team the actor may not see is rejected with 403. Ranges are validated: dates, 
 - Pipeline pressure (undefined).
 - The roster's "Avg M / Avg QC".
 
-**Attendance (Q-H2):** only CRM sign-in and sign-out counts are shown. No hours, days present or roster-based attendance is calculated.
+**Attendance (Q-H2):** only CRM sign-in and sign-out counts are shown, labelled as authentication activity. No hours, days present or roster-based attendance is calculated.
+
+**30 Oct 2026 (`PRODUCTION_READINESS_PLAN.md` §4):** the header now says "Agent KPIs and CRM sign-in activity for your scope", the table is "Performance & CRM sign-in activity", the sign-in glance and column tooltips say "not attendance", and a footnote states that sign-ins are not attendance plus the retention policy. This departs from the reference wording on purpose (C1).
 
 **Inferred definitions:** P2–P11 in §1.4. Questions PQ1–PQ7 in §1.5 are open; none blocks use.

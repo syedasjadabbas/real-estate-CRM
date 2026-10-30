@@ -46,7 +46,7 @@ Status (30 Oct 2026):
 | FR-140 | Employee directory: name, role / designation, department, contact, joining date, status | Admin / HR only |
 | FR-141 | Holiday calendar (company-wide and regional) | Holidays appear in My Workplace |
 | FR-142 | Leave: types **Annual** and **CPL**; **inclusive** dates; reason; **approval by manager / HR**; annual balance (**30 days default**) | Approved leave reduces the balance; **overlapping requests are rejected** |
-| FR-143 | Attendance: sign-in log based (no biometric) | REF-I; clock-in / out to confirm (Q-H2) |
+| FR-143 | ~~Attendance: sign-in log based~~ — superseded 30 Oct 2026: CRM sign-ins are never attendance | Q-H2: attendance rules pending client |
 | FR-130 | My Workplace: own leave requests, upcoming holidays, sign-in log | Separate milestone |
 | DATA_MODEL | `holidays (date, name, scope company / regional, region)`; `leave_requests (user_id, type annual / cpl, start_date, end_date, days computed, reason, status pending / approved / rejected / cancelled, decided_by, decided_at)`, check end ≥ start | — |
 | API_DESIGN | `GET/POST/PATCH /employees` (HR / admin), `GET/POST/DELETE /holidays`, `GET/POST /leave-requests`, `POST /leave-requests/:id/decision`, `GET /me/workplace` | 422 `BUSINESS_RULE` for leave overlap |
@@ -76,7 +76,7 @@ Status (30 Oct 2026):
 | Holidays | Calendar list by year, add / edit / delete, company-wide vs regional | Importing public-holiday feeds |
 | Leave requests & approvals | Request (any role), cancel, approve / reject with note, filters, sort, pagination, history and audit | Multi-level approval chains (pending Q3), email notifications |
 | Leave balances | Annual allowed / used / remaining per user per year | Carry-forward, encashment, accrual (pending Q4) |
-| Attendance | — (sign-in counts already appear in Performance; FR-143 waits on Q-H2) | Clock-in / clock-out |
+| Attendance | "Attendance — not available" card on the HR overview. CRM sign-in counts are authentication activity only (Performance, My Workplace) and are not attendance | Everything until Q-H2 is answered |
 | My Workplace | **Next milestone** (depends on holidays and leave) | — |
 
 ---
@@ -270,7 +270,7 @@ No existing table or column is changed.
 | Q14 | Are past-dated (retroactive) leave requests allowed? | Allowed; HR decides |
 | Q15 | A request spanning two years counts against which year? | Days split by year |
 | Q16 | Does setting an employee "inactive" also block CRM sign-in? | Yes, it reuses `users.status`, but only if Q2 allows HR to change it |
-| Q-H2 | Is attendance by sign-ins enough, or is clock-in / out needed? | Sign-ins only (already shown in Performance and My Workplace) |
+| Q-H2 | Is attendance needed, and how is it recorded? (Sign-ins are **not** attendance — decided 30 Oct 2026.) | No attendance; HR shows "not available" |
 | Q11 | Should approved leave fill the duty roster ("On leave") or affect lead rotation (Q-L2)? | No automatic link |
 
 ---
@@ -282,7 +282,7 @@ No existing table or column is changed.
 | `users` + existing RBAC (`Actor`, `managedTeamIds`, `teamMemberIds`) | Identity, roles, manager team scope for approvals |
 | `teams` / `team_members` | "T" scope for manager approval |
 | `app_settings` | The default annual allowance (30) |
-| `audit_logs`, `signin_logs` | Audit trail; attendance via sign-ins |
+| `audit_logs`, `signin_logs` | Audit trail; CRM sign-in history (authentication activity, not attendance) |
 | Shared UI (PageHeader, tab bar, toolbar, Filters drawer, Modal, Pagination, PanelCard, Field / Input) | Matching the existing design |
 | **Answers to Q1, Q2, Q3, Q3b, Q5, Q6** | Starting the schema and leave logic |
 | **Then:** My Workplace (FR-130) | Needs holidays and leave; sign-in log already exists |
@@ -303,7 +303,7 @@ No existing table or column is changed.
 | 6 | **Balances**: tiles, year logic, tests | Q4 defaults, Q15 |
 | 7 | HR Overview tab bar, navigation roles, Access denied states | — |
 | 8 | Full regression, typecheck, lint, build; browser checks for all roles at 375 / 768 / 1440; update this plan with results | — |
-| 9 | Next milestone: **My Workplace** (holidays, own leave, sign-in log) | Steps 2–6 |
+| 9 | **My Workplace**: holidays and sign-in log done 30 Oct 2026 (`MY_WORKPLACE_MODULE_PLAN.md`); own leave waits on steps 4–6 | Steps 2–6 |
 
 ---
 
@@ -549,7 +549,7 @@ At the time of writing, nothing for Employee Records was implemented (A and B we
   - 768 px: the list was checked by screenshot; no page overflow, and the table scrolls inside its card.
   - 375 px: the profile page and form were checked by screenshot; no page overflow.
 - **Server log:** no errors.
-- **Test data left behind:** one `employee_profiles` row for the Verify Agent test account with all fields empty, plus its audit entries. Nothing else changed, apart from new sign-in and audit rows.
+- **Test data left behind:** one `employee_profiles` row for the Verify Agent test account with all fields empty, plus its audit entries. Nothing else changed, apart from new sign-in and audit rows. **Update 31 Oct 2026:** that empty row was deleted on approval. Its audit entries and the user account were kept (`PRODUCTION_READINESS_PLAN.md` §8.8).
 
 ### Still blocked (unchanged from §13.2)
 

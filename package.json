@@ -11,7 +11,8 @@
     "test": "node node_modules/vitest/vitest.mjs run",
     "db:generate": "node node_modules/drizzle-kit/bin.cjs generate",
     "db:migrate": "node scripts/db-migrate.mjs",
-    "db:seed": "node scripts/db-seed.mjs"
+    "db:seed": "node scripts/db-seed.mjs",
+    "job:prune-signin-logs": "node scripts/jobs/prune-signin-logs.mjs"
   },
   "dependencies": {
     "@node-rs/argon2": "^2.2.2",

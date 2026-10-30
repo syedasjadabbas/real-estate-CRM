@@ -265,7 +265,7 @@ Stage (multi-select) · Follow-up (Overdue / Within 1 day / Within 2 days / Afte
 | Employees | "Roles, departments, contacts, and profiles" | OBSERVED (card); page Access denied |
 | Holidays | "Company-wide and regional holidays" | OBSERVED (card); page Access denied |
 | Leave | Annual allowed (30 days/year), used, remaining; New request: type (Annual / CPL), start, end (inclusive), reason; Requests table: employee, type, dates, status; approvals | OBSERVED |
-| Attendance | CRM sign-ins only (no clock-in seen) | INFERRED |
+| Attendance | Not available. The reference implied CRM sign-ins; this CRM treats sign-ins as authentication activity only (C1, 30 Oct 2026) | INFERRED / not followed |
 | Payroll | Referenced, not seen | UNKNOWN |
 
 ---
@@ -274,7 +274,7 @@ Stage (multi-select) · Follow-up (Overdue / Within 1 day / Within 2 days / Afte
 
 | Element | Detail | Label |
 |---|---|---|
-| Purpose | "Agent KPIs and CRM attendance for your scope (same metrics as team reports)" | OBSERVED |
+| Purpose | "Agent KPIs and CRM attendance for your scope (same metrics as team reports)" — this CRM says "CRM sign-in activity" instead (C1) | OBSERVED / reworded |
 | KPIs | Agents, Open leads, Booked, Lost, Calls, Meetings, CRM sign-ins, Team win %, Follow-up % (done of due), Avg calls/agent (total + minutes), Avg meetings/agent, Meaningful call %, Pipeline pressure | OBSERVED |
 | Charts | Outcome mix; Call quality (Verified ≥30 s, Qualified ≥60 s); Top closers; Call volume leaders; Calls vs meetings | OBSERVED |
 | Table | Agent, Open leads, Booked, Lost, Win %, Calls, Call min, F/U due, F/U done, F/U %, Meetings, CRM sign-ins, CRM sign-outs; "Critical" flag; "Critical only" filter | OBSERVED |

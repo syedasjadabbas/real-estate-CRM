@@ -152,7 +152,7 @@ export const navigation: NavGroup[] = [
         label: "Performance",
         href: "/dashboard/performance",
         icon: Activity,
-        description: "Agent KPIs and CRM attendance for your scope.",
+        description: "Agent KPIs and CRM sign-in activity for your scope.",
         roles: ["super_admin", "admin", "manager", "agent"],
       },
     ],

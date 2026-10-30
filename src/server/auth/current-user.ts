@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { cache } from "react";
 import { getDb } from "@/server/db";
 import { AppError } from "@/server/errors";
+import { cleanUserAgent, readProxyConfig, resolveClientIp } from "./client-ip";
 import { findActorByToken, SESSION_ABSOLUTE_MS, type RequestMeta } from "./session-store";
 import type { Actor } from "./types";
 
@@ -44,8 +45,21 @@ export async function clearSessionCookie() {
   (await cookies()).delete(SESSION_COOKIE);
 }
 
+let warnedAboutProxy = false;
+
+/**
+ * IP and user agent for sign-in logging and the login rate limit. The IP is only taken from a
+ * trusted proxy's header (see client-ip.ts); otherwise it is null, never a browser-supplied value.
+ */
 export async function requestMeta(): Promise<RequestMeta> {
   const h = await headers();
-  const forwarded = h.get("x-forwarded-for")?.split(",")[0]?.trim();
-  return { ip: forwarded || h.get("x-real-ip") || null, userAgent: h.get("user-agent") };
+  const config = readProxyConfig();
+  const { ip, reason } = resolveClientIp(h, config);
+  if (!ip && config.production && !warnedAboutProxy && (reason === "untrusted" || reason === "config" || reason === "secret")) {
+    warnedAboutProxy = true;
+    console.warn(
+      `[client-ip] Not recording client IP addresses: ${config.invalid ?? (reason === "secret" ? "proxy secret missing or wrong" : "TRUST_PROXY is not enabled")}. See docs/DEPLOYMENT_PROXY.md.`,
+    );
+  }
+  return { ip, userAgent: cleanUserAgent(h.get("user-agent")) };
 }

@@ -174,3 +174,25 @@ export async function listHolidays(db: Database, actor: Actor, input: unknown = 
   const regions = [...new Map(regionRows.map((r) => [r.region!.toLowerCase(), r.region!])).values()];
   return { year, today, query, rows: rows as HolidayRow[], tiles, next: next ?? null, regions };
 }
+
+export const UPCOMING_HOLIDAY_LIMIT = 10;
+
+/** Whole days from `from` to `to` (YYYY-MM-DD calendar dates, no time zone drift). */
+export const daysBetween = (from: string, to: string) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
+
+/**
+ * Next holidays from today (business time) for My Workplace. Every signed-in role may see the dates
+ * (HR plan §5), so there is no role check here; the HR Holidays page keeps `canViewHolidays`.
+ * Company-wide and regional dates are both returned: employees have no region yet (Q9).
+ * Only calendar facts are returned, never who created or edited a holiday.
+ */
+export async function upcomingHolidays(db: Database, { limit = UPCOMING_HOLIDAY_LIMIT, today = businessToday() } = {}) {
+  const rows = await db
+    .select({ id: holidays.id, date: holidays.date, name: holidays.name, scope: holidays.scope, region: holidays.region })
+    .from(holidays)
+    .where(gte(holidays.date, today))
+    .orderBy(asc(holidays.date), asc(holidays.scope), asc(sql`lower(${holidays.name})`))
+    .limit(limit);
+  return { today, rows: rows.map((r) => ({ ...r, daysAway: daysBetween(today, r.date) })) };
+}
+export type UpcomingHoliday = Awaited<ReturnType<typeof upcomingHolidays>>["rows"][number];

@@ -8,8 +8,9 @@ The CRM holds customer phone numbers, emails, budgets, call recordings, booking 
 |---|---|
 | Passwords | Argon2id hash; minimum 10 characters; block common passwords |
 | Sessions | Random 256-bit token, stored hashed in the DB; HTTP-only, Secure, SameSite=Lax cookie; 12 h idle / 7 d absolute expiry; revoke on password change |
-| Brute force | 5 failed logins / 15 min → temporary lock; logged |
-| Sign-in log | Every sign-in and sign-out with IP and user agent (also a business feature: My Workplace, Performance) |
+| Brute force | 5 failed logins / 15 min per email + **verified** client IP → temporary lock. Spoofed forwarded headers cannot reset it (implemented 30 Oct 2026, `PRODUCTION_READINESS_PLAN.md` §2). |
+| Sign-in log | Every sign-in and sign-out with the verified client IP (from a trusted reverse proxy only; none otherwise) and user agent (capped at 512 characters). It is **authentication activity, never attendance** (My Workplace "CRM Sign-in History", Performance counts). |
+| Client IP | Taken only from the header a trusted proxy overwrites (`TRUST_PROXY`, `TRUSTED_PROXY_COUNT`, optional `PROXY_SHARED_SECRET`). Browser-supplied `X-Forwarded-For` is never trusted; production without proxy configuration records no IP. See `DEPLOYMENT_PROXY.md`. |
 | Account lifecycle | Admin creates users; deactivated users are blocked immediately (sessions revoked) |
 | Password reset | Email token, 30 min expiry, single use (needs SMTP) |
 | 2FA | Optional TOTP for admin / accountant: **later** (not in V1 unless confirmed) |
@@ -23,7 +24,8 @@ The CRM holds customer phone numbers, emails, budgets, call recordings, booking 
 
 ## 3. Audit logging
 
-- Append-only `audit_logs`: actor, action, entity, before / after diff of key fields, IP, timestamp.
+- Append-only `audit_logs`: actor, action, entity, before / after diff of key fields, IP (column present, not written yet), timestamp.
+- Audit logs and sign-in logs are separate tables. Sign-in log retention never deletes audit logs.
 - Covers: lead stage, owner and lost changes, booking stage changes, unit status changes, payments and reversals, user and role changes, settings changes, exports, logins, and permission denials (sampled).
 - Admins can view audit logs. Nobody can edit or delete them through the app.
 
@@ -77,7 +79,7 @@ The CRM holds customer phone numbers, emails, budgets, call recordings, booking 
 - Phone numbers and emails are visible only to users with access to that lead or client.
 - Call recordings may contain sensitive conversations. Access is restricted to the lead owner, their managers and admins.
 - Sending recordings to a third-party AI provider (later phase) requires client approval and a disclosure to customers if required.
-- Data retention: proposed defaults are leads kept indefinitely unless deleted by an admin, and sign-in logs for 12 months. ⚠ To confirm.
+- Data retention: leads are kept indefinitely unless deleted by an admin (proposed). **Sign-in logs:** a configurable retention period (3–120 months, **12 proposed**) is set on Security settings by a super admin or admin. A daily job (`npm run job:prune-signin-logs`, with `--dry-run`) deletes older sign-in history **only when automatic deletion is switched on**, which stays **off until the client approves (C2)**. Audit logs are never deleted. See `DEPLOYMENT_PROXY.md` §7–8. ⚠ Period and activation to confirm.
 - Exports (CSV / PDF) are limited to admin / accountant and logged.
 - Migration data from the old CRM is handled only on the client's systems and deleted from developer machines after import.
 
@@ -90,3 +92,5 @@ The CRM holds customer phone numbers, emails, budgets, call recordings, booking 
 - [ ] Secrets rotated and stored only on the server
 - [ ] Bucket is private; signed URLs expire
 - [ ] Error pages expose no stack traces
+- [ ] App port reachable only from the reverse proxy; `TRUST_PROXY` set; spoofing check in `DEPLOYMENT_PROXY.md` §5 passed
+- [ ] Daily `job:prune-signin-logs` scheduled; retention policy confirmed by the client before automatic deletion is switched on

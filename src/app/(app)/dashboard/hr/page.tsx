@@ -1,4 +1,4 @@
-import { ArrowRight, CalendarDays, Plane, Users } from "lucide-react";
+import { ArrowRight, CalendarDays, Clock, Plane, Users } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
@@ -47,7 +47,7 @@ function ModuleCard({ m }: { m: Module }) {
   );
 }
 
-/** Reference "People & time off" overview: module cards. Employees and Holidays are built; Leave follows. */
+/** Reference "People & time off" overview: module cards. Employees and Holidays are built; Leave follows; attendance is not available (Q-H2). */
 export default async function HrPage() {
   const actor = await requirePageUser();
   const item = findNavItem("/dashboard/hr")!;
@@ -71,13 +71,21 @@ export default async function HrPage() {
       note: "HR, admins and managers",
     },
     { eyebrow: "Time off", title: "Leave", description: "Requests, approvals, and balances.", icon: Plane, href: null, note: "Not built yet" },
+    {
+      eyebrow: "Attendance",
+      title: "Attendance — not available",
+      description: "CRM sign-ins are authentication activity, not attendance. Attendance tracking waits on the client's requirements (Q-H2).",
+      icon: Clock,
+      href: null,
+      note: "Pending client decision",
+    },
   ];
   return (
     <PageStack>
       <PageHeader title="People & time off" description="Employee records, holiday calendar, leave requests, and activity. Payroll is managed under Finance." icon={item.icon} />
       <HrTabs active="overview" showEmployees={employees} showHolidays={holidays} />
       <Panel title="Modules" description="Open a section to manage people and time off.">
-        <div className="grid grid-cols-1 gap-3 py-2 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 py-2 sm:grid-cols-2 xl:grid-cols-4">
           {modules.map((m) => (
             <ModuleCard key={m.title} m={m} />
           ))}

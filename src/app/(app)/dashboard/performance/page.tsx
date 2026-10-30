@@ -16,6 +16,7 @@ import { cn } from "@/lib/cn";
 import { formatInt } from "@/lib/format";
 import type { PerformanceSort } from "@/modules/performance/range";
 import { canViewPerformance, performanceContexts, performanceReport } from "@/modules/performance/service";
+import { signinRetentionNote } from "@/modules/security/service";
 import { requirePageUser } from "@/server/auth/current-user";
 import { getDb } from "@/server/db";
 
@@ -36,8 +37,8 @@ const COLUMNS: { label: string; sort: PerformanceSort | null; title?: string }[]
   { label: "F/U done", sort: "fuDone", title: "Of those, follow-ups marked done." },
   { label: "F/U %", sort: "fuPct", title: "Done ÷ due." },
   { label: "Meetings", sort: "meetings", title: "Completed meetings the agent organized, starting in the range." },
-  { label: "CRM sign-ins", sort: "signIns", title: "Sign-ins logged in the range." },
-  { label: "CRM sign-outs", sort: "signOuts", title: "Sign-outs logged in the range." },
+  { label: "CRM sign-ins", sort: "signIns", title: "CRM sign-ins logged in the range (authentication activity, not attendance)." },
+  { label: "CRM sign-outs", sort: "signOuts", title: "CRM sign-outs logged in the range (authentication activity, not attendance)." },
 ];
 
 const pctText = (v: number | null) => (v === null ? "—" : `${v}%`);
@@ -58,7 +59,7 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
   if (!canViewPerformance(actor)) return <RestrictedState />;
   const params = flattenParams(await searchParams);
   const db = getDb();
-  const [report, contexts] = await Promise.all([performanceReport(db, actor, params), performanceContexts(db, actor)]);
+  const [report, contexts, retentionNote] = await Promise.all([performanceReport(db, actor, params), performanceContexts(db, actor), signinRetentionNote(db)]);
   const s = report.summary;
   const decided = s.booked + s.lost;
   const csvQuery = new URLSearchParams({ from: report.range.from, to: report.range.to, ...(report.team ? { team: report.team } : {}) }).toString();
@@ -69,7 +70,7 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
     <PageStack>
       <PageHeader
         title="Performance"
-        description="Agent KPIs and CRM attendance for your scope (same metrics as team reports)."
+        description="Agent KPIs and CRM sign-in activity for your scope (same metrics as team reports)."
         icon={item.icon}
         actions={
           <PerformanceFilters
@@ -123,7 +124,7 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                 <Glance label="Calls" value="—" caption="No call data yet" muted />
                 <Glance label="Meetings" value={formatInt(s.meetings)} caption={`${s.perAgent.meetings} per agent`} />
-                <Glance label="CRM sign-ins" value={formatInt(s.signIns)} caption={`${s.perAgent.signIns} per agent`} />
+                <Glance label="CRM sign-ins" value={formatInt(s.signIns)} caption={`${s.perAgent.signIns} per agent · not attendance`} />
               </div>
             </div>
           </div>
@@ -139,7 +140,7 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
       </div>
 
       <Panel
-        title="Performance & attendance"
+        title="Performance & CRM sign-in activity"
         description="Same KPI columns as team reports: leads, follow-ups, meetings, bookings, calls, and CRM sign-in counts for the date range."
         actions={
           <a href={`/api/v1/performance/export?${csvQuery}`} className={buttonClasses({ variant: "secondary", className: "h-[33px] px-3 text-xs" })} download>
@@ -211,6 +212,10 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
         <Pagination page={report.page} pageCount={report.pageCount} total={report.total} params={params} />
         <p className="text-[11px] text-zinc-500">
           Calls and call minutes need call recordings, which the CRM does not capture yet. Leads are counted by their current owner and the date they were added.
+        </p>
+        <p className="text-[11px] text-zinc-500">
+          CRM sign-ins and sign-outs are authentication activity only. They are not attendance and are not used to work out hours, lateness or absences;
+          attendance is not available until the client approves its rules. {retentionNote}
         </p>
       </Panel>
     </PageStack>

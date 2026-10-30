@@ -100,7 +100,9 @@ Write the answer next to each question during the session.
 | Q-R2 | Can a user be in more than one team? Can a manager manage several teams? | |
 | Q-R3 | Can agents see unassigned leads or other agents' leads? | |
 | Q-H1 | Leave types beyond Annual / CPL? 30 days for everyone? Who approves? | |
-| Q-H2 | Is attendance from CRM sign-ins enough, or is clock-in / clock-out needed? | |
+| Q-H2 | Is attendance needed, and how should it be recorded? (CRM sign-ins are authentication activity, not attendance.) | |
+| C2 | Confirm 12 months of sign-in history retention and approve automatic deletion | |
+| C3 | Is there a CDN or load balancer in front of Caddy? | |
 | Q-F2 | Who records and approves payments? Is a second person check needed? | |
 | Q-F3 | Receipt number format; printed from Finance? | |
 | Q-F4 | Income and expense categories. | |
