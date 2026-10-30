@@ -87,6 +87,9 @@ export const paymentDocsStatus = pgEnum("payment_docs_status", ["not_submitted",
 export const bookingPaymentKind = pgEnum("booking_payment_kind", ["payment", "reversal"]);
 export const bookingPaymentType = pgEnum("booking_payment_type", ["token", "down_payment", "installment", "other"]);
 export const reversalRequestStatus = pgEnum("reversal_request_status", ["pending", "approved", "rejected"]);
+export const targetPeriod = pgEnum("target_period", ["daily", "weekly", "monthly"]);
+export const rosterStatus = pgEnum("roster_status", ["in_office", "on_site", "on_leave", "leads_off"]);
+export const holidayScope = pgEnum("holiday_scope", ["company", "regional"]);
 export const meetingStatus = pgEnum("meeting_status", ["scheduled", "completed", "cancelled"]);
 export const taskType = pgEnum("task_type", ["general", "payment_plan", "proposal"]);
 export const taskStatus = pgEnum("task_status", ["open", "in_progress", "done", "cancelled"]);
@@ -662,6 +665,157 @@ export const taskHistory = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("task_history_task_created_idx").on(t.taskId, t.createdAt)],
+);
+
+// ─── Teams operations & targets ───────────────────────────────────────────────
+
+/**
+ * FR-110 per-agent targets. Period starts are normalised (weekly = Monday, monthly = 1st);
+ * achievement is computed from meetings and bookings, never stored.
+ */
+export const targets = pgTable(
+  "targets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    period: targetPeriod("period").notNull(),
+    periodStart: date("period_start").notNull(),
+    calls: integer("calls").notNull().default(0),
+    meetings: integer("meetings").notNull().default(0),
+    soldSqft: numeric("sold_sqft", { precision: 12, scale: 2, mode: "number" }).notNull().default(0),
+    setById: uuid("set_by_id").references(() => users.id, { onDelete: "set null" }),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("targets_user_period_start_uq").on(t.userId, t.period, t.periodStart),
+    index("targets_period_start_idx").on(t.period, t.periodStart),
+    check("targets_values_non_negative", sql`${t.calls} >= 0 and ${t.meetings} >= 0 and ${t.soldSqft} >= 0`),
+    check("targets_weekly_monday", sql`${t.period} <> 'weekly' or extract(isodow from ${t.periodStart}) = 1`),
+    check("targets_monthly_first", sql`${t.period} <> 'monthly' or extract(day from ${t.periodStart}) = 1`),
+  ],
+);
+
+/** FR-121 manager daily report: one per team per date (manual entry, Q-H3 default). */
+export const dailyReports = pgTable(
+  "daily_reports",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    teamId: uuid("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "restrict" }),
+    reportDate: date("report_date").notNull(),
+    submittedById: uuid("submitted_by_id").references(() => users.id, { onDelete: "set null" }),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex("daily_reports_team_date_uq").on(t.teamId, t.reportDate), index("daily_reports_date_idx").on(t.reportDate)],
+);
+
+export const dailyReportLines = pgTable(
+  "daily_report_lines",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    dailyReportId: uuid("daily_report_id")
+      .notNull()
+      .references(() => dailyReports.id, { onDelete: "cascade" }),
+    agentId: uuid("agent_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    leads: integer("leads").notNull().default(0),
+    calls: integer("calls").notNull().default(0),
+    meetings: integer("meetings").notNull().default(0),
+    tokens: integer("tokens").notNull().default(0),
+    bookings: integer("bookings").notNull().default(0),
+    remarks: text("remarks"),
+  },
+  (t) => [
+    uniqueIndex("daily_report_lines_report_agent_uq").on(t.dailyReportId, t.agentId),
+    check(
+      "daily_report_lines_non_negative",
+      sql`${t.leads} >= 0 and ${t.calls} >= 0 and ${t.meetings} >= 0 and ${t.tokens} >= 0 and ${t.bookings} >= 0`,
+    ),
+  ],
+);
+
+/** FR-122 duty roster: one status per person per day. Recorded only; rotation is unchanged (T-A7). */
+export const rosterEntries = pgTable(
+  "roster_entries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    teamId: uuid("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "restrict" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    date: date("date").notNull(),
+    status: rosterStatus("status").notNull(),
+    setById: uuid("set_by_id").references(() => users.id, { onDelete: "set null" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("roster_entries_user_date_uq").on(t.userId, t.date), index("roster_entries_team_date_idx").on(t.teamId, t.date)],
+);
+
+// ─── HR: holidays ─────────────────────────────────────────────────────────────
+
+/**
+ * FR-141 holiday calendar (DATA_MODEL §7). Company-wide holidays have no region; regional ones
+ * carry a free-text region (HR plan Q9 default). One holiday per date per scope / region.
+ */
+export const holidays = pgTable(
+  "holidays",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    date: date("date").notNull(),
+    name: text("name").notNull(),
+    scope: holidayScope("scope").notNull().default("company"),
+    region: text("region"),
+    createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
+    updatedById: uuid("updated_by_id").references(() => users.id, { onDelete: "set null" }),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("holidays_date_scope_region_uq").on(t.date, t.scope, sql`lower(coalesce(${t.region}, ''))`),
+    index("holidays_date_idx").on(t.date),
+    check("holidays_name_not_blank", sql`length(btrim(${t.name})) > 0`),
+    check("holidays_region_matches_scope", sql`(${t.scope} = 'regional') = (${t.region} is not null and length(btrim(${t.region})) > 0)`),
+  ],
+);
+
+// ─── HR: employee profiles ────────────────────────────────────────────────────
+
+/**
+ * FR-140 HR profile fields for a CRM account (HR plan §13, option B). Account data (name, email,
+ * role, status) stays on `users` and is not edited here. Own id + unique user_id so staff without
+ * a login can be added later without rebuilding the table (pending Q1).
+ */
+export const employeeProfiles = pgTable(
+  "employee_profiles",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    designation: text("designation"),
+    department: text("department"),
+    phoneCountryCode: text("phone_country_code"),
+    phoneNumber: text("phone_number"),
+    phoneE164: text("phone_e164"),
+    joiningDate: date("joining_date"),
+    updatedById: uuid("updated_by_id").references(() => users.id, { onDelete: "set null" }),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("employee_profiles_user_uq").on(t.userId),
+    index("employee_profiles_department_idx").on(sql`lower(${t.department})`),
+    check(
+      "employee_profiles_phone_complete",
+      sql`(${t.phoneE164} is null) = (${t.phoneCountryCode} is null) and (${t.phoneE164} is null) = (${t.phoneNumber} is null)`,
+    ),
+    check("employee_profiles_phone_e164_format", sql`${t.phoneE164} is null or ${t.phoneE164} ~ '^\\+[1-9][0-9]{6,14}$'`),
+    check("employee_profiles_text_lengths", sql`coalesce(length(${t.designation}), 0) <= 100 and coalesce(length(${t.department}), 0) <= 100`),
+  ],
 );
 
 // ─── Meetings ─────────────────────────────────────────────────────────────────

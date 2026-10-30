@@ -106,12 +106,14 @@ export const navigation: NavGroup[] = [
         href: "/dashboard/targets",
         icon: Target,
         description: "Goals set per user for the selected period (daily / weekly / monthly).",
+        roles: ["super_admin", "admin", "manager", "agent"],
       },
       {
         label: "Teams",
         href: "/dashboard/teams",
         icon: Users,
         description: "Manage sales teams, members, performance, and manager daily reports.",
+        roles: ["super_admin", "admin", "manager", "agent", "hr"],
       },
       {
         label: "Bookings",
@@ -151,6 +153,7 @@ export const navigation: NavGroup[] = [
         href: "/dashboard/performance",
         icon: Activity,
         description: "Agent KPIs and CRM attendance for your scope.",
+        roles: ["super_admin", "admin", "manager", "agent"],
       },
     ],
   },

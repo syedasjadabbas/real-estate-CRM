@@ -17,6 +17,12 @@ export function connectTestDb() {
 
 const TABLES = [
   "audit_logs",
+  "holidays",
+  "employee_profiles",
+  "roster_entries",
+  "daily_report_lines",
+  "daily_reports",
+  "targets",
   "meeting_history",
   "meetings",
   "task_history",
