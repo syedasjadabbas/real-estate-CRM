@@ -470,3 +470,21 @@ Git warns that line endings will be converted from LF to CRLF on the next checko
   - The **4 `employee_profile` audit entries**. The employee page's Profile history still shows them; the profile card is simply empty again, as for any account without a profile.
 - **Verified:** row counts of **every table** before and after. Only `employee_profiles` changed (1 → 0); all other tables, including users, audit_logs and signin_logs, are identical. A re-check found no profile left for the account.
 - The temporary script was removed. No code changed, and nothing was committed.
+
+---
+
+## 9. Review during the completion pass (31 Oct 2026)
+
+| Item | Result |
+|---|---|
+| Trusted proxy and client IP | Unchanged. `tests/unit/client-ip.test.ts` (12) and `tests/integration/security.test.ts` (13) pass in the full run of 314 tests. |
+| Login rate limit | Unchanged. It still uses the verified IP, and the spoofing tests pass. |
+| Auth and authorization | Unchanged. All six roles were re-checked in the browser across the app (see `PROJECT_STATUS.md`). New routes use the existing lead permissions. |
+| Sign-in history, Security settings | Unchanged. Automatic deletion is **still off**; nothing was stored or enabled. |
+| Cleanup command | Unchanged. It deletes only from `signin_logs` and only when enabled. No production scheduler was set up. |
+| Deployment docs | `DEPLOYMENT_PROXY.md` §9 adds recording storage (`FILE_STORAGE_DIR` on a persistent volume, backups, nginx body size). CDN settings are still pending (C3). |
+| Migrations | 0000–0011 are additive. None of them contains DROP, TRUNCATE, DELETE or a column type change (checked by search). 0011 was applied to the dev and test databases; every existing row count was unchanged, and only the new `files` table appeared. `drizzle-kit check` is clean, and `generate` reports no schema changes. |
+| Environment | `DATABASE_URL` missing → clear error on first database use. `TRUST_PROXY` and related settings are validated (invalid → no IP recorded, plus a warning). `FILE_STORAGE_DIR` inside `public/` is refused. **There is no startup check for the whole environment**; missing variables surface on first use. |
+| Production build | Passes. A Turbopack warning ("dynamic filesystem access causes tracing of the whole project") from the new storage module was fixed with `turbopackIgnore` comments; the build now has **0 warnings**. |
+
+Tasks that need the hosting environment are listed in `PROJECT_STATUS.md` §4.

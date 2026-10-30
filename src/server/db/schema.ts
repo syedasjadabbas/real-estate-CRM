@@ -63,7 +63,10 @@ export const leadActivityType = pgEnum("lead_activity_type", [
   "lost_requested",
   "lost_decided",
   "meeting",
+  "file_uploaded",
 ]);
+/** DATA_MODEL.md "files". Only call recordings on leads are uploaded so far (FR-038). */
+export const fileKind = pgEnum("file_kind", ["call_recording", "document", "receipt", "other"]);
 export const followUpStatus = pgEnum("follow_up_status", ["pending", "done", "cancelled"]);
 export const approvalType = pgEnum("approval_type", ["lead_lost"]);
 export const approvalStatus = pgEnum("approval_status", ["pending", "approved", "rejected"]);
@@ -279,6 +282,38 @@ export const leadActivities = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("lead_activities_lead_created_idx").on(t.leadId, t.createdAt)],
+);
+
+/**
+ * Uploaded files (DATA_MODEL.md "files"). The bytes live in private storage under `storage_key`
+ * (src/server/storage); only metadata is here. Lead files only for now, so the owner is an explicit
+ * `lead_id` foreign key rather than a polymorphic owner column. No delete path exists yet.
+ */
+export const files = pgTable(
+  "files",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    leadId: uuid("lead_id")
+      .notNull()
+      .references(() => leads.id, { onDelete: "restrict" }),
+    kind: fileKind("kind").notNull(),
+    storageKey: text("storage_key").notNull(),
+    originalName: text("original_name").notNull(),
+    mime: text("mime").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    /** Reported by the uploader's browser from the audio metadata; null when it could not be read. */
+    durationSec: integer("duration_sec"),
+    sha256: text("sha256").notNull(),
+    uploadedById: uuid("uploaded_by_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("files_storage_key_uq").on(t.storageKey),
+    index("files_lead_created_idx").on(t.leadId, t.createdAt),
+    check("files_size_positive", sql`${t.sizeBytes} > 0`),
+    check("files_duration_range", sql`${t.durationSec} is null or (${t.durationSec} >= 0 and ${t.durationSec} <= 86400)`),
+    check("files_name_length", sql`char_length(${t.originalName}) between 1 and 200`),
+  ],
 );
 
 export const followUps = pgTable(
@@ -952,6 +987,44 @@ export const rotationState = pgTable("rotation_state", {
   lastUserId: uuid("last_user_id").references(() => users.id, { onDelete: "set null" }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * Documented notification events (FR-006; USER_FLOWS.md §1 "Notify owner", §3 lost request flow).
+ * Nothing else raises notifications.
+ */
+export const notificationType = pgEnum("notification_type", [
+  "lead_assigned",
+  "lead_regenerated",
+  "lost_requested",
+  "lost_rejected",
+  "follow_up_soon",
+]);
+
+/** In-app notifications (DATA_MODEL.md "notifications"). One row per recipient and event key, never duplicated. */
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    type: notificationType("type").notNull(),
+    title: text("title").notNull(),
+    body: text("body"),
+    /** In-app path of the related record, e.g. /dashboard/leads/<id>. */
+    link: text("link"),
+    /** Identifies the event (e.g. lost_requested:<approval id>); unique per recipient. */
+    dedupeKey: text("dedupe_key").notNull(),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("notifications_user_event_uq").on(t.userId, t.dedupeKey),
+    index("notifications_user_created_idx").on(t.userId, t.createdAt),
+    index("notifications_user_unread_idx").on(t.userId).where(sql`${t.readAt} is null`),
+    check("notifications_link_internal", sql`${t.link} is null or ${t.link} like '/dashboard/%'`),
+  ],
+);
 
 export const auditLogs = pgTable(
   "audit_logs",

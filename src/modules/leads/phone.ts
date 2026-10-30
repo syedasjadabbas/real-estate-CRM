@@ -28,3 +28,8 @@ export function formatPhone(countryCode: string, national: string) {
   const groups = national.length > 7 ? [national.slice(0, 3), national.slice(3)] : [national];
   return `${countryCode} ${groups.join(" ")}`;
 }
+
+/** `tel:` link for the device dialer (click-to-call); digits and a leading + only. */
+export function telHref(countryCode: string, national: string) {
+  return `tel:+${`${countryCode}${national}`.replace(/\D/g, "")}`;
+}

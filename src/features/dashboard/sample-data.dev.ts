@@ -82,4 +82,5 @@ export const dashboardSampleData: DashboardData = {
     { id: "l5", name: "Sample Lead Five", status: "Qualified Lead", inbound: "Meta", owner: "Sample Agent", createdAt: "2026-10-27T13:01:00Z" },
     { id: "l6", name: "Sample Lead Six", status: "Future Opportunity", inbound: "Tiktok", owner: "Sample Agent", createdAt: "2026-10-27T11:46:00Z" },
   ],
+  lost: null,
 };

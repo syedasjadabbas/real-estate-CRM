@@ -2,6 +2,7 @@ import Link from "next/link";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/cn";
 import { INBOUND_LABELS, PRIORITY_LABELS, type SortColumn } from "@/modules/leads/constants";
+import { telHref } from "@/modules/leads/phone";
 import type { LeadListRow } from "@/modules/leads/queries";
 import { formatDateTime, formatDuration, since } from "../format";
 import { withParams } from "../url";
@@ -122,7 +123,9 @@ export function LeadsTable({
                     <td className="px-3 py-2.5 font-bold tracking-[0.05em] text-zinc-700">{r.originalCode ?? "—"}</td>
                   ) : null}
                   <td className="px-3 py-2.5 text-zinc-700">
-                    <span className="block whitespace-nowrap">{r.phone}</span>
+                    <a href={telHref(r.phoneCountryCode, r.phoneNumber)} className="block whitespace-nowrap hover:text-brand hover:underline" aria-label={`Call ${r.name} on ${r.phone}`}>
+                      {r.phone}
+                    </a>
                     <span className="block">{r.email ?? "—"}</span>
                   </td>
                   <td className="px-3 py-2.5 text-zinc-700">{r.cityName ?? "—"}</td>

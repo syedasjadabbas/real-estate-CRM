@@ -12,6 +12,7 @@ export default async function FinanceLayout({ children }: LayoutProps<"/dashboar
     canDoFinance(actor, "record") ? { href: "/dashboard/finance/record", label: "Record payment" } : null,
     canDoFinance(actor, "viewAll") || canDoFinance(actor, "decideReversal") ? { href: "/dashboard/finance/approvals", label: "Reversal approvals" } : null,
     canDoFinance(actor, "viewAll") ? { href: "/dashboard/finance/outstanding", label: "Outstanding" } : null,
+    canDoFinance(actor, "viewAll") ? { href: "/dashboard/finance/reports", label: "Reports" } : null,
     canDoFinance(actor, "viewAll") ? { href: "/dashboard/finance/settings", label: "Settings" } : null,
   ].filter((t): t is FinanceTab => t !== null);
 

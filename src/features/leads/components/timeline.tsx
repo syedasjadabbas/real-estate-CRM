@@ -40,6 +40,8 @@ function describeLead(a: TimelineActivity): { title: string; tag: string } {
       const verb = d.action === "completed" ? "Meeting completed" : d.action === "cancelled" ? "Meeting cancelled" : "Meeting scheduled";
       return { title: `${verb}: ${String(d.title ?? "")}${d.startsAt ? ` · ${formatDateTime(String(d.startsAt))}` : ""}`, tag: "Meeting" };
     }
+    case "file_uploaded":
+      return { title: `${d.kind === "document" ? "Document" : "Call recording"} uploaded${a.body ? `: ${a.body}` : ""}`, tag: "File" };
     default:
       return { title: a.type, tag: "Activity" };
   }

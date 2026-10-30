@@ -4,6 +4,7 @@ import { requireActor } from "@/server/auth/current-user";
 import type { Actor } from "@/server/auth/types";
 import { getDb, type Database } from "@/server/db";
 import { AppError } from "@/server/errors";
+import { isSameOriginRequest } from "@/server/origin";
 import { getProjectScope } from "@/server/project-scope";
 import { selectableProjects } from "@/modules/projects/queries";
 
@@ -12,8 +13,7 @@ type Handler = (ctx: { req: NextRequest; db: Database; actor: Actor; params: Rec
 /** Rejects cross-site state-changing requests (cookie auth + SameSite=Lax + Origin check). */
 function assertSameOrigin(req: NextRequest) {
   if (req.method === "GET" || req.method === "HEAD") return;
-  const origin = req.headers.get("origin");
-  if (origin && origin !== req.nextUrl.origin) {
+  if (!isSameOriginRequest(req.headers, req.nextUrl.origin)) {
     throw new AppError("FORBIDDEN", "Cross-origin request blocked.");
   }
 }

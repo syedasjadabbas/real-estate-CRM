@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { logoutAction, setActiveProjectAction } from "@/features/auth/actions";
 import { Avatar } from "@/components/ui/avatar";
+import { NotificationBell } from "@/features/notifications/components/notification-bell";
 import { buttonClasses, IconButton } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import type { ProjectOption, SessionUser } from "@/lib/session";
@@ -109,9 +110,13 @@ export function Header({
               <ShieldCheck aria-hidden="true" className="size-[18px]" />
             </Link>
           ) : null}
-          <IconButton label="Notifications" size="md">
-            <Bell aria-hidden="true" className="size-[18px]" />
-          </IconButton>
+          {user ? (
+            <NotificationBell />
+          ) : (
+            <IconButton label="Notifications" size="md" disabled>
+              <Bell aria-hidden="true" className="size-[18px]" />
+            </IconButton>
+          )}
           {user ? (
             <form action={logoutAction}>
               <button

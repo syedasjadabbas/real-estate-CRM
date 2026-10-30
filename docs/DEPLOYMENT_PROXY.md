@@ -141,3 +141,43 @@ The exit code is non-zero only on errors (for example the database is unreachabl
 2. **Retention period:** enter 3–120 months and save. This takes effect at the next job run.
 3. **Automatic deletion:** "Turn on automatic deletion…" asks for confirmation. Turn it on only after the client has approved the policy. "Turn off" stops further deletions immediately; entries already deleted cannot be restored except from a database backup.
 4. Every change is recorded in the audit log (`app.setting`).
+
+---
+
+## 9. Call recording storage (added 31 Oct 2026)
+
+Uploaded call recordings (`LEADS_MODULE_PLAN.md` §10) are stored as private files on the server, outside `public/`, and only served through the authenticated `/api/v1/recordings/:id` route.
+
+| Setting | Production value | Notes |
+|---|---|---|
+| `FILE_STORAGE_DIR` | An absolute path on a **persistent volume**, for example `/srv/mz-crm-data/storage` | Default is `./storage` in the app folder. In Docker it must be a named volume or bind mount, or files are lost when the container is replaced. The app user needs read and write access; files are created with mode 600. |
+
+**Backups:** recordings are **not** in the database, so the nightly `pg_dump` (`SECURITY_AND_PRIVACY.md` §9) does not include them. Back up `FILE_STORAGE_DIR` on the same schedule and restore both together. A `files` row whose file is missing returns "Recording file not found".
+
+**Upload size at the proxy:** recordings can be 25 MB.
+- **Caddy:** no request body limit by default, so nothing to change.
+- **nginx** (if used instead): `client_max_body_size 26m;` (nginx's default of 1 MB would reject uploads).
+
+**S3-compatible storage** (planned in `SYSTEM_ARCHITECTURE.md`) is not implemented. It needs the client's provider choice and credentials. Moving from local storage later means copying the folder and switching the storage driver.
+
+---
+
+## 10. Same-origin check for API requests (fixed 31 Oct 2026)
+
+State-changing API requests (`POST` / `PATCH` / `DELETE` under `/api/v1`) must carry an `Origin` that matches the site, as CSRF protection alongside `SameSite=Lax` cookies.
+
+**Bug found by the Playwright suite.**
+- The check compared `Origin` with `req.nextUrl.origin`, which Next.js builds from the hostname it was *started* with (`localhost` by default), not from the address the browser used.
+- Under `next start --hostname 127.0.0.1`, and behind Caddy (`https://crm.example.com` vs `http://localhost:3000`), every browser `fetch` POST was refused with 403 "Cross-origin request blocked.". That covered recording and document uploads and notification mark-read.
+- Server actions (forms) were not affected; they use Next.js's own origin check.
+
+**Fix (`src/server/origin.ts`).** The Origin's host must equal the host the browser addressed:
+- the `Host` header, which a web page cannot set; or
+- with `TRUST_PROXY=true` (and the shared secret, if configured), `X-Forwarded-Host`. In that case `X-Forwarded-Proto` must also match the Origin's scheme.
+
+`null`, malformed and non-http(s) origins are refused, and requests without `Origin` (non-browser clients, which carry no ambient cookies) are allowed, as before. Unit tests are in `tests/unit/origin.test.ts`.
+
+**What the proxy must do.**
+- Caddy's `reverse_proxy` passes the original `Host` through and sets `X-Forwarded-Host` / `X-Forwarded-Proto` by default, so §3 needs no change.
+- With nginx, add `proxy_set_header Host $host;` and `proxy_set_header X-Forwarded-Proto $scheme;`.
+- Do not rewrite `Host` to the upstream address.

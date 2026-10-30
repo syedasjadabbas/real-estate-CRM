@@ -22,7 +22,7 @@ The reference could not be re-opened in this milestone (browser extension not co
 2. **Project selector:** super admin / admin also see inactive projects, labelled "(inactive)". Managers, agents and accountants see active ones only. New leads still require an active project; the Add lead form falls back to the first active project.
 3. **List layout:** cards, as in the reference.
 
-Not built (undocumented or out of scope): delete, `default_rate_per_sqft` (inferred app setting, belongs with Bookings), units tracked (Inventory).
+Not built (undocumented or out of scope): delete, `default_rate_per_sqft` (inferred app setting, belongs with Bookings). **Update:** units tracked is now shown (from Inventory).
 
 ## 3. Data (migration `drizzle/0002_projects.sql`, additive only)
 

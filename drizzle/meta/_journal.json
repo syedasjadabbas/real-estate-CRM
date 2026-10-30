@@ -78,6 +78,20 @@
       "when": 1793370000593,
       "tag": "0010_employee_profiles",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1793388749658,
+      "tag": "0011_lead_recordings",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1793391589755,
+      "tag": "0012_notifications",
+      "breakpoints": true
     }
   ]
 }

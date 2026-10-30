@@ -3,6 +3,8 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { formatDateTime } from "@/features/leads/format";
 import { withParams } from "@/features/leads/url";
 import { cn } from "@/lib/cn";
+import { BOOKING_STAGE_LABELS } from "@/modules/bookings/constants";
+import type { BookingStage } from "@/modules/bookings/constants";
 import type { ClientSortColumn } from "@/modules/clients/constants";
 import type { ClientListRow } from "@/modules/clients/queries";
 import { RelationshipPill } from "./relationship-pill";
@@ -90,8 +92,19 @@ export function ClientsTable({
                   <td className="px-3 py-2.5">
                     <RelationshipPill value={r.relationship} />
                   </td>
-                  <td className="px-3 py-2.5 text-zinc-400" title="Investments appear once the Bookings module is available">
-                    —
+                  <td className="px-3 py-2.5 text-zinc-700">
+                    {r.latestInvestment ? (
+                      <Link href={`/dashboard/bookings/${r.latestInvestment.bookingId}`} className="hover:text-brand hover:underline">
+                        <span className="block font-semibold whitespace-nowrap">
+                          {r.latestInvestment.projectName} · {r.latestInvestment.unitNo}
+                        </span>
+                        <span className="block text-[11px] text-zinc-500">
+                          {BOOKING_STAGE_LABELS[r.latestInvestment.stage as BookingStage]} · {formatDateTime(r.latestInvestment.createdAt)}
+                        </span>
+                      </Link>
+                    ) : (
+                      <span className="text-zinc-400">—</span>
+                    )}
                   </td>
                   <td className="px-3 py-2.5 whitespace-nowrap">
                     <span className={cn(overdue ? "font-semibold text-rose-600" : "text-zinc-900")}>{formatDateTime(r.nextFollowUpAt)}</span>

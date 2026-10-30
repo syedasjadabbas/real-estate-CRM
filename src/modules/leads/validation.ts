@@ -99,6 +99,8 @@ export const leadListQuerySchema = z.object({
   stage: csv(LEAD_STAGES).catch([]),
   source: csvIds.catch([]),
   city: csvIds.catch([]),
+  /** Lost reason ids (dashboard "Lost leads by reason" click-through). */
+  lostReason: csvIds.catch([]),
   priority: csv(PRIORITIES).catch([]),
   followUp: z.enum(FOLLOW_UP_WINDOWS).optional().catch(undefined),
   dateField: z.enum(["created", "updated"]).catch("created"),

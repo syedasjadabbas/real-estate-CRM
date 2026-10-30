@@ -59,7 +59,7 @@ export function normalizeIp(value: string | null | undefined): string | null {
 
 const isLoopback = (ip: string) => ip === "::1" || /^127\./.test(ip);
 
-function secretMatches(expected: string, given: string | null) {
+export function secretMatches(expected: string, given: string | null) {
   if (!given) return false;
   const a = Buffer.from(expected);
   const b = Buffer.from(given);

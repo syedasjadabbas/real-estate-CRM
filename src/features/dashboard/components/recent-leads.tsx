@@ -42,7 +42,9 @@ export function RecentLeads({ leads }: { leads: RecentLead[] }) {
                 <TD>
                   <span className="flex items-center gap-2.5">
                     <LetterTile name={lead.name} />
-                    <span className="font-bold">{lead.name}</span>
+                    <Link href={`/dashboard/leads/${lead.id}`} className="font-bold hover:text-brand hover:underline">
+                      {lead.name}
+                    </Link>
                   </span>
                 </TD>
                 <TD>

@@ -2,7 +2,8 @@
 
 import { ArrowRight, Inbox, RefreshCw, TrendingUp, Activity, CircleCheck } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useState, useTransition } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, Eyebrow } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -10,7 +11,7 @@ import { ProgressBar, StackedBar } from "@/components/ui/progress";
 import { SegmentedControl } from "@/components/ui/segmented";
 import { KpiCard } from "@/components/ui/stat";
 import { formatCompact, formatInt, formatPct, formatTime, NO_VALUE } from "@/lib/format";
-import type { DashboardData, RangeKey } from "../types";
+import type { DashboardData, DashboardFilters, RangeKey } from "../types";
 import { rangeOptions } from "./range-options";
 
 function SplitLegend({ open, won, lost }: { open: number | null; won: number | null; lost: number | null }) {
@@ -42,10 +43,33 @@ function SplitLegend({ open, won, lost }: { open: number | null; won: number | n
   );
 }
 
-export function ExecutiveEssentials({ data }: { data: DashboardData }) {
+/** Builds the dashboard URL for a filter change; "all" teams and the default range leave no parameter. */
+function dashboardHref(next: DashboardFilters) {
+  const p = new URLSearchParams();
+  if (next.range !== "mtd") p.set("range", next.range);
+  if (next.range === "custom" && next.from) p.set("from", next.from);
+  if (next.range === "custom" && next.to) p.set("to", next.to);
+  if (next.team) p.set("team", next.team);
+  const q = p.toString();
+  return q ? `/dashboard?${q}` : "/dashboard";
+}
+
+export function ExecutiveEssentials({ data, filters = { range: "mtd" } }: { data: DashboardData; filters?: DashboardFilters }) {
   const { kpis } = data;
-  const [team, setTeam] = useState<string>(data.teams[0]?.id ?? "all");
-  const [range, setRange] = useState<RangeKey>("mtd");
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const team = filters.team ?? "all";
+  const range = filters.range;
+  const [customOpen, setCustomOpen] = useState(range === "custom");
+  const [from, setFrom] = useState(filters.from ?? "");
+  const [to, setTo] = useState(filters.to ?? "");
+  const go = (next: DashboardFilters) => startTransition(() => router.push(dashboardHref(next), { scroll: false }));
+  const setTeam = (id: string) => go({ ...filters, team: id === "all" ? undefined : id });
+  const setRange = (value: RangeKey) => {
+    if (value === "custom") return setCustomOpen(true);
+    setCustomOpen(false);
+    go({ range: value, team: filters.team });
+  };
   const maxProject = Math.max(1, ...data.topProjects.map((p) => p.count));
 
   return (
@@ -132,9 +156,32 @@ export function ExecutiveEssentials({ data }: { data: DashboardData }) {
                 </button>
               ))}
             </nav>
-            <SegmentedControl label="Date range" options={rangeOptions} value={range} onChange={setRange} />
+            <SegmentedControl label="Date range" options={rangeOptions} value={customOpen ? "custom" : range} onChange={setRange} />
           </div>
-          {data.teams.length === 0 ? <p className="mt-3 text-sm text-zinc-600">No teams in range.</p> : null}
+          {customOpen ? (
+            <form
+              className="mt-2 flex flex-wrap items-end gap-2 rounded-2xl border border-zinc-200/80 bg-white p-3 shadow-hairline"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (from && to && from <= to) go({ range: "custom", from, to, team: filters.team });
+              }}
+            >
+              <label className="text-[10px] font-black tracking-[0.05em] text-zinc-500 uppercase">
+                From
+                <input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} className="mt-1 block h-9 rounded-xl border border-zinc-200/80 px-2 text-xs font-semibold text-zinc-900" />
+              </label>
+              <label className="text-[10px] font-black tracking-[0.05em] text-zinc-500 uppercase">
+                To
+                <input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} className="mt-1 block h-9 rounded-xl border border-zinc-200/80 px-2 text-xs font-semibold text-zinc-900" />
+              </label>
+              <button type="submit" disabled={!from || !to || from > to || pending} className="h-9 rounded-xl bg-brand px-3.5 text-xs font-bold text-white shadow-hairline disabled:opacity-50">
+                Apply
+              </button>
+              {from && to && from > to ? <p className="text-xs font-semibold text-rose-600">The start date must be on or before the end date.</p> : null}
+            </form>
+          ) : null}
+          {data.teams.length === 0 ? <p className="mt-3 text-sm text-zinc-600">No teams in your scope.</p> : null}
+          {pending ? <p role="status" className="mt-2 text-xs font-semibold text-zinc-500">Updating…</p> : null}
         </div>
 
         <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-2">

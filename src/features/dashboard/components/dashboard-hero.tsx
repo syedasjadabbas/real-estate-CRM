@@ -3,7 +3,7 @@ import { brand } from "@/config/brand";
 import type { SessionUser } from "@/lib/session";
 
 /** "Analytics Dashboard" hero card with brand pill, role pill and data-source status. */
-export function DashboardHero({ user, isSample }: { user: SessionUser | null; isSample: boolean }) {
+export function DashboardHero({ user, isSample, live }: { user: SessionUser | null; isSample: boolean; live?: boolean }) {
   return (
     <div className="relative overflow-hidden rounded-3xl border border-zinc-200/80 bg-linear-to-br from-white via-brand-50/40 to-brand-50/50 p-6 shadow-hairline md:p-8">
       <div aria-hidden="true" className="pointer-events-none absolute -top-12 -right-16 size-64 rounded-full bg-brand/10 blur-3xl" />
@@ -46,7 +46,7 @@ export function DashboardHero({ user, isSample }: { user: SessionUser | null; is
               Real-time data
             </p>
             <p className="text-xs leading-4 font-bold">
-              {isSample ? "Sample data (development)" : "Data source not connected"}
+              {isSample ? "Sample data (development)" : live ? "Live · active project" : "No lead analytics for your role"}
             </p>
           </div>
         </div>

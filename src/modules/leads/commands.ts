@@ -1,3 +1,4 @@
+import { leadLink, notify, teamManagersOf } from "@/modules/notifications/service";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import type { Database } from "@/server/db";
 import {
@@ -156,6 +157,13 @@ export async function createLead(db: Database, actor: Actor, input: unknown): Pr
         data: { source: "manual", by: actor.name },
       });
       await audit(tx, actor, "lead.regenerated", existing.id, null, { regeneratedAt: now });
+      if (existing.ownerId) {
+        await notify(
+          tx,
+          [{ userId: existing.ownerId, type: "lead_regenerated", title: `Re-inquiry · ${existing.name}`, body: `Lead ${existing.code} enquired again.`, link: leadLink(existing.id), dedupeKey: `lead_regenerated:${existing.id}:${now.toISOString()}` }],
+          actor.id,
+        );
+      }
       return {
         outcome: "regenerated",
         leadId: existingVisible ? existing.id : null,
@@ -224,6 +232,13 @@ export async function createLead(db: Database, actor: Actor, input: unknown): Pr
       await logActivity(tx, { leadId: created.id, actorId: actor.id, type: "note", body: data.note });
     }
     await audit(tx, actor, "lead.create", created.id, null, { ...values, code: created.code });
+    if (ownerId) {
+      await notify(
+        tx,
+        [{ userId: ownerId, type: "lead_assigned", title: `Lead assigned to you · ${data.name}`, body: rotated ? `Lead ${created.code} · auto-assigned (rotation)` : `Lead ${created.code} · assigned by ${actor.name}`, link: leadLink(created.id), dedupeKey: `lead_assigned:${created.id}:created` }],
+        actor.id,
+      );
+    }
     return { outcome: "created", leadId: created.id, code: created.code };
   });
 }
@@ -311,6 +326,11 @@ export async function assignLead(db: Database, actor: Actor, leadId: string, inp
       data: { mode: "manual", from: lead.ownerId, ownerId },
     });
     await audit(tx, actor, "lead.assign", leadId, { ownerId: lead.ownerId }, { ownerId });
+    await notify(
+      tx,
+      [{ userId: ownerId, type: "lead_assigned", title: `Lead assigned to you · ${lead.name}`, body: `Lead ${lead.code} · assigned by ${actor.name}`, link: leadLink(leadId), dedupeKey: `lead_assigned:${leadId}:${now.toISOString()}` }],
+      actor.id,
+    );
   });
 }
 
@@ -435,9 +455,10 @@ export async function markLost(db: Database, actor: Actor, leadId: string, input
       return { status: "lost" as const };
     }
 
+    let approvalId: string;
     try {
-      await tx.transaction((sp) =>
-        sp.insert(approvals).values({ type: "lead_lost", leadId, requestedById: actor.id, lostReasonId, note: note ?? null }),
+      [{ id: approvalId }] = await tx.transaction((sp) =>
+        sp.insert(approvals).values({ type: "lead_lost", leadId, requestedById: actor.id, lostReasonId, note: note ?? null }).returning({ id: approvals.id }),
       );
     } catch (error) {
       if (isUniqueViolation(error, "approvals_one_pending_per_lead_uq")) {
@@ -447,6 +468,19 @@ export async function markLost(db: Database, actor: Actor, leadId: string, input
     }
     await logActivity(tx, { leadId, actorId: actor.id, type: "lost_requested", body: note ?? null, data: { reason: reason.name } });
     await audit(tx, actor, "lead.lost_request", leadId, null, { lostReasonId });
+    const managers = await teamManagersOf(tx, lead.ownerId ?? actor.id);
+    await notify(
+      tx,
+      managers.map((userId) => ({
+        userId,
+        type: "lost_requested" as const,
+        title: `Lost request · ${lead.name}`,
+        body: `${actor.name} asked to mark lead ${lead.code} lost (${reason.name}).`,
+        link: leadLink(leadId),
+        dedupeKey: `lost_requested:${approvalId}`,
+      })),
+      actor.id,
+    );
     return { status: "pending_approval" as const };
   });
 }
@@ -480,5 +514,12 @@ export async function decideLostRequest(db: Database, actor: Actor, approvalId: 
       data: { approved: approve, from: lead.stage },
     });
     await audit(tx, actor, approve ? "lead.lost_approved" : "lead.lost_rejected", lead.id, { stage: lead.stage }, { approvalId });
+    if (!approve) {
+      await notify(
+        tx,
+        [{ userId: request.requestedById, type: "lost_rejected", title: `Lost request rejected · ${lead.name}`, body: comment ? `${actor.name}: ${comment}` : `Rejected by ${actor.name}. The lead stays in its stage.`, link: leadLink(lead.id), dedupeKey: `lost_rejected:${approvalId}` }],
+        actor.id,
+      );
+    }
   });
 }

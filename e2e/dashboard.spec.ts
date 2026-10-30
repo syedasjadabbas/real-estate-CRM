@@ -1,0 +1,86 @@
+import { test, type Page } from "@playwright/test";
+import { createLeadFor } from "./support/data";
+import { api, expect, login, seed, unique, selectTestProject } from "./support/seed";
+
+/**
+ * Dashboard filters and lead-count consistency: the Total leads KPI for a range equals the leads
+ * list for the same days, and a lost lead appears in the lost widget and in its click-through.
+ */
+
+async function kpi(page: Page, label: string) {
+  const card = page.locator(`[data-kpi="${label}"]`);
+  await expect(card).toBeVisible();
+  return card;
+}
+
+/** Leads created in [from, to] (business days) according to the leads API. */
+async function listTotal(page: Page, query: Record<string, string>) {
+  const p = new URLSearchParams({ projectId: seed().projectId, ...query });
+  const res = await api<{ total: number }>(page, `/api/v1/leads?${p}`);
+  expect(res.status).toBe(200);
+  return res.data.total;
+}
+
+/** The Total leads KPI as a number (small counts are shown in full). */
+const totalOf = async (page: Page) => Number((await (await kpi(page, "Total leads")).locator("[data-kpi-value]").innerText()).replace(/,/g, ""));
+
+test("range chips update the URL, and the custom range matches the leads list", async ({ page }) => {
+  const { today } = seed();
+  await selectTestProject(page.context());
+  await login(page, "manager");
+  await createLeadFor("agent1", unique("E2E Dashboard"));
+
+  await page.goto("/dashboard");
+  const ranges = page.getByRole("radiogroup", { name: "Date range" });
+  await ranges.getByRole("radio", { name: "7d" }).click();
+  await expect(page).toHaveURL(/[?&]range=7d/);
+  await expect(ranges.getByRole("radio", { name: "7d" })).toHaveAttribute("aria-checked", "true");
+  await ranges.getByRole("radio", { name: "MTD" }).click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+
+  // Custom: today only.
+  await ranges.getByRole("radio", { name: "Custom" }).click();
+  await page.getByLabel("From").fill(today);
+  await page.getByLabel("To").fill(today);
+  await page.getByRole("button", { name: "Apply" }).click();
+  await expect(page).toHaveURL(new RegExp(`range=custom&from=${today}&to=${today}`));
+  await expect(page.getByRole("status").filter({ hasText: "Updating…" })).toHaveCount(0);
+  const shown = await totalOf(page);
+  expect(shown).toBeGreaterThanOrEqual(1);
+  expect(shown).toBe(await listTotal(page, { from: today, to: today }));
+
+  // A new lead today raises both by exactly one.
+  await createLeadFor("agent1", unique("E2E Dashboard Extra"));
+  await page.reload();
+  await expect.poll(() => totalOf(page)).toBe(shown + 1);
+  expect(await listTotal(page, { from: today, to: today })).toBe(shown + 1);
+});
+
+test("a lost lead is counted in the lost widget and opens in the Lost list", async ({ page }) => {
+  const { today, lostReasonId } = seed();
+  const name = unique("E2E Lost Widget");
+  const leadId = await createLeadFor("agent1", name);
+  await selectTestProject(page.context());
+  await login(page, "manager");
+  // A manager marks the lead lost directly (no approval needed for their role).
+  const lost = await api(page, `/api/v1/leads/${leadId}/lost-request`, { method: "POST", data: { lostReasonId, note: "E2E" } });
+  expect(lost.status).toBe(200);
+
+  await page.goto(`/dashboard?range=custom&from=${today}&to=${today}`);
+  const lostApi = await listTotal(page, { view: "lost", from: today, to: today, lostReason: lostReasonId });
+  const reason = page.getByRole("link", { name: /Not interested/ });
+  await expect(reason).toBeVisible();
+  await expect(reason).toContainText(String(lostApi));
+  await reason.click();
+  await page.waitForURL(/\/dashboard\/leads\/lost\?/);
+  await expect(page.getByRole("link", { name, exact: true }).first()).toBeVisible();
+});
+
+test("roles without lead analytics see no lead counts", async ({ page }) => {
+  await login(page, "accountant");
+  await page.goto("/dashboard");
+  // The layout stays, but every lead figure is the empty placeholder and no lead data is fetched.
+  await expect(page.getByText("No lead analytics for your role").first()).toBeVisible();
+  await expect((await kpi(page, "Total leads")).locator("[data-kpi-value]")).toHaveText("—");
+  await expect(page.getByRole("link", { name: /Not interested/ })).toHaveCount(0);
+});

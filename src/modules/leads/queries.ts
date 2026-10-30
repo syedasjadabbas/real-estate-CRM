@@ -53,6 +53,7 @@ function filterConditions(query: LeadListQuery, now: Date): SQL[] {
   if (query.stage.length) out.push(inArray(leads.stage, query.stage));
   if (query.source.length) out.push(inArray(leads.sourceId, query.source));
   if (query.city.length) out.push(inArray(leads.cityId, query.city));
+  if (query.lostReason.length) out.push(inArray(leads.lostReasonId, query.lostReason));
   if (query.priority.length) out.push(inArray(leads.priority, query.priority));
   if (query.followUp) {
     const day = 24 * 60 * 60 * 1000;
@@ -330,7 +331,7 @@ function dayStart(now: Date, offsetDays: number) {
 export const TODO_BUCKETS = ["today", "doneToday", "tomorrow", "7d", "15d", "30d", "overdue", "unattended"] as const;
 export type TodoBucket = (typeof TODO_BUCKETS)[number];
 
-/** To-dos & overdues (FR-027). Task and meeting buckets arrive with those modules. */
+/** To-dos & overdues (FR-027): lead follow-up buckets. Task and meeting buckets come from their own modules on the To-dos page. */
 export async function leadTodos(db: Database, actor: Actor, projectId: string, bucket: TodoBucket, now = new Date()) {
   if (!canDo(actor, "view")) throw forbidden();
   const members = await teamMemberIds(db, actor);

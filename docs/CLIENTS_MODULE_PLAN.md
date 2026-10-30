@@ -20,7 +20,7 @@ The reference showed the Clients **list only, with 0 records**. During this mile
 
 1. **Creation:** managers (own team's leads) and admins convert a lead to a client; admins can also add one manually. Auto-create on a Confirmed booking is wired in the Bookings milestone.
 2. **Duplicates:** one client per normalised phone number across all projects. Leads from several projects link to the same client.
-3. **Investments and payments:** shown as empty states until Bookings exists; "Has investment in project" is shown disabled.
+3. **Investments and payments:** shown as empty states until Bookings exists; "Has investment in project" is shown disabled. **Update 31 Oct 2026:** the detail page shows investments and payment history, and the list now has a working "Has investment in project" filter and a "Latest investment" column (the latest booking that is not cancelled, among bookings the user may see).
 4. **Relationship:** editable list, values pending confirmation.
 
 ## 3. Data (migration `drizzle/0001_clients.sql`, additive only)

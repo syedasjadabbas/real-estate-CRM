@@ -1,4 +1,4 @@
-import { ArrowLeft, BookText, CalendarPlus } from "lucide-react";
+import { ArrowLeft, BookText, CalendarPlus, Phone } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -27,7 +27,12 @@ import { LeadMeetingsList } from "@/features/meetings/components/lead-meetings";
 import { canDoMeeting } from "@/modules/meetings/policy";
 import { meetingsForLead } from "@/modules/meetings/queries";
 import { clientStatusForLead } from "@/modules/clients/queries";
+import { DocumentsPanel } from "@/features/documents/components/documents-panel";
+import { RecordingsPanel } from "@/features/recordings/components/recordings-panel";
+import { listDocuments } from "@/modules/documents/service";
 import { INBOUND_LABELS } from "@/modules/leads/constants";
+import { telHref } from "@/modules/leads/phone";
+import { listRecordings } from "@/modules/recordings/service";
 import { assignableUsers, getLeadDetail, leadLookups } from "@/modules/leads/queries";
 import { AppError } from "@/server/errors";
 
@@ -53,12 +58,14 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
       throw error;
     }
     const { lead } = detail;
-    const [lookups, owners, clientStatus, leadBookings, leadMeetings] = await Promise.all([
+    const [lookups, owners, clientStatus, leadBookings, leadMeetings, recordings, documents] = await Promise.all([
       leadLookups(db),
       assignableUsers(db, actor),
       clientStatusForLead(db, actor, lead),
       bookingsFor(db, actor, { leadId: lead.id }),
       meetingsForLead(db, actor, lead.id),
+      listRecordings(db, actor, lead.id),
+      listDocuments(db, actor, lead.id),
     ]);
 
     return (
@@ -69,6 +76,10 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
           description={`Owner ${lead.ownerName ?? "Unassigned"} · ${lead.projectName}`}
           actions={
             <>
+              <a href={telHref(lead.phoneCountryCode, lead.phoneNumber)} className={buttonClasses({ variant: "primary", size: "lg" })} aria-label={`Call ${lead.name} on ${lead.phone}`}>
+                <Phone aria-hidden="true" className="size-4" />
+                Call
+              </a>
               <FavoriteButton leadId={lead.id} initial={lead.isFavorite} size="md" />
               <Link href="/dashboard/leads" className={buttonClasses({ variant: "secondary", size: "lg" })}>
                 <ArrowLeft aria-hidden="true" className="size-4" />
@@ -83,7 +94,11 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
             <Fact label="Code">
               <span className="tracking-[0.05em]">{lead.code}</span>
             </Fact>
-            <Fact label="Phone">{lead.phone}</Fact>
+            <Fact label="Phone">
+              <a href={telHref(lead.phoneCountryCode, lead.phoneNumber)} className="hover:text-brand hover:underline">
+                {lead.phone}
+              </a>
+            </Fact>
             <Fact label="Lead">
               <StagePill stage={lead.stage} />
             </Fact>
@@ -113,6 +128,8 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
             {detail.permissions.assign ? <AssignPanel leadId={lead.id} ownerId={lead.ownerId} owners={owners} /> : null}
             <FollowUpsPanel detail={detail} />
             <NotePanel leadId={lead.id} canEdit={detail.permissions.edit} />
+            <RecordingsPanel leadId={lead.id} recordings={recordings} canUpload={detail.permissions.edit} />
+            <DocumentsPanel leadId={lead.id} documents={documents} canUpload={detail.permissions.edit} />
             <ReviewsPanel detail={detail} />
             {clientStatus ? <LeadClientPanel leadId={lead.id} status={clientStatus} /> : null}
             {canDoBooking(actor, "view") ? (

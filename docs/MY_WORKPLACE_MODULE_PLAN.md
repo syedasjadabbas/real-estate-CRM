@@ -252,7 +252,7 @@ The existing "My workplace" item stays as it is, visible to every role. No chang
 - **IP values:** every stored IP in development is loopback (`::1`). Production must run behind a proxy that overwrites `X-Forwarded-For`; otherwise the stored value can be set by the client. This is a deployment note; auth was not changed.
 - **Hover on touch screens:** the full user agent is a hover title, so phones show only the short label.
 - **Test data:** no holidays remain. New `signin_logs` rows (sign-ins and sign-outs from the role checks) and two holiday create / delete audit pairs were added; no other records changed.
-- **Retention:** sign-in logs are still never pruned (12 months proposed in `SECURITY_AND_PRIVACY.md`, unconfirmed).
+- **Retention:** configurable since Production Readiness (Security settings, `job:prune-signin-logs`); automatic deletion stays off until the client approves (C2).
 
 ### Still pending
 - **My leaves** — needs Q3, Q3b, Q5, Q6 (and the Q4 / Q8 / Q14 / Q15 defaults).

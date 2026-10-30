@@ -338,7 +338,7 @@ Built only the Holidays section. Employee records, leave requests, approvals and
 
 ### UI
 
-- `/dashboard/hr` now shows the reference overview: "People & time off", tabs (Overview, plus Holidays for roles that can open it) and the three module cards. Employees and Leave cards are marked "Not built yet"; for agents and accountants the Holidays card says it is for HR, admins and managers instead of linking to an Access denied page.
+- `/dashboard/hr` now shows the reference overview: "People & time off", tabs (Overview, plus Holidays for roles that can open it) and the three module cards. At the time, Employees and Leave cards were marked "Not built yet" (Employees has since been built and links to its page; an Attendance "not available" card was added); for agents and accountants the Holidays card says it is for HR, admins and managers instead of linking to an Access denied page.
 - `/dashboard/hr/holidays`:
   - tiles: Holidays (year), Company-wide, Regional, Next holiday;
   - toolbar: year stepper, List / Calendar switch, search (name or region), Filters drawer (Scope, Region), Clear, count pill, **Add holiday** (HR / admins);

@@ -1,6 +1,6 @@
 # Accounts & Finance Module — Phase 1 Plan (awaiting approval)
 
-Status: **plan approved 29 Oct 2026; F1 (booking payments) implemented on proposed defaults — see §9. F2–F5 not started.** Prepared 29 Oct 2026 after reviewing `REQUIREMENTS.md` §14 (FR-200–206), `MODULES_AND_FEATURES.md` Part B, `DATA_MODEL.md` §9, `SECURITY_AND_PRIVACY.md` §8, `USER_ROLES_AND_PERMISSIONS.md`, `API_DESIGN.md` (Finance), `IMPLEMENTATION_ROADMAP.md` (P6), `ASSUMPTIONS_AND_OPEN_QUESTIONS.md` (Q-F1–F6, Q-B3, Q-B5, Q-B6), `BOOKINGS_MODULE_PLAN.md` and the current schema and code.
+Status: **plan approved 29 Oct 2026; F1 (booking payments) and F2 (finance screens) implemented on proposed defaults — see §9 and the F2 log. **F4 partly built (31 Oct 2026): collections by project and outstanding by project / agent with audited CSV, see §11.** F3, F5 and income vs expense not started.** Prepared 29 Oct 2026 after reviewing `REQUIREMENTS.md` §14 (FR-200–206), `MODULES_AND_FEATURES.md` Part B, `DATA_MODEL.md` §9, `SECURITY_AND_PRIVACY.md` §8, `USER_ROLES_AND_PERMISSIONS.md`, `API_DESIGN.md` (Finance), `IMPLEMENTATION_ROADMAP.md` (P6), `ASSUMPTIONS_AND_OPEN_QUESTIONS.md` (Q-F1–F6, Q-B3, Q-B5, Q-B6), `BOOKINGS_MODULE_PLAN.md` and the current schema and code.
 
 **Reference:** none exists. Finance is *"not present in the reference CRM"* (MODULES Part B; reverse-engineering item B-12). Nothing below is reference behaviour; everything is either a written requirement or a proposal.
 
@@ -98,7 +98,7 @@ Installment schedules / overdue (needs the Tasks payment plan, Q-B6 / business r
 
 ## 4. Screens and workflow plan
 
-Navigation: a new "Accounts & Finance" sidebar entry (the only sidebar change; the code already notes it is withheld until approval). Placement **Q-F14** (the reference has no slot for it). Visible only to roles with Finance access.
+Navigation: a new "Accounts & Finance" sidebar entry (now built with F2). Placement **Q-F14** (the reference has no slot for it). Visible only to roles with Finance access.
 
 | Screen | Content |
 |---|---|
@@ -238,3 +238,36 @@ Verification:
 | Typecheck, lint, build | Pass |
 | Browser click-through (window visible) | Accountant: record form showed total / paid / outstanding; 12,000,000 rejected on the field (outstanding 11,700,000); 2,000,000 posted as receipt 4 after a deliberate double-click (one row, idempotency key set); payment detail → Request reversal saved as pending. Manager: /dashboard/finance redirected to Approvals (only tab), approved with a note → reversal 2 posted, queue emptied, history and audit trail updated |
 | Layout | 375 / 768 / 1440 px on Payments, Record, payment detail, Approvals, Outstanding, Settings, booking and client pages: no horizontal page overflow. Fixed: at 375 px the record form's Total / Paid / Outstanding tiles truncated amounts ("PKR 16,…"); they now stack in one column on phones |
+
+
+---
+
+## 11. F4 reports with confirmed definitions (31 Oct 2026)
+
+**Built** (`/dashboard/finance/reports`, a new "Reports" tab; super admin, admin and accountant only, the matrix "Reports + CSV export"):
+
+| Report | Definition | Reconciles with |
+|---|---|---|
+| Collections by project | Ledger rows **dated** in the range (default: month to date), grouped by the booking's project: receipts and amount received, reversals and amount reversed, **net = received − reversed**. Each row counts on its own date, which is the ledger's existing net rule. | The sum of ledger rows in the range (test) |
+| Outstanding by project | The FR-203 per-booking balance (total sale − net paid; cancelled bookings excluded) summed per project, as of today | The Outstanding screen totals (test) |
+| Outstanding by sales agent | Same, per booking agent ("No agent" if none) | Same |
+
+**CSV export:**
+- `GET /api/v1/finance/reports/export?report=collections|outstanding_project|outstanding_agent&from&to`, including a total row.
+- Cells that could act as spreadsheet formulas are neutralised.
+- Each export writes an audit row `finance.report_export` with the totals.
+
+**Not built** (client-dependent):
+- **Income vs expense by month:** needs income and expense records (F3: Q-F4, Q-F9).
+- **Overdue against the schedule:** Q-B6.
+- **Refunds and credits on cancellation:** Q-F10. Collections only show what is in the ledger.
+- **Finance KPIs on the dashboard:** Q-F15.
+
+**No change** to payments, reversals, receipt numbers or finance permissions. Reports are read-only, and the only rows they write are export audit rows.
+
+**Tests:** `tests/integration/finance-reports.test.ts` (5):
+- collections reconcile with reversals subtracting, and rows outside the range are excluded;
+- outstanding by project and agent equals the Outstanding screen;
+- the range defaults and a reversed range is swapped;
+- permissions (super admin, admin, accountant allowed; manager, agent, HR refused);
+- the CSV content, the formula neutralising and the export audit.

@@ -231,3 +231,34 @@ export async function bookingsFor(db: Database, actor: Actor, by: { unitId?: str
   return withMoney(db, rows, today);
 }
 
+
+/**
+ * Clients list "Has investment in project": the client has a booking that is not cancelled in the
+ * project, among bookings the actor may see. Table names are written out because Drizzle leaves
+ * columns unqualified in single-table queries, which would bind `id` to the bookings row.
+ */
+export function clientInvestedIn(actor: Actor, members: string[], projectId: string): SQL {
+  return sql`exists (select 1 from "bookings" where "bookings"."client_id" = "clients"."id" and "bookings"."project_id" = ${projectId}
+    and "bookings"."stage" <> 'cancelled' and ${bookingScopeFilter(actor, members)})`;
+}
+
+/** Latest booking that is not cancelled per client, among bookings the actor may see (Clients "Latest investment"). */
+export async function latestInvestments(db: Database, actor: Actor, clientIds: string[]) {
+  if (clientIds.length === 0 || !canDoBooking(actor, "view")) return new Map<string, { bookingId: string; projectName: string; unitNo: string; stage: string; createdAt: Date }>();
+  const members = await teamMemberIds(db, actor);
+  const rows = await db
+    .selectDistinctOn([bookings.clientId], {
+      clientId: bookings.clientId,
+      bookingId: bookings.id,
+      projectName: projects.name,
+      unitNo: units.unitNo,
+      stage: bookings.stage,
+      createdAt: bookings.createdAt,
+    })
+    .from(bookings)
+    .innerJoin(projects, eq(projects.id, bookings.projectId))
+    .innerJoin(units, eq(units.id, bookings.unitId))
+    .where(and(inArray(bookings.clientId, clientIds), sql`${bookings.stage} <> 'cancelled'`, bookingScopeFilter(actor, members)))
+    .orderBy(bookings.clientId, desc(bookings.createdAt), desc(bookings.id));
+  return new Map(rows.map(({ clientId, ...r }) => [clientId!, r]));
+}

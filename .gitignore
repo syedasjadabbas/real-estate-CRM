@@ -43,3 +43,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# private uploaded files (call recordings); production uses FILE_STORAGE_DIR
+/storage/
+
+# Playwright output
+/test-results/
+/playwright-report/
+/blob-report/

@@ -22,6 +22,10 @@ export type ExecutiveKpis = {
 
 export type NamedCount = { id: string; label: string; count: number };
 
+/** FR-016: lost leads per team, with the owners (agents) inside it. */
+export type LostTeam = { id: string; label: string; count: number; agents: NamedCount[] };
+export type LostBreakdown = { byReason: NamedCount[]; byTeam: LostTeam[]; total: number; from: string; to: string };
+
 export type InsightTotals = {
   teams: number;
   avgScore: number;
@@ -61,6 +65,9 @@ export type RecentLead = {
   createdAt: string;
 };
 
+/** Range and team chosen in the URL (?range=&from=&to=&team=). */
+export type DashboardFilters = { range: RangeKey; from?: string; to?: string; team?: string };
+
 export type DashboardData = {
   /** True only for the development preview route. */
   isSample: boolean;
@@ -79,6 +86,7 @@ export type DashboardData = {
   leadSources: NamedCount[];
   inboundChannels: NamedCount[];
   recentLeads: RecentLead[];
+  lost: LostBreakdown | null;
 };
 
 export const emptyDashboardData: DashboardData = {
@@ -98,4 +106,5 @@ export const emptyDashboardData: DashboardData = {
   leadSources: [],
   inboundChannels: [],
   recentLeads: [],
+  lost: null,
 };

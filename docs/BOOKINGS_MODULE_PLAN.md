@@ -24,7 +24,7 @@ Status: **confirmed scope implemented and verified against PostgreSQL** (29 Oct 
 1. **Hold:** the creator enters "Reserved until" (optional, not in the past). Overdue holds (date passed while Negotiation / Token pending) are flagged; nothing is released automatically.
 2. **Stages:** forward one step at a time, no skipping, no going back; every move logged with an optional note. No payment or document gates.
 3. **Confirm:** unit → Booked (Sold stays a manual admin status for units without an active booking), lead → Booked, client created or linked by phone (FR-050; one client per phone).
-4. **Payments:** deferred to Finance. Paid shows PKR 0 / total; the 30% milestone reads "Not met" with an explanatory note. No payment rows exist.
+4. **Payments:** deferred to Finance at the time. **Update:** Finance F1/F2 now posts payments, and the booking page takes Paid and the 30% milestone from them.
 5. **Provisional receipt / Sales order:** placeholder tabs; no document numbers issued.
 6. **Cancel:** unit → Available; the lead stays where it is.
 7. **Total sale = area (snapshot at booking) × rate**, no discount; rate > 0, token > 0, token ≤ total.

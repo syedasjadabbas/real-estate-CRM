@@ -1,3 +1,5 @@
+import { clientInvestedIn, latestInvestments } from "@/modules/bookings/queries";
+import { canDoBooking } from "@/modules/bookings/policy";
 import { and, asc, count, desc, eq, ilike, isNull, or, sql, type SQL } from "drizzle-orm";
 import { alias, type AnyPgColumn } from "drizzle-orm/pg-core";
 import type { Database } from "@/server/db";
@@ -49,13 +51,14 @@ export type ClientListRow = Awaited<ReturnType<typeof listClients>>["rows"][numb
 
 /**
  * Clients are long-term profiles across projects, so the list is not filtered by the
- * header's project selector. "Latest investment" needs Bookings and is not returned yet.
+ * header's project selector. "Latest investment" and the project filter use bookings the actor may see.
  */
 export async function listClients(db: Database, actor: Actor, rawQuery: unknown, now = new Date()) {
   if (!canDoClient(actor, "view")) throw forbidden();
   const query = clientListQuerySchema.parse(rawQuery ?? {});
   const members = await teamMemberIds(db, actor);
-  const where = and(clientScopeFilter(actor, members), searchCondition(query.q));
+  const investedFilter = query.project && canDoBooking(actor, "view") ? clientInvestedIn(actor, members, query.project) : undefined;
+  const where = and(clientScopeFilter(actor, members), searchCondition(query.q), investedFilter);
   const column = sortColumns[query.sort];
 
   const [{ total }] = await db.select({ total: count() }).from(clients).where(where);
@@ -78,8 +81,13 @@ export async function listClients(db: Database, actor: Actor, rawQuery: unknown,
     page,
     pageCount,
     pageSize: CLIENT_PAGE_SIZE,
-    rows: rows.map((r) => ({ ...r, phone: formatPhone(r.phoneCountryCode, r.phoneNumber) })),
+    rows: await withInvestments(db, actor, rows.map((r) => ({ ...r, phone: formatPhone(r.phoneCountryCode, r.phoneNumber) }))),
   };
+}
+
+async function withInvestments<T extends { id: string }>(db: Database, actor: Actor, rows: T[]) {
+  const latest = await latestInvestments(db, actor, rows.map((r) => r.id));
+  return rows.map((r) => ({ ...r, latestInvestment: latest.get(r.id) ?? null }));
 }
 
 export async function getClientDetail(db: Database, actor: Actor, clientId: string) {

@@ -52,6 +52,8 @@ export const convertLeadSchema = z.object({
  */
 export const clientListQuerySchema = z.object({
   q: z.string().trim().max(100).optional().catch(undefined),
+  /** "Has investment in project" filter. */
+  project: z.string().uuid().optional().catch(undefined),
   sort: z.enum(CLIENT_SORT_COLUMNS).catch("updatedAt"),
   dir: z.enum(["asc", "desc"]).catch("desc"),
   page: z.coerce.number().int().min(1).max(10_000).catch(1),

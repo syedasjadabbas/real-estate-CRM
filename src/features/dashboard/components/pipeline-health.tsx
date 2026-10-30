@@ -100,6 +100,12 @@ export function PipelineHealth({ data }: { data: PipelineHealthData | null }) {
               </TBody>
             </Table>
           </div>
+        ) : data ? (
+          // Live data, but FR-014's counting rules are not confirmed (DASHBOARD_PLAN.md §7).
+          <EmptyState>
+            The aging × meetings matrix is waiting for the client to confirm which leads count as the &ldquo;engaged pipeline&rdquo; and how
+            meetings are counted. The tiles above are live.
+          </EmptyState>
         ) : (
           <EmptyState>No engaged pipeline to analyse yet.</EmptyState>
         )}

@@ -46,6 +46,7 @@ export function KpiCard({
 }) {
   return (
     <div
+      data-kpi={label}
       className={cn(
         "flex flex-col justify-between rounded-2xl border border-zinc-200/80 bg-white p-4 shadow-hairline transition-shadow hover:shadow-md hover:shadow-zinc-950/5",
         className,
@@ -72,7 +73,7 @@ export function KpiCard({
           {label}
         </p>
         <div className="mt-1.5">
-          <div className="text-3xl leading-9 font-black tracking-[-0.025em] tabular-nums">{value}</div>
+          <div data-kpi-value className="text-3xl leading-9 font-black tracking-[-0.025em] tabular-nums">{value}</div>
           {caption ? <div className="text-xs leading-4 font-medium text-zinc-600">{caption}</div> : null}
         </div>
       </div>

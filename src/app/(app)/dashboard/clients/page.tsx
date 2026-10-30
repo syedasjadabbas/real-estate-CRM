@@ -10,7 +10,9 @@ import { ClientsScopeNotice } from "@/features/clients/components/scope-notice";
 import { clientsContext } from "@/features/clients/context";
 import { Pagination } from "@/features/leads/components/pagination";
 import { flattenParams } from "@/features/leads/url";
+import { canDoBooking } from "@/modules/bookings/policy";
 import { canDoClient } from "@/modules/clients/policy";
+import { selectableProjects } from "@/modules/projects/queries";
 import { listClients } from "@/modules/clients/queries";
 
 export const metadata: Metadata = { title: "Clients" };
@@ -19,7 +21,10 @@ export default async function ClientsPage({ searchParams }: PageProps<"/dashboar
   const { actor, db, canView } = await clientsContext();
   if (!canView) return <RestrictedState />;
   const params = flattenParams(await searchParams);
-  const result = await listClients(db, actor, params);
+  const [result, projects] = await Promise.all([
+    listClients(db, actor, params),
+    canDoBooking(actor, "view") ? selectableProjects(db, actor) : Promise.resolve(null),
+  ]);
   return (
     <section className="space-y-6" aria-label="All clients">
       <PageHeader
@@ -40,13 +45,13 @@ export default async function ClientsPage({ searchParams }: PageProps<"/dashboar
         }
       />
       <ClientsScopeNotice actor={actor} />
-      <ClientsToolbar params={params} total={result.total} />
+      <ClientsToolbar params={params} total={result.total} projects={projects} />
       <ClientsTable
         rows={result.rows}
         pathname="/dashboard/clients"
         params={params}
         now={result.generatedAt}
-        emptyMessage={params.q ? "No clients match this search." : "No clients yet."}
+        emptyMessage={params.q || params.project ? "No clients match this search or filter." : "No clients yet."}
       />
       <Pagination page={result.page} pageCount={result.pageCount} total={result.total} params={params} />
     </section>
