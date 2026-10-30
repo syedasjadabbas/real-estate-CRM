@@ -1,6 +1,8 @@
 # Project status and completion checklist
 
-Updated **31 Oct 2026 (round 4: Playwright)**. Everything below was checked against the code and by running the checks named here. Nothing since commit `0f24ba9` (rounds 1–4) has been committed or deployed.
+Updated **31 Oct 2026 (final read-only audit, §9)**. Everything below was checked against the code and by running the checks named here.
+- Rounds 1–4 are committed and pushed as `e956033` on `main`.
+- Nothing has been deployed.
 
 ---
 
@@ -79,6 +81,8 @@ Out of scope (separate quote): AI call analysis, Meta / TikTok / WhatsApp, payro
 6. Daily `job:prune-signin-logs` scheduled, plus one manual `--dry-run`.
 7. Back up the database **and** `FILE_STORAGE_DIR` together; test one restore.
 8. Remove demo / verify accounts; rotate secrets (`SECURITY_AND_PRIVACY.md` §11).
+   - Check the security headers with `curl -sI https://<domain>/login` (`DEPLOYMENT_PROXY.md` §11).
+   - Decide on HSTS `includeSubDomains`.
 9. Recommended storage controls (`FILE_STORAGE_REVIEW.md` items 1–3):
    - graceful stop;
    - disk alerts;
@@ -175,3 +179,122 @@ Estimate: **about 82–85% of the quoted scope is built and verified; about 15% 
 | Vitest | `npm test` | 38 files, 342 / 342 |
 | Schema drift | `drizzle-kit check`; `drizzle-kit generate --name drift_probe` | "Everything's fine"; "No schema changes, nothing to migrate" (no file created; 13 migrations) |
 | Production build and Playwright | `npm run test:e2e` | Build passes (91 / 91 pages, 0 warnings); **42 / 42** Playwright tests |
+
+## 9. Final read-only audit (31 Oct 2026)
+
+No application code, configuration or database records were changed; only this file was updated.
+
+### 9.1 Re-run results (same day, after `e956033`)
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | Pass |
+| `npm run lint` | Pass, 0 problems |
+| `npm test` (Vitest) | 38 files, **342 / 342** |
+| `drizzle-kit check` / `generate --name drift_probe` | "Everything's fine" / "No schema changes" (13 migrations, no file created) |
+| `npm run test:e2e` | Production build passes (91 pages, 0 warnings); Playwright **42 / 42** in 2.4 min |
+
+### 9.2 Repository hygiene
+
+| Item | Finding |
+|---|---|
+| Working tree | Clean before this audit: nothing uncommitted needed to be kept |
+| Temporary files | None tracked. Ignored local files only: `.env.local`, `.dev-credentials`, `.next/`, `test-results/` (empty), `tsconfig.tsbuildinfo` |
+| Migration journal | Entries 0–12 match the 13 SQL files and 13 snapshots |
+| `.env.example` | Lists every variable the code reads: `DATABASE_URL`, `TEST_DATABASE_URL`, `TRUST_PROXY`, `TRUSTED_PROXY_COUNT`, `CLIENT_IP_HEADER`, `PROXY_SHARED_SECRET`, `FILE_STORAGE_DIR`. `NODE_ENV` is set by the runtime. No session secret is needed (session tokens are random and stored hashed) |
+| **Repository visibility** | **Resolved 31 Oct 2026: the repository is now private** (verified: `visibility: PRIVATE`; anonymous API access returns 404; `main` still at `e956033`, no history change). It had been public, It contains the commercial quotation (`Zeploy_Tech_Real_Estate_CRM_Quotation_Updated.*`, `quotation/`, since `d8b03b3`) and the full requirements and security docs. The files stay in the private history; nothing was rewritten. Before visibility changed, the repository was checked for integrations: no webhooks, deployments, environments, Actions workflows, Pages, deploy keys or forks; the owner is the only collaborator |
+| `.claude/launch.json` | A local dev-tool file is tracked. Harmless |
+
+### 9.3 Security items still requiring action
+
+1. **Security headers: resolved 31 Oct 2026.**
+   - `next.config.ts` now sends CSP, `X-Frame-Options: DENY`, `Referrer-Policy: same-origin`, `nosniff` and HSTS (`DEPLOYMENT_PROXY.md` §11).
+   - The CSP uses `'unsafe-inline'` scripts because nonces are incompatible with Partial Prerendering.
+   - HSTS has no `includeSubDomains` / `preload`; adding them is the client's call.
+   - The file routes keep their own sandbox CSP.
+   - Covered by `e2e/security-headers.spec.ts`.
+2. **Repository visibility: resolved** (§9.2).
+3. **Storage controls** (`FILE_STORAGE_REVIEW.md` items 1–3): graceful stop, disk alerts, report-only ClamAV scan, upload rate limit and body cap at the proxy.
+4. **Live HTTPS check of the same-origin fix** behind the real proxy (`DEPLOYMENT_PROXY.md` §10).
+5. **Development accounts.**
+   - `db:seed` refuses `NODE_ENV=production`, but the dev database holds `@mz.local` accounts. Never copy it to production.
+   - Rotate all secrets at handover (§5 step 8).
+6. **2FA** is not in V1 (`SECURITY_AND_PRIVACY.md` §2: "later, unless confirmed").
+
+### 9.4 Requirement coverage
+
+Every FR in `REQUIREMENTS.md` is either built (§1) or on the blocker list (§4), except these out-of-scope items: FR-039 (AI call analysis), FR-040 (Meta) and FR-041 (TikTok), all quoted separately.
+
+Partly built, with the open part listed in §4:
+
+| FR | Built | Waiting on |
+|---|---|---|
+| FR-014 aging matrix | — | M-Q1–M-Q5 |
+| FR-032 shared phones | View only | Merge |
+| FR-043 / FR-075 CSV imports | — | Q-P5 |
+| FR-081 holds | — | Q-B2 |
+| FR-084 receipts / sales order | — | Q-B5 |
+| FR-142 leave | — | Q3 etc. |
+| FR-152 call quality | Durations are now stored | Q: "does a recording count as a call" |
+| FR-153 critical flag | — | Q-L8 |
+| FR-200 / 201 / 205 income and expense | — | Q-F |
+| FR-203 overdue vs schedule | — | Schedules |
+| FR-204 receipt numbers | — | Q-F3 |
+
+Non-functional requirements not verified:
+- **NFR-02:** list pages < 1.5 s at 10k leads. No load test was run.
+- **NFR-05:** Edge, Safari, and mobile Chrome / Safari on real devices. Only desktop Chrome and Chrome mobile emulation are automated.
+
+### 9.5 Test coverage gaps
+
+- **Service-level tests:** every module has Vitest integration tests on PostgreSQL.
+- **Browser tests:** Playwright covers the eight critical workflows only.
+
+Not covered in a browser:
+- bookings, meetings, tasks / proposal builder, inventory, projects, clients, teams / roster / daily reports, targets, performance, HR employees and holidays, finance payment entry, the Security settings page;
+- print layouts (proposal / payment plan): no automated test of any kind;
+- click-to-call: only the `tel:` link format is unit-tested; the dialer hand-off needs a real phone.
+
+### 9.6 Documentation consistency
+
+- Fixed here: the header of this file said nothing since `0f24ba9` was committed.
+- Historical notes, accurate for their date and left unchanged:
+  - `PRODUCTION_READINESS_PLAN.md` line 434 ("these uncommitted changes"), now in `0f24ba9`;
+  - `UI_FOUNDATION_NOTES.md` ("sign-in is not connected yet");
+  - `IMPLEMENTATION_ROADMAP.md` dates.
+- `SECURITY_AND_PRIVACY.md` §7 headers: now implemented and documented (§9.3 item 1).
+
+### 9.7 Recommendation
+
+**Ready for a client demonstration** on a local or staging machine with the seeded development data:
+- every built workflow passes its automated tests;
+- the dashboard and screens show real data only;
+- blocked features say what they are waiting for instead of showing empty or invented data.
+
+**Not ready for production use** until:
+- the §5 deployment checklist is complete;
+- a live HTTPS check passes, covering the same-origin fix and the five headers via `curl -sI`.
+
+The security headers and the repository visibility, which earlier blocked production, are resolved.
+
+The completion estimate stays at **about 82–85% of the quoted scope built and verified**. The remaining ~15% waits on the client decisions in §4.
+
+### 9.8 Follow-up: visibility and security headers (31 Oct 2026)
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | Pass |
+| `npm run lint` | Pass, 0 problems |
+| `npm test` (Vitest) | 38 files, **342 / 342** |
+| `drizzle-kit check` | "Everything's fine" |
+| `npm run test:e2e` | Production build passes, 0 warnings; Playwright **47 / 47** in 3.5 min: the 42 earlier tests plus 5 in `e2e/security-headers.spec.ts` (4 desktop, 1 mobile) |
+| Dev server (`next dev`, :3100) | Headers present, `unsafe-eval` only in development; the login page hydrates and fonts load with no CSP errors |
+
+**Found while testing.** Next.js config headers replace a header that a route sets itself. A site-wide CSP therefore replaced the file routes' stricter sandbox policy, so the app CSP is not applied to `/api/`. The spec asserts that the sandbox policy is delivered.
+
+**Files changed (uncommitted):**
+- `next.config.ts`
+- `e2e/security-headers.spec.ts` (new)
+- `docs/DEPLOYMENT_PROXY.md` §11
+- `docs/SECURITY_AND_PRIVACY.md` §7
+- `docs/PROJECT_STATUS.md`

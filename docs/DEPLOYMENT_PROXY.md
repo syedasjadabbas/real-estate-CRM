@@ -181,3 +181,51 @@ State-changing API requests (`POST` / `PATCH` / `DELETE` under `/api/v1`) must c
 - Caddy's `reverse_proxy` passes the original `Host` through and sets `X-Forwarded-Host` / `X-Forwarded-Proto` by default, so §3 needs no change.
 - With nginx, add `proxy_set_header Host $host;` and `proxy_set_header X-Forwarded-Proto $scheme;`.
 - Do not rewrite `Host` to the upstream address.
+
+---
+
+## 11. Security headers (added 31 Oct 2026)
+
+The app sets its own security headers in `next.config.ts` (`headers()`), so they apply behind any proxy and in every environment. They implement `SECURITY_AND_PRIVACY.md` §7.
+
+| Header | Value | Where |
+|---|---|---|
+| `Content-Security-Policy` | `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'` | Every path except `/api/` |
+| `X-Frame-Options` | `DENY` | Every path |
+| `Referrer-Policy` | `same-origin` | Every path |
+| `X-Content-Type-Options` | `nosniff` | Every path |
+| `Strict-Transport-Security` | `max-age=31536000` (one year) | Every path; browsers only honour it over HTTPS |
+
+**Why the policy looks like this.**
+- **`'unsafe-inline'` scripts.**
+  - Next.js streams its page data as inline scripts. The alternative, a per-request nonce, requires every page to render dynamically.
+  - The Next.js 16 CSP guide says nonces are incompatible with Partial Prerendering, which this app uses (`cacheComponents`).
+  - The policy therefore follows the guide's "Without Nonces" pattern.
+  - Scripts still load only from the app's own origin; no third-party scripts are allowed.
+- **`'unsafe-eval'` is added in development only** (`next dev`), because React needs it for error stacks. Production builds never send it; the Playwright suite checks this.
+- **`blob:` media** lets the recording panel read a chosen file's duration before upload.
+- **No `upgrade-insecure-requests`:** Caddy already redirects HTTP to HTTPS. The directive would break plain-HTTP local runs (`next start` on 127.0.0.1).
+- **`/api/` gets no app CSP.**
+  - Config headers *replace* a header that a route sets itself.
+  - The recording and document routes send a stricter policy that must reach the browser: `default-src 'none'; img-src 'self'; sandbox`.
+  - JSON responses don't need a script policy. The other four headers still apply to `/api/`.
+- **HSTS without `includeSubDomains` or `preload`:** those options bind every subdomain of the client's domain to HTTPS, possibly permanently. Add them only with the client's agreement once all their subdomains serve HTTPS.
+
+**Proxy configuration.**
+- **No change is needed in Caddy (§3).** Do not repeat these headers in the Caddyfile: a second `Content-Security-Policy` header would be combined with the app's, which is stricter than intended and hard to debug.
+- If a header must be overridden at the proxy, use Caddy's `header` directive with replace semantics (for example `header Strict-Transport-Security "max-age=31536000; includeSubDomains"`), and document it here.
+- With nginx, use the same rule: don't add duplicates with `add_header`.
+
+**Checking after deployment.**
+
+```bash
+curl -sI https://crm.example.com/login
+```
+
+The response should show all five headers. Also confirm in the browser console that no CSP violations appear while signed in, uploading a recording and playing it.
+
+**Tests:** `e2e/security-headers.spec.ts` (5 tests) checks:
+- the headers on pages, API routes and static assets;
+- that the file routes keep their sandbox policy;
+- that a page on another origin cannot frame the app;
+- that signed-in pages, `blob:` media and the notification dropdown raise no CSP violations, on desktop and mobile.

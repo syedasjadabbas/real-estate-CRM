@@ -52,6 +52,8 @@ The CRM holds customer phone numbers, emails, budgets, call recordings, booking 
 
 - HTTPS everywhere (Caddy auto-TLS), HSTS.
 - Security headers: CSP (self + storage domain), X-Frame-Options DENY, Referrer-Policy, X-Content-Type-Options.
+  - **Implemented 31 Oct 2026** in `next.config.ts`: CSP (self only; storage is local, so there is no storage domain), X-Frame-Options DENY, Referrer-Policy `same-origin`, nosniff and HSTS (1 year).
+  - Exact values and the reasons for `'unsafe-inline'` are in `DEPLOYMENT_PROXY.md` §11.
 - CSRF: SameSite cookies + Origin check on state-changing requests (server actions include this).
 - Input validation with Zod; parameterised queries via the ORM. Output escaping by React.
 - Rate limiting (see `API_DESIGN.md`).
