@@ -234,14 +234,14 @@ Partly built, with the open part listed in §4:
 |---|---|---|
 | FR-014 aging matrix | — | M-Q1–M-Q5 |
 | FR-032 shared phones | View only | Merge |
-| FR-043 / FR-075 CSV imports | — | Q-P5 |
+| FR-043 / FR-075 CSV imports | FR-075 units (§15.1) | FR-043 leads: Q-P5 (old system's export) |
 | FR-081 holds | — | Q-B2 |
 | FR-084 receipts / sales order | — | Q-B5 |
 | FR-142 leave | — | Q3 etc. |
 | FR-152 call quality | Durations are now stored | Q: "does a recording count as a call" |
 | FR-153 critical flag | — | Q-L8 |
 | FR-200 / 201 / 205 income and expense | — | Q-F |
-| FR-203 overdue vs schedule | — | Schedules |
+| FR-203 overdue vs schedule | Against the booking's payment plan (§15.2) | Down payment due date (C-27) |
 | FR-204 receipt numbers | — | Q-F3 |
 
 Non-functional requirements not verified:
@@ -671,3 +671,41 @@ Migrations 0017–0019 are additive and applied to the development and test data
 | Schema drift | "Everything's fine" / "No schema changes" (22 migrations; no new migration this round) |
 | Production build | Pass (100 / 100 pages, 0 warnings) |
 | Playwright | **64 / 64** (desktop and mobile), no runtime warnings |
+
+## 15. Round 5 (3 Nov 2026)
+
+### 15.1 FR-075: importing units from CSV
+- Inventory → "Import CSV" (Super Admin and Admin, the roles that add units by hand). Choose a project and a CSV file (at most 2,000 rows and 2 MB). A template can be downloaded from the page.
+- Columns: `unit_no`, `floor`, `block`, `area_sqft`, `base_price`, `sale_model`, `nature`, `category`, `type`, `bedrooms`, `premium`, `comment`, `listed_on`. Required: `unit_no`, `area_sqft` and `base_price`. Unknown or missing headers are refused before any row is read.
+- **Check file** runs every row through the same rules as adding a unit by hand (field validation, the project's dimension lists, unique unit numbers, including duplicates inside the file). It writes nothing and shows a validation report: line, unit, and the reason for each failed row.
+- **Import units** is enabled only after a clean check of the same file and project. It adds all rows or none, so a file with any error changes nothing. New units start as Available.
+- Each new unit is audited (`unit.create`), plus one `unit.import` summary row.
+- Tests: `unit-import.test.ts` (CSV parsing; check writes nothing; row errors by line with nothing imported; clean import audited; bad headers and roles refused); `e2e/inventory-import.spec.ts`.
+- **Lead import (FR-043) is still not built:** it depends on the old system's export format (Q-P5).
+
+### 15.2 FR-203: overdue against the payment plan
+- Finance → Outstanding now has "Due to date (plan)" and "Overdue" columns, an "Overdue" total, and an "Overdue on plan" filter.
+- **Schedule:** the booking's payment plan, meaning its most recent Payment-plan task that isn't cancelled. Its installments carry due dates (the 10th of the month, Q43).
+- **Due to date:** the plan's installments dated on or before today (Pakistan date).
+- **Overdue:** due to date minus net paid (after reversals), never below zero.
+- **What is not counted:** rows without a date are left out, and the screen says how many. This covers the down payment until C-27 is answered, and plans saved before due dates existed.
+- **No plan:** a booking without a payment plan shows "No plan". No figure is guessed.
+- No new formula or policy was introduced. There are no late fees and no grace period. The figure is a plain comparison of the agreed schedule with posted payments.
+- Test: `finance.test.ts` "overdue against the payment plan (FR-203)" covers past, future and undated rows, cancelled plans being ignored, a booking without a plan, the totals and the filter.
+
+### 15.3 Still not built (no defined rule; current behaviour kept)
+- Lead import format (FR-043, Q-P5); receipt / sales-order layout (FR-084, "to be provided by client"); merging shared-phone leads and deleting leads (no rule given).
+- Refund deductions; receipt numbering; PDP / CDP; Critical agent rule; Pipeline pressure; ROI rate and floor prices; attendance policy; task status definitions; aging matrix.
+- New notification events (N2–N6); staff leave approval order (C-4); cross-year deduction (C-13); proration method (C-10).
+- Access removals waiting for the signed questionnaire (S-1).
+
+### 15.4 Verification (3 Nov 2026, end of round 5)
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | Pass |
+| `npm run lint` | Pass, 0 problems |
+| `npm test` (Vitest) | **46 files, 405 / 405** |
+| Schema drift | "Everything's fine" / "No schema changes" (22 migrations; no new migration this round) |
+| Production build | Pass (101 / 101 pages, 0 warnings) |
+| Playwright | **67 tests** (desktop and mobile). Run 1: 66 / 67, the new import spec failed on an ambiguous "Project" label (fixed; then 3 / 3 alone). Run 2: 65 / 67, two notification specs not changed this round timed out during a slow run (10 min vs 3.7 min); re-run twice each: 38 / 38 |

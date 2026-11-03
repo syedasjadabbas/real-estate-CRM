@@ -2,6 +2,7 @@
 
 import { refresh } from "next/cache";
 import { createUnit, setUnitStatus, updateUnit } from "@/modules/inventory/commands";
+import { importUnits } from "@/modules/inventory/import";
 import { updateProjectDimensions } from "@/modules/projects/commands";
 import { requireActor } from "@/server/auth/current-user";
 import { getDb } from "@/server/db";
@@ -36,4 +37,8 @@ export async function setUnitStatusAction(unitId: string, status: string, reason
 
 export async function updateDimensionsAction(projectId: string, input: Record<string, string[]>) {
   return run((db, actor) => updateProjectDimensions(db, actor, projectId, input));
+}
+
+export async function importUnitsAction(input: { projectId: string; csv: string; apply: boolean }) {
+  return run((db, actor) => importUnits(db, actor, input));
 }

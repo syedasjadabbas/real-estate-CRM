@@ -2,11 +2,12 @@ import { and, asc, desc, eq, ilike, inArray, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import type { Database } from "@/server/db";
-import { auditLogs, bookingPayments, bookings, leads, paymentMethods, paymentReversalRequests, projects, units, users } from "@/server/db/schema";
+import { auditLogs, bookingPayments, bookings, leads, paymentMethods, paymentReversalRequests, projects, taskInstallmentRows, tasks, units, users } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
 import { forbidden, notFound } from "@/server/errors";
 import { MILESTONE_RATIO } from "@/modules/bookings/constants";
 import { canAccessBooking } from "@/modules/bookings/policy";
+import { businessToday } from "@/modules/bookings/today";
 import { teamMemberIds } from "@/modules/leads/support";
 import { PAYABLE_STAGES } from "./constants";
 import { netPaidByBooking, toPaisa } from "./ledger";
@@ -112,6 +113,7 @@ export type PaymentDetail = Awaited<ReturnType<typeof getPaymentDetail>>;
 const outstandingQuerySchema = z.object({
   project: z.uuid().optional().catch(undefined),
   milestone: z.enum(["met", "not_met"]).optional().catch(undefined),
+  overdue: z.enum(["yes"]).optional().catch(undefined),
   q: z.string().trim().max(100).optional().catch(undefined),
 });
 
@@ -119,6 +121,39 @@ const outstandingQuerySchema = z.object({
  * FR-203 per-booking balances (all bookings except cancelled): total, paid (from rows), outstanding,
  * milestone. "Overdue vs schedule" needs installment schedules, which don't exist yet.
  */
+/**
+ * FR-203 "overdue vs schedule". The schedule is the booking's payment plan: its most recent
+ * Payment-plan task that isn't cancelled. Installments carry due dates (the 10th, Q43).
+ * - Due to date = the plan's installments dated on or before today (Pakistan date).
+ * - Rows without a date (the down payment until C-27 is answered, and plans saved before due
+ *   dates existed) are not counted and are reported separately.
+ * - A booking without a plan has no schedule: its figures are null, never guessed.
+ */
+export async function scheduleDueByBooking(db: Database, bookingIds: string[], today = businessToday()) {
+  const out = new Map<string, { planTaskId: string; dueToDate: number; undatedRows: number }>();
+  if (!bookingIds.length) return out;
+  const plans = await db
+    .selectDistinctOn([tasks.bookingId], { bookingId: tasks.bookingId, taskId: tasks.id })
+    .from(tasks)
+    .where(and(inArray(tasks.bookingId, bookingIds), eq(tasks.type, "payment_plan"), ne(tasks.status, "cancelled")))
+    .orderBy(tasks.bookingId, desc(tasks.createdAt));
+  if (!plans.length) return out;
+  const sums = await db
+    .select({
+      taskId: taskInstallmentRows.taskId,
+      due: sql<string>`coalesce(sum(${taskInstallmentRows.amount}) filter (where ${taskInstallmentRows.dueOn} <= ${today}), 0)`,
+      undated: sql<number>`count(*) filter (where ${taskInstallmentRows.dueOn} is null)::int`,
+    })
+    .from(taskInstallmentRows)
+    .where(inArray(taskInstallmentRows.taskId, plans.map((p) => p.taskId)))
+    .groupBy(taskInstallmentRows.taskId);
+  for (const p of plans) {
+    const s = sums.find((x) => x.taskId === p.taskId);
+    out.set(p.bookingId!, { planTaskId: p.taskId, dueToDate: Number(s?.due ?? 0), undatedRows: s?.undated ?? 0 });
+  }
+  return out;
+}
+
 export async function outstandingBookings(db: Database, actor: Actor, rawQuery: unknown) {
   if (!canDoFinance(actor, "viewAll")) throw forbidden();
   const q = outstandingQuerySchema.parse(rawQuery ?? {});
@@ -148,14 +183,26 @@ export async function outstandingBookings(db: Database, actor: Actor, rawQuery: 
       ),
     )
     .orderBy(asc(projects.name), asc(sql`lower(${units.unitNo})`));
-  const paid = await netPaidByBooking(db, rows.map((r) => r.bookingId));
+  const [paid, schedule] = await Promise.all([netPaidByBooking(db, rows.map((r) => r.bookingId)), scheduleDueByBooking(db, rows.map((r) => r.bookingId))]);
   const all = rows.map((r) => {
     const p = paid.get(r.bookingId) ?? 0;
-    return { ...r, paid: p, outstanding: (toPaisa(r.totalSale) - toPaisa(p)) / 100, milestoneMet: toPaisa(p) >= toPaisa(r.totalSale * MILESTONE_RATIO) };
+    const plan = schedule.get(r.bookingId) ?? null;
+    const overdue = plan ? Math.max(0, toPaisa(plan.dueToDate) - toPaisa(p)) / 100 : null;
+    return {
+      ...r,
+      paid: p,
+      outstanding: (toPaisa(r.totalSale) - toPaisa(p)) / 100,
+      milestoneMet: toPaisa(p) >= toPaisa(r.totalSale * MILESTONE_RATIO),
+      planTaskId: plan?.planTaskId ?? null,
+      dueToDate: plan?.dueToDate ?? null,
+      undatedRows: plan?.undatedRows ?? 0,
+      overdue,
+    };
   });
-  const rowsOut = q.milestone ? all.filter((r) => (q.milestone === "met" ? r.milestoneMet : !r.milestoneMet)) : all;
+  let rowsOut = q.milestone ? all.filter((r) => (q.milestone === "met" ? r.milestoneMet : !r.milestoneMet)) : all;
+  if (q.overdue) rowsOut = rowsOut.filter((r) => (r.overdue ?? 0) > 0);
   const sum = (pick: (r: (typeof rowsOut)[number]) => number) => rowsOut.reduce((acc, r) => acc + toPaisa(pick(r)), 0) / 100;
-  return { rows: rowsOut, totals: { total: sum((r) => r.totalSale), paid: sum((r) => r.paid), outstanding: sum((r) => r.outstanding) } };
+  return { rows: rowsOut, totals: { total: sum((r) => r.totalSale), paid: sum((r) => r.paid), outstanding: sum((r) => r.outstanding), overdue: sum((r) => r.overdue ?? 0) } };
 }
 export type OutstandingRow = Awaited<ReturnType<typeof outstandingBookings>>["rows"][number];
 

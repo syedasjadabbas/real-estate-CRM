@@ -735,7 +735,7 @@ export const tasks = pgTable(
   ],
 );
 
-/** FR-091 proposed schedule rows (editable). Not payments, not used for Finance "overdue". */
+/** FR-091 proposed schedule rows (editable). Not payments; a booking payment plan's dated rows are its schedule for Finance "overdue" (FR-203). */
 export const taskInstallmentRows = pgTable(
   "task_installment_rows",
   {

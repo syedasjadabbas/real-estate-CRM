@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { selectClass } from "@/features/leads/components/lead-fields";
 import { withParams } from "@/features/leads/url";
 
-/** Search + project + milestone filter for the Outstanding view. */
+/** Search + project + milestone + overdue filter for the Outstanding view. */
 export function OutstandingToolbar({ params, projects }: { params: Record<string, string>; projects: { id: string; label: string }[] }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -51,14 +51,21 @@ export function OutstandingToolbar({ params, projects }: { params: Record<string
             <option value="met">30% met</option>
           </select>
         </label>
-        {params.q || params.project || params.milestone ? (
+        <label className="min-w-0 flex-1 basis-40 lg:flex-none">
+          <span className="sr-only">Overdue</span>
+          <select value={params.overdue ?? ""} onChange={(e) => go({ overdue: e.target.value || null })} className={selectClass} disabled={pending}>
+            <option value="">Any payment status</option>
+            <option value="yes">Overdue on plan</option>
+          </select>
+        </label>
+        {params.q || params.project || params.milestone || params.overdue ? (
           <Button
             variant="secondary"
             size="lg"
             className="h-10 px-4 text-xs"
             onClick={() => {
               setQ("");
-              go({ q: null, project: null, milestone: null });
+              go({ q: null, project: null, milestone: null, overdue: null });
             }}
           >
             Clear

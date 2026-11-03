@@ -15,7 +15,7 @@ import { getDb } from "@/server/db";
 
 export const metadata: Metadata = { title: "Finance · Outstanding" };
 
-const COLUMNS = ["Lead", "Unit", "Project", "Sales agent", "Stage", "Total sale", "Paid", "Outstanding", "30% milestone"];
+const COLUMNS = ["Lead", "Unit", "Project", "Sales agent", "Stage", "Total sale", "Paid", "Outstanding", "Due to date (plan)", "Overdue", "30% milestone"];
 
 export default async function OutstandingPage({ searchParams }: PageProps<"/dashboard/finance/outstanding">) {
   const actor = await requirePageUser();
@@ -29,12 +29,13 @@ export default async function OutstandingPage({ searchParams }: PageProps<"/dash
       <PageHeader
         as="h2"
         title="Outstanding balances"
-        description="Per booking: total sale − posted payments (net of reversals). Overdue against a schedule needs installment plans, which aren't set up yet."
+        description="Per booking: total sale − posted payments (net of reversals). Overdue compares the booking's payment plan (installments due on the 10th) with what has been paid; installments without a date, such as the down payment, aren't counted."
       />
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
         <MiniStat label="Total sale" value={formatPrice(result.totals.total)} caption={`${result.rows.length} bookings`} />
         <MiniStat label="Paid" value={formatPrice(result.totals.paid)} caption="Posted payments − reversals" />
         <MiniStat label="Outstanding" value={formatPrice(result.totals.outstanding)} caption="Still to collect" />
+        <MiniStat label="Overdue" value={formatPrice(result.totals.overdue)} caption="Past due on payment plans" />
       </div>
       <OutstandingToolbar params={params} projects={projects} />
       <div className="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-hairline">
@@ -67,6 +68,17 @@ export default async function OutstandingPage({ searchParams }: PageProps<"/dash
                   <td className="px-3 py-2.5 whitespace-nowrap tabular-nums">{formatPrice(r.totalSale)}</td>
                   <td className="px-3 py-2.5 whitespace-nowrap tabular-nums">{formatPrice(r.paid)}</td>
                   <td className="px-3 py-2.5 whitespace-nowrap font-semibold tabular-nums">{formatPrice(r.outstanding)}</td>
+                  <td className="px-3 py-2.5 whitespace-nowrap tabular-nums">
+                    {r.planTaskId ? (
+                      <Link href={`/dashboard/tasks/${r.planTaskId}`} className="hover:text-brand hover:underline">
+                        {formatPrice(r.dueToDate)}
+                      </Link>
+                    ) : (
+                      <span className="text-zinc-400">No plan</span>
+                    )}
+                    {r.undatedRows ? <span className="block text-[10px] text-zinc-500">{r.undatedRows} undated row{r.undatedRows === 1 ? "" : "s"} not counted</span> : null}
+                  </td>
+                  <td className={`px-3 py-2.5 whitespace-nowrap font-semibold tabular-nums ${r.overdue ? "text-rose-700" : ""}`}>{r.overdue === null ? "—" : formatPrice(r.overdue)}</td>
                   <td className="px-3 py-2.5 whitespace-nowrap">{r.milestoneMet ? "Met" : "Not met"}</td>
                 </tr>
               ))}

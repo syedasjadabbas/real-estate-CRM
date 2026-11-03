@@ -9,7 +9,7 @@ import { createUnit } from "@/modules/inventory/commands";
 import { createLead } from "@/modules/leads/commands";
 import { hashPassword } from "@/server/auth/password";
 import { loadActor } from "@/server/auth/session-store";
-import { auditLogs, bookingPayments, paymentReversalRequests, users } from "@/server/db/schema";
+import { auditLogs, bookingPayments, paymentReversalRequests, taskInstallmentRows, tasks, users } from "@/server/db/schema";
 import type { Database } from "@/server/db";
 import type { Actor, Role } from "@/server/auth/types";
 import { AppError } from "@/server/errors";
@@ -314,7 +314,8 @@ describe.skipIf(!hasTestDb)("Finance F1: booking payments (PostgreSQL integratio
       const out = await outstandingBookings(db, accountant, {});
       expect(out.rows).toHaveLength(3);
       const sum = (pick: (r: (typeof out.rows)[number]) => number) => out.rows.reduce((acc, r) => acc + pick(r), 0);
-      expect(out.totals).toEqual({ total: sum((r) => r.totalSale), paid: sum((r) => r.paid), outstanding: sum((r) => r.outstanding) });
+      expect(out.totals).toEqual({ total: sum((r) => r.totalSale), paid: sum((r) => r.paid), outstanding: sum((r) => r.outstanding), overdue: 0 });
+      expect(out.rows.every((r) => r.overdue === null && r.dueToDate === null)).toBe(true); // no payment plans: no schedule
       expect(out.totals.paid).toBe(16_250_000);
       expect((await outstandingBookings(db, accountant, { milestone: "met" })).rows.map((r) => r.bookingId).sort()).toEqual([a, b].sort());
       expect(await errorCode(outstandingBookings(db, f.actors.manager, {}))).toBe("FORBIDDEN");
@@ -322,6 +323,43 @@ describe.skipIf(!hasTestDb)("Finance F1: booking payments (PostgreSQL integratio
       const payable = (await payableBookings(db, accountant)).map((r) => r.id);
       expect(payable).toEqual([a]);
       expect(await errorCode(payableBookings(db, admin))).toBe("FORBIDDEN");
+    });
+  });
+
+  describe("overdue against the payment plan (FR-203)", () => {
+    const plan = async (bookingId: string, rows: { amount: number; dueOn: string | null }[], status: "open" | "cancelled" = "open") => {
+      const [t] = await db
+        .insert(tasks)
+        .values({ title: "Plan", type: "payment_plan", status, assigneeId: f.actors.agent1.id, bookingId, proposal: {} as never })
+        .returning({ id: tasks.id });
+      await db.insert(taskInstallmentRows).values(rows.map((r, i) => ({ taskId: t.id, seq: i + 1, label: `Row ${i + 1}`, amount: r.amount, dueOn: r.dueOn })));
+      return t.id;
+    };
+
+    it("compares installments due by today with net paid; undated rows and bookings without a plan are not guessed", async () => {
+      const a = await bookingAt();
+      const b = await bookingAt();
+      const none = await bookingAt();
+      // a: 2 past-due installments (2,000,000), one future, one undated down payment.
+      const planA = await plan(a, [
+        { amount: 3_000_000, dueOn: null },
+        { amount: 1_000_000, dueOn: "2026-01-10" },
+        { amount: 1_000_000, dueOn: "2026-02-10" },
+        { amount: 1_000_000, dueOn: "2099-01-10" },
+      ]);
+      await pay(a, "1500000");
+      // b: a cancelled plan is ignored; the open one is fully covered by payments.
+      await plan(b, [{ amount: 9_000_000, dueOn: "2026-01-10" }], "cancelled");
+      await plan(b, [{ amount: 500_000, dueOn: "2026-01-10" }]);
+      await pay(b, "800000");
+
+      const out = await outstandingBookings(db, accountant, {});
+      const row = (id: string) => out.rows.find((r) => r.bookingId === id)!;
+      expect(row(a)).toMatchObject({ planTaskId: planA, dueToDate: 2_000_000, undatedRows: 1, overdue: 500_000 });
+      expect(row(b)).toMatchObject({ dueToDate: 500_000, undatedRows: 0, overdue: 0 });
+      expect(row(none)).toMatchObject({ planTaskId: null, dueToDate: null, overdue: null });
+      expect(out.totals.overdue).toBe(500_000);
+      expect((await outstandingBookings(db, accountant, { overdue: "yes" })).rows.map((r) => r.bookingId)).toEqual([a]);
     });
   });
 });

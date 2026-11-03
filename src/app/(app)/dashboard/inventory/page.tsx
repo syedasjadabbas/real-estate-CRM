@@ -34,13 +34,18 @@ export default async function InventoryPage({ searchParams }: PageProps<"/dashbo
         description={`Units for sale in ${scopeName}. Open a unit for its full dimensions and details.`}
         actions={
           canDoInventory(actor, "manage") && projects.length ? (
-            <Link
-              href={`/dashboard/inventory/new${result.projectId ? `?project=${result.projectId}` : ""}`}
-              className={buttonClasses({ variant: "primary", size: "lg", className: "px-5" })}
-            >
-              <Plus aria-hidden="true" className="size-4" />
-              Add unit
-            </Link>
+            <div className="flex flex-wrap gap-2">
+              <Link href="/dashboard/inventory/import" className={buttonClasses({ variant: "secondary", size: "lg" })}>
+                Import CSV
+              </Link>
+              <Link
+                href={`/dashboard/inventory/new${result.projectId ? `?project=${result.projectId}` : ""}`}
+                className={buttonClasses({ variant: "primary", size: "lg", className: "px-5" })}
+              >
+                <Plus aria-hidden="true" className="size-4" />
+                Add unit
+              </Link>
+            </div>
           ) : null
         }
       />
