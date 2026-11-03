@@ -23,6 +23,8 @@ export async function visibleTeams(db: Database, actor: Actor) {
       id: teams.id,
       name: teams.name,
       isActive: teams.isActive,
+      weekendDays: teams.weekendDays,
+      region: teams.region,
       managerId: teams.managerId,
       managerName: manager.name,
       members: sql<number>`(select count(*)::int from ${teamMembers} where ${teamMembers.teamId} = ${teams.id})`,
@@ -169,7 +171,7 @@ export async function getRosterDay(db: Database, actor: Actor, teamId: string, r
   const rows = members.map((m) => ({ ...m, status: (entries.find((e) => e.userId === m.id)?.status ?? null) as RosterStatus | null }));
   const editable = rosterEditable(date, now);
   return {
-    team: { id: team.id, name: team.name },
+    team: { id: team.id, name: team.name, weekendDays: team.weekendDays },
     date,
     rows,
     counts: counts(rows.map((r) => r.status)),
@@ -197,7 +199,7 @@ export async function getRosterMonth(db: Database, actor: Actor, teamId: string,
         .where(and(inArray(rosterEntries.userId, members.map((m) => m.id)), gte(rosterEntries.date, days[0]), lte(rosterEntries.date, days[days.length - 1])))
     : [];
   return {
-    team: { id: team.id, name: team.name },
+    team: { id: team.id, name: team.name, weekendDays: team.weekendDays },
     month,
     days,
     rows: members.map((m) => ({ ...m, byDay: Object.fromEntries(entries.filter((e) => e.userId === m.id).map((e) => [e.date, e.status])) as Record<string, RosterStatus> })),

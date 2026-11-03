@@ -134,7 +134,7 @@ export const navigation: NavGroup[] = [
         href: "/dashboard/tasks",
         icon: SquareCheckBig,
         description: "Create, assign, and track CRM tasks including printable plans.",
-        roles: ["super_admin", "admin", "manager", "agent"],
+        roles: ["super_admin", "admin", "manager", "agent", "hr", "accountant"],
       },
       {
         label: "Meetings",

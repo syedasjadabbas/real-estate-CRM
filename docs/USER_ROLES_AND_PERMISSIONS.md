@@ -63,19 +63,30 @@ Legend: **F** full · **T** own team · **O** own records · **R** read-only · 
 | Bookings: create | F | F | T | O | — | — |
 | Bookings: change stage | F | F | T | O (up to Sales order) | — | R |
 | Bookings: confirm / cancel | F | F | T | — | — | — |
-| Tasks | F | F | T | O | — | — |
+| Tasks | F | F | T | O | O (assigned to them; no create) | O (assigned to them; no create) |
 | Proposal discount | any | any | ≤ manager cap | ≤ agent cap (5%) | — | — |
 | Meetings | F | F | T | O | — | — |
 | Targets: set | F | F | T | — | — | — |
 | Targets: view | F | F | T | O | — | — |
 | Teams / daily report / roster | F | F | T | R (own roster) | R | — |
 | HR employees / holidays | F | F | R | — | F | — |
+| HR records without a CRM login (Q1) | F | F | R | — | F | — |
 | Leave: request | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Leave: approve | F | F | T | — | F | — |
 | Performance | F | F | T | O | — | — |
 | Accounts & Finance | F | R | — | — | — | F |
+| CRM accounts: create, role, password, deactivate, lead shift (Q2, Q3) | F | F, except Super Admin accounts (C-1) | — | — | — | — |
+| Recordings: delete (Q53; hides, file kept) | F | — | — | — | — | — |
 | Settings, users, roles | F | users only | — | — | — | — |
 | Audit log | F | R | — | — | — | — |
+
+**Changes from the client questionnaire (implemented 3 Nov 2026):** Tasks for HR and Accountants (Q45), HR records without logins (Q1), account management (Q2, Q3) and recording deletion (Q53).
+
+**Not yet applied:** the answers that *remove* access wait for the signed questionnaire (S-1) and stay as shown above:
+- Manager reversal approval (Q31);
+- agent recording playback (Q52);
+- proposal editing limited to Super Admin (Q36);
+- task assignment limited to Admins (Q45).
 
 ### Enforcement rules (PROPOSED)
 

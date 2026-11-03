@@ -1,0 +1,1 @@
+ALTER TABLE "teams" ADD COLUMN "weekend_days" integer[] DEFAULT '{}'::integer[] NOT NULL;

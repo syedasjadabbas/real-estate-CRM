@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildRows, computeFigures, rowsTotal, unitPricePerSqft } from "@/modules/tasks/plan";
+import { buildRows, computeFigures, installmentDueOn, rowsTotal, unitPricePerSqft } from "@/modules/tasks/plan";
 import { canAccessTask, canAssignTo, canDoTask, canEditDownPayment, discountCap, taskScope } from "@/modules/tasks/policy";
 import { createTaskSchema, proposalSettingsSchema, taskListQuerySchema } from "@/modules/tasks/validation";
 import type { Role } from "@/server/auth/types";
@@ -11,9 +11,11 @@ const other = "8b1c2a64-0a52-4b9b-9a0e-6f0d2b1c9e13";
 
 describe("tasks policy (Tasks F/F/T/O/—/—)", () => {
   it("maps roles to actions and scopes", () => {
-    expect(roles.filter((role) => canDoTask({ role }, "view"))).toEqual(["super_admin", "admin", "manager", "agent"]);
+    expect(roles.filter((role) => canDoTask({ role }, "view"))).toEqual(["super_admin", "admin", "manager", "agent", "hr", "accountant"]);
+    // Q45: HR and Accountants receive tasks but don't create them.
+    expect(roles.filter((role) => canDoTask({ role }, "create"))).toEqual(["super_admin", "admin", "manager", "agent"]);
     expect(roles.filter((role) => canDoTask({ role }, "settings"))).toEqual(["super_admin", "admin"]);
-    expect(roles.map(taskScope)).toEqual(["all", "all", "team", "own", "none", "none"]);
+    expect(roles.map(taskScope)).toEqual(["all", "all", "team", "own", "own", "own"]);
   });
 
   it("scopes records by assignee or creator", () => {
@@ -103,5 +105,19 @@ describe("tasks validation", () => {
     expect(taskListQuerySchema.parse({ sort: "bogus", dir: "x", page: "-3" })).toMatchObject({ sort: "updatedAt", dir: "desc", page: 1 });
     expect(proposalSettingsSchema.parse({ managerCap: "", roiPerSqft: "" })).toEqual({ managerCap: null, roiPerSqft: null });
     expect(proposalSettingsSchema.safeParse({ agentCap: "" }).success).toBe(false);
+  });
+});
+
+describe("installment due dates (Q43)", () => {
+  it("falls on the 10th of consecutive months and rolls over the year", () => {
+    expect(installmentDueOn("2026-11", 0)).toBe("2026-11-10");
+    expect(installmentDueOn("2026-11", 2)).toBe("2027-01-10");
+    expect(installmentDueOn("2026-01", 35)).toBe("2028-12-10");
+  });
+
+  it("dates installment rows only, never the down payment, and only with a first month", () => {
+    const f = computeFigures({ areaSqft: 500, pricePerSqft: 20_000, discountPct: 0, downPaymentPct: 25, installmentCount: 2, roiPerSqft: null });
+    expect(buildRows(f, 2, "Monthly", "2027-02").map((r) => r.dueOn)).toEqual([null, "2027-02-10", "2027-03-10"]);
+    expect(buildRows(f, 2, "Monthly").map((r) => r.dueOn)).toEqual([null, null, null]);
   });
 });

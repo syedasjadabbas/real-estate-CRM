@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Modal } from "@/components/ui/modal";
 import { PanelCard } from "@/features/leads/components/detail-panels";
 import { formatDateTime } from "@/features/leads/format";
 import { cn } from "@/lib/cn";
@@ -46,13 +47,30 @@ function measureDuration(file: File): Promise<number | null> {
  * phone's built-in recorder, then upload the file here. Playback streams from the authenticated
  * `/api/v1/recordings/:id` route; nothing is public.
  */
-export function RecordingsPanel({ leadId, recordings, canUpload }: { leadId: string; recordings: RecordingRow[]; canUpload: boolean }) {
+export function RecordingsPanel({ leadId, recordings, canUpload, canDelete = false }: { leadId: string; recordings: RecordingRow[]; canUpload: boolean; canDelete?: boolean }) {
   const router = useRouter();
   const inputId = useId();
   const input = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [pending, setPending] = useState(false);
+  const [removing, setRemoving] = useState<RecordingRow | null>(null);
+
+  const remove = async () => {
+    if (!removing) return;
+    setPending(true);
+    try {
+      const res = await fetch(`/api/v1/recordings/${removing.id}`, { method: "DELETE" });
+      const json = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+      setMsg(res.ok ? { text: "Recording deleted.", ok: true } : { text: json?.error?.message ?? "Delete failed. Try again.", ok: false });
+      if (res.ok) router.refresh();
+    } catch {
+      setMsg({ text: "Delete failed. Check your connection and try again.", ok: false });
+    } finally {
+      setPending(false);
+      setRemoving(null);
+    }
+  };
   // Measured when the file is chosen; the upload never waits for it (null = not known).
   const duration = useRef<{ file: File; seconds: number | null } | null>(null);
 
@@ -112,14 +130,21 @@ export function RecordingsPanel({ leadId, recordings, canUpload }: { leadId: str
             <li key={r.id} className="rounded-xl border border-zinc-200/80 p-3">
               <div className="flex items-start justify-between gap-2">
                 <p className="min-w-0 text-xs font-bold break-words text-zinc-900">{r.name}</p>
-                <a
-                  href={`/api/v1/recordings/${r.id}?download=1`}
-                  className="inline-flex shrink-0 items-center gap-1 text-[11px] font-bold text-brand hover:underline"
-                  aria-label={`Download ${r.name}`}
-                >
-                  <Download aria-hidden="true" className="size-3.5" />
-                  Save
-                </a>
+                <span className="flex shrink-0 items-center gap-3">
+                  <a
+                    href={`/api/v1/recordings/${r.id}?download=1`}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-brand hover:underline"
+                    aria-label={`Download ${r.name}`}
+                  >
+                    <Download aria-hidden="true" className="size-3.5" />
+                    Save
+                  </a>
+                  {canDelete ? (
+                    <button type="button" onClick={() => setRemoving(r)} className="text-[11px] font-bold text-rose-600 hover:underline" aria-label={`Delete ${r.name}`}>
+                      Delete
+                    </button>
+                  ) : null}
+                </span>
               </div>
               <p className="mt-0.5 text-[11px] text-zinc-500">
                 {r.uploadedBy ?? "—"} · {formatDateTime(r.createdAt)} · {formatBytes(r.sizeBytes)} · {formatClock(r.durationSec)}
@@ -163,6 +188,26 @@ export function RecordingsPanel({ leadId, recordings, canUpload }: { leadId: str
         <p role="alert" className="mt-3 text-xs font-semibold text-rose-600">
           {msg.text}
         </p>
+      ) : null}
+      {canDelete ? (
+        <Modal
+          open={removing !== null}
+          onClose={() => setRemoving(null)}
+          title="Delete this recording?"
+          description={removing ? `${removing.name} will no longer be listed or playable for anyone. The deletion is recorded in the audit log.` : undefined}
+          footer={
+            <div className="flex justify-end gap-2">
+              <Button variant="secondary" size="lg" onClick={() => setRemoving(null)}>
+                Cancel
+              </Button>
+              <Button variant="primary" size="lg" disabled={pending} onClick={remove}>
+                Delete recording
+              </Button>
+            </div>
+          }
+        >
+          <p className="text-sm text-zinc-700">Only Super Admins can delete recordings.</p>
+        </Modal>
       ) : null}
     </PanelCard>
   );

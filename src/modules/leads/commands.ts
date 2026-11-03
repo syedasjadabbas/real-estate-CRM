@@ -1,5 +1,6 @@
 import { leadLink, notify, teamManagersOf } from "@/modules/notifications/service";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { businessToday } from "@/modules/bookings/today";
 import type { Database } from "@/server/db";
 import {
   approvals,
@@ -78,14 +79,25 @@ async function assertAssignable(tx: Tx, actor: Actor, ownerId: string, members: 
   if (!canAssignTo(actor, ownerId, members)) throw forbidden("You cannot assign leads to that user.");
 }
 
-/** Round-robin owner for a project among active agents in active teams (Q2). */
-async function rotateOwner(tx: Tx, projectId: string): Promise<string | null> {
+/**
+ * Round-robin owner for a project among active agents in active teams (Q2). Agents on approved
+ * leave today (Pakistan date) are skipped (questionnaire Q19).
+ */
+async function rotateOwner(tx: Tx, projectId: string, now = new Date()): Promise<string | null> {
+  const today = businessToday(now);
   const eligible = await tx
     .selectDistinct({ id: users.id, name: users.name })
     .from(users)
     .innerJoin(teamMembers, eq(teamMembers.userId, users.id))
     .innerJoin(teams, eq(teams.id, teamMembers.teamId))
-    .where(and(eq(users.role, "agent"), eq(users.status, "active"), eq(teams.isActive, true)))
+    .where(
+      and(
+        eq(users.role, "agent"),
+        eq(users.status, "active"),
+        eq(teams.isActive, true),
+        sql`not exists (select 1 from leave_requests lr where lr.user_id = ${users.id} and lr.status in ('approved', 'cancel_requested') and lr.start_date <= ${today} and lr.end_date >= ${today})`,
+      ),
+    )
     .orderBy(asc(users.name), asc(users.id));
   if (eligible.length === 0) return null;
 

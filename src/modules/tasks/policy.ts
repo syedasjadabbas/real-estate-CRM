@@ -5,7 +5,9 @@ import type { ProposalSettings } from "./plan";
 /**
  * Tasks authorization (USER_ROLES_AND_PERMISSIONS.md): Tasks F/F/T/O/—/—.
  * A task is "own" when the actor is its assignee or its creator; a manager's team scope covers
- * tasks assigned to or created by the manager or a team member.
+ * tasks assigned to or created by the manager or a team member. Questionnaire Q45: Admins and Super
+ * Admins assign tasks to all users, so HR and Accountants can receive tasks and see / update their
+ * own (they don't create tasks).
  */
 export type TaskScope = "all" | "team" | "own" | "none";
 
@@ -17,6 +19,8 @@ export function taskScope(role: Role): TaskScope {
     case "manager":
       return "team";
     case "agent":
+    case "hr":
+    case "accountant":
       return "own";
     default:
       return "none";
@@ -30,8 +34,8 @@ const ROLE_ACTIONS: Record<Role, TaskAction[]> = {
   admin: ["view", "create", "edit", "settings"],
   manager: ["view", "create", "edit"],
   agent: ["view", "create", "edit"],
-  hr: [],
-  accountant: [],
+  hr: ["view", "edit"],
+  accountant: ["view", "edit"],
 };
 
 export function canDoTask(actor: Pick<Actor, "role">, action: TaskAction) {
@@ -74,8 +78,8 @@ export function canAssignTo(actor: Pick<Actor, "id" | "role">, assigneeId: strin
   }
 }
 
-/** Roles a task can be assigned to (the roles that work tasks). */
-export const ASSIGNABLE_ROLES: Role[] = ["super_admin", "admin", "manager", "agent"];
+/** Roles a task can be assigned to: all users (Q45). Managers and agents still assign only within their scope. */
+export const ASSIGNABLE_ROLES: Role[] = ["super_admin", "admin", "manager", "agent", "hr", "accountant"];
 
 /**
  * FR-091 discount cap. Admins: any. Managers: the manager cap setting, or the agent cap while it is

@@ -190,9 +190,12 @@ async function RosterTab({ actor, params }: { actor: Actor; params: Record<strin
       {!team ? (
         <EmptyState size="sm">Select a team to edit the roster.</EmptyState>
       ) : day ? (
-        <RosterDayForm key={`${day.team.id}-${date}`} teamId={day.team.id} date={date} rows={day.rows} canEdit={day.canEdit} locked={day.locked} />
+        <>
+          {day.team.weekendDays.includes(new Date(`${date}T00:00:00Z`).getUTCDay()) ? <p className="mb-3 text-xs font-semibold text-zinc-600">This day is a weekend for {day.team.name}.</p> : null}
+          <RosterDayForm key={`${day.team.id}-${date}`} teamId={day.team.id} date={date} rows={day.rows} canEdit={day.canEdit} locked={day.locked} />
+        </>
       ) : monthGrid ? (
-        <RosterMonthGrid days={monthGrid.days} rows={monthGrid.rows} />
+        <RosterMonthGrid days={monthGrid.days} rows={monthGrid.rows} weekendDays={monthGrid.team.weekendDays} />
       ) : null}
       <p className="mt-4 text-[11px] text-zinc-500">Duty is recorded only; it does not change lead rotation yet (pending client confirmation).</p>
     </PanelCard>

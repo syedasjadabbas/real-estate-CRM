@@ -5,11 +5,12 @@ import { bookings, leads, projects, taskHistory, taskInstallmentRows, tasks, uni
 import type { Actor } from "@/server/auth/types";
 import { forbidden } from "@/server/errors";
 import { canAccessBooking, canDoBooking } from "@/modules/bookings/policy";
-import { canAccessLead } from "@/modules/leads/policy";
+import { canAccessLead, leadScope } from "@/modules/leads/policy";
 import { scopeFilter as leadScopeFilter, teamMemberIds, type DbOrTx } from "@/modules/leads/support";
 import { selectableProjects } from "@/modules/projects/queries";
 import { ACTIVE_TASK_STATUSES, TASK_PAGE_SIZE } from "./constants";
 import { ASSIGNABLE_ROLES, canAccessTask, canDoTask, canEditDownPayment, discountCap, taskScope } from "./policy";
+import { unitPricePerSqft } from "./plan";
 import { getProposalSettings } from "./settings";
 import { loadAccessibleTask } from "./support";
 import { taskListQuerySchema } from "./validation";
@@ -126,17 +127,21 @@ export async function assignableUsers(db: DbOrTx, actor: Actor) {
  * (plus whatever the task already links), and projects / units for the proposal builder.
  */
 export async function taskFormOptions(db: Database, actor: Actor, projectId: string | null, current: { leadId?: string | null; bookingId?: string | null } = {}) {
-  if (!canDoTask(actor, "create")) throw forbidden();
+  // The edit form needs the options too: HR and Accountants edit tasks assigned to them (Q45) but don't create.
+  if (!canDoTask(actor, "create") && !canDoTask(actor, "edit")) throw forbidden();
   const members = await teamMemberIds(db, actor);
   const leadWhere = (extra: SQL | undefined) => and(isNull(leads.deletedAt), leadScopeFilter(actor, members), extra);
   const [assignees, leadRows, bookingRows, projectRows, unitRows, settings] = await Promise.all([
     assignableUsers(db, actor),
-    db
-      .select({ id: leads.id, name: leads.name, code: leads.code })
-      .from(leads)
-      .where(leadWhere(or(projectId ? eq(leads.projectId, projectId) : undefined, current.leadId ? eq(leads.id, current.leadId) : undefined)))
-      .orderBy(asc(leads.name))
-      .limit(1000),
+    // Roles without lead access (HR, Accountant) get no lead options.
+    leadScope(actor.role) === "none"
+      ? Promise.resolve([] as { id: string; name: string; code: string }[])
+      : db
+          .select({ id: leads.id, name: leads.name, code: leads.code })
+          .from(leads)
+          .where(leadWhere(or(projectId ? eq(leads.projectId, projectId) : undefined, current.leadId ? eq(leads.id, current.leadId) : undefined)))
+          .orderBy(asc(leads.name))
+          .limit(1000),
     canDoBooking(actor, "view")
       ? db
           .select({ id: bookings.id, leadId: bookings.leadId, agentId: bookings.agentId, leadName: leads.name, leadCode: leads.code, unitNo: units.unitNo, projectName: projects.name })
@@ -191,7 +196,7 @@ export type TaskFormOptions = Awaited<ReturnType<typeof taskFormOptions>>;
 export async function getTaskDetail(db: Database, actor: Actor, taskId: string, now = new Date()) {
   if (!canDoTask(actor, "view")) throw forbidden();
   const { task, members } = await loadAccessibleTask(db, actor, taskId);
-  const [people, lead, booking, rows, history, project] = await Promise.all([
+  const [people, lead, booking, rows, history, project, unitNow, settings] = await Promise.all([
     db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, [task.assigneeId, ...(task.createdById ? [task.createdById] : [])])),
     task.leadId ? db.select({ id: leads.id, name: leads.name, code: leads.code, ownerId: leads.ownerId }).from(leads).where(eq(leads.id, task.leadId)).then((r) => r[0]) : null,
     task.bookingId
@@ -205,7 +210,7 @@ export async function getTaskDetail(db: Database, actor: Actor, taskId: string, 
           .then((r) => r[0])
       : null,
     db
-      .select({ seq: taskInstallmentRows.seq, label: taskInstallmentRows.label, description: taskInstallmentRows.description, progress: taskInstallmentRows.progress, amount: taskInstallmentRows.amount })
+      .select({ seq: taskInstallmentRows.seq, label: taskInstallmentRows.label, description: taskInstallmentRows.description, progress: taskInstallmentRows.progress, amount: taskInstallmentRows.amount, dueOn: taskInstallmentRows.dueOn })
       .from(taskInstallmentRows)
       .where(eq(taskInstallmentRows.taskId, task.id))
       .orderBy(asc(taskInstallmentRows.seq)),
@@ -216,7 +221,15 @@ export async function getTaskDetail(db: Database, actor: Actor, taskId: string, 
       .where(eq(taskHistory.taskId, task.id))
       .orderBy(desc(taskHistory.createdAt), desc(taskHistory.id)),
     task.proposal?.projectId ? db.select({ name: projects.name }).from(projects).where(eq(projects.id, task.proposal.projectId)).then((r) => r[0] ?? null) : null,
+    task.proposal?.unitId ? db.select({ areaSqft: units.areaSqft, basePrice: units.basePrice }).from(units).where(eq(units.id, task.proposal.unitId)).then((r) => r[0] ?? null) : null,
+    task.proposal?.unitId ? getProposalSettings(db) : null,
   ]);
+  // Q47: a proposal follows the unit's price. If the unit changed after the last save, say so.
+  const currentPrice = unitNow && settings ? unitPricePerSqft(unitNow, settings.defaultPricePerSqft) : null;
+  const unitChanged =
+    task.proposal && unitNow && (currentPrice !== task.proposal.pricePerSqft || unitNow.areaSqft !== task.proposal.areaSqft)
+      ? { savedPricePerSqft: task.proposal.pricePerSqft, currentPricePerSqft: currentPrice, savedAreaSqft: task.proposal.areaSqft, currentAreaSqft: unitNow.areaSqft }
+      : null;
   const name = (id: string | null) => people.find((p) => p.id === id)?.name ?? null;
   // Names for reassignment entries (ids are what the history stores).
   const historyIds = [...new Set(history.flatMap((h) => (h.action === "assign" ? [h.data?.from, h.data?.to] : [])).filter((v): v is string => typeof v === "string"))];
@@ -233,6 +246,7 @@ export async function getTaskDetail(db: Database, actor: Actor, taskId: string, 
     booking: booking && bookingVisible ? { id: booking.id, stage: booking.stage, unitNo: booking.unitNo, projectName: booking.projectName, leadName: booking.leadName } : null,
     hiddenBooking: Boolean(booking && !bookingVisible),
     projectName: project?.name ?? null,
+    unitChanged,
     rows,
     history,
     userNames: Object.fromEntries(historyNames.map((u) => [u.id, u.name])) as Record<string, string>,

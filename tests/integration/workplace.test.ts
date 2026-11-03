@@ -1,9 +1,10 @@
+import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { businessToday } from "@/modules/bookings/today";
 import { listHolidays, upcomingHolidays } from "@/modules/holidays/service";
 import { getMyWorkplace, listMySignins } from "@/modules/workplace/service";
 import { createSession, loadActor, revokeSession } from "@/server/auth/session-store";
-import { holidays, signinLogs, users } from "@/server/db/schema";
+import { holidays, signinLogs, teamMembers, teams, users } from "@/server/db/schema";
 import type { Database } from "@/server/db";
 import type { Actor } from "@/server/auth/types";
 import { AppError } from "@/server/errors";
@@ -151,10 +152,25 @@ describe.skipIf(!hasTestDb)("My Workplace (PostgreSQL integration)", () => {
       for (const actor of everyone) {
         const w = await getMyWorkplace(db, actor);
         expect(w.holidays.rows.map((h) => h.name)).toEqual(["Regional Day"]);
-        expect(w.leave).toEqual({ status: "pending_client_decision" });
+        expect(w.regions).toEqual([]); // no team region set: every regional holiday is listed
       }
       expect(await errorCode(listHolidays(db, f.actors.agent1))).toBe("FORBIDDEN");
       expect(await errorCode(listHolidays(db, accountant))).toBe("FORBIDDEN");
+    });
+
+    it("Q5: a team's region limits regional holidays to that region; company holidays always show", async () => {
+      await db.insert(holidays).values([
+        { date: addDays(businessToday(), 3), name: "Company Day", scope: "company" },
+        { date: addDays(businessToday(), 4), name: "Lahore Day", scope: "regional", region: "Lahore" },
+        { date: addDays(businessToday(), 5), name: "Karachi Day", scope: "regional", region: "Karachi" },
+      ]);
+      const [teamOfAgent1] = await db.select({ teamId: teamMembers.teamId }).from(teamMembers).where(eq(teamMembers.userId, f.actors.agent1.id));
+      await db.update(teams).set({ region: "lahore" }).where(eq(teams.id, teamOfAgent1.teamId));
+      const w = await getMyWorkplace(db, f.actors.agent1);
+      expect(w.regions).toEqual(["lahore"]);
+      expect(w.holidays.rows.map((h) => h.name)).toEqual(["Company Day", "Lahore Day"]);
+      // Someone with no team region still sees every regional holiday.
+      expect((await getMyWorkplace(db, f.actors.hr)).holidays.rows.map((h) => h.name)).toEqual(["Company Day", "Lahore Day", "Karachi Day"]);
     });
 
     it("returns an empty list when nothing is scheduled", async () => {

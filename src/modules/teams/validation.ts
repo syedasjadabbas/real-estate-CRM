@@ -23,6 +23,20 @@ export const createTeamSchema = z.object({
   name: z.string("Name is required").trim().min(2, "Use at least 2 characters").max(80, "Use at most 80 characters"),
   managerId: optionalId,
   isActive: z.boolean().optional().default(true),
+  /** Q5: members see this region's holidays. Blank = no region. */
+  region: z
+    .string()
+    .optional()
+    .nullable()
+    .transform((v) => (v ? v.trim().replace(/\s+/g, " ") : null) || null)
+    .pipe(z.string().max(80, "Use at most 80 characters").nullable()),
+  /** Q9: weekends vary by team. 0 = Sunday … 6 = Saturday; stored sorted, without duplicates. */
+  weekendDays: z
+    .array(z.number().int().min(0, "Invalid day").max(6, "Invalid day"))
+    .max(6, "Leave at least one working day")
+    .optional()
+    .default([])
+    .transform((d) => [...new Set(d)].sort((a, b) => a - b)),
 });
 export const updateTeamSchema = createTeamSchema.partial();
 

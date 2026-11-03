@@ -27,17 +27,18 @@ export type TaskFormInitial = {
   bookingId: string;
   description: string;
   proposal: TaskProposal | null;
-  rows: { label: string; description: string | null; progress: string | null; amount: number }[];
+  rows: { label: string; description: string | null; progress: string | null; amount: number; dueOn?: string | null }[];
 };
 
-type RowState = { label: string; description: string; progress: string; amount: string };
+type RowState = { label: string; description: string; progress: string; amount: string; dueOn: string };
 const str = (v: string | number | null | undefined) => (v === null || v === undefined ? "" : String(v));
 const num = (v: string) => (v.trim() === "" ? NaN : Number(v.replace(/,/g, "")));
-const toRowState = (r: { label: string; description: string | null; progress: string | null; amount: number }): RowState => ({
+const toRowState = (r: { label: string; description: string | null; progress: string | null; amount: number; dueOn?: string | null }): RowState => ({
   label: r.label,
   description: str(r.description),
   progress: str(r.progress),
   amount: str(r.amount),
+  dueOn: str(r.dueOn),
 });
 
 /** Numbered builder card ("01 Cover page"), FormSection layout with the reference's step number. */
@@ -100,6 +101,7 @@ export function TaskForm({
     downPaymentPct: str(existing?.downPaymentPct ?? settings.downPaymentPct),
     installmentCount: str(existing?.installmentCount ?? settings.installmentCount),
     recurringLabel: existing?.recurringLabel ?? DEFAULT_RECURRING_LABEL,
+    firstInstallmentMonth: str(existing?.firstInstallmentMonth),
     freeNightVouchers: str(existing?.freeNightVouchers),
     bonuses: str(existing?.bonuses),
     whyActNow: str(existing?.whyActNow),
@@ -109,7 +111,7 @@ export function TaskForm({
   // Saved rows that differ from the generated schedule were edited by hand: keep showing them.
   const [rowsEdited, setRowsEdited] = useState(() => {
     if (!existing || initial.rows.length === 0) return false;
-    const regenerated = buildRows(existing, existing.installmentCount, existing.recurringLabel).map(toRowState);
+    const regenerated = buildRows(existing, existing.installmentCount, existing.recurringLabel, existing.firstInstallmentMonth ?? null).map(toRowState);
     return JSON.stringify(regenerated) !== JSON.stringify(initial.rows.map(toRowState));
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -118,16 +120,18 @@ export function TaskForm({
 
   const plan = hasPlan(v.type);
   const unit = options.units.find((u) => u.id === p.unitId);
-  const projectUnits = options.units.filter((u) => u.projectId === p.projectId);
-  const pricePerSqft = unit ? (existing && existing.unitId === unit.id ? existing.pricePerSqft : unitPricePerSqft(unit, settings.defaultPricePerSqft)) : null;
-  const areaSqft = unit ? (existing && existing.unitId === unit.id ? existing.areaSqft : unit.areaSqft) : null;
+  // Q48: only Available units can be quoted in a Proposal; its existing unit stays listed so it can be kept.
+  const projectUnits = options.units.filter((u) => u.projectId === p.projectId && (v.type !== "proposal" || u.status === "available" || u.id === existing?.unitId));
+  // Q47: the unit's current price and area, also for a proposal saved earlier.
+  const pricePerSqft = unit ? unitPricePerSqft(unit, settings.defaultPricePerSqft) : null;
+  const areaSqft = unit ? unit.areaSqft : null;
   const roiPerSqft = existing ? existing.roiPerSqft : settings.roiPerSqft;
   const count = Math.trunc(num(p.installmentCount));
   const inputsValid = [num(p.discountPct), num(p.downPaymentPct)].every((n) => Number.isFinite(n) && n >= 0 && n <= 100) && count >= 1 && count <= 360;
   const figures = inputsValid
     ? computeFigures({ areaSqft, pricePerSqft, discountPct: num(p.discountPct), downPaymentPct: num(p.downPaymentPct), installmentCount: count, roiPerSqft })
     : { totalList: null, afterDiscount: null, downPayment: null, eachInstallment: null, roiAnnual: null };
-  const generated = inputsValid ? buildRows(figures, count, p.recurringLabel) : [];
+  const generated = inputsValid ? buildRows(figures, count, p.recurringLabel, /^\d{4}-\d{2}$/.test(p.firstInstallmentMonth) ? p.firstInstallmentMonth : null) : [];
   // Rows follow the figures automatically until someone edits them; "Rebuild" brings them back in line.
   const shownRows = rowsEdited ? rows : generated.map(toRowState);
   const shownTotal = rowsTotal(shownRows.map((r) => ({ amount: Number.isFinite(num(r.amount)) ? num(r.amount) : 0 })));
@@ -328,7 +332,7 @@ export function TaskForm({
             <Field label="Unit" error={errors["proposal.unitId"]} className="sm:col-span-2">
               {(id, describedBy) => (
                 <select id={id} aria-describedby={describedBy} value={p.unitId} onChange={(e) => setProposal({ unitId: e.target.value })} className={selectClass} disabled={pending || !p.projectId}>
-                  <option value="">{p.projectId ? (projectUnits.length ? "Pick unit…" : "No units in this project") : "Pick a project first"}</option>
+                  <option value="">{p.projectId ? (projectUnits.length ? "Pick unit…" : "No available units in this project") : "Pick a project first"}</option>
                   {projectUnits.map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.unitNo} · {formatArea(u.areaSqft)} · {u.status.replace("_", " ")}
@@ -361,6 +365,7 @@ export function TaskForm({
             {text("installmentCount", "No. of installments", { inputMode: "numeric" })}
             {readOnly("Each installment (PKR)", formatPrice(figures.eachInstallment))}
             {text("recurringLabel", "Recurring row label")}
+            {text("firstInstallmentMonth", "First installment month", { type: "month", required: true, hint: "Installments are due on the 10th of each month from this month." })}
           </Step>
           <Step n="04" title="ROI & vouchers" hint="Optional extras printed with the investment summary">
             {text("freeNightVouchers", "Free night vouchers", { inputMode: "numeric" })}
@@ -382,13 +387,14 @@ export function TaskForm({
               <p className="rounded-xl bg-zinc-50 px-3 py-4 text-center text-xs text-zinc-500">Pick a unit or set sale totals — installment rows generate automatically.</p>
             ) : (
               <div className="max-h-[420px] overflow-auto rounded-xl border border-zinc-200/80">
-                <table className="w-full min-w-[560px] border-collapse text-left text-xs">
+                <table className="w-full min-w-[680px] border-collapse text-left text-xs">
                   <thead className="sticky top-0 z-10 bg-zinc-100">
                     <tr className="text-[10px] font-black tracking-[0.05em] text-zinc-600 uppercase">
                       <th scope="col" className="w-10 px-2 py-2.5">#</th>
                       <th scope="col" className="px-2 py-2.5">Installment</th>
                       <th scope="col" className="px-2 py-2.5">Description</th>
                       <th scope="col" className="px-2 py-2.5">Progress</th>
+                      <th scope="col" className="px-2 py-2.5">Due date</th>
                       <th scope="col" className="px-2 py-2.5 text-right">Amount</th>
                     </tr>
                   </thead>
@@ -417,6 +423,7 @@ export function TaskForm({
                           {cell("label", "installment")}
                           {cell("description", "description")}
                           {cell("progress", "progress")}
+                          {i === 0 ? <td className="px-2 py-1 text-zinc-400">—</td> : cell("dueOn", "due date", "tabular-nums")}
                           {cell("amount", "amount", "text-right tabular-nums")}
                         </tr>
                       );

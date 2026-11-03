@@ -64,6 +64,7 @@ export const leadActivityType = pgEnum("lead_activity_type", [
   "lost_decided",
   "meeting",
   "file_uploaded",
+  "file_deleted",
 ]);
 /** DATA_MODEL.md "files". Only call recordings on leads are uploaded so far (FR-038). */
 export const fileKind = pgEnum("file_kind", ["call_recording", "document", "receipt", "other"]);
@@ -93,6 +94,9 @@ export const reversalRequestStatus = pgEnum("reversal_request_status", ["pending
 export const targetPeriod = pgEnum("target_period", ["daily", "weekly", "monthly"]);
 export const rosterStatus = pgEnum("roster_status", ["in_office", "on_site", "on_leave", "leads_off"]);
 export const holidayScope = pgEnum("holiday_scope", ["company", "regional"]);
+/** Q10, Q11: "CPL" means medical leave and is taken from the annual allowance. */
+export const leaveType = pgEnum("leave_type", ["annual", "medical"]);
+export const leaveStatus = pgEnum("leave_status", ["pending", "approved", "rejected", "withdrawn", "cancel_requested", "cancelled"]);
 export const meetingStatus = pgEnum("meeting_status", ["scheduled", "completed", "cancelled"]);
 export const taskType = pgEnum("task_type", ["general", "payment_plan", "proposal"]);
 export const taskStatus = pgEnum("task_status", ["open", "in_progress", "done", "cancelled"]);
@@ -159,6 +163,10 @@ export const teams = pgTable("teams", {
   name: text("name").notNull().unique(),
   managerId: uuid("manager_id").references(() => users.id, { onDelete: "set null" }),
   isActive: boolean("is_active").notNull().default(true),
+  /** Holiday region of the team's members (questionnaire Q5); matches `holidays.region` ignoring case. */
+  region: text("region"),
+  /** Weekend days for the duty roster (questionnaire Q9), 0 = Sunday … 6 = Saturday. Empty = none set. */
+  weekendDays: integer("weekend_days").array().notNull().default(sql`'{}'::integer[]`),
   ...timestamps,
 });
 
@@ -296,6 +304,8 @@ export const files = pgTable(
     leadId: uuid("lead_id")
       .notNull()
       .references(() => leads.id, { onDelete: "restrict" }),
+    /** For payment proofs (kind "receipt", questionnaire Q33): the payment the file belongs to. */
+    paymentId: uuid("payment_id").references((): AnyPgColumn => bookingPayments.id, { onDelete: "restrict" }),
     kind: fileKind("kind").notNull(),
     storageKey: text("storage_key").notNull(),
     originalName: text("original_name").notNull(),
@@ -305,6 +315,9 @@ export const files = pgTable(
     durationSec: integer("duration_sec"),
     sha256: text("sha256").notNull(),
     uploadedById: uuid("uploaded_by_id").references(() => users.id, { onDelete: "set null" }),
+    /** Hidden by a Super Admin (Q53). The row and the stored file are kept; nothing is erased. */
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    deletedById: uuid("deleted_by_id").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -628,6 +641,8 @@ export type TaskProposal = {
   freeNightVouchers: number | null;
   roiPerSqft: number | null;
   roiAnnual: number | null;
+  /** "YYYY-MM": month of installment 1; installments fall on the 10th (Q43). Absent on older proposals. */
+  firstInstallmentMonth?: string | null;
   bonuses: string | null;
   whyActNow: string | null;
   nextSteps: string | null;
@@ -679,6 +694,8 @@ export const taskInstallmentRows = pgTable(
     description: text("description"),
     progress: text("progress"),
     amount: numeric("amount", { precision: 16, scale: 2, mode: "number" }).notNull(),
+    /** Due date (Q43: the 10th of each month). Null for the down payment and for older proposals. */
+    dueOn: date("due_on"),
   },
   (t) => [
     uniqueIndex("task_installment_rows_task_seq_uq").on(t.taskId, t.seq),
@@ -787,9 +804,65 @@ export const rosterEntries = pgTable(
     date: date("date").notNull(),
     status: rosterStatus("status").notNull(),
     setById: uuid("set_by_id").references(() => users.id, { onDelete: "set null" }),
+    /** Set when the entry was written by an approved leave (Q18), so cancelling removes only these. */
+    leaveRequestId: uuid("leave_request_id").references((): AnyPgColumn => leaveRequests.id, { onDelete: "set null" }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("roster_entries_user_date_uq").on(t.userId, t.date), index("roster_entries_team_date_idx").on(t.teamId, t.date)],
+);
+
+// ─── HR: leave ────────────────────────────────────────────────────────────────
+
+/**
+ * Leave requests (FR-142, questionnaire Q4–Q19). Days are calendar days, inclusive (Q8). A request
+ * never spans two calendar years until the client decides how to split it (C-13).
+ */
+export const leaveRequests = pgTable(
+  "leave_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    type: leaveType("type").notNull(),
+    startDate: date("start_date").notNull(),
+    endDate: date("end_date").notNull(),
+    days: integer("days").notNull(),
+    reason: text("reason"),
+    status: leaveStatus("status").notNull().default("pending"),
+    /** "senior": manager, HR, admin, super admin — approved by a Super Admin (Q7). "staff": the two configured steps (Q6). */
+    approvalPath: text("approval_path").notNull(),
+    /** Next approval step (1 or 2) while pending. */
+    currentStep: integer("current_step").notNull().default(1),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [
+    index("leave_requests_user_start_idx").on(t.userId, t.startDate),
+    check("leave_requests_dates", sql`${t.startDate} <= ${t.endDate} and extract(year from ${t.startDate}) = extract(year from ${t.endDate})`),
+    check("leave_requests_days", sql`${t.days} = (${t.endDate} - ${t.startDate}) + 1`),
+    check("leave_requests_path", sql`${t.approvalPath} in ('senior', 'staff')`),
+    check("leave_requests_reason_length", sql`coalesce(length(${t.reason}), 0) <= 500`),
+  ],
+);
+
+/** Each approval or cancellation decision on a leave request, in order. */
+export const leaveDecisions = pgTable(
+  "leave_decisions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    requestId: uuid("request_id")
+      .notNull()
+      .references(() => leaveRequests.id, { onDelete: "cascade" }),
+    /** "approval" step 1 / 2, "cancellation", "withdrawal" or "cancel_request". */
+    kind: text("kind").notNull(),
+    step: integer("step"),
+    approved: boolean("approved").notNull(),
+    actorId: uuid("actor_id").references(() => users.id, { onDelete: "set null" }),
+    comment: text("comment"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("leave_decisions_request_idx").on(t.requestId, t.createdAt)],
 );
 
 // ─── HR: holidays ─────────────────────────────────────────────────────────────
@@ -821,17 +894,20 @@ export const holidays = pgTable(
 // ─── HR: employee profiles ────────────────────────────────────────────────────
 
 /**
- * FR-140 HR profile fields for a CRM account (HR plan §13, option B). Account data (name, email,
- * role, status) stays on `users` and is not edited here. Own id + unique user_id so staff without
- * a login can be added later without rebuilding the table (pending Q1).
+ * FR-140 HR profile fields (HR plan §13, option B). For a CRM account, name, email, role and
+ * status stay on `users`. Staff without a login (questionnaire Q1) have no `user_id`; their name,
+ * email and employment status are kept here.
  */
 export const employeeProfiles = pgTable(
   "employee_profiles",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "restrict" }),
+    /** The CRM account, when the employee has one. Staff without a login have none (Q1). */
+    userId: uuid("user_id").references(() => users.id, { onDelete: "restrict" }),
+    /** Name, email and employment status of staff without a CRM login; accounts use `users`. */
+    fullName: text("full_name"),
+    email: text("email"),
+    status: userStatus("status").notNull().default("active"),
     designation: text("designation"),
     department: text("department"),
     phoneCountryCode: text("phone_country_code"),
@@ -850,6 +926,8 @@ export const employeeProfiles = pgTable(
     ),
     check("employee_profiles_phone_e164_format", sql`${t.phoneE164} is null or ${t.phoneE164} ~ '^\\+[1-9][0-9]{6,14}$'`),
     check("employee_profiles_text_lengths", sql`coalesce(length(${t.designation}), 0) <= 100 and coalesce(length(${t.department}), 0) <= 100`),
+    check("employee_profiles_identity", sql`${t.userId} is not null or (${t.fullName} is not null and length(btrim(${t.fullName})) > 0)`),
+    check("employee_profiles_record_lengths", sql`coalesce(length(${t.fullName}), 0) <= 100 and coalesce(length(${t.email}), 0) <= 254`),
   ],
 );
 

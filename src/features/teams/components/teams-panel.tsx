@@ -16,7 +16,7 @@ import { createTeamAction, setTeamMembersAction, updateTeamAction } from "../act
 
 type Person = { id: string; name: string; role: string };
 type Detail = {
-  team: { id: string; name: string; managerId: string | null; isActive: boolean };
+  team: { id: string; name: string; managerId: string | null; isActive: boolean; weekendDays: number[]; region: string | null };
   members: { id: string; name: string; role: string; status: string }[];
   history: { id: string; action: string; createdAt: Date; actorName: string | null }[];
 };
@@ -33,10 +33,14 @@ function Msg({ msg }: { msg: { text: string; ok: boolean } | null }) {
 const HISTORY: Record<string, string> = { "team.create": "Team created", "team.update": "Team details changed", "team.members": "Members changed" };
 
 /** Team setup form (admins): name, manager, active. Used for "New team" and for editing. */
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
 function TeamForm({ team, managers, onDone }: { team?: Detail["team"]; managers: Person[]; onDone?: () => void }) {
   const [name, setName] = useState(team?.name ?? "");
   const [managerId, setManagerId] = useState(team?.managerId ?? "");
   const [isActive, setIsActive] = useState(team?.isActive ?? true);
+  const [weekendDays, setWeekendDays] = useState<number[]>(team?.weekendDays ?? []);
+  const [region, setRegion] = useState(team?.region ?? "");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [pending, startTransition] = useTransition();
@@ -48,7 +52,7 @@ function TeamForm({ team, managers, onDone }: { team?: Detail["team"]; managers:
       onSubmit={(e) => {
         e.preventDefault();
         startTransition(async () => {
-          const input = { name, managerId: managerId || null, isActive };
+          const input = { name, managerId: managerId || null, isActive, weekendDays, region };
           const result = team ? await updateTeamAction(team.id, input) : await createTeamAction(input);
           if (result.ok) {
             setErrors({});
@@ -82,6 +86,28 @@ function TeamForm({ team, managers, onDone }: { team?: Detail["team"]; managers:
           )}
         </Field>
       </div>
+      <Field label="Holiday region" error={errors.region} hint="Members see company holidays plus this region's holidays in My Workplace. Leave blank for none.">
+        {(id, d) => <Input id={id} aria-describedby={d} invalid={Boolean(errors.region)} value={region} maxLength={80} disabled={pending} onChange={(e) => setRegion(e.target.value)} />}
+      </Field>
+      <fieldset>
+        <legend className="text-xs font-semibold text-zinc-800">Weekend days</legend>
+        <p className="text-[11px] text-zinc-500">Shown on this team&apos;s duty roster. Leave days are counted in calendar days, so weekends don&apos;t change leave.</p>
+        <div className="mt-1.5 flex flex-wrap gap-3">
+          {WEEKDAYS.map((label, day) => (
+            <label key={label} className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-800">
+              <input
+                type="checkbox"
+                className="size-4 accent-[#107c41]"
+                checked={weekendDays.includes(day)}
+                disabled={pending}
+                onChange={(e) => setWeekendDays((d) => (e.target.checked ? [...d, day] : d.filter((x) => x !== day)))}
+              />
+              {label}
+            </label>
+          ))}
+        </div>
+        {errors.weekendDays ? <p className="mt-1 text-xs font-semibold text-rose-600">{errors.weekendDays}</p> : null}
+      </fieldset>
       <label className="flex items-start gap-2 text-xs font-semibold text-zinc-800">
         <input type="checkbox" className="mt-0.5 size-4 accent-[#107c41]" checked={isActive} disabled={pending} onChange={(e) => setIsActive(e.target.checked)} />
         <span>

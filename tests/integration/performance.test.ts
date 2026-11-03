@@ -3,7 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createLead } from "@/modules/leads/commands";
 import { performanceContexts, performanceCsv, performanceReport } from "@/modules/performance/service";
 import { loadActor } from "@/server/auth/session-store";
-import { followUps, leads, meetings, signinLogs, teams, users } from "@/server/db/schema";
+import { followUps, leadActivities, leads, meetings, signinLogs, teams, users } from "@/server/db/schema";
 import type { Database } from "@/server/db";
 import type { Actor } from "@/server/auth/types";
 import { AppError } from "@/server/errors";
@@ -114,6 +114,20 @@ describe.skipIf(!hasTestDb)("Performance (PostgreSQL integration)", () => {
     expect(report.summary).toMatchObject({ agents: 3, open: 2, booked: 2, lost: 2, winPct: 50, fuDue: 3, fuDone: 2, fuPct: 67, meetings: 2, signIns: 2 });
     expect(report.charts.outcomeMix).toEqual({ open: 2, booked: 2, lost: 2, total: 6 });
     expect(report.charts.topClosers.map((t) => t.name)).toEqual(["Agent B", "Agent A"]);
+  });
+
+  it("Q25: leads count by their original assignment date, not a later reassignment", async () => {
+    const a = f.actors.agent1;
+    // Created in range for agent A, reassigned after the range to agent B: still counts in range (for its owner, B).
+    const moved = await lead(a, INSIDE);
+    await db.update(leads).set({ ownerId: f.actors.agent2.id }).where(eq(leads.id, moved));
+    await db.insert(leadActivities).values({ leadId: moved, actorId: f.actors.manager.id, type: "assignment", data: { mode: "manual", from: a.id, ownerId: f.actors.agent2.id }, createdAt: JUST_AFTER });
+    // Created before the range without an owner, first assigned inside it: counts in range.
+    const late = await lead(a, JUST_BEFORE);
+    await db.insert(leadActivities).values({ leadId: late, actorId: f.actors.manager.id, type: "assignment", data: { mode: "manual", from: null, ownerId: a.id }, createdAt: INSIDE });
+    const report = await performanceReport(db, f.actors.superAdmin, RANGE, NOW);
+    expect(row(report, f.actors.agent2.id)).toMatchObject({ leads: 1 });
+    expect(row(report, a.id)).toMatchObject({ leads: 1 });
   });
 
   it("scope: admins all agents (or one team), managers their team, agents themselves; HR / accountant denied", async () => {

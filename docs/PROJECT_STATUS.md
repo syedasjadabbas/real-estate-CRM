@@ -72,15 +72,18 @@ Out of scope (separate quote): AI call analysis, Meta / TikTok / WhatsApp, payro
 
 ## 5. Production deployment requirements (need the hosting environment)
 
+The full ordered list is in `PRODUCTION_HANDOVER_CHECKLIST.md`; client-provided dependencies (H-1 to H-12) are in `VERSION_1_EXECUTION_PLAN.md` §6.
+
+
 1. Server, domain, DNS, TLS with Caddy 2.5+ (`DEPLOYMENT_PROXY.md` §3).
 2. App port private; firewall 22 / 80 / 443 only (§2).
 3. Env file: `NODE_ENV=production`, `DATABASE_URL`, `TRUST_PROXY=true`, `TRUSTED_PROXY_COUNT=1`, **`FILE_STORAGE_DIR` on a persistent volume** (the server now warns if it is missing), optional `PROXY_SHARED_SECRET`.
-4. `npm ci && npm run build && npm run db:migrate`. Migrations 0000–0012 are additive.
+4. `npm ci && npm run build && npm run db:migrate` on a **clean, separate production database**. Migrations 0000–0012 are additive. Then the controlled setup script (planned P1): client-confirmed lookup lists and the first Super Admin. `db:seed` must never run in production.
 5. Live checks: real IP recorded, spoofed header ignored, app port unreachable, recording and document upload / playback through the proxy (25 MB passes Caddy; nginx would need `client_max_body_size 26m`).
    - Confirm that **notification mark-read and uploads work over HTTPS** (same-origin check, `DEPLOYMENT_PROXY.md` §10). With nginx, it must pass `Host` and `X-Forwarded-Proto`.
 6. Daily `job:prune-signin-logs` scheduled, plus one manual `--dry-run`.
 7. Back up the database **and** `FILE_STORAGE_DIR` together; test one restore.
-8. Remove demo / verify accounts; rotate secrets (`SECURITY_AND_PRIVACY.md` §11).
+8. No development accounts or development, test or fictional records exist in production (the database starts empty). Use fresh production secrets (`SECURITY_AND_PRIVACY.md` §11).
    - Check the security headers with `curl -sI https://<domain>/login` (`DEPLOYMENT_PROXY.md` §11).
    - Decide on HSTS `includeSubDomains`.
 9. Recommended storage controls (`FILE_STORAGE_REVIEW.md` items 1–3):
@@ -266,10 +269,14 @@ Not covered in a browser:
 
 ### 9.7 Recommendation
 
-**Ready for a client demonstration** on a local or staging machine with the seeded development data:
+*Revised 3 Nov 2026: there is no demo or presentation environment.*
+
+**The built features are ready to be deployed to the client's production server** for handover and acceptance testing, because:
 - every built workflow passes its automated tests;
-- the dashboard and screens show real data only;
-- blocked features say what they are waiting for instead of showing empty or invented data.
+- the screens show real data only;
+- blocked features say what they are waiting for.
+
+Version 1 scope, preparation work (P1–P5) and acceptance terms are in `VERSION_1_EXECUTION_PLAN.md`.
 
 **Not ready for production use** until:
 - the §5 deployment checklist is complete;
@@ -298,3 +305,253 @@ The completion estimate stays at **about 82–85% of the quoted scope built and 
 - `docs/DEPLOYMENT_PROXY.md` §11
 - `docs/SECURITY_AND_PRIVACY.md` §7
 - `docs/PROJECT_STATUS.md`
+
+## 10. Planning after the client questionnaire (2–3 Nov 2026)
+
+**Documents written (no code changed):**
+- `CLIENT_ANSWERS_RECONCILIATION.md`;
+- `POST_QUESTIONNAIRE_IMPLEMENTATION_PLAN.md`;
+- `CHANGE_REQUESTS.md`;
+- `REMAINING_CLIENT_CLARIFICATIONS.md`;
+- `VERSION_1_EXECUTION_PLAN.md`;
+- `PRODUCTION_HANDOVER_CHECKLIST.md`;
+- `EXTERNAL_INTEGRATIONS.md`.
+
+**Version 1 is the deployed CRM on the client's server.** It includes:
+- E1–E3;
+- production preparation P1–P5;
+- E4 / E5 after signed approval.
+
+**Production finding.** A clean database created by migrations has **no lead sources, cities, budget ranges or lost reasons, and no first Super Admin**. Those currently come only from the development seed. A controlled production setup script (P1) is therefore required work.
+
+**Status:**
+- awaiting Zeploy Tech's implementation approval;
+- awaiting the client's signature (S-1) and dependencies H-1 to H-12.
+
+The completion estimate is unchanged.
+
+## 11. Implementation from the client questionnaire (3 Nov 2026)
+
+Source of truth: the 53 questionnaire answers (`CLIENT_ANSWERS_RECONCILIATION.md`).
+
+**Rules followed:**
+- Nothing that removes an existing access was applied: the questionnaire is unsigned (S-1).
+- No business or financial rule was invented.
+- Migrations are additive only; no database was reset.
+- Not committed or deployed.
+
+### 11.1 Implemented
+
+| Q | Change | Where | Tests |
+|---|---|---|---|
+| Q2, Q3 | **Account management** for Admin and Super Admin, on HR → Employees: create a CRM user, change name or role, reset password, deactivate or reactivate.<br>**Safeguards:** nobody changes their own role or status; the last active Super Admin is protected; only a Super Admin manages or grants Super Admin (C-1 default); team rules on role changes.<br>**Sessions:** deactivation, role change and password reset end the user's sessions.<br>**Auth code** is unchanged; inactive users were already refused. | `modules/accounts`, `/api/v1/users…`, `features/hr/components/account-*` | `accounts.test.ts` (9), `accounts-rules.test.ts` (4), `e2e/accounts.spec.ts` (4) |
+| Q3 | **Lead shift option:** move a person's open, lost and / or booked leads (the admin chooses the groups) to an active agent or manager.<br>Each lead goes through normal reassignment: pending follow-ups move with it, and the move is logged, audited and notified. Tasks and meetings are not moved (C-2). | same | `accounts.test.ts` |
+| Q1 | **HR records for staff without a CRM login:** name, optional email, employment status and profile fields; listed with accounts; "No CRM login" filter and tile; audited history.<br>Migration 0013 makes `employee_profiles.user_id` optional and adds `full_name`, `email`, `status`. | `modules/employees`, HR pages, `/dashboard/hr/employees/new-record` | `employees.test.ts` (+2) |
+| Q41, Q42, Q33 | **Settings:** manager discount cap 5%; default down payment 25%; payment method "Pay order".<br>Migration 0014 changes only values nobody has edited. | `drizzle/0014`, `tasks/constants.ts` | `tasks.test.ts` |
+| Q43 | **Installment due dates:** the builder requires a *First installment month*; installments are dated the 10th of consecutive months.<br>Edited schedules must keep every installment on the 10th.<br>Due dates appear on the task page and the printed proposal.<br>The down payment row stays undated (C-27).<br>Existing proposals keep their rows until edited. | `tasks/plan.ts`, `commands.ts`, task form, print | `tasks.test.ts` (+3), `tasks-rules.test.ts` (+2) |
+| Q48 | **Proposals quote only Available units.** A proposal keeping its existing unit stays editable. Payment-plan tasks for a booking still use the booked unit (Q48 concerns proposals). | `tasks/commands.ts`, task form | `tasks.test.ts` |
+| Q37–Q40 | Rounding on the last installment, 0% default discount, save-with-warning, agent cap 5%. | — | Unchanged, re-verified |
+| Q45 (additive half) | **Admins and Super Admins can assign tasks to all users;** HR and Accountants now receive tasks and can view and update their own (no create). | `tasks/policy.ts`, navigation | `tasks.test.ts` (+1), `tasks-rules.test.ts` |
+| Q25 | Performance counts leads by their **original assignment date**: creation date, or the first assignment of a lead created unassigned. Reassignments don't move it. | `performance/service.ts` | `performance.test.ts` (+1) |
+| Q24, Q26, Q27, Q30, Q35, Q51 | Confirmed current behaviour | — | Existing tests |
+| Q9 | **Team weekend days** (Sun–Sat, per team) in the team form; weekend columns shaded on the roster month view, plus a note in the day view. Leave is unaffected (calendar days, Q8). Migration 0016. | `teams/*`, roster views | `teams-targets.test.ts` (+1) |
+| Q53 | **Super Admin can delete a call recording.** Pending C-33 it is *hidden*: removed from every list and player, recorded in the audit log and timeline, and the stored audio file is kept. Migration 0015. | `files/lead-files.ts`, recordings route and panel | `recordings.test.ts` (+1) |
+| P1 | `scripts/setup-production.mjs`:<br>- **guards:** requires `NODE_ENV=production` and `--confirm-database`; never reads `.env.local`;<br>- **lookups:** client-confirmed lists from `setup/production-lookups.json` (template provided, idempotent);<br>- **first Super Admin:** hidden password prompt, never printed; refused if one already exists. | `scripts/`, `setup/` | `setup-production.test.ts` (4) |
+| P2 | `scripts/ops/backup.sh` (database dump + storage archive + checksums; optional off-server rsync; no pruning) and `scripts/ops/restore-check.sh` (restores into a temporary database, compares counts, checks files, drops it), plus `RESTORE.md`. | `scripts/ops/` | Backup and in-place restore verified on the test database |
+
+**Migrations:** 0013–0016, all additive, applied to the development and test databases. Development data after them:
+- 11 users, 5 leads, unchanged;
+- the seeded down payment changed from 30 to 25 and a manager cap of 5 added (both never edited before);
+- "Pay order" added.
+
+### 11.2 Kept as today until signed approval (removes existing access)
+- Q31: managers approving reversals.
+- Q52: agents playing recordings.
+- Q36: proposal editing limited to Super Admin.
+- Q45: managers and agents stop assigning tasks.
+
+### 11.3 Not built: missing client decision (current behaviour preserved)
+
+| Q | Missing decision | ID |
+|---|---|---|
+| Q4–Q8, Q10–Q17 | Leave module:<br>- who approves and in what order (C-4);<br>- Super Admin leave (C-5);<br>- cross-year rule (C-13);<br>- allowance value, proration method, leave year, cancellation flow (C-7, C-10–C-12) | C-4, C-5, C-13 |
+| Q18, Q19 | Leave → roster and rotation (needs leave) | C-14, C-15 |
+| Q5 | Holiday region by team: staff in several teams | C-3 |
+| Q20–Q22 | Attendance: capture rules, plus the commercial decision | C-16, CR-1 |
+| Q23 | Critical agent rule | C-17 |
+| Q28 | Pipeline pressure formula | C-20 |
+| Q29 | Receipt number format | C-21 |
+| Q32 | Refund deduction and approval | C-22, CR-3 |
+| Q33 (proof files) | Payment proof attachments | C-23 |
+| Q34 | PDP / CDP | C-24 |
+| Q44 | Floor prices (project, override rule) and ROI rate | C-28 |
+| Q46 | Task statuses vs types | C-30 |
+| Q47 | Current unit price on proposals (printed copy) | C-31 |
+| Q49 | Floor map on printed proposals | CR-2 |
+| Q50 | Sign-in log deletion stays **off** until the signed approval and a production scheduler | S-1 |
+| Q53 (erase) | Permanent erase of recordings | C-33 |
+
+### 11.4 Verification (3 Nov 2026)
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | Pass |
+| `npm run lint` | Pass, 0 problems |
+| `npm test` (Vitest) | **41 files, 371 / 371** |
+| `drizzle-kit check` / `generate --name drift_probe` | "Everything's fine" / "No schema changes" (17 migrations) |
+| `npm run test:e2e` | Production build passes (94 / 94 pages, 0 warnings); Playwright **51 / 51** (desktop and mobile) |
+
+The completion estimate is not raised by this round: it implements answered rules inside quoted modules, and the main blocked modules (leave, attendance, income / expense, receipts) are unchanged.
+
+### 11.5 Code audit of the implementation round (3 Nov 2026)
+
+**Defects found and fixed:**
+
+| # | Defect | Fix | Test |
+|---|---|---|---|
+| 1 | Creating a proposal with hand-edited rows skipped the Q43 due-date check (only updates checked it). | `createTask` checks rows too. | `tasks.test.ts` "hand-edited rows are checked on create too" |
+| 2 | HR and Accountants could not open the task edit page: the form options required *create* permission, and the lead picker refused roles without lead access. | Options need create **or** edit; no lead options for roles without leads. | `tasks.test.ts` Q45 (HR edit form, hidden lead) |
+| 3 | Two admins creating the same email at the same moment got a server error instead of a field error. | The unique-index violation is mapped to the email field. | Covered by the duplicate-email test path |
+| 4 | The lead shift had per-lead audit rows but no record on the deactivated person's history. | One `user.leads_shift` summary row (receiver, groups, moved / matched). | `accounts.test.ts` |
+| 5 | The setup script could add a lookup name that already existed in another letter case. | The insert skips case-insensitive matches. | `setup-production.test.ts` |
+| 6 | `restore-check.sh` could only run with `CREATEDB`. | Optional `RESTORE_CHECK_DATABASE` scratch target (refuses the live database). Rows in the backup may never exceed live. | Full run reported OK (`scripts/ops/RESTORE.md`) |
+
+**Answers re-checked against the implementation:**
+- Q2, Q3, Q1, Q41, Q42, Q43, Q48, Q25, Q9 and Q53 match the client's wording.
+- Q45 is half applied, by design: Admins assign to all users; removing managers' and agents' assigning waits for S-1.
+- **Q33 is not covered by existing Finance.** Payments store only a free-text *Reference* (cheque or transaction no.). There is no attachment, and Accountants can't open lead documents. "Online receipt" and "cash images" proofs therefore need the attachment feature (in scope, after C-23).
+- **Not specified by the client:** if a CRM account is later created for someone who already has a no-login HR record, the two records are separate. HR should not create both.
+
+**Security review (server-enforced, not UI only):**
+- **Account management:** every API route and server action calls the service guards.
+  - An Admin can't act on or grant Super Admin.
+  - Nobody changes their own role or status.
+  - The last active Super Admin is protected.
+  - Team role rules apply.
+  - A role change, password reset or deactivation deletes the user's sessions in the same transaction.
+  - Passwords are never returned, logged or audited.
+- **Records without login:** they can't be attached to a user (unknown fields rejected), and the profile route can't edit them.
+- **Recordings:** `DELETE /api/v1/recordings/:id` is Super Admin only (403 for agent, manager and admin in Playwright). A hidden recording is 404 for everyone, including download. The stored file is kept, and an audit row and timeline entry are written.
+- **Lead shift:** every moved lead goes through `assignLead`, which checks the actor, receiver and scope and writes `lead.assign`, plus the summary row.
+- **Setup script:**
+  - refuses unless `NODE_ENV=production` and the database name matches;
+  - never reads `.env.local`;
+  - lookups are idempotent;
+  - refuses a second Super Admin;
+  - the password is never echoed (tested with a piped password).
+- **Backups:** credentials go through libpq environment variables (`pg-env.mjs`), never command-line arguments; files are written with `umask 077`. Running the scripts with `bash -x` would print the exported values, so don't trace them.
+
+**Migration rollback and compatibility (all additive; none reversed automatically):**
+
+| Migration | Risk if rolled back or run against older code | Note |
+|---|---|---|
+| 0013 records without login | Re-adding NOT NULL on `user_id` fails once no-login records exist. Older app code ignores those rows. | Roll back only by deleting the records first: a client decision |
+| 0014 due dates + defaults | Older code ignores `due_on`. The 30 → 25 down-payment change and the manager cap are data; reverting means setting them back in Tasks settings (audited). | Only values nobody had edited were changed |
+| 0015 recording hide | PostgreSQL can't drop an enum value (`file_deleted`). **Older app code would show hidden recordings again**, because it doesn't read `deleted_at`. | Don't deploy older code against this schema |
+| 0016 team weekends | Older code ignores the column. | — |
+
+All 17 migrations apply cleanly to an empty test database (`e2e` global setup, every run).
+
+**Tests added in the audit:**
+- Vitest: +5 assertions or tests (tasks ×3, accounts, setup script).
+- Playwright: `e2e/questionnaire-screens.spec.ts` (Q1 desktop and mobile, Q9, Q43, Q48), plus recording-delete API checks in `files.spec.ts`.
+
+## 12. Implementation round 2 (3 Nov 2026)
+
+### 12.1 Phase 1: payment proof attachments (Q33). Done.
+
+**What it does:**
+- Accountants and Super Admins attach receipts, screenshots or cash photos to a posted payment on its payment page.
+- Formats: PDF, JPG, PNG, DOCX, XLSX, up to 10 MB, content-checked.
+- Images preview inline under a sandbox CSP; other files download.
+
+**Storage:**
+- Files are private (`payment-proofs/YYYY/MM/<uuid>.<ext>`). Each is a `files` row of kind `receipt` linked to its payment by the new `payment_id` (migration 0017, additive).
+- Proofs never appear among lead documents.
+- Each upload is audited (`payment.proof_upload`) and shown in the payment's audit trail.
+
+**Access:**
+- **Viewing** follows itemised-payment access: finance roles, and managers for their team's bookings. Managers of other teams get 404; agents and HR get 403.
+- **Uploading:** Accountant and Super Admin only. A reversal entry can't carry proof.
+
+**Unchanged:** existing payments, their references and the record-payment form. Proof is **optional** until the client confirms (C-23).
+
+**Code:**
+- `modules/finance/proofs.ts`;
+- `/api/v1/finance/payments/:id/proofs` (GET, POST) and `/api/v1/finance/proofs/:id` (GET);
+- the documents panel, generalised; the lead documents panel is unchanged.
+
+**Tests:** `payment-proofs.test.ts` (3); `e2e/payment-proofs.spec.ts` (1: attach, preview, download, role checks).
+
+### 12.2 Phase 2: leave management (Q4–Q19). Done, except the isolated decisions.
+
+**Built:**
+- **Employees, in My Workplace:** request leave, see balance and history, withdraw a pending request, request cancellation of approved leave.
+- **Approvers, HR and admins, in HR → Leave:**
+  - waiting decisions;
+  - cancellation requests;
+  - all requests: HR, Admin and Super Admin see everyone; managers see their teams;
+  - leave settings (Admin, Super Admin).
+- Migration 0018: `leave_requests`, `leave_decisions`, `roster_entries.leave_request_id`, all additive.
+
+| Answer | Implementation |
+|---|---|
+| Q4 | One allowance for everyone: setting **30 days** by default (value to confirm, C-7) |
+| Q8 | Calendar days, inclusive; weekends and holidays count |
+| Q10, Q11 | Types "Annual" and "Medical (CPL)"; both come out of the annual allowance |
+| Q12 | A request over the remaining balance is refused, with the days left. Pending requests hold their days |
+| Q13 | Joiners are prorated from the joining date. **Provisional method** (calendar-day share, nearest half day), isolated in `proratedAllowance` until C-10 |
+| Q14 | No carry-forward: each calendar year starts again (leave year to confirm, C-11) |
+| Q16 | Past dates allowed. Overlapping requests refused (FR-142) |
+| Q7 | Leave of Managers, HR, Admins and Super Admins is approved by a **Super Admin**. Admins can't. **Nobody approves their own leave**, so a Super Admin's own leave needs another Super Admin (C-5 pending) |
+| Q6 | Agents' and accountants' leave needs **two steps**. Who approves each step is an **Admin setting** (Team manager / HR / Admin), **left unset** until the client confirms the order (C-4). Until then those requests stay pending, with a notice. Once set, the steps run in order, and a rejection at either step ends the request |
+| Q15 | Cancelling approved leave: the employee requests it and an Admin or Super Admin decides, or an Admin / Super Admin cancels directly with a reason. Cancelled days return to the balance |
+| Q17 | **Isolated:** a request spanning two calendar years is refused with a message ("submit one request per year") until C-13. A database check enforces it too |
+| Q18 | On final approval, each day is written to the roster as "On leave" on the person's first active team. **A day a manager already set is not replaced** (C-14). Cancelling removes only the days written by that leave |
+| Q19 | Automatic lead rotation skips agents whose approved leave covers today (Pakistan date). "Leads off" and manual assignment are unchanged (C-15) |
+| Q9 | Team weekends were done in round 1; under calendar-day counting they don't change leave |
+
+**Audit:** `leave.request`, `.approve_step`, `.approve`, `.reject`, `.withdraw`, `.cancel_request`, `.cancel`, `.cancel_refused`; setting changes as `app.setting`.
+
+**Not built:** leave for staff without a CRM login (C-6); leave notifications (N4 open).
+
+**Tests:**
+- `leave-rules.test.ts` (4);
+- `leave.test.ts` (9): balances, blocks, the Super Admin path, the staff steps, roster, cancellation, rotation, visibility;
+- `e2e/leave.spec.ts` (3 tests; 4 runs with mobile).
+
+### 12.3 Phase 3: finance and proposals. Done for what is defined.
+- **Q47, proposals follow unit price changes:**
+  - Saving a proposal now uses the unit's **current** price and area. It previously kept the price from the first save. The ROI rate stays as saved.
+  - A proposal saved before a price change shows a notice on its page and on the print screen (not on paper) until it is saved again.
+  - Records are only recalculated when someone saves them.
+  - Whether a copy of each printed version must be kept is C-31.
+  - Test: `tasks.test.ts` "Q47".
+- **Not built: missing definitions.** Receipt format (C-21), PDP / CDP (C-24), refunds with deductions (C-22, CR-3), floor prices and ROI (C-28), task statuses (C-30).
+- **Not applied: removes existing access.** Manager reversal approval (Q31) and Super-Admin-only proposal editing (Q36).
+
+### 12.4 Phase 4: remaining modules. Done for what is defined.
+- **Q5, holiday region by team:**
+  - Teams have a "Holiday region" (migration 0019).
+  - My Workplace shows company holidays plus the regional holidays of the person's teams' regions, matched ignoring case.
+  - Staff in several teams see all their teams' regions (C-3 pending), so nothing relevant is hidden.
+  - Without a team region, every regional holiday is still listed, as before.
+  - Test: `workplace.test.ts` "Q5".
+- **Defect fixed:** the leave balance ran parallel queries inside a transaction; `pg` warned about this at runtime. It now runs them in sequence.
+- **Nothing else is defined and additive:**
+  - Dashboard: aging matrix (M-Q1–M-Q5), Critical (C-17) and Pipeline pressure (C-20) need definitions.
+  - Notifications: no new events defined (N2–N6).
+  - Attendance: commercial decision (CR-1) and C-16.
+  - Sign-in log deletion: needs S-1.
+
+### 12.5 Verification (3 Nov 2026, end of round 2)
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | Pass |
+| `npm run lint` | Pass, 0 problems |
+| `npm test` (Vitest) | **44 files, 390 / 390** |
+| `drizzle-kit check` / `generate --name drift_probe` | "Everything's fine" / "No schema changes" (20 migrations) |
+| `npm run test:e2e` | Production build passes (96 / 96 pages, 0 warnings, no runtime warnings); Playwright **61 / 61** (desktop and mobile) |
+
+Migrations 0017–0019 are additive and applied to the development and test databases. The development database still has its 11 users, 5 leads and 6 payments; no leave was created there.

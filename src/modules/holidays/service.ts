@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, ilike, isNotNull, lte, ne, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, lte, ne, or, sql, type SQL } from "drizzle-orm";
 import type { Database } from "@/server/db";
 import { auditLogs, holidays, users } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
@@ -186,11 +186,16 @@ export const daysBetween = (from: string, to: string) => Math.round((Date.parse(
  * Company-wide and regional dates are both returned: employees have no region yet (Q9).
  * Only calendar facts are returned, never who created or edited a holiday.
  */
-export async function upcomingHolidays(db: Database, { limit = UPCOMING_HOLIDAY_LIMIT, today = businessToday() } = {}) {
+/**
+ * Upcoming holidays. With `regions` (questionnaire Q5: region from the person's teams), regional
+ * holidays are limited to those regions (ignoring case); without, every regional holiday is listed.
+ */
+export async function upcomingHolidays(db: Database, { limit = UPCOMING_HOLIDAY_LIMIT, today = businessToday(), regions = null as string[] | null } = {}) {
+  const regionFilter = regions === null ? undefined : regions.length ? or(eq(holidays.scope, "company"), inArray(sql`lower(${holidays.region})`, regions.map((r) => r.toLowerCase()))) : eq(holidays.scope, "company");
   const rows = await db
     .select({ id: holidays.id, date: holidays.date, name: holidays.name, scope: holidays.scope, region: holidays.region })
     .from(holidays)
-    .where(gte(holidays.date, today))
+    .where(and(gte(holidays.date, today), regionFilter))
     .orderBy(asc(holidays.date), asc(holidays.scope), asc(sql`lower(${holidays.name})`))
     .limit(limit);
   return { today, rows: rows.map((r) => ({ ...r, daysAway: daysBetween(today, r.date) })) };

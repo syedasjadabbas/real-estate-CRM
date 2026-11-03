@@ -56,6 +56,15 @@ export type AgentMetrics = {
 
 const n = (v: unknown) => Number(v ?? 0);
 
+/**
+ * Questionnaire Q25: leads count by their original assignment date. That is the creation date,
+ * unless the lead was created without an owner; then it is the first assignment from nobody.
+ * Later reassignments (which record a previous owner) never move the date.
+ */
+const assignedAt = sql`coalesce(
+  (select min(a.created_at) from lead_activities a where a.lead_id = "leads"."id" and a.type = 'assignment' and (a.data->>'from') is null),
+  "leads"."created_at")`;
+
 /** Per-agent metrics for the window (definitions P2–P9). */
 async function agentMetrics(db: Database, agents: { id: string; name: string }[], window: { start: Date; end: Date }): Promise<AgentMetrics[]> {
   const ids = agents.map((a) => a.id);
@@ -69,7 +78,7 @@ async function agentMetrics(db: Database, agents: { id: string; name: string }[]
         lost: sql<number>`count(*) filter (where ${leads.stage} = 'lost_lead')::int`,
       })
       .from(leads)
-      .where(and(inArray(leads.ownerId, ids), isNull(leads.deletedAt), gte(leads.createdAt, window.start), lt(leads.createdAt, window.end)))
+      .where(and(inArray(leads.ownerId, ids), isNull(leads.deletedAt), sql`${assignedAt} >= ${window.start}`, sql`${assignedAt} < ${window.end}`))
       .groupBy(leads.ownerId),
     db
       .select({

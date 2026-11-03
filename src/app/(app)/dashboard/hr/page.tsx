@@ -1,4 +1,5 @@
 import { ArrowRight, CalendarDays, Clock, Plane, Users } from "lucide-react";
+import { canOpenLeaveAdmin } from "@/modules/leave/service";
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
@@ -47,7 +48,7 @@ function ModuleCard({ m }: { m: Module }) {
   );
 }
 
-/** Reference "People & time off" overview: module cards. Employees and Holidays are built; Leave follows; attendance is not available (Q-H2). */
+/** Reference "People & time off" overview: module cards. Employees, Holidays and Leave are built; attendance is not available (Q-H2 / CR-1). */
 export default async function HrPage() {
   const actor = await requirePageUser();
   const item = findNavItem("/dashboard/hr")!;
@@ -70,7 +71,14 @@ export default async function HrPage() {
       href: holidays ? "/dashboard/hr/holidays" : null,
       note: "HR, admins and managers",
     },
-    { eyebrow: "Time off", title: "Leave", description: "Requests, approvals, and balances.", icon: Plane, href: null, note: "Not built yet" },
+    {
+      eyebrow: "Time off",
+      title: "Leave",
+      description: "Requests, approvals, and balances. Request your own leave from My Workplace.",
+      icon: Plane,
+      href: canOpenLeaveAdmin(actor) ? "/dashboard/hr/leave" : "/dashboard/workspace",
+      note: "Approvers, HR and admins",
+    },
     {
       eyebrow: "Attendance",
       title: "Attendance — not available",
@@ -83,7 +91,7 @@ export default async function HrPage() {
   return (
     <PageStack>
       <PageHeader title="People & time off" description="Employee records, holiday calendar, leave requests, and activity. Payroll is managed under Finance." icon={item.icon} />
-      <HrTabs active="overview" showEmployees={employees} showHolidays={holidays} />
+      <HrTabs active="overview" showEmployees={employees} showHolidays={holidays} showLeave={canOpenLeaveAdmin(actor)} />
       <Panel title="Modules" description="Open a section to manage people and time off.">
         <div className="grid grid-cols-1 gap-3 py-2 sm:grid-cols-2 xl:grid-cols-4">
           {modules.map((m) => (

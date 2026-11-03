@@ -92,6 +92,55 @@
       "when": 1793391589755,
       "tag": "0012_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1793687296409,
+      "tag": "0013_employee_records_without_login",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1793687650785,
+      "tag": "0014_proposal_due_dates_and_questionnaire_defaults",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1793688178864,
+      "tag": "0015_recording_hide",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1793688339516,
+      "tag": "0016_team_weekend_days",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1793691134848,
+      "tag": "0017_payment_proofs",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1793691595181,
+      "tag": "0018_leave_requests",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1793692508546,
+      "tag": "0019_team_region",
+      "breakpoints": true
     }
   ]
 }

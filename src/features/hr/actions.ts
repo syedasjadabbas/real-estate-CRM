@@ -1,7 +1,8 @@
 "use server";
 
 import { refresh } from "next/cache";
-import { saveEmployeeProfile } from "@/modules/employees/service";
+import { createAccount, reassignOwnedLeads, resetAccountPassword, setAccountStatus, updateAccount } from "@/modules/accounts/service";
+import { createEmployeeRecord, saveEmployeeProfile, saveEmployeeRecord } from "@/modules/employees/service";
 import { createHoliday, deleteHoliday, updateHoliday } from "@/modules/holidays/service";
 import { requireActor } from "@/server/auth/current-user";
 import { getDb } from "@/server/db";
@@ -33,4 +34,32 @@ export async function deleteHolidayAction(holidayId: string) {
 
 export async function saveEmployeeProfileAction(userId: string, input: Record<string, unknown>) {
   return run((db, actor) => saveEmployeeProfile(db, actor, userId, input));
+}
+
+export async function createAccountAction(input: Record<string, unknown>) {
+  return run((db, actor) => createAccount(db, actor, input));
+}
+
+export async function updateAccountAction(userId: string, input: Record<string, unknown>) {
+  return run((db, actor) => updateAccount(db, actor, userId, input));
+}
+
+export async function resetAccountPasswordAction(userId: string, input: Record<string, unknown>) {
+  return run((db, actor) => resetAccountPassword(db, actor, userId, input));
+}
+
+export async function setAccountStatusAction(userId: string, input: Record<string, unknown>) {
+  return run((db, actor) => setAccountStatus(db, actor, userId, input));
+}
+
+export async function reassignOwnedLeadsAction(userId: string, input: Record<string, unknown>) {
+  return run((db, actor) => reassignOwnedLeads(db, actor, userId, input));
+}
+
+export async function createEmployeeRecordAction(input: Record<string, unknown>) {
+  return run((db, actor) => createEmployeeRecord(db, actor, input));
+}
+
+export async function saveEmployeeRecordAction(profileId: string, input: Record<string, unknown>) {
+  return run((db, actor) => saveEmployeeRecord(db, actor, profileId, input));
 }

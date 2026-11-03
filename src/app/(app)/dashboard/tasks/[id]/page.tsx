@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card";
 import { EmptyState, RestrictedState } from "@/components/ui/empty-state";
 import { SummaryTile } from "@/components/ui/stat";
 import { BookingStagePill } from "@/features/bookings/components/stage-pill";
-import { formatArea, formatPrice } from "@/features/inventory/format";
+import { formatArea, formatListedOn, formatPrice } from "@/features/inventory/format";
 import { PanelCard } from "@/features/leads/components/detail-panels";
 import { formatDateTime } from "@/features/leads/format";
 import { RebuildRowsButton, TaskStatusPanel } from "@/features/tasks/components/task-panels";
@@ -177,6 +177,12 @@ export default async function TaskDetailPage({ params, searchParams }: PageProps
                   <Fact label="Expected ROI annually">{p.roiAnnual !== null ? formatPrice(p.roiAnnual) : "—"}</Fact>
                 </div>
                 {/* One column on phones so amounts are never cut off. */}
+                {detail.unitChanged ? (
+                  <p role="note" className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
+                    The unit&apos;s price changed after this proposal was saved (saved {formatPrice(detail.unitChanged.savedPricePerSqft)} / sq ft, now{" "}
+                    {formatPrice(detail.unitChanged.currentPricePerSqft)} / sq ft). Open Edit and save to update the figures and schedule.
+                  </p>
+                ) : null}
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
                   <SummaryTile label={`After ${p.discountPct}% discount`} value={formatPrice(p.afterDiscount)} />
                   <SummaryTile label={`Down payment ${p.downPaymentPct}%`} value={formatPrice(p.downPayment)} />
@@ -194,6 +200,7 @@ export default async function TaskDetailPage({ params, searchParams }: PageProps
                           <th scope="col" className="px-3 py-2.5">Installment</th>
                           <th scope="col" className="px-3 py-2.5">Description</th>
                           <th scope="col" className="px-3 py-2.5">Progress</th>
+                          <th scope="col" className="px-3 py-2.5">Due date</th>
                           <th scope="col" className="px-3 py-2.5 text-right">Amount</th>
                         </tr>
                       </thead>
@@ -204,13 +211,14 @@ export default async function TaskDetailPage({ params, searchParams }: PageProps
                             <td className="px-3 py-2 font-semibold">{r.label}</td>
                             <td className="px-3 py-2 text-zinc-700">{r.description ?? ""}</td>
                             <td className="px-3 py-2 text-zinc-700">{r.progress ?? ""}</td>
+                            <td className="px-3 py-2 whitespace-nowrap text-zinc-700 tabular-nums">{r.dueOn ? formatListedOn(r.dueOn) : ""}</td>
                             <td className="px-3 py-2 text-right font-semibold tabular-nums">{formatPrice(r.amount)}</td>
                           </tr>
                         ))}
                       </tbody>
                       <tfoot>
                         <tr className="border-t border-zinc-200 bg-zinc-50 font-black">
-                          <td colSpan={4} className="px-3 py-2">
+                          <td colSpan={5} className="px-3 py-2">
                             Total
                           </td>
                           <td className="px-3 py-2 text-right tabular-nums">{formatPrice(rowsTotal(detail.rows))}</td>

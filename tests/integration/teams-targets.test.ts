@@ -71,6 +71,16 @@ describe.skipIf(!hasTestDb)("Teams & Targets (PostgreSQL integration)", () => {
       expect((await db.select().from(auditLogs).where(eq(auditLogs.entityId, teamId))).map((a) => a.action).sort()).toEqual(["team.create", "team.update"]);
     });
 
+    it("Q9: each team keeps its own weekend days, shown with the roster", async () => {
+      const { teamId } = await createTeam(db, admin, { name: "Weekend Fri-Sat", weekendDays: [6, 5, 5] });
+      expect((await db.select().from(teams).where(eq(teams.id, teamId)))[0].weekendDays).toEqual([5, 6]);
+      expect(await updateTeam(db, admin, teamId, { weekendDays: [0] })).toEqual({ changed: ["weekendDays"] });
+      expect(await updateTeam(db, admin, teamId, { weekendDays: [0] })).toEqual({ changed: [] });
+      expect(await fieldOf(updateTeam(db, admin, teamId, { weekendDays: [7] }))).toBe("weekendDays.0");
+      expect(await fieldOf(updateTeam(db, admin, teamId, { weekendDays: [0, 1, 2, 3, 4, 5, 6] }))).toBe("weekendDays");
+      expect((await getRosterMonth(db, admin, teamId, "2026-11")).team.weekendDays).toEqual([0]);
+    });
+
     it("membership: admins only, active agents / managers only, add and remove recorded", async () => {
       const r = await setTeamMembers(db, admin, team1, { userIds: [f.actors.manager.id, f.actors.agent1.id, f.actors.outsideAgent.id] });
       expect(r).toEqual({ added: [f.actors.outsideAgent.id], removed: [f.actors.agent2.id] });

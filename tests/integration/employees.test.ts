@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { getEmployee, listEmployees, saveEmployeeProfile } from "@/modules/employees/service";
+import { createEmployeeRecord, getEmployee, listEmployees, saveEmployeeProfile, saveEmployeeRecord } from "@/modules/employees/service";
 import { loadActor } from "@/server/auth/session-store";
 import { auditLogs, employeeProfiles, users } from "@/server/db/schema";
 import type { Database } from "@/server/db";
@@ -137,7 +137,7 @@ describe.skipIf(!hasTestDb)("Employee records (PostgreSQL integration)", () => {
     it("lists every CRM account with tiles, including those without a profile", async () => {
       const r = await listEmployees(db, f.actors.hr, {});
       expect(r.total).toBe(9);
-      expect(r.tiles).toEqual({ accounts: 9, active: 8, inactive: 1, completed: 1 });
+      expect(r.tiles).toEqual({ accounts: 9, active: 8, inactive: 1, noLogin: 0, completed: 1 });
       expect(r.rows.find((x) => x.id === f.actors.manager.id)).toMatchObject({ designation: null, department: null, phone: null });
       expect(r.departments).toEqual(["Human Resources", "Sales"]);
     });
@@ -167,5 +167,60 @@ describe.skipIf(!hasTestDb)("Employee records (PostgreSQL integration)", () => {
     await expect(db.insert(employeeProfiles).values({ userId: f.actors.agent1.id, department: "x".repeat(101) })).rejects.toThrow();
     await db.insert(employeeProfiles).values({ userId: f.actors.agent1.id });
     await expect(db.insert(employeeProfiles).values({ userId: f.actors.agent1.id })).rejects.toThrow();
+  });
+});
+
+describe.skipIf(!hasTestDb)("Employee records without a CRM login (Q1)", () => {
+  let db: Database;
+  let close: () => Promise<void>;
+  let f: Fixture;
+
+  beforeAll(() => {
+    ({ db, close } = connectTestDb());
+  });
+  afterAll(async () => close());
+  beforeEach(async () => {
+    await resetDb(db);
+    f = await seedFixture(db);
+  });
+
+  it("HR adds a record without a login; it is listed, opened, edited and audited", async () => {
+    const hr = f.actors.hr;
+    const { id } = await createEmployeeRecord(db, hr, { fullName: "  Driver   Khan ", email: "Driver@Test.local", department: "Logistics", phoneCountryCode: "+92", phoneNumber: "03001234567" });
+    const [row] = await db.select().from(employeeProfiles).where(eq(employeeProfiles.id, id));
+    expect(row).toMatchObject({ userId: null, fullName: "Driver Khan", email: "driver@test.local", status: "active", department: "Logistics", phoneE164: "+923001234567" });
+
+    const list = await listEmployees(db, hr, {});
+    const listed = list.rows.find((r) => r.id === id);
+    expect(listed).toMatchObject({ name: "Driver Khan", role: null, hasLogin: false, status: "active" });
+    expect(list.tiles.noLogin).toBe(1);
+    expect(list.tiles.accounts).toBe(list.total - 1);
+    expect((await listEmployees(db, hr, { role: "none" })).rows.map((r) => r.id)).toEqual([id]);
+    expect((await listEmployees(db, hr, { q: "driver" })).rows.map((r) => r.id)).toEqual([id]);
+
+    const { employee } = await getEmployee(db, hr, id);
+    expect(employee).toMatchObject({ id, hasLogin: false, role: null, name: "Driver Khan" });
+
+    expect(await saveEmployeeRecord(db, hr, id, { status: "inactive", designation: "Driver" })).toEqual({ changed: ["status", "designation"] });
+    expect((await listEmployees(db, hr, { status: "inactive" })).rows.map((r) => r.id)).toContain(id);
+    const logs = await db.select().from(auditLogs).where(eq(auditLogs.entityId, id));
+    expect(logs.map((l) => l.action).sort()).toEqual(["employee.record_create", "employee.record_update"]);
+    expect((await getEmployee(db, hr, id)).history).toHaveLength(2);
+  });
+
+  it("validates records and keeps account rows separate", async () => {
+    expect((await errorOf(createEmployeeRecord(db, f.actors.hr, { email: "x@test.local" })))?.fields?.fullName).toBeTruthy();
+    expect((await errorOf(createEmployeeRecord(db, f.actors.hr, { fullName: "A", email: "not-an-email" })))?.fields?.email).toBeTruthy();
+    expect(await errorCode(createEmployeeRecord(db, f.actors.hr, { fullName: "A", role: "agent" }))).toBe("VALIDATION_FAILED");
+    expect(await errorCode(createEmployeeRecord(db, f.actors.manager, { fullName: "A" }))).toBe("FORBIDDEN");
+    expect(await errorCode(createEmployeeRecord(db, f.actors.agent1, { fullName: "A" }))).toBe("FORBIDDEN");
+    // A CRM account's profile can't be edited as a record, and vice versa the account id stays the key.
+    await saveEmployeeProfile(db, f.actors.hr, f.actors.agent1.id, { department: "Sales" });
+    const [p] = await db.select().from(employeeProfiles).where(eq(employeeProfiles.userId, f.actors.agent1.id));
+    expect(await errorCode(saveEmployeeRecord(db, f.actors.hr, p.id, { fullName: "Hijack" }))).toBe("NOT_FOUND");
+    expect((await getEmployee(db, f.actors.hr, f.actors.agent1.id)).employee).toMatchObject({ hasLogin: true, role: "agent" });
+    // Managers can read records.
+    const { id } = await createEmployeeRecord(db, f.actors.hr, { fullName: "Office Boy" });
+    expect((await getEmployee(db, f.actors.manager, id)).employee.name).toBe("Office Boy");
   });
 });

@@ -1,6 +1,6 @@
-import { and, count, desc, eq, sql } from "drizzle-orm";
+import { and, count, desc, eq, isNotNull, sql } from "drizzle-orm";
 import type { Database } from "@/server/db";
-import { signinLogs } from "@/server/db/schema";
+import { signinLogs, teamMembers, teams } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
 import { AppError } from "@/server/errors";
 import { upcomingHolidays } from "@/modules/holidays/service";
@@ -61,6 +61,15 @@ export type SigninRow = Awaited<ReturnType<typeof listMySignins>>["rows"][number
  * My leave waits on the HR leave questions (Q3, Q3b, Q5, Q6), so no leave data is returned.
  */
 export async function getMyWorkplace(db: Database, actor: Actor, input: unknown = {}) {
-  const [holidays, signins] = await Promise.all([upcomingHolidays(db), listMySignins(db, actor, input)]);
-  return { holidays, signins, leave: { status: "pending_client_decision" as const } };
+  // Q5: region comes from the person's teams. Staff in several teams see all their teams' regions (C-3);
+  // with no team region set, every regional holiday stays listed, as before.
+  const teamRegions = (
+    await db
+      .selectDistinct({ region: teams.region })
+      .from(teamMembers)
+      .innerJoin(teams, eq(teams.id, teamMembers.teamId))
+      .where(and(eq(teamMembers.userId, actor.id), eq(teams.isActive, true), isNotNull(teams.region)))
+  ).map((r) => r.region!);
+  const [holidays, signins] = await Promise.all([upcomingHolidays(db, { regions: teamRegions.length ? teamRegions : null }), listMySignins(db, actor, input)]);
+  return { holidays, signins, regions: teamRegions };
 }

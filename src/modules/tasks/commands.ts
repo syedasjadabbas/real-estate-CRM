@@ -7,15 +7,15 @@ import { AppError } from "@/server/errors";
 import { canAccessBooking } from "@/modules/bookings/policy";
 import { seesInactiveInSelector } from "@/modules/projects/policy";
 import { loadAccessibleLead, teamMemberIds, type DbOrTx, type Tx } from "@/modules/leads/support";
-import { DEFAULT_RECURRING_LABEL, TASK_STATUS_LABELS, hasPlan } from "./constants";
-import { buildRows, computeFigures, unitPricePerSqft, type PlanRow, type ProposalSettings } from "./plan";
+import { DEFAULT_RECURRING_LABEL, TASK_STATUS_LABELS, hasPlan, type TaskType } from "./constants";
+import { buildRows, computeFigures, INSTALLMENT_DUE_DAY, unitPricePerSqft, type PlanRow, type ProposalSettings } from "./plan";
 import { ASSIGNABLE_ROLES, assertCanTask, canAssignTo, canEditDownPayment, discountCap } from "./policy";
 import { getProposalSettings } from "./settings";
 import { loadAccessibleTask, parseTask, taskFieldError } from "./support";
 import { createTaskSchema, proposalSchema, statusSchema, updateTaskSchema } from "./validation";
 
 type ProposalData = z.output<typeof proposalSchema>;
-type RowData = { label: string; description: string | null; progress: string | null; amount: number };
+type RowData = { label: string; description: string | null; progress: string | null; amount: number; dueOn?: string | null };
 
 async function record(tx: DbOrTx, actor: Actor, taskId: string, action: string, data: Record<string, unknown>, before: unknown = null) {
   await tx.insert(taskHistory).values({ taskId, actorId: actor.id, action, data });
@@ -49,15 +49,19 @@ async function checkLinks(tx: DbOrTx, actor: Actor, leadId: string | null, booki
 /**
  * Turns builder inputs into the stored plan. Prices come from the unit (or the default price
  * setting); the discount cap and the agents' down-payment lock are enforced here (FR-091).
- * An existing plan keeps its unit price and ROI snapshot while the unit is unchanged.
+ * Questionnaire Q47: proposals reflect the unit's current price and area on every save (they no
+ * longer keep the price from the first save). The ROI rate stays as saved.
  */
-async function resolveProposal(tx: DbOrTx, actor: Actor, input: ProposalData, existing: TaskProposal | null, settings: ProposalSettings): Promise<TaskProposal> {
+async function resolveProposal(tx: DbOrTx, actor: Actor, input: ProposalData, existing: TaskProposal | null, settings: ProposalSettings, type: TaskType): Promise<TaskProposal> {
   let projectId = input.projectId;
   let unit: typeof units.$inferSelect | undefined;
   if (input.unitId) {
     [unit] = await tx.select().from(units).where(eq(units.id, input.unitId)).limit(1);
     if (!unit) throw taskFieldError("proposal.unitId", "Choose a unit");
     if (projectId && unit.projectId !== projectId) throw taskFieldError("proposal.unitId", "This unit belongs to another project");
+    // Q48: only Available units can be quoted in a Proposal (a payment plan for an existing booking uses
+    // the booked unit). A proposal that keeps its existing unit stays editable.
+    if (type === "proposal" && unit.id !== existing?.unitId && unit.status !== "available") throw taskFieldError("proposal.unitId", "Only available units can be used in a proposal");
     projectId = unit.projectId;
   }
   if (projectId && projectId !== existing?.projectId) {
@@ -65,9 +69,8 @@ async function resolveProposal(tx: DbOrTx, actor: Actor, input: ProposalData, ex
     if (!project || (project.status !== "active" && !seesInactiveInSelector(actor))) throw taskFieldError("proposal.projectId", "Choose an active project");
   }
 
-  const sameUnit = Boolean(existing && unit && existing.unitId === unit.id);
-  const areaSqft = unit ? (sameUnit ? existing!.areaSqft : unit.areaSqft) : null;
-  const pricePerSqft = unit ? (sameUnit ? existing!.pricePerSqft : unitPricePerSqft(unit, settings.defaultPricePerSqft)) : null;
+  const areaSqft = unit ? unit.areaSqft : null;
+  const pricePerSqft = unit ? unitPricePerSqft(unit, settings.defaultPricePerSqft) : null;
   const roiPerSqft = existing ? existing.roiPerSqft : settings.roiPerSqft;
 
   const cap = discountCap(actor.role, settings);
@@ -81,6 +84,9 @@ async function resolveProposal(tx: DbOrTx, actor: Actor, input: ProposalData, ex
     downPaymentPct = locked;
   }
   const installmentCount = input.installmentCount ?? existing?.installmentCount ?? settings.installmentCount;
+  // Q43: installment due dates are mandatory (the 10th of each month), so the first month is required.
+  const firstInstallmentMonth = input.firstInstallmentMonth ?? existing?.firstInstallmentMonth ?? null;
+  if (!firstInstallmentMonth) throw taskFieldError("proposal.firstInstallmentMonth", "Choose the month of the first installment (installments are due on the 10th)");
   const figures = computeFigures({ areaSqft, pricePerSqft, discountPct: input.discountPct, downPaymentPct, installmentCount, roiPerSqft });
 
   return {
@@ -108,18 +114,28 @@ async function resolveProposal(tx: DbOrTx, actor: Actor, input: ProposalData, ex
     freeNightVouchers: input.freeNightVouchers ?? null,
     roiPerSqft,
     roiAnnual: figures.roiAnnual,
+    firstInstallmentMonth,
     bonuses: input.bonuses,
     whyActNow: input.whyActNow,
     nextSteps: input.nextSteps,
   };
 }
 
-const generatedRows = (p: TaskProposal) => buildRows(p, p.installmentCount, p.recurringLabel);
+const generatedRows = (p: TaskProposal) => buildRows(p, p.installmentCount, p.recurringLabel, p.firstInstallmentMonth ?? null);
+
+/** Edited schedules (FR-091): every installment row needs a due date on the 10th (Q43). Row 1 is the down payment. */
+function checkRowDates(rows: RowData[]) {
+  rows.forEach((r, i) => {
+    if (i === 0) return;
+    if (!r.dueOn) throw taskFieldError(`rows.${i}.dueOn`, `${r.label}: choose a due date`);
+    if (Number(r.dueOn.slice(8, 10)) !== INSTALLMENT_DUE_DAY) throw taskFieldError(`rows.${i}.dueOn`, `${r.label}: installments are due on the ${INSTALLMENT_DUE_DAY}th of the month`);
+  });
+}
 
 async function replaceRows(tx: Tx, taskId: string, rows: (PlanRow | RowData)[]) {
   await tx.delete(taskInstallmentRows).where(eq(taskInstallmentRows.taskId, taskId));
   if (rows.length) {
-    await tx.insert(taskInstallmentRows).values(rows.map((r, i) => ({ taskId, seq: i + 1, label: r.label, description: r.description, progress: r.progress, amount: r.amount })));
+    await tx.insert(taskInstallmentRows).values(rows.map((r, i) => ({ taskId, seq: i + 1, label: r.label, description: r.description, progress: r.progress, amount: r.amount, dueOn: r.dueOn ?? null })));
   }
 }
 
@@ -136,7 +152,7 @@ export async function createTask(db: Database, actor: Actor, input: unknown) {
     let proposal: TaskProposal | null = null;
     if (hasPlan(data.type)) {
       if (!data.proposal) throw taskFieldError("proposal.customerName", "Customer name is required");
-      proposal = await resolveProposal(tx, actor, data.proposal, null, await getProposalSettings(tx));
+      proposal = await resolveProposal(tx, actor, data.proposal, null, await getProposalSettings(tx), data.type);
     }
     const [task] = await tx
       .insert(tasks)
@@ -152,6 +168,7 @@ export async function createTask(db: Database, actor: Actor, input: unknown) {
         proposal,
       })
       .returning({ id: tasks.id });
+    if (proposal && data.rows) checkRowDates(data.rows);
     if (proposal) await replaceRows(tx, task.id, data.rows ?? generatedRows(proposal));
     await record(tx, actor, task.id, "create", { title: data.title, type: data.type, assigneeId, dueAt: data.dueAt, leadId: data.leadId, bookingId: data.bookingId });
     return { taskId: task.id };
@@ -190,11 +207,13 @@ export async function updateTask(db: Database, actor: Actor, taskId: string, inp
       proposal = null;
       rows = [];
     } else if (data.proposal) {
-      proposal = await resolveProposal(tx, actor, data.proposal, task.proposal, await getProposalSettings(tx));
+      proposal = await resolveProposal(tx, actor, data.proposal, task.proposal, await getProposalSettings(tx), next.type);
+      if (data.rows) checkRowDates(data.rows);
       rows = data.rows ?? generatedRows(proposal);
     } else if (!proposal) {
       throw taskFieldError("proposal.customerName", "Customer name is required");
     } else if (data.rows) {
+      checkRowDates(data.rows);
       rows = data.rows;
     }
 

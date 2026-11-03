@@ -48,6 +48,7 @@ export const PROPOSAL_SETTING_KEYS = {
 } as const;
 export type ProposalSettingKey = keyof typeof PROPOSAL_SETTING_KEYS;
 
-export const PROPOSAL_FALLBACKS = { agentCap: 5, downPaymentPct: 30, installmentCount: 36 } as const;
+/** Used when a setting is missing. Down payment 25% per questionnaire Q42 (was 30%). */
+export const PROPOSAL_FALLBACKS = { agentCap: 5, downPaymentPct: 25, installmentCount: 36 } as const;
 
 export const DEFAULT_RECURRING_LABEL = "Monthly";

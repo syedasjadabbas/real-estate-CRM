@@ -1,8 +1,10 @@
-import { Users } from "lucide-react";
+import { UserPlus, UserRoundPlus, Users } from "lucide-react";
+import { canOpenLeaveAdmin } from "@/modules/leave/service";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader, PageStack } from "@/components/shell/page-header";
 import { StatusTag } from "@/components/ui/badge";
+import { buttonClasses } from "@/components/ui/button";
 import { EmptyState, RestrictedState } from "@/components/ui/empty-state";
 import { MiniStat } from "@/components/ui/stat";
 import { EmployeesToolbar } from "@/features/hr/components/employees-toolbar";
@@ -12,6 +14,7 @@ import { Pagination } from "@/features/leads/components/pagination";
 import { flattenParams, withParams } from "@/features/leads/url";
 import { cn } from "@/lib/cn";
 import { formatInt } from "@/lib/format";
+import { canManageAccounts } from "@/modules/accounts/policy";
 import { canEditEmployeeProfiles, canViewEmployees } from "@/modules/employees/policy";
 import { listEmployees } from "@/modules/employees/service";
 import type { EmployeeSort } from "@/modules/employees/validation";
@@ -53,14 +56,33 @@ export default async function EmployeesPage({ searchParams }: PageProps<"/dashbo
         title="Employees"
         description={
           canEdit
-            ? "CRM accounts with their HR profile: designation, department, phone and joining date. Account details are read-only here."
+            ? canManageAccounts(actor)
+              ? "CRM accounts with their HR profile: designation, department, phone and joining date. Open an employee to manage their account."
+              : "CRM accounts with their HR profile: designation, department, phone and joining date. Account details are managed by Admins."
             : "CRM accounts with their HR profile (view only)."
         }
         icon={Users}
+        actions={
+          canEdit ? (
+            <div className="flex flex-wrap gap-2">
+              <Link href="/dashboard/hr/employees/new-record" className={buttonClasses({ variant: "secondary", size: "lg" })}>
+                <UserRoundPlus aria-hidden="true" className="size-4" />
+                Add employee (no login)
+              </Link>
+              {canManageAccounts(actor) ? (
+                <Link href="/dashboard/hr/employees/new" className={buttonClasses({ variant: "primary", size: "lg" })}>
+                  <UserPlus aria-hidden="true" className="size-4" />
+                  New CRM user
+                </Link>
+              ) : null}
+            </div>
+          ) : null
+        }
       />
-      <HrTabs active="employees" showEmployees showHolidays={canViewHolidays(actor)} />
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <HrTabs active="employees" showEmployees showHolidays={canViewHolidays(actor)} showLeave={canOpenLeaveAdmin(actor)} />
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <MiniStat label="Accounts" value={formatInt(tiles.accounts)} caption="CRM logins" />
+        <MiniStat label="No CRM login" value={formatInt(tiles.noLogin)} caption="HR records only" />
         <MiniStat label="Active" value={formatInt(tiles.active)} caption="Can sign in" />
         <MiniStat label="Inactive" value={formatInt(tiles.inactive)} caption="Cannot sign in" />
         <MiniStat label="Profiles completed" value={formatInt(tiles.completed)} caption="All HR fields filled" />
@@ -103,11 +125,11 @@ export default async function EmployeesPage({ searchParams }: PageProps<"/dashbo
                       <Link href={`/dashboard/hr/employees/${r.id}`} className="block font-bold text-zinc-900 hover:text-brand hover:underline">
                         {r.name}
                       </Link>
-                      <span className="block text-[11px] text-zinc-500">{r.email}</span>
+                      <span className="block text-[11px] text-zinc-500">{r.email ?? "No email"}</span>
                     </td>
                     <td className="max-w-[220px] px-3 py-3 break-words whitespace-normal">{r.designation ?? none}</td>
                     <td className="max-w-[220px] px-3 py-3 break-words whitespace-normal">{r.department ?? none}</td>
-                    <td className="px-3 py-3 whitespace-nowrap">{ROLE_LABELS[r.role]}</td>
+                    <td className="px-3 py-3 whitespace-nowrap">{r.role ? ROLE_LABELS[r.role] : <span className="text-zinc-500">No CRM login</span>}</td>
                     <td className="px-3 py-3 whitespace-nowrap tabular-nums">{r.phone ?? none}</td>
                     <td className="px-3 py-3 whitespace-nowrap tabular-nums">{r.joiningDate ? formatListedOn(r.joiningDate) : none}</td>
                     <td className="px-3 py-3">
@@ -131,7 +153,7 @@ export default async function EmployeesPage({ searchParams }: PageProps<"/dashbo
       )}
       <Pagination page={data.page} pageCount={data.pageCount} total={data.total} params={params} />
       <p className="text-[11px] text-zinc-500">
-        Lists CRM accounts only. Adding employees, staff without a CRM login, and changes to name, email, role or account status wait for client decisions.
+        Lists CRM accounts and HR records for staff without a CRM login. Accounts are created and deactivated by Admins and Super Admins.
       </p>
     </PageStack>
   );

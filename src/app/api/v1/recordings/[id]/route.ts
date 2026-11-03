@@ -1,8 +1,8 @@
 import { connection, type NextRequest } from "next/server";
-import { openRecording } from "@/modules/recordings/service";
+import { deleteRecording, openRecording } from "@/modules/recordings/service";
 import { requireActor } from "@/server/auth/current-user";
 import { getDb } from "@/server/db";
-import { errorResponse } from "@/server/http";
+import { apiRoute, errorResponse } from "@/server/http";
 import { notFound } from "@/server/errors";
 import { objectSize, readObject } from "@/server/storage/local";
 import { parseRange } from "@/server/storage/range";
@@ -50,3 +50,6 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/api/v1/recording
     return errorResponse(error);
   }
 }
+
+/** DELETE — Super Admin only (Q53): hides the recording everywhere; the stored file is kept. */
+export const DELETE = apiRoute(async ({ db, actor, params }) => deleteRecording(db, actor, params.id));

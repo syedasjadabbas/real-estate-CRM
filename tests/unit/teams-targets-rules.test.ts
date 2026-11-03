@@ -81,7 +81,7 @@ describe("permissions", () => {
 describe("validation", () => {
   it("team, daily report, roster and target inputs", () => {
     expect(createTeamSchema.safeParse({ name: "A" }).success).toBe(false);
-    expect(createTeamSchema.parse({ name: " North ", managerId: "" })).toEqual({ name: "North", managerId: null, isActive: true });
+    expect(createTeamSchema.parse({ name: " North ", managerId: "" })).toEqual({ name: "North", managerId: null, isActive: true, region: null, weekendDays: [] });
     expect(dailyReportSchema.safeParse({ lines: [{ agentId: U, leads: -1 }] }).success).toBe(false);
     expect(dailyReportSchema.parse({ lines: [{ agentId: U, leads: "3", calls: "" }] }).lines[0]).toMatchObject({ leads: 3, calls: 0, remarks: null });
     expect(rosterSchema.safeParse({ entries: [{ userId: U, status: "remote" }] }).success).toBe(false);

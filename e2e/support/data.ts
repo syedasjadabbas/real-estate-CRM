@@ -1,7 +1,9 @@
 import { and, eq } from "drizzle-orm";
+import { createUnit } from "@/modules/inventory/commands";
 import { createLead } from "@/modules/leads/commands";
+import { createTeam, setTeamMembers } from "@/modules/teams/commands";
 import { loadActor } from "@/server/auth/session-store";
-import { auditLogs, leads, users } from "@/server/db/schema";
+import { auditLogs, bookingPayments, leads, users } from "@/server/db/schema";
 import { connectTestDb } from "../../tests/support/db";
 import { testDatabaseUrl } from "./guard";
 import { seed, uniquePhone, type Role } from "./seed";
@@ -50,4 +52,28 @@ export function leadStage(leadId: string) {
 
 export function auditCount(action: string, entityId?: string) {
   return withDb(async (db) => (await db.select({ id: auditLogs.id }).from(auditLogs).where(and(eq(auditLogs.action, action), entityId ? eq(auditLogs.entityId, entityId) : undefined))).length);
+}
+
+/** An Available unit in the Test Project (through the real inventory service). */
+export function createAvailableUnit(unitNo: string) {
+  return withDb(async (db) => {
+    const actor = await actorOf(db, "superAdmin");
+    const { unitId } = await createUnit(db, actor, { projectId: seed().projectId, unitNo, areaSqft: "500", basePrice: "10000000" });
+    return unitId;
+  });
+}
+
+/** A team with agent1 as member (through the real teams service). */
+export function createTeamWithAgent(name: string) {
+  return withDb(async (db) => {
+    const actor = await actorOf(db, "superAdmin");
+    const { teamId } = await createTeam(db, actor, { name });
+    await setTeamMembers(db, actor, teamId, { userIds: [seed().users.agent1.id] });
+    return teamId;
+  });
+}
+
+/** The payment recorded by global setup (the seeded booking's 500,000 token). */
+export function seededPaymentId() {
+  return withDb(async (db) => (await db.select({ id: bookingPayments.id }).from(bookingPayments).where(eq(bookingPayments.kind, "payment")).orderBy(bookingPayments.recordedAt).limit(1))[0].id);
 }

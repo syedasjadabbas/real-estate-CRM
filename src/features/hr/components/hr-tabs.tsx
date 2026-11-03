@@ -1,15 +1,23 @@
 import Link from "next/link";
 import { cn } from "@/lib/cn";
 
-/**
- * HR section tabs (reference: Overview / Leave for agents). Only built sections are listed;
- * Leave is added in its own milestone.
- */
-export function HrTabs({ active, showEmployees, showHolidays }: { active: "overview" | "employees" | "holidays"; showEmployees: boolean; showHolidays: boolean }) {
+/** HR section tabs (reference: Overview / Leave). Leave is shown to approvers and HR / admins. */
+export function HrTabs({
+  active,
+  showEmployees,
+  showHolidays,
+  showLeave = false,
+}: {
+  active: "overview" | "employees" | "holidays" | "leave";
+  showEmployees: boolean;
+  showHolidays: boolean;
+  showLeave?: boolean;
+}) {
   const tabs = [
     { key: "overview", label: "Overview", href: "/dashboard/hr" },
     ...(showEmployees ? [{ key: "employees", label: "Employees", href: "/dashboard/hr/employees" }] : []),
     ...(showHolidays ? [{ key: "holidays", label: "Holidays", href: "/dashboard/hr/holidays" }] : []),
+    ...(showLeave ? [{ key: "leave", label: "Leave", href: "/dashboard/hr/leave" }] : []),
   ];
   return (
     <nav

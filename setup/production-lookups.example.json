@@ -1,0 +1,7 @@
+{
+  "_note": "Copy to production-lookups.json and fill in with the CLIENT-CONFIRMED lists (dependency H-8). Do not use the development seed lists without confirmation.",
+  "leadSources": [],
+  "cities": [],
+  "budgetRanges": [],
+  "lostReasons": []
+}

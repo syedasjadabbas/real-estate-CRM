@@ -1,4 +1,5 @@
 import { ArrowLeft, UserRound } from "lucide-react";
+import { canOpenLeaveAdmin } from "@/modules/leave/service";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -7,11 +8,14 @@ import { PageHeader, PageStack } from "@/components/shell/page-header";
 import { StatusTag } from "@/components/ui/badge";
 import { buttonClasses } from "@/components/ui/button";
 import { EmptyState, RestrictedState } from "@/components/ui/empty-state";
+import { AccountControls } from "@/features/hr/components/account-controls";
 import { EmployeeProfileForm } from "@/features/hr/components/employee-profile-form";
 import { HrTabs } from "@/features/hr/components/hr-tabs";
 import { formatListedOn } from "@/features/inventory/format";
 import { PanelCard } from "@/features/leads/components/detail-panels";
 import { formatDateTime } from "@/features/leads/format";
+import { canManageAccount, canManageAccounts, grantableRoles } from "@/modules/accounts/policy";
+import { leadReceivers, ownedLeadSummary } from "@/modules/accounts/service";
 import { canEditEmployeeProfiles, canViewEmployees } from "@/modules/employees/policy";
 import { employeeSuggestions, getEmployee } from "@/modules/employees/service";
 import { canViewHolidays } from "@/modules/holidays/policy";
@@ -60,6 +64,8 @@ export default async function EmployeePage({ params }: PageProps<"/dashboard/hr/
   const { employee: e, history } = data;
   const canEdit = canEditEmployeeProfiles(actor);
   const suggestions = canEdit ? await employeeSuggestions(db) : { departments: [], designations: [] };
+  const manage = e.role !== null && canManageAccount(actor, e.role);
+  const [leadCounts, receivers] = manage ? await Promise.all([ownedLeadSummary(db, actor, e.id), leadReceivers(db, actor, e.id)]) : [null, []];
 
   return (
     <PageStack>
@@ -74,10 +80,16 @@ export default async function EmployeePage({ params }: PageProps<"/dashboard/hr/
           </Link>
         }
       />
-      <HrTabs active="employees" showEmployees showHolidays={canViewHolidays(actor)} />
+      <HrTabs active="employees" showEmployees showHolidays={canViewHolidays(actor)} showLeave={canOpenLeaveAdmin(actor)} />
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <div className="min-w-0 space-y-6">
           <PanelCard title="CRM account">
+            {e.role === null ? (
+              <p className="text-sm text-zinc-700">
+                No CRM login. HR keeps this record for a staff member who doesn&apos;t sign in to the CRM.
+                {e.email ? ` Email on record: ${e.email}.` : ""}
+              </p>
+            ) : (
             <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Fact label="Name">{e.name}</Fact>
               <Fact label="Email">{e.email}</Fact>
@@ -87,14 +99,23 @@ export default async function EmployeePage({ params }: PageProps<"/dashboard/hr/
               </Fact>
               <Fact label="Account created">{formatDateTime(e.createdAt)}</Fact>
             </dl>
-            <p className="mt-4 text-[11px] text-zinc-500">
-              Account details are read-only here. Who creates, edits and deactivates CRM accounts is pending a client decision.
-            </p>
+            )}
+            {e.role === null || (manage && leadCounts) ? null : (
+              <p className="mt-4 text-[11px] text-zinc-500">
+                {canManageAccounts(actor) ? "Only a Super Admin can manage Super Admin accounts." : "Account details are managed by Admins and Super Admins."}
+              </p>
+            )}
           </PanelCard>
+          {manage && leadCounts ? (
+            <PanelCard title="Manage account">
+              <AccountControls account={{ id: e.id, name: e.name, role: e.role!, status: e.status }} roles={grantableRoles(actor)} isSelf={actor.id === e.id} leads={leadCounts} receivers={receivers} />
+            </PanelCard>
+          ) : null}
           <PanelCard title="HR profile">
             {canEdit ? (
               <EmployeeProfileForm
                 userId={e.id}
+                record={e.role === null ? { fullName: e.name, email: e.email, status: e.status } : undefined}
                 profile={{ designation: e.designation, department: e.department, phoneCountryCode: e.phoneCountryCode, phoneNumber: e.phoneNumber, joiningDate: e.joiningDate }}
                 departments={suggestions.departments}
                 designations={suggestions.designations}

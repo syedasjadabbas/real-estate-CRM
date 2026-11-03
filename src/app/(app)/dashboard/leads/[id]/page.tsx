@@ -128,7 +128,7 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
             {detail.permissions.assign ? <AssignPanel leadId={lead.id} ownerId={lead.ownerId} owners={owners} /> : null}
             <FollowUpsPanel detail={detail} />
             <NotePanel leadId={lead.id} canEdit={detail.permissions.edit} />
-            <RecordingsPanel leadId={lead.id} recordings={recordings} canUpload={detail.permissions.edit} />
+            <RecordingsPanel leadId={lead.id} recordings={recordings} canUpload={detail.permissions.edit} canDelete={actor.role === "super_admin"} />
             <DocumentsPanel leadId={lead.id} documents={documents} canUpload={detail.permissions.edit} />
             <ReviewsPanel detail={detail} />
             {clientStatus ? <LeadClientPanel leadId={lead.id} status={clientStatus} /> : null}

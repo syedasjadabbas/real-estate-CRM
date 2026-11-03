@@ -1,7 +1,7 @@
 import type { Database } from "@/server/db";
 import type { Actor } from "@/server/auth/types";
 import { AppError } from "@/server/errors";
-import { assertCanUploadTo, listLeadFiles, openLeadFile, saveLeadFile, type LeadFileRow } from "@/modules/files/lead-files";
+import { assertCanUploadTo, hideLeadFile, listLeadFiles, openLeadFile, saveLeadFile, type LeadFileRow } from "@/modules/files/lead-files";
 import {
   cleanFileName,
   extensionOf,
@@ -49,3 +49,8 @@ export const listRecordings = (db: Database, actor: Actor, leadId: string) => li
 export type RecordingRow = LeadFileRow;
 
 export const openRecording = (db: Database, actor: Actor, fileId: string) => openLeadFile(db, actor, fileId, "call_recording");
+
+/** Super Admin only (Q53). Hides the recording; the audio file is kept pending C-33. */
+export function deleteRecording(db: Database, actor: Actor, fileId: string) {
+  return hideLeadFile(db, actor, fileId, "call_recording");
+}

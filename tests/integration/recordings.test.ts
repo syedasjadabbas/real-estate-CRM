@@ -1,10 +1,10 @@
-import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createLead } from "@/modules/leads/commands";
-import { listRecordings, openRecording, uploadRecording } from "@/modules/recordings/service";
+import { deleteRecording, listRecordings, openRecording, uploadRecording } from "@/modules/recordings/service";
 import { auditLogs, files, leadActivities, leads, users } from "@/server/db/schema";
 import { loadActor } from "@/server/auth/session-store";
 import type { Database } from "@/server/db";
@@ -194,5 +194,46 @@ describe.skipIf(!hasTestDb)("Call recordings (PostgreSQL integration)", () => {
     await expect(db.insert(files).values({ ...base, storageKey: "k3", sizeBytes: 1, originalName: "" })).rejects.toThrow();
     await db.insert(files).values({ ...base, storageKey: "k4", sizeBytes: 1 });
     await expect(db.insert(files).values({ ...base, storageKey: "k4", sizeBytes: 1 })).rejects.toThrow();
+  });
+});
+
+describe.skipIf(!hasTestDb)("Recording deletion by Super Admin (Q53)", () => {
+  let db: Database;
+  let close: () => Promise<void>;
+  let f: Fixture;
+  let storageDir: string;
+
+  beforeAll(async () => {
+    ({ db, close } = connectTestDb());
+    storageDir = await mkdtemp(path.join(tmpdir(), "mz-rec-delete-"));
+    process.env.FILE_STORAGE_DIR = storageDir;
+  });
+  afterAll(async () => {
+    await close();
+    await rm(storageDir, { recursive: true, force: true });
+  });
+  beforeEach(async () => {
+    await resetDb(db);
+    f = await seedFixture(db);
+  });
+
+  it("only a Super Admin can delete; the recording disappears for everyone, the file and audit trail stay", async () => {
+    const r = await createLead(db, f.actors.manager, leadInput(f, { ownerId: f.actors.agent1.id }));
+    if (r.outcome !== "created") throw new Error("lead");
+    const { id } = await uploadRecording(db, f.actors.agent1, r.leadId, { bytes: wav(), name: "call.wav" });
+    for (const actor of [f.actors.agent1, f.actors.manager]) expect(await errorCode(deleteRecording(db, actor, id))).toBe("FORBIDDEN");
+
+    expect(await deleteRecording(db, f.actors.superAdmin, id)).toEqual({ hidden: true });
+    expect(await listRecordings(db, f.actors.superAdmin, r.leadId)).toEqual([]);
+    for (const actor of [f.actors.superAdmin, f.actors.manager, f.actors.agent1]) expect(await errorCode(openRecording(db, actor, id))).toBe("NOT_FOUND");
+    expect(await errorCode(deleteRecording(db, f.actors.superAdmin, id))).toBe("NOT_FOUND");
+
+    const [row] = await db.select().from(files).where(eq(files.id, id));
+    expect(row.deletedById).toBe(f.actors.superAdmin.id);
+    expect((await stat(path.join(storageDir, row.storageKey))).size).toBeGreaterThan(0);
+    const [log] = await db.select().from(auditLogs).where(eq(auditLogs.action, "lead.recording_delete"));
+    expect(log.after).toEqual({ hidden: true, fileKept: true });
+    const acts = await db.select().from(leadActivities).where(eq(leadActivities.leadId, r.leadId));
+    expect(acts.map((a) => a.type)).toContain("file_deleted");
   });
 });

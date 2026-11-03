@@ -6,12 +6,14 @@ import { PageHeader } from "@/components/shell/page-header";
 import { buttonClasses } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState, RestrictedState } from "@/components/ui/empty-state";
+import { DocumentsPanel } from "@/features/documents/components/documents-panel";
 import { DecideReversalForm, RequestReversalForm } from "@/features/finance/components/reversal-forms";
 import { formatListedOn, formatPrice } from "@/features/inventory/format";
 import { PanelCard } from "@/features/leads/components/detail-panels";
 import { formatDateTime } from "@/features/leads/format";
 import { canDoFinance, canSeeItemisedPayments } from "@/modules/finance/policy";
 import { PAYMENT_TYPE_LABELS } from "@/modules/finance/constants";
+import { listPaymentProofs } from "@/modules/finance/proofs";
 import { getPaymentDetail } from "@/modules/finance/views";
 import { requirePageUser } from "@/server/auth/current-user";
 import { getDb } from "@/server/db";
@@ -25,6 +27,7 @@ const ACTION_LABELS: Record<string, string> = {
   "payment.reversal_approved": "Reversal approved and posted",
   "payment.reversal_approved_emergency": "Reversal approved by super admin (emergency)",
   "payment.reversal_rejected": "Reversal rejected",
+  "payment.proof_upload": "Payment proof attached",
 };
 
 function Fact({ label, children }: { label: string; children: React.ReactNode }) {
@@ -48,6 +51,7 @@ export default async function PaymentDetailPage({ params }: PageProps<"/dashboar
     throw error;
   }
   const { entry, original, reversal, booking, permissions } = detail;
+  const proofs = await listPaymentProofs(getDb(), actor, original.id);
   const isReversal = entry.kind === "reversal";
   const back = canDoFinance(actor, "viewAll") ? "/dashboard/finance" : "/dashboard/finance/approvals";
 
@@ -118,6 +122,13 @@ export default async function PaymentDetailPage({ params }: PageProps<"/dashboar
           </PanelCard>
         </div>
         <div className="space-y-6">
+          <DocumentsPanel
+            documents={proofs}
+            canUpload={canDoFinance(actor, "record")}
+            uploadUrl={`/api/v1/finance/payments/${original.id}/proofs`}
+            fileBase="/api/v1/finance/proofs"
+            text={{ title: "Payment proof", empty: "No proof attached. Proof is optional.", field: "Attach a receipt or photo", button: "Attach proof", uploaded: "Proof attached.", noun: "Proofs" }}
+          />
           <PanelCard title="Reversal">
             <div className="space-y-4">
               {detail.requests.length === 0 ? <p className="text-xs text-zinc-600">No reversal has been requested.</p> : null}

@@ -26,11 +26,16 @@ export function RosterLegend() {
 }
 
 /** FR-122 Month view: members × days (read-only; changes are made in the Day view). */
-export function RosterMonthGrid({ days, rows }: { days: string[]; rows: { id: string; name: string; byDay: Record<string, RosterStatus> }[] }) {
+/** Day of week (0 = Sunday) of a "YYYY-MM-DD" date, independent of the browser's time zone. */
+const weekdayOf = (date: string) => new Date(`${date}T00:00:00Z`).getUTCDay();
+
+export function RosterMonthGrid({ days, rows, weekendDays = [] }: { days: string[]; rows: { id: string; name: string; byDay: Record<string, RosterStatus> }[]; weekendDays?: number[] }) {
+  const weekend = (d: string) => weekendDays.includes(weekdayOf(d));
   if (rows.length === 0) return <EmptyState size="sm">This team has no members.</EmptyState>;
   return (
     <div className="space-y-2">
       <RosterLegend />
+      {weekendDays.length ? <p className="text-[11px] text-zinc-500">Shaded columns are this team&apos;s weekend.</p> : null}
       <div className="max-h-[480px] overflow-auto rounded-xl border border-zinc-200/80">
         <table className="border-collapse text-left text-[11px]">
           <thead className="sticky top-0 bg-zinc-100">
@@ -39,7 +44,7 @@ export function RosterMonthGrid({ days, rows }: { days: string[]; rows: { id: st
                 Member
               </th>
               {days.map((d) => (
-                <th key={d} scope="col" className="w-9 px-1 py-2 text-center font-black text-zinc-600 tabular-nums">
+                <th key={d} scope="col" className={cn("w-9 px-1 py-2 text-center font-black tabular-nums", weekend(d) ? "bg-zinc-200/70 text-zinc-500" : "text-zinc-600")} title={weekend(d) ? "Team weekend" : undefined}>
                   {Number(d.slice(8))}
                 </th>
               ))}
@@ -54,7 +59,7 @@ export function RosterMonthGrid({ days, rows }: { days: string[]; rows: { id: st
                 {days.map((d) => {
                   const s = r.byDay[d];
                   return (
-                    <td key={d} className="px-0.5 py-1 text-center" title={s ? `${r.name}: ${ROSTER_STATUS_LABELS[s]} on ${d}` : undefined}>
+                    <td key={d} className={cn("px-0.5 py-1 text-center", weekend(d) && "bg-zinc-100/80")} title={s ? `${r.name}: ${ROSTER_STATUS_LABELS[s]} on ${d}` : weekend(d) ? "Team weekend" : undefined}>
                       {s ? <span className={cn("inline-block rounded px-1 py-0.5 text-[9px] font-black", TONE[s])}>{SHORT[s]}</span> : <span className="text-zinc-300">·</span>}
                     </td>
                   );

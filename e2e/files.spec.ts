@@ -93,6 +93,21 @@ test("an agent uploads a call recording; it plays for permitted users only", asy
     if (role === "agent2") expect((await api(page, `/api/v1/leads/${leadId}/recordings`, { method: "POST", multipart: { file: { name: "x.wav", mimeType: "audio/wav", buffer: silentWav() } } })).status).toBe(404);
     await ctx.close();
   }
+
+  // Q53: only a Super Admin deletes (hides) a recording; afterwards nobody can play it.
+  for (const role of ["agent1", "manager", "admin"] as const) {
+    const ctx = await browser.newContext();
+    const page = await ctx.newPage();
+    await login(page, role);
+    expect((await api(page, `/api/v1/recordings/${recordingId}`, { method: "DELETE" })).status, role).toBe(403);
+    await ctx.close();
+  }
+  const saCtx = await browser.newContext();
+  const sa = await saCtx.newPage();
+  await login(sa, "superAdmin");
+  expect((await api(sa, `/api/v1/recordings/${recordingId}`, { method: "DELETE" })).status).toBe(200);
+  expect((await sa.request.get(`/api/v1/recordings/${recordingId}`)).status()).toBe(404);
+  await saCtx.close();
 });
 
 test("a recording with the wrong content is refused before it is stored", async ({ page }) => {

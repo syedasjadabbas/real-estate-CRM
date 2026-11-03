@@ -54,7 +54,7 @@ describe.skipIf(!hasTestDb)("Tasks module (PostgreSQL integration)", () => {
   };
   const general = (actor: Actor, extra: Record<string, unknown> = {}) => createTask(db, actor, { title: "Call back", type: "general", ...extra });
   const proposal = (actor: Actor, p: Record<string, unknown> = {}, extra: Record<string, unknown> = {}) =>
-    createTask(db, actor, { title: "Plan for Ali", type: "proposal", proposal: { customerName: "Ali", projectId: f.projectId, unitId, ...p }, ...extra });
+    createTask(db, actor, { title: "Plan for Ali", type: "proposal", proposal: { customerName: "Ali", projectId: f.projectId, unitId, firstInstallmentMonth: "2027-01", ...p }, ...extra });
   const rowsOf = async (taskId: string) => db.select().from(taskInstallmentRows).where(eq(taskInstallmentRows.taskId, taskId)).orderBy(taskInstallmentRows.seq);
   const taskRow = async (taskId: string) => (await db.select().from(tasks).where(eq(tasks.id, taskId)))[0];
 
@@ -67,14 +67,15 @@ describe.skipIf(!hasTestDb)("Tasks module (PostgreSQL integration)", () => {
     expect((await db.select().from(auditLogs).where(eq(auditLogs.entityId, taskId)))[0].action).toBe("task.create");
   });
 
-  it("enforces roles: HR has no access; agents assign only to themselves; managers to their team", async () => {
+  it("enforces roles: HR can't create tasks; agents assign only to themselves; managers to their team", async () => {
     expect(await errorCode(general(f.actors.hr))).toBe("FORBIDDEN");
-    expect(await errorCode(listTasks(db, f.actors.hr, {}))).toBe("FORBIDDEN");
+    expect((await listTasks(db, f.actors.hr, {})).rows).toEqual([]);
     expect(await fieldOf(general(f.actors.agent1, { assigneeId: f.actors.agent2.id }))).toBe("assigneeId");
     expect(await errorCode(general(f.actors.manager, { assigneeId: f.actors.agent1.id }))).toBe("ok");
     expect(await fieldOf(general(f.actors.manager, { assigneeId: f.actors.outsideAgent.id }))).toBe("assigneeId");
     expect(await errorCode(general(f.actors.superAdmin, { assigneeId: f.actors.outsideAgent.id }))).toBe("ok");
-    expect(await fieldOf(general(f.actors.superAdmin, { assigneeId: f.actors.hr.id }))).toBe("assigneeId");
+    // Q45: Admins assign to all users, HR included.
+    expect(await fieldOf(general(f.actors.superAdmin, { assigneeId: f.actors.hr.id }))).toBeNull();
   });
 
   it("scopes visibility: own for agents, team for managers, all for admins (404 outside scope)", async () => {
@@ -143,8 +144,8 @@ describe.skipIf(!hasTestDb)("Tasks module (PostgreSQL integration)", () => {
     const { taskId } = await proposal(f.actors.agent1, { installmentCount: "2" });
     const edited = [
       { label: "Booking", amount: "3000000", progress: "On signing" },
-      { label: "Grey structure", amount: "4000000" },
-      { label: "Possession", amount: "3000000" },
+      { label: "Grey structure", amount: "4000000", dueOn: "2027-03-10" },
+      { label: "Possession", amount: "3000000", dueOn: "2027-09-10" },
     ];
     await updateTask(db, f.actors.agent1, taskId, { proposal: { customerName: "Ali", projectId: f.projectId, unitId, installmentCount: "2" }, rows: edited });
     expect((await rowsOf(taskId)).map((r) => [r.seq, r.label, r.progress, r.amount])).toEqual([
@@ -153,6 +154,9 @@ describe.skipIf(!hasTestDb)("Tasks module (PostgreSQL integration)", () => {
       [3, "Possession", null, 3_000_000],
     ]);
     expect(await fieldOf(updateTask(db, f.actors.agent1, taskId, { rows: [{ label: "", amount: "1" }] }))).toBe("rows.0.label");
+    // Q43: every installment row needs a due date on the 10th (the down payment row needs none).
+    expect(await fieldOf(updateTask(db, f.actors.agent1, taskId, { rows: [edited[0], { label: "Grey", amount: "7000000" }] }))).toBe("rows.1.dueOn");
+    expect(await fieldOf(updateTask(db, f.actors.agent1, taskId, { rows: [edited[0], { label: "Grey", amount: "7000000", dueOn: "2027-03-15" }] }))).toBe("rows.1.dueOn");
     await rebuildInstallments(db, f.actors.agent1, taskId);
     expect((await rowsOf(taskId)).map((r) => r.label)).toEqual(["Down payment", "Installment 1", "Installment 2"]);
     expect((await db.select().from(taskHistory).where(eq(taskHistory.taskId, taskId))).map((h) => h.action).sort()).toEqual(["create", "plan", "rebuild"]);
@@ -258,7 +262,8 @@ describe.skipIf(!hasTestDb)("Tasks module (PostgreSQL integration)", () => {
     const lead = await leadOf(f.actors.agent1);
     const { bookingId } = await createBooking(db, f.actors.agent1, { projectId: f.projectId, leadId: lead, unitId, ratePerSqft: "20000", tokenAmount: "500000" });
     const before = (await db.select({ n: count() }).from(bookingPayments))[0].n;
-    const { taskId } = await proposal(f.actors.agent1, {}, { leadId: lead, bookingId });
+    // A payment plan for the booking uses the booked (no longer available) unit.
+    const { taskId } = await proposal(f.actors.agent1, {}, { type: "payment_plan", leadId: lead, bookingId });
     await rebuildInstallments(db, f.actors.agent1, taskId);
     expect((await db.select({ n: count() }).from(bookingPayments))[0].n).toBe(before);
   });
@@ -268,5 +273,80 @@ describe.skipIf(!hasTestDb)("Tasks module (PostgreSQL integration)", () => {
     await expect(db.update(tasks).set({ type: "proposal" }).where(eq(tasks.id, taskId))).rejects.toThrow();
     await expect(db.update(tasks).set({ status: "done" }).where(eq(tasks.id, taskId))).rejects.toThrow();
     await expect(db.insert(taskInstallmentRows).values({ taskId, seq: 1, label: "x", amount: -1 })).rejects.toThrow();
+  });
+
+  describe("questionnaire rules (Q37, Q41–Q43, Q48)", () => {
+    it("installments are due on the 10th of consecutive months from the chosen first month, across years", async () => {
+      const { taskId } = await proposal(f.actors.agent1, { installmentCount: "3", firstInstallmentMonth: "2026-11" });
+      const rows = await rowsOf(taskId);
+      expect(rows.map((r) => [r.label, r.dueOn])).toEqual([
+        ["Down payment", null],
+        ["Installment 1", "2026-11-10"],
+        ["Installment 2", "2026-12-10"],
+        ["Installment 3", "2027-01-10"],
+      ]);
+      // The rounding remainder still lands on the last installment (Q37).
+      expect(rows.reduce((n, r) => n + r.amount, 0)).toBe((await taskRow(taskId)).proposal!.afterDiscount);
+    });
+
+    it("hand-edited rows are checked on create too", async () => {
+      const rows = [{ label: "Down payment", amount: "2500000" }, { label: "Installment 1", amount: "7500000", dueOn: "2027-01-11" }];
+      expect(await fieldOf(proposal(f.actors.agent1, { installmentCount: "1" }, { rows }))).toBe("rows.1.dueOn");
+      rows[1].dueOn = "2027-01-10";
+      expect(await fieldOf(proposal(f.actors.agent1, { installmentCount: "1" }, { rows }))).toBeNull();
+    });
+
+    it("the first installment month is required on every saved proposal", async () => {
+      expect(await fieldOf(proposal(f.actors.agent1, { firstInstallmentMonth: null }))).toBe("proposal.firstInstallmentMonth");
+      expect(await fieldOf(proposal(f.actors.agent1, { firstInstallmentMonth: "2027-13" }))).toBe("proposal.firstInstallmentMonth");
+    });
+
+    it("only Available units can be quoted; a proposal keeps its unit if that unit is booked later", async () => {
+      const { taskId } = await proposal(f.actors.agent1);
+      await db.update(units).set({ status: "reserved" }).where(eq(units.id, unitId));
+      expect(await fieldOf(proposal(f.actors.agent1))).toBe("proposal.unitId");
+      expect(await fieldOf(proposal(f.actors.agent1, {}, { type: "payment_plan" }))).toBeNull();
+      // The existing proposal can still be edited with the same (now reserved) unit.
+      await updateTask(db, f.actors.agent1, taskId, { proposal: { customerName: "Ali C", projectId: f.projectId, unitId, installmentCount: "12" } });
+      expect((await taskRow(taskId)).proposal).toMatchObject({ customerName: "Ali C", unitId });
+    });
+
+    it("Q47: a saved proposal follows later unit price changes on its next save, and flags them until then", async () => {
+      const { taskId } = await proposal(f.actors.agent1);
+      expect((await taskRow(taskId)).proposal).toMatchObject({ pricePerSqft: 20_000, totalList: 10_000_000 });
+      expect((await getTaskDetail(db, f.actors.agent1, taskId)).unitChanged).toBeNull();
+      await db.update(units).set({ basePrice: 11_000_000 }).where(eq(units.id, unitId));
+      expect((await getTaskDetail(db, f.actors.agent1, taskId)).unitChanged).toMatchObject({ savedPricePerSqft: 20_000, currentPricePerSqft: 22_000 });
+      await updateTask(db, f.actors.agent1, taskId, { proposal: { customerName: "Ali", projectId: f.projectId, unitId } });
+      expect((await taskRow(taskId)).proposal).toMatchObject({ pricePerSqft: 22_000, totalList: 11_000_000 });
+      expect((await getTaskDetail(db, f.actors.agent1, taskId)).unitChanged).toBeNull();
+    });
+
+    it("managers fall back to the 5% manager cap from migration 0014 (Q41)", async () => {
+      await db.insert(appSettings).values({ key: "proposal.manager_discount_cap_pct", value: "5" });
+      expect(await fieldOf(proposal(f.actors.manager, { discountPct: "5.5" }))).toBe("proposal.discountPct");
+      expect(await fieldOf(proposal(f.actors.manager, { discountPct: "5" }))).toBeNull();
+    });
+  });
+
+  it("Q45: Admins assign tasks to all users; HR sees and updates only their own; others can't assign to HR", async () => {
+    const hr = f.actors.hr;
+    expect(await fieldOf(general(f.actors.manager, { assigneeId: hr.id }))).toBe("assigneeId");
+    expect(await fieldOf(general(f.actors.agent1, { assigneeId: hr.id }))).toBe("assigneeId");
+    const { taskId } = await general(f.actors.superAdmin, { assigneeId: hr.id, title: "Collect CNIC copies" });
+    await general(f.actors.superAdmin, { title: "Not for HR" });
+    expect((await listTasks(db, hr, {})).rows.map((r) => r.title)).toEqual(["Collect CNIC copies"]);
+    expect((await setTaskStatus(db, hr, taskId, { status: "done" })).changed).toBe(true);
+    // HR can't hand the task to someone else.
+    expect(await fieldOf(updateTask(db, hr, taskId, { assigneeId: f.actors.agent1.id }))).toBe("assigneeId");
+    const options = await taskFormOptions(db, f.actors.superAdmin, f.projectId);
+    expect(options.assignees.map((a) => a.id)).toContain(hr.id);
+    // A task linked to a lead HR can't see opens without revealing the lead.
+    const leadId = await leadOf(f.actors.agent1);
+    const { taskId: linked } = await general(f.actors.superAdmin, { assigneeId: hr.id, leadId });
+    const detail = await getTaskDetail(db, hr, linked);
+    expect(detail.lead).toBeNull();
+    // HR's edit form loads, offering only themselves as assignee.
+    expect((await taskFormOptions(db, hr, f.projectId)).assignees.map((a) => a.id)).toEqual([hr.id]);
   });
 });

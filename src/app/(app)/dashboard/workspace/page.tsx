@@ -1,4 +1,6 @@
 import { CalendarDays, Circle } from "lucide-react";
+import { MyLeavePanel } from "@/features/leave/components/my-leave-panel";
+import { myLeave } from "@/modules/leave/service";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader, PageStack } from "@/components/shell/page-header";
@@ -31,7 +33,7 @@ const EVENT_FILTERS: { label: string; value: SigninEvent | null }[] = [
 
 const inDays = (n: number) => (n === 0 ? "Today" : n === 1 ? "Tomorrow" : `In ${formatInt(n)} days`);
 
-/** My Workplace (FR-130): upcoming holidays and the user's own sign-in log. My leave waits on HR decisions. */
+/** My Workplace (FR-130): my leave, upcoming holidays and the user's own sign-in log. */
 export default async function WorkspacePage({ searchParams }: PageProps<"/dashboard/workspace">) {
   const actor = await requirePageUser();
   const all = flattenParams(await searchParams);
@@ -40,7 +42,7 @@ export default async function WorkspacePage({ searchParams }: PageProps<"/dashbo
   if (all.event) params.event = all.event;
   if (all.page) params.page = all.page;
   const db = getDb();
-  const [{ holidays, signins }, retentionNote] = await Promise.all([getMyWorkplace(db, actor, params), signinRetentionNote(db)]);
+  const [{ holidays, signins }, retentionNote, leave] = await Promise.all([getMyWorkplace(db, actor, params), signinRetentionNote(db), myLeave(db, actor)]);
   const next = holidays.rows[0] ?? null;
   const year = holidays.today.slice(0, 4);
   const listParams: Record<string, string> = signins.query.event ? { event: signins.query.event } : {};
@@ -54,7 +56,7 @@ export default async function WorkspacePage({ searchParams }: PageProps<"/dashbo
           value={<span className="block truncate text-sm leading-[18px]">{next ? next.name : "None scheduled"}</span>}
           caption={next ? `${formatListedOn(next.date)} · ${inDays(next.daysAway)}` : "Next on the calendar"}
         />
-        <MiniStat label={`Leave · ${year}`} value="—" caption="Waiting on HR decisions" />
+        <MiniStat label={`Leave · ${year}`} value={`${leave.balance.remaining} / ${leave.balance.allowance}`} caption="Days remaining / allowance" />
         <MiniStat label="Sign-ins logged" value={formatInt(signins.recentSignins)} caption={`Last ${SIGNIN_COUNT_DAYS} days · not attendance`} />
       </div>
 
@@ -97,11 +99,7 @@ export default async function WorkspacePage({ searchParams }: PageProps<"/dashbo
             ) : null}
           </PanelCard>
 
-          <PanelCard title="My leave">
-            <EmptyState size="sm">
-              Leave requests start once the client confirms the leave rules (approvals, day counting and CPL). Nothing is recorded here yet.
-            </EmptyState>
-          </PanelCard>
+          <MyLeavePanel balance={leave.balance} rows={leave.rows} today={holidays.today} />
         </div>
 
         <PanelCard title="CRM Sign-in History" className="min-w-0 self-start">

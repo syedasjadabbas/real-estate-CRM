@@ -12,8 +12,32 @@ import { DOCUMENT_ACCEPT, documentFormatOf, MAX_DOCUMENT_BYTES } from "@/modules
 import type { LeadFileRow } from "@/modules/files/lead-files";
 import { extensionOf, formatBytes } from "@/modules/recordings/validation";
 
-/** Lead documents (FR-038): private files, opened through the authenticated `/api/v1/documents/:id` route. */
-export function DocumentsPanel({ leadId, documents, canUpload }: { leadId: string; documents: LeadFileRow[]; canUpload: boolean }) {
+type FileRow = Pick<LeadFileRow, "id" | "name" | "mime" | "sizeBytes" | "createdAt" | "uploadedBy">;
+
+/** Wording and endpoints; the defaults are the lead documents panel. */
+type PanelText = { title: string; empty: string; field: string; button: string; uploaded: string; noun: string };
+const LEAD_DOCUMENTS: PanelText = { title: "Documents", empty: "No documents yet.", field: "Upload a document", button: "Upload document", uploaded: "Document uploaded.", noun: "Documents" };
+
+/**
+ * Lead documents (FR-038): private files, opened through the authenticated `/api/v1/documents/:id`
+ * route. Also used for payment proofs (Q33) with their own endpoints and wording.
+ */
+export function DocumentsPanel({
+  leadId,
+  documents,
+  canUpload,
+  uploadUrl = `/api/v1/leads/${leadId}/documents`,
+  fileBase = "/api/v1/documents",
+  text = LEAD_DOCUMENTS,
+}: {
+  leadId?: string;
+  documents: FileRow[];
+  canUpload: boolean;
+  uploadUrl?: string;
+  /** Files are served at `${fileBase}/:id` (a string: props from server pages must be serialisable). */
+  fileBase?: string;
+  text?: PanelText;
+}) {
   const router = useRouter();
   const inputId = useId();
   const input = useRef<HTMLInputElement>(null);
@@ -26,7 +50,7 @@ export function DocumentsPanel({ leadId, documents, canUpload }: { leadId: strin
     setFile(null);
     if (!f) return;
     if (!documentFormatOf(extensionOf(f.name))) return setMsg({ text: "Upload a PDF, JPG, PNG, DOCX or XLSX file.", ok: false });
-    if (f.size > MAX_DOCUMENT_BYTES) return setMsg({ text: "Documents can be at most 10 MB.", ok: false });
+    if (f.size > MAX_DOCUMENT_BYTES) return setMsg({ text: `${text.noun} can be at most 10 MB.`, ok: false });
     setFile(f);
   };
 
@@ -37,12 +61,12 @@ export function DocumentsPanel({ leadId, documents, canUpload }: { leadId: strin
     try {
       const form = new FormData();
       form.set("file", file);
-      const res = await fetch(`/api/v1/leads/${leadId}/documents`, { method: "POST", body: form });
+      const res = await fetch(uploadUrl, { method: "POST", body: form });
       const json = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
       if (!res.ok) return setMsg({ text: json?.error?.message ?? "Upload failed. Try again.", ok: false });
       setFile(null);
       if (input.current) input.current.value = "";
-      setMsg({ text: "Document uploaded.", ok: true });
+      setMsg({ text: text.uploaded, ok: true });
       router.refresh();
     } catch {
       setMsg({ text: "Upload failed. Check your connection and try again.", ok: false });
@@ -52,9 +76,9 @@ export function DocumentsPanel({ leadId, documents, canUpload }: { leadId: strin
   };
 
   return (
-    <PanelCard title={`Documents · ${documents.length}`}>
+    <PanelCard title={`${text.title} · ${documents.length}`}>
       {documents.length === 0 ? (
-        <EmptyState size="sm">No documents yet.</EmptyState>
+        <EmptyState size="sm">{text.empty}</EmptyState>
       ) : (
         <ul className="divide-y divide-zinc-100">
           {documents.map((d) => {
@@ -69,12 +93,12 @@ export function DocumentsPanel({ leadId, documents, canUpload }: { leadId: strin
                 </div>
                 <span className="flex shrink-0 items-center gap-2">
                   {image ? (
-                    <a href={`/api/v1/documents/${d.id}`} target="_blank" rel="noopener" className="inline-flex items-center gap-1 text-[11px] font-bold text-brand hover:underline" aria-label={`Open ${d.name}`}>
+                    <a href={`${fileBase}/${d.id}`} target="_blank" rel="noopener" className="inline-flex items-center gap-1 text-[11px] font-bold text-brand hover:underline" aria-label={`Open ${d.name}`}>
                       <ExternalLink aria-hidden="true" className="size-3.5" />
                       Open
                     </a>
                   ) : null}
-                  <a href={`/api/v1/documents/${d.id}?download=1`} className="inline-flex items-center gap-1 text-[11px] font-bold text-brand hover:underline" aria-label={`Download ${d.name}`}>
+                  <a href={`${fileBase}/${d.id}?download=1`} className="inline-flex items-center gap-1 text-[11px] font-bold text-brand hover:underline" aria-label={`Download ${d.name}`}>
                     <Download aria-hidden="true" className="size-3.5" />
                     Save
                   </a>
@@ -88,7 +112,7 @@ export function DocumentsPanel({ leadId, documents, canUpload }: { leadId: strin
       {canUpload ? (
         <div className="mt-4 space-y-2 border-t border-zinc-100 pt-4">
           <label htmlFor={inputId} className="block text-[10px] font-black tracking-[0.1em] text-zinc-500 uppercase">
-            Upload a document
+            {text.field}
           </label>
           <input
             ref={input}
@@ -108,7 +132,7 @@ export function DocumentsPanel({ leadId, documents, canUpload }: { leadId: strin
             ) : null}
             <Button variant="primary" size="lg" disabled={!file || pending} onClick={upload}>
               <Upload aria-hidden="true" className="size-4" />
-              {pending ? "Uploading…" : "Upload document"}
+              {pending ? "Uploading…" : text.button}
             </Button>
           </div>
         </div>

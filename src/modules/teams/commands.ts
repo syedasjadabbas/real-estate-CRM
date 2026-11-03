@@ -43,13 +43,13 @@ export async function createTeam(db: Database, actor: Actor, input: unknown) {
   return db.transaction(async (tx) => {
     await checkNameFree(tx, data.name);
     if (data.managerId) await checkManager(tx, data.managerId);
-    const [team] = await tx.insert(teams).values({ name: data.name, managerId: data.managerId, isActive: data.isActive }).returning({ id: teams.id });
+    const [team] = await tx.insert(teams).values({ name: data.name, managerId: data.managerId, isActive: data.isActive, weekendDays: data.weekendDays, region: data.region ?? null }).returning({ id: teams.id });
     await audit(tx, actor, "team.create", "team", team.id, null, data);
     return { teamId: team.id };
   });
 }
 
-/** Name, manager, active flag. Inactive teams are hidden from rotation (FR-120); never deleted (T-A3). */
+/** Name, manager, active flag, weekend days (Q9). Inactive teams are hidden from rotation (FR-120); never deleted (T-A3). */
 export async function updateTeam(db: Database, actor: Actor, teamId: string, input: unknown) {
   assertCanManageTeams(actor);
   const data = parse(updateTeamSchema, input);
@@ -59,10 +59,12 @@ export async function updateTeam(db: Database, actor: Actor, teamId: string, inp
       name: data.name ?? team.name,
       managerId: "managerId" in data ? (data.managerId ?? null) : team.managerId,
       isActive: data.isActive ?? team.isActive,
+      weekendDays: data.weekendDays ?? team.weekendDays,
+      region: "region" in data ? (data.region ?? null) : team.region,
     };
     if (next.name !== team.name) await checkNameFree(tx, next.name, team.id);
     if (next.managerId && next.managerId !== team.managerId) await checkManager(tx, next.managerId);
-    const changed = (["name", "managerId", "isActive"] as const).filter((k) => next[k] !== team[k]);
+    const changed = (["name", "managerId", "isActive", "weekendDays", "region"] as const).filter((k) => JSON.stringify(next[k]) !== JSON.stringify(team[k]));
     if (changed.length === 0) return { changed: [] as string[] };
     await tx.update(teams).set({ ...next, updatedAt: new Date() }).where(eq(teams.id, team.id));
     await audit(

@@ -1,4 +1,5 @@
 import { CalendarDays } from "lucide-react";
+import { canOpenLeaveAdmin } from "@/modules/leave/service";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader, PageStack } from "@/components/shell/page-header";
@@ -54,7 +55,7 @@ export default async function HolidaysPage({ searchParams }: PageProps<"/dashboa
         description={canManage ? "Company-wide and regional holidays. Add, edit or remove dates for the calendar." : "Company-wide and regional holidays (view only)."}
         icon={CalendarDays}
       />
-      <HrTabs active="holidays" showEmployees={canViewEmployees(actor)} showHolidays />
+      <HrTabs active="holidays" showEmployees={canViewEmployees(actor)} showHolidays showLeave={canOpenLeaveAdmin(actor)} />
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <MiniStat label={`Holidays ${year}`} value={formatInt(tiles.total)} caption={`${formatInt(tiles.upcoming)} still ahead`} />
         <MiniStat label="Company-wide" value={formatInt(tiles.company)} caption="Apply to everyone" />

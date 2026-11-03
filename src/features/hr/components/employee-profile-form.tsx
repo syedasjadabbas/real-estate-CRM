@@ -6,14 +6,35 @@ import { Field, Input } from "@/components/ui/input";
 import { COUNTRY_CODES, selectClass } from "@/features/leads/components/lead-fields";
 import { cn } from "@/lib/cn";
 import { MAX_JOINING_YEAR, MIN_JOINING_YEAR } from "@/modules/employees/validation";
-import { saveEmployeeProfileAction } from "../actions";
+import { useRouter } from "next/navigation";
+import { createEmployeeRecordAction, saveEmployeeProfileAction, saveEmployeeRecordAction } from "../actions";
 
 type Profile = { designation: string | null; department: string | null; phoneCountryCode: string | null; phoneNumber: string | null; joiningDate: string | null };
+/** Name, email and employment status of staff without a CRM login (questionnaire Q1). */
+type RecordIdentity = { fullName: string; email: string | null; status: "active" | "inactive" };
 
-/** FR-140 HR profile fields (super admin, admin, HR). Free text with suggestions from existing entries. */
-export function EmployeeProfileForm({ userId, profile, departments, designations }: { userId: string; profile: Profile; departments: string[]; designations: string[] }) {
+/**
+ * FR-140 HR profile fields (super admin, admin, HR). Free text with suggestions from existing entries.
+ * With `record`, the form also edits the name, email and status of staff without a CRM login
+ * (`userId` is then the record id, or null to create a new record).
+ */
+export function EmployeeProfileForm({
+  userId,
+  profile,
+  departments,
+  designations,
+  record,
+}: {
+  userId: string | null;
+  profile: Profile;
+  departments: string[];
+  designations: string[];
+  record?: RecordIdentity;
+}) {
+  const router = useRouter();
   const depList = useId();
   const desList = useId();
+  const [identity, setIdentity] = useState({ fullName: record?.fullName ?? "", email: record?.email ?? "", status: record?.status ?? "active" });
   const [values, setValues] = useState({
     designation: profile.designation ?? "",
     department: profile.department ?? "",
@@ -34,10 +55,18 @@ export function EmployeeProfileForm({ userId, profile, departments, designations
       onSubmit={(e) => {
         e.preventDefault();
         startTransition(async () => {
-          const result = await saveEmployeeProfileAction(userId, values);
+          if (record && !userId) {
+            const created = await createEmployeeRecordAction({ ...identity, ...values });
+            if (created.ok) return router.push(`/dashboard/hr/employees/${created.data.id}`);
+            setErrors(created.fields ?? {});
+            setMsg({ text: created.fields?.form ?? created.message, ok: false });
+            return;
+          }
+          const result = record ? await saveEmployeeRecordAction(userId!, { ...identity, ...values }) : await saveEmployeeProfileAction(userId!, values);
           if (result.ok) {
             setErrors({});
             setMsg({ text: result.data.changed.length ? "Profile saved." : "No changes to save.", ok: true });
+            if (record) router.refresh();
           } else {
             setErrors(result.fields ?? {});
             setMsg({ text: result.fields?.form ?? result.message, ok: false });
@@ -45,6 +74,24 @@ export function EmployeeProfileForm({ userId, profile, departments, designations
         });
       }}
     >
+      {record ? (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Field label="Full name" error={errors.fullName}>
+            {(id, d) => <Input id={id} aria-describedby={d} invalid={Boolean(errors.fullName)} maxLength={100} value={identity.fullName} disabled={pending} onChange={(e) => setIdentity((v) => ({ ...v, fullName: e.target.value }))} />}
+          </Field>
+          <Field label="Email" error={errors.email} hint="Optional. Not used to sign in.">
+            {(id, d) => <Input id={id} type="email" aria-describedby={d} invalid={Boolean(errors.email)} maxLength={254} value={identity.email} disabled={pending} onChange={(e) => setIdentity((v) => ({ ...v, email: e.target.value }))} />}
+          </Field>
+          <Field label="Employment status" error={errors.status}>
+            {(id, d) => (
+              <select id={id} aria-describedby={d} className={selectClass} value={identity.status} disabled={pending} onChange={(e) => setIdentity((v) => ({ ...v, status: e.target.value as "active" | "inactive" }))}>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            )}
+          </Field>
+        </div>
+      ) : null}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Designation" error={errors.designation} hint="Free text; existing entries are suggested.">
           {(id, d) => (
@@ -110,7 +157,7 @@ export function EmployeeProfileForm({ userId, profile, departments, designations
           </p>
         ) : null}
         <Button type="submit" variant="primary" disabled={pending} className="px-4">
-          {pending ? "Saving…" : "Save profile"}
+          {pending ? "Saving…" : record && !userId ? "Add employee" : "Save profile"}
         </Button>
       </div>
     </form>

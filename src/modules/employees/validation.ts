@@ -86,7 +86,8 @@ export type ProfileInput = z.input<typeof profileSchema>;
 
 export const employeeListQuerySchema = z.object({
   q: z.string().trim().max(100).optional().catch(undefined),
-  role: z.enum(ROLES).optional().catch(undefined),
+  /** A CRM role, or "none" for staff without a login. */
+  role: z.enum([...ROLES, "none"]).optional().catch(undefined),
   status: z.enum(["active", "inactive"]).optional().catch(undefined),
   department: z.string().trim().min(1).max(100).optional().catch(undefined),
   sort: z.enum(EMPLOYEE_SORTS).catch("name"),
@@ -94,3 +95,37 @@ export const employeeListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).max(10_000).catch(1),
 });
 export type EmployeeListQuery = z.output<typeof employeeListQuerySchema>;
+
+const recordIdentity = z
+  .object({
+    fullName: z
+      .string()
+      .transform(squash)
+      .pipe(z.string("Enter a name").max(100, "Use at most 100 characters")),
+    email: z
+      .string()
+      .nullable()
+      .transform((v) => squash(v)?.toLowerCase() ?? null)
+      .pipe(z.email("Enter a valid email address").max(254, "Use at most 254 characters").nullable()),
+    status: z.enum(["active", "inactive"], "Choose a status"),
+  })
+  .partial()
+  .strict();
+
+export type RecordInput = z.output<typeof recordIdentity> & z.output<typeof profileSchema>;
+
+/**
+ * Staff without a CRM login (questionnaire Q1): the profile fields plus name, optional email and
+ * employment status. Unknown fields are rejected, as for profiles.
+ */
+export const recordSchema = z.unknown().transform((input, ctx): RecordInput => {
+  const raw = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const { fullName, email, status, ...rest } = raw;
+  const identityInput = Object.fromEntries(Object.entries({ fullName, email, status }).filter(([, v]) => v !== undefined));
+  const identity = recordIdentity.safeParse(identityInput);
+  const profile = profileSchema.safeParse(rest);
+  const issues = [...(identity.error?.issues ?? []), ...(profile.error?.issues ?? [])];
+  for (const issue of issues) ctx.addIssue({ code: "custom", path: issue.path, message: issue.message });
+  if (!identity.success || !profile.success) return z.NEVER;
+  return { ...identity.data, ...profile.data };
+});

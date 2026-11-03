@@ -42,6 +42,8 @@ function describeLead(a: TimelineActivity): { title: string; tag: string } {
     }
     case "file_uploaded":
       return { title: `${d.kind === "document" ? "Document" : "Call recording"} uploaded${a.body ? `: ${a.body}` : ""}`, tag: "File" };
+    case "file_deleted":
+      return { title: `${d.kind === "document" ? "Document" : "Call recording"} deleted${a.body ? `: ${a.body}` : ""}`, tag: "File" };
     default:
       return { title: a.type, tag: "Activity" };
   }

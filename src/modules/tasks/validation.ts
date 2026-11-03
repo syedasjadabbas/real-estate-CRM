@@ -77,6 +77,14 @@ export const proposalSchema = z.object({
     .preprocess(toNumber, z.number("Number of installments is required").int("Use a whole number").min(1, "At least 1 installment").max(MAX_INSTALLMENTS, `At most ${MAX_INSTALLMENTS} installments`))
     .optional(),
   recurringLabel: optionalText(40),
+  /** Month of the first installment ("YYYY-MM"); installments are due on the 10th (Q43). */
+  firstInstallmentMonth: z
+    .string()
+    .trim()
+    .optional()
+    .nullable()
+    .transform((v) => (v ? v : null))
+    .pipe(z.string().regex(/^(19|20|21)\d{2}-(0[1-9]|1[0-2])$/, "Choose a month").nullable()),
   freeNightVouchers: z.preprocess(toNumber, z.number("Must be a number").int("Use a whole number").min(0, "Can't be negative").max(1000, "Too many").optional()),
   bonuses: optionalText(4000),
   whyActNow: optionalText(4000),
@@ -89,6 +97,13 @@ export const planRowSchema = z.object({
   description: optionalText(200),
   progress: optionalText(80),
   amount,
+  dueOn: z
+    .string()
+    .trim()
+    .optional()
+    .nullable()
+    .transform((v) => (v ? v : null))
+    .pipe(z.iso.date("Use a valid date").nullable()),
 });
 
 const rows = z.array(planRowSchema).max(MAX_INSTALLMENTS + 1, "Too many rows").optional();

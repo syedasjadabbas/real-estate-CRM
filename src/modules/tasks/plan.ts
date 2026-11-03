@@ -23,7 +23,19 @@ export type PlanFigures = {
   roiAnnual: number | null;
 };
 
-export type PlanRow = { seq: number; label: string; description: string | null; progress: string | null; amount: number };
+export type PlanRow = { seq: number; label: string; description: string | null; progress: string | null; amount: number; dueOn: string | null };
+
+/** Installments fall on the 10th of each month (questionnaire Q43). */
+export const INSTALLMENT_DUE_DAY = 10;
+
+/** The 10th of the month `offset` months after `firstMonth` ("YYYY-MM"). */
+export function installmentDueOn(firstMonth: string, offset: number) {
+  const [y, m] = firstMonth.split("-").map(Number);
+  const total = y * 12 + (m - 1) + offset;
+  const year = Math.floor(total / 12);
+  const month = (total % 12) + 1;
+  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(INSTALLMENT_DUE_DAY).padStart(2, "0")}`;
+}
 
 const paisa = (n: number) => Math.round(n * 100);
 const rupees = (p: number) => p / 100;
@@ -53,15 +65,21 @@ export function computeFigures(input: {
 }
 
 /** Rebuilds the schedule: a down-payment row, then N recurring rows; the last row absorbs rounding. */
-export function buildRows(figures: PlanFigures, installmentCount: number, recurringLabel: string): PlanRow[] {
+/**
+ * Down payment plus N installments; the rounding remainder goes on the last one (Q37). With a first
+ * installment month, installment i is due on the 10th of month i (Q43); the down payment has no
+ * date until the client decides when it is due (C-27).
+ */
+export function buildRows(figures: PlanFigures, installmentCount: number, recurringLabel: string, firstInstallmentMonth: string | null = null): PlanRow[] {
   if (figures.afterDiscount === null || figures.downPayment === null) return [];
   const after = paisa(figures.afterDiscount);
   const down = paisa(figures.downPayment);
   const each = paisa(figures.eachInstallment ?? 0);
-  const rows: PlanRow[] = [{ seq: 1, label: "Down payment", description: null, progress: null, amount: rupees(down) }];
+  const rows: PlanRow[] = [{ seq: 1, label: "Down payment", description: null, progress: null, amount: rupees(down), dueOn: null }];
   for (let i = 1; i <= installmentCount; i++) {
     const amount = i === installmentCount ? after - down - each * (installmentCount - 1) : each;
-    rows.push({ seq: i + 1, label: `Installment ${i}`, description: recurringLabel || null, progress: null, amount: rupees(amount) });
+    const dueOn = firstInstallmentMonth ? installmentDueOn(firstInstallmentMonth, i - 1) : null;
+    rows.push({ seq: i + 1, label: `Installment ${i}`, description: recurringLabel || null, progress: null, amount: rupees(amount), dueOn });
   }
   return rows;
 }
