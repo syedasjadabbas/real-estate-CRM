@@ -14,7 +14,14 @@ const password = z
   .max(MAX_PASSWORD_LENGTH, `Use at most ${MAX_PASSWORD_LENGTH} characters`);
 
 export const createAccountSchema = z
-  .object({ name, email, role, password })
+  .object({
+    name,
+    email,
+    role,
+    password,
+    /** An HR record without a login (Q1) that this account belongs to; it is linked, not duplicated. */
+    employeeRecordId: z.uuid("Choose an HR record").optional().nullable().or(z.literal("")).transform((v) => (v ? v : null)),
+  })
   .strict()
   .superRefine((v, ctx) => {
     if (v.password.trim().toLowerCase() === v.email) ctx.addIssue({ code: "custom", path: ["password"], message: "The password cannot be the email address" });

@@ -144,7 +144,8 @@ export async function getEmployee(db: Database, actor: Actor, id: string) {
     .select({ id: auditLogs.id, before: auditLogs.before, after: auditLogs.after, createdAt: auditLogs.createdAt, actorName: historyActor.name })
     .from(auditLogs)
     .leftJoin(historyActor, eq(historyActor.id, auditLogs.actorId))
-    .where(and(eq(auditLogs.entity, "employee_profile"), eq(auditLogs.entityId, row.id)))
+    // A record later linked to an account keeps its earlier history (audited under the record id).
+    .where(and(eq(auditLogs.entity, "employee_profile"), or(eq(auditLogs.entityId, row.id), eq(auditLogs.entityId, row.profileId ?? row.id))))
     .orderBy(desc(auditLogs.createdAt))
     .limit(50);
   return { employee: { ...row, createdAt: new Date(row.createdAt), phone: phoneOf(row) }, history };

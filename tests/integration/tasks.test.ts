@@ -4,6 +4,7 @@ import { createBooking } from "@/modules/bookings/commands";
 import { createUnit, updateUnit } from "@/modules/inventory/commands";
 import { createLead } from "@/modules/leads/commands";
 import { createTask, rebuildInstallments, setTaskStatus, updateTask } from "@/modules/tasks/commands";
+import { applyProposalReconciliation, proposalReconciliationReport } from "@/modules/tasks/price-sync";
 import { getTaskDetail, listTasks, overdueTasks, taskFormOptions } from "@/modules/tasks/queries";
 import { getProposalSettings, updateProposalSettings } from "@/modules/tasks/settings";
 import { loadActor } from "@/server/auth/session-store";
@@ -346,6 +347,43 @@ describe.skipIf(!hasTestDb)("Tasks module (PostgreSQL integration)", () => {
 
       // Changing something other than price or area doesn't touch proposals.
       expect(await updateUnit(db, f.actors.superAdmin, unitId, { comment: "Corner unit" })).toEqual({ changed: ["comment"] });
+    });
+
+    it("Q47 reconciliation: reports older proposals that differ, applies safely and is idempotent", async () => {
+      const { taskId: generated } = await proposal(f.actors.agent1, { installmentCount: "2" });
+      const { taskId: edited } = await proposal(f.actors.agent1, { installmentCount: "2" });
+      await updateTask(db, f.actors.agent1, edited, {
+        rows: [
+          { label: "Down payment", amount: "3000000" },
+          { label: "Grey structure", amount: "4000000", dueOn: "2027-02-10" },
+          { label: "Possession", amount: "3000000", dueOn: "2027-08-10" },
+        ],
+      });
+      const { taskId: cancelled } = await proposal(f.actors.agent1);
+      await setTaskStatus(db, f.actors.agent1, cancelled, { status: "cancelled" });
+      const { taskId: plan } = await proposal(f.actors.agent1, {}, { type: "payment_plan" });
+      // A price change made before automatic sync existed (written directly, bypassing updateUnit).
+      await db.update(units).set({ basePrice: 11_000_000 }).where(eq(units.id, unitId));
+
+      expect(await errorCode(proposalReconciliationReport(db, f.actors.manager))).toBe("FORBIDDEN");
+      const report = await proposalReconciliationReport(db, f.actors.superAdmin);
+      expect(Object.fromEntries(report.rows.map((r) => [r.taskId, r.action]))).toEqual({ [generated]: "update", [edited]: "update_keep_rows", [cancelled]: "skip_cancelled", [plan]: "skip_payment_plan" });
+      expect(report.rows.find((r) => r.taskId === generated)).toMatchObject({ saved: { pricePerSqft: 20_000 }, current: { pricePerSqft: 22_000 } });
+      // The report writes nothing.
+      expect((await taskRow(generated)).proposal).toMatchObject({ pricePerSqft: 20_000 });
+
+      expect(await errorCode(applyProposalReconciliation(db, f.actors.manager))).toBe("FORBIDDEN");
+      expect(await applyProposalReconciliation(db, f.actors.superAdmin)).toMatchObject({ updated: 2, skipCancelled: 1, skipPaymentPlan: 1 });
+      expect((await taskRow(generated)).proposal).toMatchObject({ pricePerSqft: 22_000, totalList: 11_000_000 });
+      expect((await rowsOf(edited)).map((r) => r.label)).toEqual(["Down payment", "Grey structure", "Possession"]);
+      expect((await taskRow(cancelled)).proposal).toMatchObject({ pricePerSqft: 20_000 });
+      expect((await taskRow(plan)).proposal).toMatchObject({ pricePerSqft: 20_000 });
+      const [h] = await db.select().from(taskHistory).where(and(eq(taskHistory.taskId, generated), eq(taskHistory.action, "price_sync")));
+      expect(h.data).toMatchObject({ trigger: "reconciliation", before: { pricePerSqft: 20_000 }, after: { pricePerSqft: 22_000 } });
+
+      // Idempotent: nothing left to update; the skipped ones stay reported and unchanged.
+      expect(await applyProposalReconciliation(db, f.actors.superAdmin)).toMatchObject({ updated: 0, update: 0, updateKeepRows: 0, skipCancelled: 1, skipPaymentPlan: 1 });
+      expect((await db.select().from(taskHistory).where(eq(taskHistory.action, "price_sync"))).length).toBe(2);
     });
 
     it("managers fall back to the 5% manager cap from migration 0014 (Q41)", async () => {

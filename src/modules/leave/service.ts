@@ -392,3 +392,28 @@ export async function leaveDecisionHistory(db: Database, requestIds: string[]) {
     .where(inArray(leaveDecisions.requestId, requestIds))
     .orderBy(asc(leaveDecisions.createdAt));
 }
+
+/**
+ * Leave balances for the year ("Leave balances" in the quotation): every active CRM user for HR,
+ * Admins and Super Admins; a manager's team members for managers. Same rules as `leaveBalance`.
+ */
+export async function leaveBalances(db: Database, actor: Actor, year = yearOf(businessToday())) {
+  if (!canOpenLeaveAdmin(actor)) throw forbidden();
+  let people = await db.select({ id: users.id, name: users.name, role: users.role }).from(users).where(eq(users.status, "active")).orderBy(asc(sql`lower(${users.name})`));
+  if (!canViewAllLeave(actor)) {
+    const members = actor.managedTeamIds.length
+      ? new Set((await db.selectDistinct({ id: teamMembers.userId }).from(teamMembers).where(inArray(teamMembers.teamId, actor.managedTeamIds))).map((r) => r.id))
+      : new Set<string>();
+    people = people.filter((p) => members.has(p.id));
+  }
+  const rows = [];
+  for (const p of people) rows.push({ ...p, ...(await leaveBalance(db, p.id, year)) });
+  return { year, rows };
+}
+
+/** One person's balance, for the employee page (HR, Admin, Super Admin, or the person's team manager). */
+export async function employeeLeaveBalance(db: Database, actor: Actor, userId: string, year = yearOf(businessToday())) {
+  if (!canOpenLeaveAdmin(actor)) throw forbidden();
+  if (!canViewAllLeave(actor) && !(await managesRequester(db, actor.id, userId))) throw forbidden();
+  return leaveBalance(db, userId, year);
+}

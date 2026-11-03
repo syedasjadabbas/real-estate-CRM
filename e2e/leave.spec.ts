@@ -70,3 +70,11 @@ test("only approvers, HR and admins open HR → Leave; agents are refused", asyn
   await page.goto("/dashboard/hr/leave");
   await expect(page.getByText("Access denied").first()).toBeVisible();
 });
+
+test("HR sees everyone's leave balances for the year", async ({ page }) => {
+  await login(page, "hr");
+  await page.goto("/dashboard/hr/leave");
+  const table = page.getByRole("table", { name: "Leave balances" });
+  await expect(table).toBeVisible();
+  await expect(table.getByRole("row").filter({ hasText: seed().users.agent1.name })).toBeVisible();
+});

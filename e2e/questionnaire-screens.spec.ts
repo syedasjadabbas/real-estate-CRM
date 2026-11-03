@@ -91,3 +91,9 @@ test("the unit picker offers only Available units for proposals (Q48)", async ({
   await page.getByLabel("Type").selectOption("payment_plan");
   await expect(unit.locator("option", { hasText: "E2E-1 ·" })).toHaveCount(1);
 });
+
+test("Admins see the proposal price reconciliation report in Tasks settings (Q47)", async ({ page }) => {
+  await login(page, "admin");
+  await page.goto("/dashboard/tasks/settings");
+  await expect(page.getByRole("heading", { name: "Proposal price reconciliation (Q47)" })).toBeVisible();
+});

@@ -11,9 +11,10 @@ import { ROLE_LABELS, type Role } from "@/server/auth/types";
 import { createAccountAction } from "../actions";
 
 /** New CRM account (Admin / Super Admin, questionnaire Q2). The initial password is never shown again. */
-export function AccountCreateForm({ roles }: { roles: Role[] }) {
+export function AccountCreateForm({ roles, records = [], recordId = "" }: { roles: Role[]; records?: { id: string; name: string | null; email: string | null }[]; recordId?: string }) {
   const router = useRouter();
-  const [values, setValues] = useState({ name: "", email: "", role: "agent" as Role, password: "" });
+  const preset = records.find((r) => r.id === recordId);
+  const [values, setValues] = useState({ name: preset?.name ?? "", email: preset?.email ?? "", role: "agent" as Role, password: "", employeeRecordId: preset?.id ?? "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -37,6 +38,31 @@ export function AccountCreateForm({ roles }: { roles: Role[] }) {
         });
       }}
     >
+      {records.length ? (
+        <Field label="HR record (optional)" error={errors.employeeRecordId} hint="If this person already has an HR record without a login, link it so they aren't listed twice.">
+          {(id, d) => (
+            <select
+              id={id}
+              aria-describedby={d}
+              className={selectClass}
+              value={values.employeeRecordId}
+              disabled={pending}
+              onChange={(e) => {
+                const r = records.find((x) => x.id === e.target.value);
+                setValues((v) => ({ ...v, employeeRecordId: e.target.value, name: r?.name ?? v.name, email: r?.email ?? v.email }));
+              }}
+            >
+              <option value="">No existing HR record</option>
+              {records.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                  {r.email ? ` · ${r.email}` : ""}
+                </option>
+              ))}
+            </select>
+          )}
+        </Field>
+      ) : null}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Name" error={errors.name}>
           {(id, d) => <Input id={id} aria-describedby={d} invalid={Boolean(errors.name)} maxLength={100} value={values.name} disabled={pending} onChange={set("name")} />}

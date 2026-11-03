@@ -1,5 +1,5 @@
 import { ArrowLeft, UserRound } from "lucide-react";
-import { canOpenLeaveAdmin } from "@/modules/leave/service";
+import { canOpenLeaveAdmin, employeeLeaveBalance } from "@/modules/leave/service";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -65,6 +65,14 @@ export default async function EmployeePage({ params }: PageProps<"/dashboard/hr/
   const canEdit = canEditEmployeeProfiles(actor);
   const suggestions = canEdit ? await employeeSuggestions(db) : { departments: [], designations: [] };
   const manage = e.role !== null && canManageAccount(actor, e.role);
+  // Shown to HR, admins and the person's team manager; anyone else simply doesn't get the panel.
+  const balance =
+    e.role !== null && canOpenLeaveAdmin(actor)
+      ? await employeeLeaveBalance(db, actor, e.id).catch((error: unknown) => {
+          if (error instanceof AppError && error.code === "FORBIDDEN") return null;
+          throw error;
+        })
+      : null;
   const [leadCounts, receivers] = manage ? await Promise.all([ownedLeadSummary(db, actor, e.id), leadReceivers(db, actor, e.id)]) : [null, []];
 
   return (
@@ -88,6 +96,11 @@ export default async function EmployeePage({ params }: PageProps<"/dashboard/hr/
               <p className="text-sm text-zinc-700">
                 No CRM login. HR keeps this record for a staff member who doesn&apos;t sign in to the CRM.
                 {e.email ? ` Email on record: ${e.email}.` : ""}
+                {canManageAccounts(actor) && e.status === "active" ? (
+                  <Link href={`/dashboard/hr/employees/new?record=${e.id}`} className="mt-2 block text-xs font-bold text-brand hover:underline">
+                    Create a CRM login for this employee
+                  </Link>
+                ) : null}
               </p>
             ) : (
             <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -109,6 +122,19 @@ export default async function EmployeePage({ params }: PageProps<"/dashboard/hr/
           {manage && leadCounts ? (
             <PanelCard title="Manage account">
               <AccountControls account={{ id: e.id, name: e.name, role: e.role!, status: e.status }} roles={grantableRoles(actor)} isSelf={actor.id === e.id} leads={leadCounts} receivers={receivers} />
+            </PanelCard>
+          ) : null}
+          {balance ? (
+            <PanelCard title={`Leave balance · ${balance.year}`}>
+              <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                <Fact label="Allowance">
+                  {balance.allowance}
+                  {balance.provisional ? <span className="block text-[11px] font-medium text-amber-800">prorated (provisional)</span> : null}
+                </Fact>
+                <Fact label="Taken">{balance.granted}</Fact>
+                <Fact label="Pending">{balance.pending}</Fact>
+                <Fact label="Remaining">{balance.remaining}</Fact>
+              </dl>
             </PanelCard>
           ) : null}
           <PanelCard title="HR profile">

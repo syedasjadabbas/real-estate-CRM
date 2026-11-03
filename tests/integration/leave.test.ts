@@ -5,7 +5,9 @@ import {
   cancelApprovedLeave,
   decideLeave,
   decideLeaveCancellation,
+  employeeLeaveBalance,
   leaveBalance,
+  leaveBalances,
   leaveOverview,
   myLeave,
   requestLeaveCancellation,
@@ -174,6 +176,18 @@ describe.skipIf(!hasTestDb)("Leave (questionnaire Q4–Q19, PostgreSQL integrati
       const [lead] = await db.select({ ownerId: leads.ownerId }).from(leads).where(eq(leads.id, r.leadId));
       expect(lead.ownerId).toBe(f.actors.agent2.id);
     }
+  });
+
+  it("leave balances: HR sees everyone's; managers their team's; others are refused", async () => {
+    await req(f.actors.agent1, "09-01", "09-03");
+    const all = await leaveBalances(db, f.actors.hr, YEAR);
+    expect(all.rows.find((r) => r.id === f.actors.agent1.id)).toMatchObject({ allowance: 30, pending: 3, remaining: 27 });
+    expect(all.rows.length).toBeGreaterThanOrEqual(6);
+    const team = await leaveBalances(db, f.actors.manager, YEAR);
+    expect(team.rows.map((r) => r.id).sort()).toEqual([f.actors.manager.id, f.actors.agent1.id, f.actors.agent2.id].sort());
+    expect(await errorCode(leaveBalances(db, f.actors.agent1, YEAR))).toBe("FORBIDDEN");
+    expect(await employeeLeaveBalance(db, f.actors.manager, f.actors.agent1.id, YEAR)).toMatchObject({ remaining: 27 });
+    expect(await errorCode(employeeLeaveBalance(db, f.actors.manager, f.actors.outsideAgent.id, YEAR))).toBe("FORBIDDEN");
   });
 
   it("visibility: HR, admins and super admins see all; managers their teams; others can't open the admin view", async () => {

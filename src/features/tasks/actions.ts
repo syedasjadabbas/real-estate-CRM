@@ -1,6 +1,7 @@
 "use server";
 
 import { refresh } from "next/cache";
+import { applyProposalReconciliation } from "@/modules/tasks/price-sync";
 import { createTask, rebuildInstallments, setTaskStatus, updateTask } from "@/modules/tasks/commands";
 import { updateProposalSettings } from "@/modules/tasks/settings";
 import { requireActor } from "@/server/auth/current-user";
@@ -37,4 +38,8 @@ export async function rebuildInstallmentsAction(taskId: string) {
 
 export async function updateProposalSettingsAction(input: Record<string, unknown>) {
   return run((db, actor) => updateProposalSettings(db, actor, input));
+}
+
+export async function applyProposalReconciliationAction() {
+  return run((db, actor) => applyProposalReconciliation(db, actor));
 }

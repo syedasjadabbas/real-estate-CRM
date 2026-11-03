@@ -617,3 +617,57 @@ Migrations 0017–0019 are additive and applied to the development and test data
 | Playwright | **62 / 62** (desktop and mobile) |
 
 **One flaky assertion fixed.** The new income / expense spec failed once in the full run: it waited for a status message that disappears when the page refreshes after voiding. It now waits for the voided state. It then passed 3 / 3 alone and 62 / 62 in the full suite.
+
+## 14. Round 4 (3 Nov 2026)
+
+### 14.1 Q47: reconciling proposals saved before automatic sync
+
+**What was built:** Tasks → Proposal settings → "Proposal price reconciliation (Q47)", plus `GET` and `POST /api/v1/tasks/proposal-reconciliation`. Admin and Super Admin only.
+
+**The report** is a dry run that writes nothing. It lists every saved plan whose stored unit price or area differs from its unit today, with the saved and current price per sq ft, the saved and current total, and the action that applying would take:
+
+| Action | When |
+|---|---|
+| Recalculate and regenerate the schedule | Proposal not cancelled, schedule as generated |
+| Recalculate; keep the hand-edited schedule | Proposal not cancelled, rows edited by hand |
+| Not changed: cancelled | Cancelled proposals are reported, never changed |
+| Not changed: booking payment plan | Payment plans keep their booking's agreed rate |
+
+**Applying** is a deliberate button or API call by an Admin or Super Admin. It is **not run as part of any deployment** and was **not run on the development database**.
+- It uses the same recalculation as the automatic sync.
+- Each changed proposal gets a `price_sync` history entry (trigger `reconciliation`) and an audit row with the previous and new figures.
+- The run itself is audited (`task.price_reconciliation` with counts).
+- It is **idempotent**: an updated proposal no longer differs, so a second run changes nothing.
+
+**Development database, read only:** 2 saved plans, **0 differ** from their units.
+
+**Test:** `tasks.test.ts` "Q47 reconciliation" covers each action, report-is-read-only, permissions, history and idempotency.
+
+### 14.2 HR: linking an existing no-login record to a new account (Q1, Q2)
+- When an Admin creates a CRM user, they can pick an existing HR record without a login. A record's page also has "Create a CRM login for this employee".
+- The record is **linked, not duplicated**: its profile fields and earlier history move to the account (`employee.record_link` audited), and the person is listed once.
+- A record can't be linked twice.
+- Test: `accounts.test.ts` "Q1 … linked".
+
+### 14.3 Leave balances (quotation: "Leave balances")
+- HR → Leave → "Balances · year": allowance (marked "prorated (provisional)" where it applies), taken, pending and remaining for every active user (HR, Admin, Super Admin) or the manager's team.
+- Each employee's page shows their balance to HR, admins and their team manager.
+- Held cross-year requests are not counted.
+- Tests: `leave.test.ts` "leave balances"; `e2e/leave.spec.ts` "HR sees everyone's leave balances".
+
+### 14.4 Still not built (no defined rule; current behaviour kept)
+- Refund deductions; receipt numbering; PDP / CDP; Critical agent rule; Pipeline pressure; ROI rate and floor prices; attendance policy; task status definitions; aging matrix.
+- New notification events (N2–N6, including leave).
+- Staff leave approval order (C-4); cross-year deduction (C-13); proration method (C-10).
+- Access removals waiting for the signed questionnaire (S-1).
+
+### 14.5 Verification (3 Nov 2026, end of round 4)
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | Pass |
+| `npm run lint` | Pass, 0 problems |
+| `npm test` (Vitest) | **45 files, 399 / 399** |
+| Schema drift | "Everything's fine" / "No schema changes" (22 migrations; no new migration this round) |
+| Production build | Pass (100 / 100 pages, 0 warnings) |
+| Playwright | **64 / 64** (desktop and mobile), no runtime warnings |

@@ -1,6 +1,6 @@
 import { and, asc, count, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
 import type { Database } from "@/server/db";
-import { auditLogs, leads, sessions, teamMembers, teams, users } from "@/server/db/schema";
+import { auditLogs, employeeProfiles, leads, sessions, teamMembers, teams, users } from "@/server/db/schema";
 import type { Actor, Role } from "@/server/auth/types";
 import { hashPassword } from "@/server/auth/password";
 import { AppError, notFound } from "@/server/errors";
@@ -61,7 +61,17 @@ export async function createAccount(db: Database, actor: Actor, input: unknown) 
       const [taken] = await tx.select({ id: users.id }).from(users).where(sql`lower(${users.email}) = ${data.email}`).limit(1);
       if (taken) throw fieldError("email", "An account with this email already exists");
       const [user] = await tx.insert(users).values({ name: data.name, email: data.email, role: data.role, passwordHash }).returning({ id: users.id });
-      await writeAudit(tx, actor, "user.create", user.id, null, { name: data.name, email: data.email, role: data.role, status: "active" });
+      await writeAudit(tx, actor, "user.create", user.id, null, { name: data.name, email: data.email, role: data.role, status: "active", employeeRecordId: data.employeeRecordId });
+      if (data.employeeRecordId) {
+        // The HR record (profile fields and history) now belongs to this account.
+        const [linked] = await tx
+          .update(employeeProfiles)
+          .set({ userId: user.id, updatedById: actor.id, updatedAt: new Date() })
+          .where(and(eq(employeeProfiles.id, data.employeeRecordId), sql`${employeeProfiles.userId} is null`))
+          .returning({ id: employeeProfiles.id });
+        if (!linked) throw fieldError("employeeRecordId", "This HR record is no longer available to link");
+        await tx.insert(auditLogs).values({ actorId: actor.id, action: "employee.record_link", entity: "employee_profile", entityId: user.id, before: { recordId: linked.id }, after: { userId: user.id } });
+      }
       return { id: user.id };
     });
   } catch (error) {
@@ -205,4 +215,14 @@ export async function leadReceivers(db: Database, actor: Actor, excludeUserId: s
     .where(and(eq(users.status, "active"), inArray(users.role, ["agent", "manager"])))
     .orderBy(asc(sql`lower(${users.name})`));
   return rows.filter((r) => r.id !== excludeUserId);
+}
+
+/** HR records without a CRM login that a new account can be linked to (Q1). */
+export async function linkableRecords(db: Database, actor: Actor) {
+  assertCanManageAccounts(actor);
+  return db
+    .select({ id: employeeProfiles.id, name: employeeProfiles.fullName, email: employeeProfiles.email })
+    .from(employeeProfiles)
+    .where(and(sql`${employeeProfiles.userId} is null`, eq(employeeProfiles.status, "active")))
+    .orderBy(asc(sql`lower(${employeeProfiles.fullName})`));
 }

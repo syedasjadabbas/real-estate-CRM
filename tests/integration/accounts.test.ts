@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { createAccount, ownedLeadSummary, reassignOwnedLeads, resetAccountPassword, setAccountStatus, updateAccount } from "@/modules/accounts/service";
+import { createAccount, linkableRecords, ownedLeadSummary, reassignOwnedLeads, resetAccountPassword, setAccountStatus, updateAccount } from "@/modules/accounts/service";
+import { createEmployeeRecord, getEmployee, listEmployees } from "@/modules/employees/service";
 import { createLead } from "@/modules/leads/commands";
 import { authenticate } from "@/server/auth/login";
 import { findActorByToken, loadActor } from "@/server/auth/session-store";
@@ -153,5 +154,21 @@ describe.skipIf(!hasTestDb)("Account management (PostgreSQL integration)", () =>
     // The receiver must be an active agent or manager.
     expect(await errorCode(reassignOwnedLeads(db, admin, f.actors.agent1.id, { toUserId: f.actors.hr.id, lost: true }))).toBe("VALIDATION_FAILED");
     expect(await errorCode(reassignOwnedLeads(db, f.actors.manager, f.actors.agent1.id, { toUserId: f.actors.agent2.id, lost: true }))).toBe("FORBIDDEN");
+  });
+
+  it("Q1: a new account can be linked to an existing HR record, so the person is listed once with their history", async () => {
+    const { id: recordId } = await createEmployeeRecord(db, f.actors.hr, { fullName: "Office Driver", email: "driver@test.local", department: "Logistics" });
+    expect((await linkableRecords(db, admin)).map((r) => r.id)).toEqual([recordId]);
+    const before = (await listEmployees(db, admin, {})).total;
+    const { id } = await create(admin, { name: "Office Driver", email: "driver@test.local", employeeRecordId: recordId });
+    const after = await listEmployees(db, admin, {});
+    expect(after.total).toBe(before); // linked, not duplicated
+    expect(after.rows.find((r) => r.id === id)).toMatchObject({ hasLogin: true, department: "Logistics" });
+    const { history } = await getEmployee(db, admin, id);
+    expect(history.length).toBeGreaterThanOrEqual(1); // the record's creation stays in the history
+    expect(await linkableRecords(db, admin)).toEqual([]);
+    // A record can't be linked twice.
+    expect((await errorOf(create(admin, { email: "other@test.local", employeeRecordId: recordId })))?.fields?.employeeRecordId).toBeTruthy();
+    expect((await db.select().from(users).where(eq(users.email, "other@test.local"))).length).toBe(0);
   });
 });

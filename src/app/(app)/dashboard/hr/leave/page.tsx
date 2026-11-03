@@ -10,7 +10,7 @@ import { LeaveStatusTag } from "@/features/leave/components/leave-status";
 import { canViewEmployees } from "@/modules/employees/policy";
 import { canViewHolidays } from "@/modules/holidays/policy";
 import { CROSS_YEAR_HELD_NOTE, isCrossYear, LEAVE_TYPE_LABELS, STAFF_STEP_LABELS } from "@/modules/leave/rules";
-import { canCancelApprovedLeave, canManageLeaveSettings, canOpenLeaveAdmin, leaveOverview, type LeaveRow } from "@/modules/leave/service";
+import { canCancelApprovedLeave, canManageLeaveSettings, canOpenLeaveAdmin, leaveBalances, leaveOverview, type LeaveRow } from "@/modules/leave/service";
 import { requirePageUser } from "@/server/auth/current-user";
 import { ROLE_LABELS, type Role } from "@/server/auth/types";
 import { getDb } from "@/server/db";
@@ -23,7 +23,8 @@ const when = (r: LeaveRow) => `${formatListedOn(r.startDate)}${r.endDate !== r.s
 export default async function LeavePage() {
   const actor = await requirePageUser();
   if (!canOpenLeaveAdmin(actor)) return <RestrictedState />;
-  const data = await leaveOverview(getDb(), actor);
+  const db = getDb();
+  const [data, balances] = await Promise.all([leaveOverview(db, actor), leaveBalances(db, actor)]);
   const { settings } = data;
   const stepNote = (r: LeaveRow) =>
     r.approvalPath === "senior"
@@ -115,6 +116,44 @@ export default async function LeavePage() {
             </table>
           </div>
         )}
+      </PanelCard>
+
+      <PanelCard title={`Balances · ${balances.year}`}>
+        {balances.rows.length === 0 ? (
+          <EmptyState size="sm">No one to show.</EmptyState>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[560px] border-collapse text-left text-xs" aria-label="Leave balances">
+              <thead>
+                <tr className="border-b border-zinc-200 text-[10px] font-black tracking-[0.05em] text-zinc-600 uppercase">
+                  <th scope="col" className="py-2 pr-3">Employee</th>
+                  <th scope="col" className="py-2 pr-3 text-right">Allowance</th>
+                  <th scope="col" className="py-2 pr-3 text-right">Taken</th>
+                  <th scope="col" className="py-2 pr-3 text-right">Pending</th>
+                  <th scope="col" className="py-2 text-right">Remaining</th>
+                </tr>
+              </thead>
+              <tbody>
+                {balances.rows.map((b) => (
+                  <tr key={b.id} className="border-b border-zinc-100 last:border-b-0">
+                    <td className="py-2 pr-3">
+                      <span className="font-bold">{b.name}</span>
+                      <span className="block text-[11px] text-zinc-500">{ROLE_LABELS[b.role]}</span>
+                    </td>
+                    <td className="py-2 pr-3 text-right tabular-nums">
+                      {b.allowance}
+                      {b.provisional ? <span className="block text-[10px] text-amber-800">prorated (provisional)</span> : b.prorated ? <span className="block text-[10px] text-zinc-500">prorated</span> : null}
+                    </td>
+                    <td className="py-2 pr-3 text-right tabular-nums">{b.granted}</td>
+                    <td className="py-2 pr-3 text-right tabular-nums">{b.pending}</td>
+                    <td className="py-2 text-right font-bold tabular-nums">{b.remaining}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p className="mt-2 text-[11px] text-zinc-500">Requests across two calendar years are held and not counted until the company confirms how they are deducted.</p>
       </PanelCard>
 
       {canManageLeaveSettings(actor) ? (

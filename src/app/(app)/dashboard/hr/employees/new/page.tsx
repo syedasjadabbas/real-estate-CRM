@@ -9,15 +9,19 @@ import { AccountCreateForm } from "@/features/hr/components/account-create-form"
 import { HrTabs } from "@/features/hr/components/hr-tabs";
 import { PanelCard } from "@/features/leads/components/detail-panels";
 import { canManageAccounts, grantableRoles } from "@/modules/accounts/policy";
+import { linkableRecords } from "@/modules/accounts/service";
+import { getDb } from "@/server/db";
 import { canViewHolidays } from "@/modules/holidays/policy";
 import { requirePageUser } from "@/server/auth/current-user";
 
 export const metadata: Metadata = { title: "New CRM user" };
 
 /** Create a CRM account (Admin, Super Admin; questionnaire Q2). */
-export default async function NewAccountPage() {
+export default async function NewAccountPage({ searchParams }: PageProps<"/dashboard/hr/employees/new">) {
   const actor = await requirePageUser();
   if (!canManageAccounts(actor)) return <RestrictedState />;
+  const { record } = await searchParams;
+  const records = await linkableRecords(getDb(), actor);
   return (
     <PageStack>
       <PageHeader
@@ -33,7 +37,7 @@ export default async function NewAccountPage() {
       />
       <HrTabs active="employees" showEmployees showHolidays={canViewHolidays(actor)} showLeave={canOpenLeaveAdmin(actor)} />
       <PanelCard title="Account" className="max-w-3xl">
-        <AccountCreateForm roles={grantableRoles(actor)} />
+        <AccountCreateForm roles={grantableRoles(actor)} records={records} recordId={typeof record === "string" ? record : ""} />
       </PanelCard>
     </PageStack>
   );
