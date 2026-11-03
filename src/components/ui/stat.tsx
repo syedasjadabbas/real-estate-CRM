@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
@@ -23,7 +24,7 @@ const labelTones: Record<Tone, string> = {
 
 /**
  * Executive-essentials KPI card: icon box + category pill, coloured caption,
- * 30px value, sub-caption, optional footer (e.g. stacked bar).
+ * 30px value, sub-caption, optional footer (e.g. stacked bar). With `href` the card opens that list.
  */
 export function KpiCard({
   icon: Icon,
@@ -34,7 +35,11 @@ export function KpiCard({
   caption,
   footer,
   className,
+  href,
+  linkLabel,
 }: {
+  href?: string;
+  linkLabel?: string;
   icon: LucideIcon;
   tone?: Tone;
   category: string;
@@ -44,7 +49,7 @@ export function KpiCard({
   footer?: ReactNode;
   className?: string;
 }) {
-  return (
+  const content = (
     <div
       data-kpi={label}
       className={cn(
@@ -79,6 +84,13 @@ export function KpiCard({
       </div>
       {footer ? <div className="pt-3">{footer}</div> : null}
     </div>
+  );
+  if (!href) return content;
+  return (
+    <Link href={href} className="block rounded-2xl focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:outline-none [&>div]:h-full">
+      {content}
+      <span className="sr-only">{linkLabel ?? `Open ${label}`}</span>
+    </Link>
   );
 }
 

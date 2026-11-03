@@ -6,10 +6,14 @@ import { HrTabs } from "@/features/hr/components/hr-tabs";
 import { formatListedOn } from "@/features/inventory/format";
 import { PanelCard } from "@/features/leads/components/detail-panels";
 import { CancelApprovedLeave, LeaveDecision, LeaveSettingsForm } from "@/features/leave/components/leave-admin";
+import { LeaveListFilters, LeaveSortHeader } from "@/features/leave/components/leave-list-controls";
 import { LeaveStatusTag } from "@/features/leave/components/leave-status";
+import { Pagination } from "@/features/leads/components/pagination";
+import { flattenParams } from "@/features/leads/url";
 import { canViewEmployees } from "@/modules/employees/policy";
 import { canViewHolidays } from "@/modules/holidays/policy";
 import { CROSS_YEAR_HELD_NOTE, isCrossYear, LEAVE_TYPE_LABELS, STAFF_STEP_LABELS } from "@/modules/leave/rules";
+import { businessToday } from "@/modules/bookings/today";
 import { canCancelApprovedLeave, canManageLeaveSettings, canOpenLeaveAdmin, leaveBalances, leaveOverview, type LeaveRow } from "@/modules/leave/service";
 import { requirePageUser } from "@/server/auth/current-user";
 import { ROLE_LABELS, type Role } from "@/server/auth/types";
@@ -17,14 +21,25 @@ import { getDb } from "@/server/db";
 
 export const metadata: Metadata = { title: "Leave" };
 
+const PATH = "/dashboard/hr/leave";
 const when = (r: LeaveRow) => `${formatListedOn(r.startDate)}${r.endDate !== r.startDate ? ` – ${formatListedOn(r.endDate)}` : ""} · ${r.days} day${r.days === 1 ? "" : "s"}`;
 
 /** HR → Leave (FR-142): approvals waiting for you, cancellation requests, all requests and settings. */
-export default async function LeavePage() {
+export default async function LeavePage({ searchParams }: PageProps<"/dashboard/hr/leave">) {
   const actor = await requirePageUser();
   if (!canOpenLeaveAdmin(actor)) return <RestrictedState />;
+  const params = flattenParams(await searchParams);
+  const thisYear = Number(businessToday().slice(0, 4));
+  const asked = Number(params.year);
+  // Calendar years only (C-11); out-of-range values fall back to this year.
+  const year = Number.isInteger(asked) && asked >= 2000 && asked <= thisYear + 1 ? asked : thisYear;
   const db = getDb();
-  const [data, balances] = await Promise.all([leaveOverview(db, actor), leaveBalances(db, actor)]);
+  const [data, balances] = await Promise.all([leaveOverview(db, actor, year, params), leaveBalances(db, actor, year)]);
+  const sortHeader = (column: Parameters<typeof LeaveSortHeader>[0]["column"], label: string) => (
+    <th scope="col" className="py-2 pr-3" aria-sort={data.query.sort === column ? (data.query.dir === "asc" ? "ascending" : "descending") : undefined}>
+      <LeaveSortHeader path={PATH} params={params} column={column} label={label} sort={data.query.sort} dir={data.query.dir} />
+    </th>
+  );
   const { settings } = data;
   const stepNote = (r: LeaveRow) =>
     r.approvalPath === "senior"
@@ -33,7 +48,7 @@ export default async function LeavePage() {
 
   return (
     <PageStack>
-      <PageHeader title="Leave" description={`Leave requests for ${data.year}. Days are calendar days.`} icon={Plane} />
+      <PageHeader title="Leave" description={`Leave requests and balances for ${data.year}. Days are calendar days.`} icon={Plane} />
       <HrTabs active="leave" showEmployees={canViewEmployees(actor)} showHolidays={canViewHolidays(actor)} showLeave />
       {!settings.staffStep1 ? (
         <p role="note" className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
@@ -81,18 +96,22 @@ export default async function LeavePage() {
         </PanelCard>
       ) : null}
 
-      <PanelCard title={`All requests · ${data.rows.length}`}>
+      <PanelCard title={`All requests · ${data.year} · ${data.total}`}>
+        <div className="mb-3">
+          <LeaveListFilters path={PATH} params={params} years={data.years} year={data.year} />
+        </div>
         {data.rows.length === 0 ? (
-          <EmptyState size="sm">No leave requests in {data.year}.</EmptyState>
+          <EmptyState size="sm">{params.q || params.status || params.type ? "No leave requests match these filters." : `No leave requests in ${data.year}.`}</EmptyState>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] border-collapse text-left text-xs">
+            <table className="w-full min-w-[640px] border-collapse text-left text-xs" aria-label="All leave requests">
               <thead>
                 <tr className="border-b border-zinc-200 text-[10px] font-black tracking-[0.05em] text-zinc-600 uppercase">
-                  <th scope="col" className="py-2 pr-3">Employee</th>
-                  <th scope="col" className="py-2 pr-3">Type</th>
-                  <th scope="col" className="py-2 pr-3">Dates</th>
-                  <th scope="col" className="py-2 pr-3">Status</th>
+                  {sortHeader("employee", "Employee")}
+                  {sortHeader("type", "Type")}
+                  {sortHeader("dates", "Dates")}
+                  {sortHeader("status", "Status")}
+                  {sortHeader("requested", "Requested")}
                   <th scope="col" className="py-2">Action</th>
                 </tr>
               </thead>
@@ -109,6 +128,7 @@ export default async function LeavePage() {
                       <LeaveStatusTag status={r.status} />
                       {r.status === "pending" ? <span className="mt-1 block text-[11px] text-zinc-500">{isCrossYear(r) ? CROSS_YEAR_HELD_NOTE : stepNote(r)}</span> : null}
                     </td>
+                    <td className="py-2 pr-3 whitespace-nowrap text-zinc-600">{formatListedOn(businessToday(r.createdAt))}</td>
                     <td className="py-2">{canCancelApprovedLeave(actor) && r.status === "approved" && r.userId !== actor.id ? <CancelApprovedLeave id={r.id} name={r.userName} /> : null}</td>
                   </tr>
                 ))}
@@ -116,6 +136,11 @@ export default async function LeavePage() {
             </table>
           </div>
         )}
+        {data.total > 0 ? (
+          <div className="mt-3">
+            <Pagination page={data.page} pageCount={data.pageCount} total={data.total} params={params} />
+          </div>
+        ) : null}
       </PanelCard>
 
       <PanelCard title={`Balances · ${balances.year}`}>

@@ -1,5 +1,6 @@
 import { CalendarDays, Circle } from "lucide-react";
 import { MyLeavePanel } from "@/features/leave/components/my-leave-panel";
+import { businessToday } from "@/modules/bookings/today";
 import { myLeave } from "@/modules/leave/service";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -41,10 +42,13 @@ export default async function WorkspacePage({ searchParams }: PageProps<"/dashbo
   const params: Record<string, string> = {};
   if (all.event) params.event = all.event;
   if (all.page) params.page = all.page;
+  const thisYear = Number(businessToday().slice(0, 4));
+  const askedYear = Number(all.leaveYear);
+  // My leave by calendar year (C-11); anything out of range shows this year.
+  const leaveYear = Number.isInteger(askedYear) && askedYear >= 2000 && askedYear <= thisYear + 1 ? askedYear : thisYear;
   const db = getDb();
-  const [{ holidays, signins }, retentionNote, leave] = await Promise.all([getMyWorkplace(db, actor, params), signinRetentionNote(db), myLeave(db, actor)]);
+  const [{ holidays, signins }, retentionNote, leave] = await Promise.all([getMyWorkplace(db, actor, params), signinRetentionNote(db), myLeave(db, actor, leaveYear)]);
   const next = holidays.rows[0] ?? null;
-  const year = holidays.today.slice(0, 4);
   const listParams: Record<string, string> = signins.query.event ? { event: signins.query.event } : {};
 
   return (
@@ -56,7 +60,7 @@ export default async function WorkspacePage({ searchParams }: PageProps<"/dashbo
           value={<span className="block truncate text-sm leading-[18px]">{next ? next.name : "None scheduled"}</span>}
           caption={next ? `${formatListedOn(next.date)} · ${inDays(next.daysAway)}` : "Next on the calendar"}
         />
-        <MiniStat label={`Leave · ${year}`} value={`${leave.balance.remaining} / ${leave.balance.allowance}`} caption="Days remaining / allowance" />
+        <MiniStat label={`Leave · ${leave.year}`} value={`${leave.balance.remaining} / ${leave.balance.allowance}`} caption="Days remaining / allowance" />
         <MiniStat label="Sign-ins logged" value={formatInt(signins.recentSignins)} caption={`Last ${SIGNIN_COUNT_DAYS} days · not attendance`} />
       </div>
 
@@ -99,7 +103,12 @@ export default async function WorkspacePage({ searchParams }: PageProps<"/dashbo
             ) : null}
           </PanelCard>
 
-          <MyLeavePanel balance={leave.balance} rows={leave.rows} today={holidays.today} />
+          <MyLeavePanel
+            balance={leave.balance}
+            rows={leave.rows}
+            today={holidays.today}
+            years={leave.years.map((y) => ({ year: y, current: y === leave.year, href: `/dashboard/workspace?${new URLSearchParams({ ...params, ...(y === thisYear ? {} : { leaveYear: String(y) }) })}` }))}
+          />
         </div>
 
         <PanelCard title="CRM Sign-in History" className="min-w-0 self-start">

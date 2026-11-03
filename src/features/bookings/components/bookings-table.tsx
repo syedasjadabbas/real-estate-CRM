@@ -2,14 +2,49 @@ import Link from "next/link";
 import { EmptyState } from "@/components/ui/empty-state";
 import { formatPrice } from "@/features/inventory/format";
 import { formatDateTime } from "@/features/leads/format";
+import { withParams } from "@/features/leads/url";
+import { cn } from "@/lib/cn";
 import type { BookingRow } from "@/modules/bookings/queries";
+import type { BookingSortColumn } from "@/modules/bookings/validation";
 import { BookingStagePill, HoldOverdueChip } from "./stage-pill";
 
-/** Reference columns: Lead, Sales agent, Unit, Project, Stage, Paid, Updated, Open. */
-const COLUMNS = ["Lead", "Sales agent", "Unit", "Project", "Stage", "Paid", "Updated", ""];
+type Column = { label: string; sort?: BookingSortColumn };
+
+/** Reference columns: Lead, Sales agent, Unit, Project, Stage, Paid, Updated (sortable, FR-005), Open. */
+const COLUMNS: Column[] = [
+  { label: "Lead", sort: "lead" },
+  { label: "Sales agent", sort: "agent" },
+  { label: "Unit", sort: "unit" },
+  { label: "Project", sort: "project" },
+  { label: "Stage", sort: "stage" },
+  { label: "Paid", sort: "paid" },
+  { label: "Updated", sort: "updatedAt" },
+  { label: "" },
+];
+
+function SortHeader({ column, params }: { column: Column; params: Record<string, string> }) {
+  if (!column.sort) return <span className="sr-only">Open</span>;
+  const current = (params.sort ?? "updatedAt") === column.sort;
+  const dir = params.dir === "asc" ? "asc" : "desc";
+  const nextDir = current && dir === "desc" ? "asc" : "desc";
+  return (
+    <Link
+      href={withParams("/dashboard/bookings", params, { sort: column.sort, dir: nextDir, page: null })}
+      className="group inline-flex items-center gap-1.5 hover:text-zinc-900"
+      aria-label={`Sort by ${column.label}`}
+    >
+      {column.label}
+      <span aria-hidden="true" className="flex flex-col text-[7px] leading-[7px]">
+        <span className={cn(current && dir === "asc" ? "text-brand" : "text-zinc-300")}>▲</span>
+        <span className={cn(current && dir === "desc" ? "text-brand" : "text-zinc-300")}>▼</span>
+      </span>
+    </Link>
+  );
+}
 
 /** Bookings table in the Leads table style. Paid comes from posted Finance records. */
-export function BookingsTable({ rows, emptyMessage }: { rows: BookingRow[]; emptyMessage: string }) {
+export function BookingsTable({ rows, emptyMessage, params = {} }: { rows: BookingRow[]; emptyMessage: string; params?: Record<string, string> }) {
+  const ariaSort = (key?: BookingSortColumn) => (key && (params.sort ?? "updatedAt") === key ? (params.dir === "asc" ? "ascending" : "descending") : undefined);
   return (
     <div className="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-hairline">
       <div className="relative max-h-[540px] overflow-auto">
@@ -17,8 +52,8 @@ export function BookingsTable({ rows, emptyMessage }: { rows: BookingRow[]; empt
           <thead className="sticky top-0 z-10 bg-zinc-100">
             <tr className="border-b border-zinc-200 text-[10px] font-black tracking-[0.05em] text-zinc-600 uppercase">
               {COLUMNS.map((c, i) => (
-                <th key={i} scope="col" className="px-3 py-4 whitespace-nowrap">
-                  {c || <span className="sr-only">Open</span>}
+                <th key={i} scope="col" aria-sort={ariaSort(c.sort)} className="px-3 py-4 whitespace-nowrap">
+                  <SortHeader column={c} params={params} />
                 </th>
               ))}
             </tr>

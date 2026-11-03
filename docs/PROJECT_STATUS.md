@@ -709,3 +709,93 @@ Migrations 0017–0019 are additive and applied to the development and test data
 | Schema drift | "Everything's fine" / "No schema changes" (22 migrations; no new migration this round) |
 | Production build | Pass (101 / 101 pages, 0 warnings) |
 | Playwright | **67 tests** (desktop and mobile). Run 1: 66 / 67, the new import spec failed on an ambiguous "Project" label (fixed; then 3 / 3 alone). Run 2: 65 / 67, two notification specs not changed this round timed out during a slow run (10 min vs 3.7 min); re-run twice each: 38 / 38 |
+
+## 16. Round 6 (3 Nov 2026)
+
+### 16.1 Playwright stability: what caused the timeouts
+- **Symptom:** in round 5, two notification specs timed out in one full run ("follow-up reminders appear as a pop-up once", "the notification dropdown fits the screen"). In a later run, "a Super Admin adds a category … voids it" timed out instead.
+- **Checked and ruled out:**
+  - **Shared data:** no other spec creates follow-ups, and the reminder spec creates its own lead. The dropdown spec only opens the bell.
+  - **Parallel execution:** Playwright runs one worker, and the test database had no other sessions.
+  - **Selectors:** each failing step uses role-based locators that pass in every normal run.
+- **Cause: CPU contention on the machine.** Per-test timings from the failed run, compared with a clean run, show bursts where every test ran 3–8× slower.
+  - Example: the document upload spec took 40.9 s instead of 7.4 s.
+  - The bursts lined up with type checks and other work run at the same time as the suite.
+  - The trace of the failed income / expense spec shows it was not stuck. Every step was simply 2–5× slower (navigations 2–4 s, new browser contexts about 2 s), until the 60 s test limit.
+- **Action:**
+  - The suite must run on an otherwise idle machine. This is now stated here and in the Playwright config comment.
+  - No timeouts were raised, no retries were added and no test was skipped.
+  - The three runs below were made with nothing else running.
+
+### 16.2 Unit CSV import: hardened and fully tested
+- **Fixed: an unclosed quote** used to swallow the rest of the file silently. It is now refused, naming the line where the quote starts.
+- **Fixed: a row with more values than the header** (usually an unquoted comma in a price) had its extra values dropped silently. It is now reported on that row. Trailing empty cells are still accepted.
+- **Fixed: line numbers.** The report now uses each row's real line in the file, even with blank lines or line breaks inside quoted values.
+- **Fixed: wrong message for a non-number.** A non-numeric area or price (for example "abc") was reported as "is required". It now says "must be a number". The same validator is used by the unit forms.
+- **Tests (`unit-import.test.ts`, 13):**
+  - parsing, line numbers and unclosed quotes;
+  - numeric, decimal, date and required-field errors per row, plus a valid row with thousands separators;
+  - duplicate unit numbers (case-insensitive) within the file and against existing units;
+  - atomic rollback when a later row fails, with no audit rows written;
+  - roles: Super Admin and Admin allowed; Manager, Agent, HR and Accountant refused;
+  - audit: one `unit.import` summary with the count, and one `unit.create` per unit.
+
+### 16.3 Overdue (FR-203): calculation tests
+`finance.test.ts` → "overdue against the payment plan" now covers:
+- partial payments, including paisa;
+- overpaying the schedule, which never goes below zero;
+- reversed payments: a requested but undecided reversal still counts, an approved one doesn't;
+- multiple, future and undated installments;
+- cancelled plans, and the most recent open plan when there are several;
+- bookings without a plan;
+- the Pakistan date boundary: an installment due on the 10th counts from 19:00 UTC on the 9th;
+- totals equal to the sum of the rows, with each booking's Paid checked against its `booking_payments` rows.
+
+`outstandingBookings` now accepts the business date, so these tests don't depend on the clock.
+
+### 16.4 Next defined requirements (built)
+| Requirement | What was built |
+|---|---|
+| FR-200 / FR-201 / FR-205 "totals reconcile with records" | **Income & expenses totals were computed from at most 500 listed rows.** They are now summed in the database over every matching entry, and voided entries are never counted. The list pages 50 at a time, and search covers payee, reference, note and category. |
+| FINANCE_MODULE_PLAN §4: payment filters include "method" | **Payments → Method filter.** A reversal follows the method of the payment it reverses. |
+| FINANCE_MODULE_PLAN §4: Outstanding "filters project / agent / milestone" | **Outstanding → Sales agent filter.** It lists the agents that have open bookings. |
+| HR_MODULE_PLAN: "Leave filters drawer (Search, Status, Leave type, Clear all), sorting and pagination"; FR-005 | **HR → Leave → All requests:** search (employee, reason), status and type filters, Clear all, sortable Employee / Type / Dates / Status / Requested columns, and 50 per page. "Waiting for your decision" and cancellation requests now cover every year and ignore the list filters, so a filter can never hide a request that needs a decision. |
+| MODULES_AND_FEATURES §11: "My leave … by year" | **A year selector on HR → Leave** (requests and balances) **and on My Workplace → My leave.** Calendar years are used, as before; the leave-year question (C-11) is still open. |
+| FR-005 column sorting | **Bookings list:** sortable Lead, Sales agent, Unit, Project, Stage, Paid (net of reversals) and Updated. |
+| MODULES_AND_FEATURES §1: "KPI tiles link to Leads, Won, Regenerated" | **Dashboard:** Total leads, Won / Lost and Regenerated open their lists for the same days. The "Reports" target is not named, so no link was added for it. |
+
+Tests:
+- Integration:
+  - `finance-entries.test.ts`: totals across pages, search, voided entries;
+  - `finance.test.ts`: method filter, agent filter, bookings sorting;
+  - `leave.test.ts`: paging, filters, sorting, years, and decisions from other years.
+- Browser: `e2e/list-controls.spec.ts` (desktop and mobile).
+
+### 16.5 Still not built (no defined rule; current behaviour kept)
+Unchanged from §15.3:
+- lead import format (Q-P5);
+- receipt layout and numbering;
+- PDP / CDP;
+- refunds;
+- Critical and Pipeline pressure;
+- ROI and floor prices;
+- attendance;
+- task statuses;
+- the aging matrix;
+- notification events N2–N6;
+- leave decisions C-4, C-10 and C-13;
+- access removals waiting for the signature (S-1).
+
+### 16.6 Verification (3 Nov 2026, end of round 6)
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | Pass |
+| `npm run lint` | Pass, 0 problems |
+| `npm test` (Vitest) | **46 files, 426 / 426** |
+| Schema drift | "Everything's fine" / "No schema changes" (22 migrations; no new migration) |
+| Production build | Pass (101 / 101 pages) |
+| Playwright, three consecutive full runs (idle machine, no retries) | **72 / 72, 72 / 72, 72 / 72** (4.1, 4.3 and 5.5 min; desktop and mobile) |
+
+**One unexplained Vitest stall.** During development, `finance.test.ts` had two tests fail at about 10 s (the hook timeout) in one run out of five. The next three consecutive runs of that file passed 25 / 25, and the test database had no other sessions. It couldn't be reproduced and is recorded here rather than hidden.
+

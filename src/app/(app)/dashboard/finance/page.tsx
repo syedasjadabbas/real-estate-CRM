@@ -10,7 +10,7 @@ import { PaymentsToolbar } from "@/features/finance/components/payments-toolbar"
 import { Pagination } from "@/features/leads/components/pagination";
 import { flattenParams } from "@/features/leads/url";
 import { canDoFinance } from "@/modules/finance/policy";
-import { listPayments } from "@/modules/finance/queries";
+import { listPaymentMethods, listPayments } from "@/modules/finance/queries";
 import { inventoryProjects } from "@/modules/inventory/queries";
 import { requirePageUser } from "@/server/auth/current-user";
 import { getDb } from "@/server/db";
@@ -26,7 +26,7 @@ export default async function FinancePaymentsPage({ searchParams }: PageProps<"/
   }
   const params = flattenParams(await searchParams);
   const db = getDb();
-  const [result, projects] = await Promise.all([listPayments(db, actor, params), inventoryProjects(db)]);
+  const [result, projects, methods] = await Promise.all([listPayments(db, actor, params), inventoryProjects(db), listPaymentMethods(db)]);
   const filtered = ["q", "project", "type", "kind", "from", "to"].some((k) => params[k]);
 
   return (
@@ -44,7 +44,7 @@ export default async function FinancePaymentsPage({ searchParams }: PageProps<"/
           ) : null
         }
       />
-      <PaymentsToolbar params={params} total={result.total} projects={projects} />
+      <PaymentsToolbar params={params} total={result.total} projects={projects} methods={methods.map((m) => ({ id: m.id, name: m.name }))} />
       <PaymentsTable rows={result.rows} emptyMessage={filtered ? "No payments match these filters." : "No payments have been posted yet."} />
       <Pagination page={result.page} pageCount={result.pageCount} total={result.total} params={params} />
     </section>

@@ -46,7 +46,7 @@ export default async function BookingsPage({ searchParams }: PageProps<"/dashboa
         }
       />
       <BookingsToolbar params={params} total={result.total} projects={projects} projectId={result.projectId} />
-      <BookingsTable rows={result.rows} emptyMessage={filtered ? "No bookings match these filters." : "No bookings in this scope yet."} />
+      <BookingsTable rows={result.rows} params={params} emptyMessage={filtered ? "No bookings match these filters." : "No bookings in this scope yet."} />
       <Pagination page={result.page} pageCount={result.pageCount} total={result.total} params={params} />
     </section>
   );

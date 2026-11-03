@@ -190,6 +190,79 @@ describe.skipIf(!hasTestDb)("Leave (questionnaire Q4–Q19, PostgreSQL integrati
     expect(await errorCode(employeeLeaveBalance(db, f.actors.manager, f.actors.outsideAgent.id, YEAR))).toBe("FORBIDDEN");
   });
 
+  describe("HR → Leave list: filters, sorting, paging and years (HR_MODULE_PLAN, FR-005)", () => {
+    /** Rows straight into the table (no balance rules needed for list behaviour). */
+    const seedRows = async (userId: string, n: number, year: number, extra: Partial<typeof leaveRequests.$inferInsert> = {}) =>
+      db.insert(leaveRequests).values(
+        Array.from({ length: n }, (_, i) => {
+          const day = `${year}-${String((i % 12) + 1).padStart(2, "0")}-${String((i % 27) + 1).padStart(2, "0")}`;
+          return { userId, type: i % 3 === 0 ? ("medical" as const) : ("annual" as const), startDate: day, endDate: day, days: 1, approvalPath: "staff", status: "rejected" as const, ...extra };
+        }),
+      );
+
+    it("pages 50 at a time with a total, and filters by status, type and search", async () => {
+      await seedRows(f.actors.agent1.id, 55, YEAR);
+      await seedRows(f.actors.agent2.id, 3, YEAR, { status: "approved", reason: "Family wedding" });
+      const first = await leaveOverview(db, f.actors.hr, YEAR);
+      expect(first).toMatchObject({ total: 58, page: 1, pageCount: 2 });
+      expect(first.rows).toHaveLength(50);
+      const second = await leaveOverview(db, f.actors.hr, YEAR, { page: "2" });
+      expect(second.rows).toHaveLength(8);
+      expect(new Set([...first.rows, ...second.rows].map((r) => r.id)).size).toBe(58);
+
+      expect((await leaveOverview(db, f.actors.hr, YEAR, { status: "approved" })).total).toBe(3);
+      expect((await leaveOverview(db, f.actors.hr, YEAR, { type: "medical" })).rows.every((r) => r.type === "medical")).toBe(true);
+      expect((await leaveOverview(db, f.actors.hr, YEAR, { q: "wedding" })).total).toBe(3);
+      expect((await leaveOverview(db, f.actors.hr, YEAR, { q: f.actors.agent2.name })).total).toBe(3);
+      // Unknown values are ignored, not errors.
+      expect((await leaveOverview(db, f.actors.hr, YEAR, { status: "bogus", type: "x", sort: "nope" })).total).toBe(58);
+      // A manager's filters stay inside their teams.
+      expect((await leaveOverview(db, f.actors.manager, YEAR, { q: f.actors.outsideAgent.name })).total).toBe(0);
+    });
+
+    it("sorts by employee, dates, type, status and request time in both directions", async () => {
+      await seedRows(f.actors.agent1.id, 4, YEAR);
+      await seedRows(f.actors.agent2.id, 2, YEAR, { status: "approved" });
+      const names = async (dir: string) => (await leaveOverview(db, f.actors.hr, YEAR, { sort: "employee", dir })).rows.map((r) => r.userName.toLowerCase());
+      const asc = await names("asc");
+      expect(asc).toEqual([...asc].sort());
+      expect(await names("desc")).toEqual([...asc].reverse());
+      const dates = (await leaveOverview(db, f.actors.hr, YEAR, { sort: "dates", dir: "asc" })).rows.map((r) => r.startDate);
+      expect(dates).toEqual([...dates].sort());
+      const statuses = (await leaveOverview(db, f.actors.hr, YEAR, { sort: "status", dir: "asc" })).rows.map((r) => r.status);
+      expect(statuses).toEqual([...statuses].sort());
+    });
+
+    it("another year is listed on request; pending decisions from any year still reach the approver", async () => {
+      await seedRows(f.actors.agent1.id, 2, YEAR - 1, { status: "approved" });
+      // A manager's request from last year still waiting for the Super Admin (senior path).
+      const [old] = await db
+        .insert(leaveRequests)
+        .values({ userId: f.actors.manager.id, type: "annual", startDate: `${YEAR - 1}-12-01`, endDate: `${YEAR - 1}-12-02`, days: 2, approvalPath: "senior", status: "pending" })
+        .returning();
+      const thisYear = await leaveOverview(db, f.actors.superAdmin, YEAR);
+      expect(thisYear.total).toBe(0);
+      expect(thisYear.years).toEqual([YEAR, YEAR - 1]);
+      expect(thisYear.decidable.map((r) => r.id)).toEqual([old.id]);
+      // Filters never hide a pending decision.
+      expect((await leaveOverview(db, f.actors.superAdmin, YEAR, { status: "cancelled" })).decidable.map((r) => r.id)).toEqual([old.id]);
+      expect((await leaveOverview(db, f.actors.superAdmin, YEAR - 1)).total).toBe(3);
+    });
+
+    it("My leave lists one year at a time and the years the person has requests in", async () => {
+      await seedRows(f.actors.agent1.id, 2, YEAR - 2, { status: "approved" });
+      await req(f.actors.agent1, "06-01", "06-02");
+      const now = await myLeave(db, f.actors.agent1);
+      expect(now).toMatchObject({ year: YEAR, years: [YEAR, YEAR - 2] });
+      expect(now.rows).toHaveLength(1);
+      const past = await myLeave(db, f.actors.agent1, YEAR - 2);
+      expect(past.rows).toHaveLength(2);
+      expect(past.balance.year).toBe(YEAR - 2);
+      // Another person's years are not mixed in.
+      expect((await myLeave(db, f.actors.agent2)).years).toEqual([YEAR]);
+    });
+  });
+
   it("visibility: HR, admins and super admins see all; managers their teams; others can't open the admin view", async () => {
     await req(f.actors.agent1, "09-10", "09-10");
     await req(f.actors.outsideAgent, "09-11", "09-11");

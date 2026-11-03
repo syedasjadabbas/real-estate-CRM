@@ -12,7 +12,7 @@ import { BOOKING_PAGE_SIZE, CLOSED_STAGES, HOLD_STAGES, MILESTONE_RATIO, nextSta
 import { bookingScope, canAccessBooking, canDoBooking, canMoveTo } from "./policy";
 import { netPaid, netPaidByBooking, toPaisa } from "@/modules/finance/ledger";
 import { businessToday } from "./today";
-import { bookingListQuerySchema } from "./validation";
+import { bookingListQuerySchema, type BookingSortColumn } from "./validation";
 
 const agent = alias(users, "agent");
 
@@ -70,6 +70,17 @@ const rowSelection = {
 
 export type BookingRow = Awaited<ReturnType<typeof listBookings>>["rows"][number];
 
+/** Sort keys; Paid is the same net (payments − reversals) the column shows, computed from the rows. */
+const BOOKING_SORTS: Record<BookingSortColumn, SQL> = {
+  lead: sql`lower(${leads.name})`,
+  agent: sql`lower(${agent.name})`,
+  unit: sql`lower(${units.unitNo})`,
+  project: sql`lower(${projects.name})`,
+  stage: sql`${bookings.stage}`,
+  paid: sql`(select coalesce(sum(case when p.kind = 'payment' then p.amount else -p.amount end), 0) from booking_payments p where p.booking_id = ${bookings.id})`,
+  updatedAt: sql`${bookings.updatedAt}`,
+};
+
 /** FR-085 list: search (lead, code, phone, unit), project (header project by default, or all), stage. */
 export async function listBookings(db: Database, actor: Actor, rawQuery: unknown, defaultProjectId: string | null, today: string) {
   if (!canDoBooking(actor, "view")) throw forbidden();
@@ -98,9 +109,10 @@ export async function listBookings(db: Database, actor: Actor, rawQuery: unknown
     .where(where);
   const pageCount = Math.max(1, Math.ceil(total / BOOKING_PAGE_SIZE));
   const page = Math.min(query.page, pageCount);
+  const column = BOOKING_SORTS[query.sort];
   const rows = await from()
     .where(where)
-    .orderBy(desc(bookings.updatedAt))
+    .orderBy(query.dir === "asc" ? sql`${column} asc nulls last` : sql`${column} desc nulls last`, desc(bookings.updatedAt), desc(bookings.id))
     .limit(BOOKING_PAGE_SIZE)
     .offset((page - 1) * BOOKING_PAGE_SIZE);
   return {

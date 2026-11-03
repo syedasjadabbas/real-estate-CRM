@@ -92,6 +92,35 @@ describe.skipIf(!hasTestDb)("Income and expenses (FR-200, FR-201, FR-205)", () =
     expect(log.action).toBe("finance.expense_create");
   });
 
+  it("totals cover every matching entry across pages, not just the page shown; search narrows both", async () => {
+    // 60 expenses of 1,000.01 directly in the table (faster than the service), plus one income and one voided expense.
+    await db.insert(financeEntries).values(
+      Array.from({ length: 60 }, (_, i) => ({ kind: "expense" as const, categoryId: rent, amount: 1000.01, entryDate: `2026-10-${String((i % 28) + 1).padStart(2, "0")}`, payee: i < 5 ? "Electric Co" : "Landlord", createdById: accountant.id })),
+    );
+    await createEntry(db, accountant, { kind: "income", categoryId: commission, amount: "500000", entryDate: "2026-10-05", reference: "INV-77" });
+    const { entryId } = await createEntry(db, accountant, { kind: "expense", categoryId: rent, amount: "99999", entryDate: "2026-10-06" });
+    await voidEntry(db, accountant, entryId, { reason: "Entered twice" });
+
+    const first = await listEntries(db, admin, {});
+    expect(first).toMatchObject({ total: 61, page: 1, pageCount: 2 });
+    expect(first.rows).toHaveLength(50);
+    expect(first.totals).toEqual({ income: 500000, expense: 60000.6, net: 439999.4 });
+    const second = await listEntries(db, admin, { page: "2" });
+    expect(second.rows).toHaveLength(11);
+    expect(second.totals).toEqual(first.totals);
+    expect(new Set([...first.rows, ...second.rows].map((r) => r.id)).size).toBe(61);
+    // A page past the end clamps to the last page.
+    expect((await listEntries(db, admin, { page: "9" })).page).toBe(2);
+
+    // Listing voided entries never adds them to totals.
+    expect((await listEntries(db, admin, { voided: "include" })).totals).toEqual(first.totals);
+    // Search: payee, reference, category name.
+    expect((await listEntries(db, admin, { q: "electric" })).totals).toEqual({ income: 0, expense: 5000.05, net: -5000.05 });
+    expect((await listEntries(db, admin, { q: "INV-77" })).rows.map((r) => r.kind)).toEqual(["income"]);
+    expect((await listEntries(db, admin, { q: "commission" })).total).toBe(1);
+    expect((await listEntries(db, admin, { q: "100%_" })).total).toBe(0);
+  });
+
   it("edits are audited before / after; voiding keeps the entry, leaves totals and blocks edits", async () => {
     const { entryId } = await createEntry(db, accountant, { kind: "expense", categoryId: rent, amount: "150000", entryDate: "2026-11-01" });
     expect(await updateEntry(db, accountant, entryId, { amount: "160000", payee: "Landlord" })).toEqual({ changed: ["amount", "payee"] });

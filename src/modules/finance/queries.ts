@@ -118,6 +118,7 @@ const listQuerySchema = z.object({
   from: z.iso.date().optional().catch(undefined),
   to: z.iso.date().optional().catch(undefined),
   bookingId: z.uuid().optional().catch(undefined),
+  method: z.uuid().optional().catch(undefined),
   page: z.coerce.number().int().min(1).max(10_000).catch(1),
 });
 
@@ -142,6 +143,10 @@ export async function listPayments(db: Database, actor: Actor, rawQuery: unknown
     q.to ? lte(bookingPayments.receivedOn, q.to) : undefined,
     q.bookingId ? eq(bookingPayments.bookingId, q.bookingId) : undefined,
     q.project ? eq(bookings.projectId, q.project) : undefined,
+    // A reversal has no method of its own: it follows the method of the payment it reverses.
+    q.method
+      ? sql`coalesce(${bookingPayments.methodId}, (select o.method_id from booking_payments o where o.id = ${bookingPayments.reversalOfId})) = ${q.method}`
+      : undefined,
     searchCondition(q.q),
   );
   const [{ total }] = await db

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, inArray, or, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import type { Database } from "@/server/db";
@@ -341,9 +341,9 @@ const listSelect = {
 };
 export type LeaveRow = { id: string; userId: string; userName: string; userRole: string; type: "annual" | "medical"; startDate: string; endDate: string; days: number; reason: string | null; status: LeaveStatus; approvalPath: string; currentStep: number; createdAt: Date };
 
-/** The signed-in person's requests and balance for a year. */
+/** The signed-in person's requests and balance for a year, and the years they have requests in. */
 export async function myLeave(db: Database, actor: Actor, year = yearOf(businessToday())) {
-  const [balance, rows] = await Promise.all([
+  const [balance, rows, years] = await Promise.all([
     leaveBalance(db, actor.id, year),
     db
       .select(listSelect)
@@ -351,35 +351,89 @@ export async function myLeave(db: Database, actor: Actor, year = yearOf(business
       .innerJoin(requester, eq(requester.id, leaveRequests.userId))
       .where(and(eq(leaveRequests.userId, actor.id), sql`extract(year from ${leaveRequests.startDate}) = ${year}`))
       .orderBy(desc(leaveRequests.startDate)),
+    leaveYears(db, eq(leaveRequests.userId, actor.id)),
   ]);
-  return { balance, rows: rows as LeaveRow[] };
+  return { year, years, balance, rows: rows as LeaveRow[] };
+}
+
+export const LEAVE_PAGE_SIZE = 50;
+export const LEAVE_STATUS_FILTERS = ["pending", "approved", "rejected", "withdrawn", "cancel_requested", "cancelled"] as const;
+export const LEAVE_SORT_COLUMNS = ["employee", "type", "dates", "status", "requested"] as const;
+export type LeaveSortColumn = (typeof LEAVE_SORT_COLUMNS)[number];
+const LEAVE_SORTS: Record<LeaveSortColumn, SQL> = {
+  employee: sql`lower(${requester.name})`,
+  type: sql`${leaveRequests.type}`,
+  dates: sql`${leaveRequests.startDate}`,
+  status: sql`${leaveRequests.status}`,
+  requested: sql`${leaveRequests.createdAt}`,
+};
+const leaveListQuery = z.object({
+  q: z.string().trim().max(100).optional().catch(undefined),
+  status: z.enum(LEAVE_STATUS_FILTERS).optional().catch(undefined),
+  type: z.enum(LEAVE_TYPES).optional().catch(undefined),
+  sort: z.enum(LEAVE_SORT_COLUMNS).catch("requested"),
+  dir: z.enum(["asc", "desc"]).catch("desc"),
+  page: z.coerce.number().int().min(1).max(10_000).catch(1),
+});
+
+/** Leave years with at least one request in the actor's scope, plus the current year (year selector). */
+async function leaveYears(db: Database, scope: SQL) {
+  const rows = await db
+    .selectDistinct({ year: sql<number>`extract(year from ${leaveRequests.startDate})::int` })
+    .from(leaveRequests)
+    .where(scope);
+  return [...new Set([yearOf(businessToday()), ...rows.map((r) => Number(r.year))])].sort((a, b) => b - a);
 }
 
 /**
- * Leave admin view: requests the actor may see (HR / Admin / Super Admin: all; managers: their teams),
- * the ones waiting for the actor's decision, and cancellation requests (Admin / Super Admin).
+ * Leave admin view: requests the actor may see (HR / Admin / Super Admin: all; managers: their teams).
+ * - The list covers one calendar year (C-11: calendar year until confirmed), with search, status,
+ *   type, sorting and 50 per page.
+ * - "Waiting for your decision" and cancellation requests (Admin / Super Admin) cover every year and
+ *   ignore the list filters, so nothing that needs a decision is hidden by them.
  */
-export async function leaveOverview(db: Database, actor: Actor, year = yearOf(businessToday())) {
+export async function leaveOverview(db: Database, actor: Actor, year = yearOf(businessToday()), rawQuery: unknown = {}) {
   if (!canOpenLeaveAdmin(actor)) throw forbidden();
+  const query = leaveListQuery.parse(rawQuery ?? {});
   const settings = await getLeaveSettings(db);
-  let scope = sql`true`;
+  let scope: SQL = sql`true`;
   if (!canViewAllLeave(actor)) {
     const members = actor.managedTeamIds.length
       ? (await db.selectDistinct({ id: teamMembers.userId }).from(teamMembers).where(inArray(teamMembers.teamId, actor.managedTeamIds))).map((r) => r.id)
       : [];
     scope = members.length ? inArray(leaveRequests.userId, members) : sql`false`;
   }
+  const term = query.q ? `%${query.q.replace(/[%_\\]/g, (c) => `\\${c}`)}%` : null;
+  const where = and(
+    scope,
+    sql`extract(year from ${leaveRequests.startDate}) = ${year}`,
+    query.status ? eq(leaveRequests.status, query.status) : undefined,
+    query.type ? eq(leaveRequests.type, query.type) : undefined,
+    term ? or(ilike(requester.name, term), ilike(leaveRequests.reason, term)) : undefined,
+  );
+  const [{ total }] = await db.select({ total: sql<number>`count(*)::int` }).from(leaveRequests).innerJoin(requester, eq(requester.id, leaveRequests.userId)).where(where);
+  const pageCount = Math.max(1, Math.ceil(total / LEAVE_PAGE_SIZE));
+  const page = Math.min(query.page, pageCount);
+  const column = LEAVE_SORTS[query.sort];
   const rows = (await db
     .select(listSelect)
     .from(leaveRequests)
     .innerJoin(requester, eq(requester.id, leaveRequests.userId))
-    .where(and(scope, sql`extract(year from ${leaveRequests.startDate}) = ${year}`))
-    .orderBy(desc(leaveRequests.createdAt))
-    .limit(500)) as LeaveRow[];
+    .where(where)
+    .orderBy(query.dir === "asc" ? sql`${column} asc` : sql`${column} desc`, desc(leaveRequests.createdAt), desc(leaveRequests.id))
+    .limit(LEAVE_PAGE_SIZE)
+    .offset((page - 1) * LEAVE_PAGE_SIZE)) as LeaveRow[];
+
+  const open = (await db
+    .select(listSelect)
+    .from(leaveRequests)
+    .innerJoin(requester, eq(requester.id, leaveRequests.userId))
+    .where(and(scope, inArray(leaveRequests.status, ["pending", "cancel_requested"])))
+    .orderBy(asc(leaveRequests.createdAt))) as LeaveRow[];
   const decidable: LeaveRow[] = [];
-  for (const r of rows) if (await canDecideStep(db, actor, r, settings)) decidable.push(r);
-  const cancellations = canCancelApprovedLeave(actor) ? rows.filter((r) => r.status === "cancel_requested" && r.userId !== actor.id) : [];
-  return { year, settings, rows, decidable, cancellations };
+  for (const r of open) if (r.status === "pending" && (await canDecideStep(db, actor, r, settings))) decidable.push(r);
+  const cancellations = canCancelApprovedLeave(actor) ? open.filter((r) => r.status === "cancel_requested" && r.userId !== actor.id) : [];
+  return { year, years: await leaveYears(db, scope), settings, query: { ...query, page }, total, page, pageCount, rows, decidable, cancellations };
 }
 
 /** Decisions on one request, oldest first (for the history column). */

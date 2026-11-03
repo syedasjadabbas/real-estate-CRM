@@ -114,6 +114,7 @@ const outstandingQuerySchema = z.object({
   project: z.uuid().optional().catch(undefined),
   milestone: z.enum(["met", "not_met"]).optional().catch(undefined),
   overdue: z.enum(["yes"]).optional().catch(undefined),
+  agent: z.uuid().optional().catch(undefined),
   q: z.string().trim().max(100).optional().catch(undefined),
 });
 
@@ -154,7 +155,7 @@ export async function scheduleDueByBooking(db: Database, bookingIds: string[], t
   return out;
 }
 
-export async function outstandingBookings(db: Database, actor: Actor, rawQuery: unknown) {
+export async function outstandingBookings(db: Database, actor: Actor, rawQuery: unknown, today = businessToday()) {
   if (!canDoFinance(actor, "viewAll")) throw forbidden();
   const q = outstandingQuerySchema.parse(rawQuery ?? {});
   const agent = alias(users, "agent");
@@ -179,11 +180,12 @@ export async function outstandingBookings(db: Database, actor: Actor, rawQuery: 
       and(
         ne(bookings.stage, "cancelled"),
         q.project ? eq(bookings.projectId, q.project) : undefined,
+        q.agent ? eq(bookings.agentId, q.agent) : undefined,
         term ? or(ilike(leads.name, term), ilike(leads.code, term), ilike(units.unitNo, term)) : undefined,
       ),
     )
     .orderBy(asc(projects.name), asc(sql`lower(${units.unitNo})`));
-  const [paid, schedule] = await Promise.all([netPaidByBooking(db, rows.map((r) => r.bookingId)), scheduleDueByBooking(db, rows.map((r) => r.bookingId))]);
+  const [paid, schedule] = await Promise.all([netPaidByBooking(db, rows.map((r) => r.bookingId)), scheduleDueByBooking(db, rows.map((r) => r.bookingId), today)]);
   const all = rows.map((r) => {
     const p = paid.get(r.bookingId) ?? 0;
     const plan = schedule.get(r.bookingId) ?? null;
@@ -202,7 +204,14 @@ export async function outstandingBookings(db: Database, actor: Actor, rawQuery: 
   let rowsOut = q.milestone ? all.filter((r) => (q.milestone === "met" ? r.milestoneMet : !r.milestoneMet)) : all;
   if (q.overdue) rowsOut = rowsOut.filter((r) => (r.overdue ?? 0) > 0);
   const sum = (pick: (r: (typeof rowsOut)[number]) => number) => rowsOut.reduce((acc, r) => acc + toPaisa(pick(r)), 0) / 100;
-  return { rows: rowsOut, totals: { total: sum((r) => r.totalSale), paid: sum((r) => r.paid), outstanding: sum((r) => r.outstanding), overdue: sum((r) => r.overdue ?? 0) } };
+  // Sales agents with an open (not cancelled) booking, for the agent filter.
+  const agents = await db
+    .selectDistinct({ id: agent.id, name: agent.name })
+    .from(bookings)
+    .innerJoin(agent, eq(agent.id, bookings.agentId))
+    .where(ne(bookings.stage, "cancelled"))
+    .orderBy(agent.name);
+  return { rows: rowsOut, agents, totals: { total: sum((r) => r.totalSale), paid: sum((r) => r.paid), outstanding: sum((r) => r.outstanding), overdue: sum((r) => r.overdue ?? 0) } };
 }
 export type OutstandingRow = Awaited<ReturnType<typeof outstandingBookings>>["rows"][number];
 

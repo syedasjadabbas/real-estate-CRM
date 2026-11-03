@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { and, asc, desc, eq, gte, isNull, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, isNull, lte, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import type { Database } from "@/server/db";
@@ -159,24 +159,46 @@ export async function voidEntry(db: Database, actor: Actor, entryId: string, inp
   });
 }
 
+export const ENTRY_PAGE_SIZE = 50;
+
 const listQuery = z.object({
+  q: z.string().trim().max(100).optional().catch(undefined),
   kind: z.enum(ENTRY_KINDS).optional().catch(undefined),
   categoryId: z.uuid().optional().catch(undefined),
   from: z.iso.date().optional().catch(undefined),
   to: z.iso.date().optional().catch(undefined),
   voided: z.enum(["include", "only"]).optional().catch(undefined),
+  page: z.coerce.number().int().min(1).max(10_000).catch(1),
 });
 
+/**
+ * FR-200 / FR-201 list, 50 per page, newest first. Search covers payee, reference, note and
+ * category. Totals cover every entry matching the filter (not just the page); voided entries are
+ * never counted in totals, even when they are listed.
+ */
 export async function listEntries(db: Database, actor: Actor, input: unknown = {}) {
   assertCanFinance(actor, "viewAll");
   const q = listQuery.parse(input ?? {});
+  const term = q.q ? `%${q.q.replace(/[%_\\]/g, (c) => `\\${c}`)}%` : null;
   const where = and(
     q.kind ? eq(financeEntries.kind, q.kind) : undefined,
     q.categoryId ? eq(financeEntries.categoryId, q.categoryId) : undefined,
     q.from ? gte(financeEntries.entryDate, q.from) : undefined,
     q.to ? lte(financeEntries.entryDate, q.to) : undefined,
     q.voided === "only" ? sql`${financeEntries.voidedAt} is not null` : q.voided === "include" ? undefined : isNull(financeEntries.voidedAt),
+    term ? or(ilike(financeEntries.payee, term), ilike(financeEntries.reference, term), ilike(financeEntries.note, term), ilike(financeCategories.name, term)) : undefined,
   );
+  const [agg] = await db
+    .select({
+      total: sql<number>`count(*)::int`,
+      income: sql<string>`coalesce(sum(${financeEntries.amount}) filter (where ${financeEntries.kind} = 'income' and ${financeEntries.voidedAt} is null), 0)`,
+      expense: sql<string>`coalesce(sum(${financeEntries.amount}) filter (where ${financeEntries.kind} = 'expense' and ${financeEntries.voidedAt} is null), 0)`,
+    })
+    .from(financeEntries)
+    .innerJoin(financeCategories, eq(financeCategories.id, financeEntries.categoryId))
+    .where(where);
+  const pageCount = Math.max(1, Math.ceil(agg.total / ENTRY_PAGE_SIZE));
+  const page = Math.min(q.page, pageCount);
   const rows = await db
     .select({
       id: financeEntries.id,
@@ -195,11 +217,12 @@ export async function listEntries(db: Database, actor: Actor, input: unknown = {
     .leftJoin(paymentMethods, eq(paymentMethods.id, financeEntries.methodId))
     .leftJoin(creator, eq(creator.id, financeEntries.createdById))
     .where(where)
-    .orderBy(desc(financeEntries.entryDate), desc(financeEntries.createdAt))
-    .limit(500);
-  const live = rows.filter((r) => !r.voidedAt);
-  const sum = (k: EntryKind) => Math.round(live.filter((r) => r.kind === k).reduce((n, r) => n + r.amount * 100, 0)) / 100;
-  return { query: q, rows, totals: { income: sum("income"), expense: sum("expense"), net: Math.round((sum("income") - sum("expense")) * 100) / 100 } };
+    .orderBy(desc(financeEntries.entryDate), desc(financeEntries.createdAt), desc(financeEntries.id))
+    .limit(ENTRY_PAGE_SIZE)
+    .offset((page - 1) * ENTRY_PAGE_SIZE);
+  const income = Number(agg.income);
+  const expense = Number(agg.expense);
+  return { query: { ...q, page }, total: agg.total, page, pageCount, rows, totals: { income, expense, net: Math.round((income - expense) * 100) / 100 } };
 }
 
 export async function getEntry(db: Database, actor: Actor, entryId: string) {

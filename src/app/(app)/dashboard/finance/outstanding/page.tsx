@@ -37,7 +37,7 @@ export default async function OutstandingPage({ searchParams }: PageProps<"/dash
         <MiniStat label="Outstanding" value={formatPrice(result.totals.outstanding)} caption="Still to collect" />
         <MiniStat label="Overdue" value={formatPrice(result.totals.overdue)} caption="Past due on payment plans" />
       </div>
-      <OutstandingToolbar params={params} projects={projects} />
+      <OutstandingToolbar params={params} projects={projects} agents={result.agents} />
       <div className="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-hairline">
         <div className="relative max-h-[540px] overflow-auto">
           <table className="w-full min-w-max border-collapse text-left text-xs">

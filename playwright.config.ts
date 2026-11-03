@@ -5,6 +5,8 @@ import { E2E_BASE_URL, E2E_PORT, E2E_STORAGE_DIR, testDatabaseUrl } from "./e2e/
  * End-to-end tests (e2e/). They run the production build (`next start`) against the separate
  * TEST database only, with uploads in a temporary folder. Run `npm run test:e2e` (builds first).
  * Do not run at the same time as the Vitest suite: both reset the test database.
+ * Run it on an otherwise idle machine: under heavy CPU load (a type check or build alongside),
+ * every step slows several-fold and long specs reach the 60 s limit (PROJECT_STATUS.md §16.1).
  */
 const testDb = testDatabaseUrl();
 

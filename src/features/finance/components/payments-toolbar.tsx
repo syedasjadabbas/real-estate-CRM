@@ -10,13 +10,23 @@ import { withParams } from "@/features/leads/url";
 import { formatInt } from "@/lib/format";
 import { PAYMENT_TYPES, PAYMENT_TYPE_LABELS } from "@/modules/finance/constants";
 
-/** Search + project + type + entry kind + date range, in the shared toolbar card. */
-export function PaymentsToolbar({ params, total, projects }: { params: Record<string, string>; total: number; projects: { id: string; label: string }[] }) {
+/** Search + project + type + method + entry kind + date range, in the shared toolbar card. */
+export function PaymentsToolbar({
+  params,
+  total,
+  projects,
+  methods,
+}: {
+  params: Record<string, string>;
+  total: number;
+  projects: { id: string; label: string }[];
+  methods: { id: string; name: string }[];
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const [pending, startTransition] = useTransition();
   const [q, setQ] = useState(params.q ?? "");
-  const hasAny = ["q", "project", "type", "kind", "from", "to"].some((k) => params[k]);
+  const hasAny = ["q", "project", "type", "method", "kind", "from", "to"].some((k) => params[k]);
 
   const go = (overrides: Record<string, string | null>) =>
     startTransition(() => router.replace(withParams(pathname, params, { ...overrides, page: null })));
@@ -60,6 +70,7 @@ export function PaymentsToolbar({ params, total, projects }: { params: Record<st
         </label>
         {select("Project", "project", projects.map((p) => ({ value: p.id, label: p.label })), "All projects")}
         {select("Type", "type", PAYMENT_TYPES.map((t) => ({ value: t, label: PAYMENT_TYPE_LABELS[t] })), "All types")}
+        {select("Method", "method", methods.map((m) => ({ value: m.id, label: m.name })), "All methods")}
         {select("Entry", "kind", [{ value: "payment", label: "Payments" }, { value: "reversal", label: "Reversals" }], "Payments and reversals")}
         {date("Received from", "from")}
         {date("Received to", "to")}
@@ -70,7 +81,7 @@ export function PaymentsToolbar({ params, total, projects }: { params: Record<st
             className="h-10 px-4 text-xs"
             onClick={() => {
               setQ("");
-              go({ q: null, project: null, type: null, kind: null, from: null, to: null });
+              go({ q: null, project: null, type: null, method: null, kind: null, from: null, to: null });
             }}
           >
             Clear

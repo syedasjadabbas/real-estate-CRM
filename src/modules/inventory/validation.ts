@@ -14,7 +14,8 @@ const amount = (label: string, opts: { positive?: boolean; max: number }) =>
   z.preprocess(
     (v) => (typeof v === "string" ? (v.trim() === "" ? undefined : Number(v.replace(/,/g, ""))) : v),
     z
-      .number(`${label} is required`)
+      // Blank is "required"; text that isn't a number (NaN after parsing) says so.
+      .number({ error: (issue) => (issue.input === undefined ? `${label} is required` : `${label} must be a number`) })
       .refine((n) => Number.isFinite(n), `${label} must be a number`)
       .refine((n) => (opts.positive ? n > 0 : n >= 0), opts.positive ? `${label} must be greater than 0` : `${label} cannot be negative`)
       .refine((n) => n <= opts.max, `${label} is too large`)

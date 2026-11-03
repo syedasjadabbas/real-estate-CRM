@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -19,7 +20,7 @@ type Balance = { year: number; allowance: number; prorated: boolean; provisional
  * My leave (FR-130, questionnaire Q4–Q17): balance for the year, a request form (calendar days,
  * past dates allowed, refused above the remaining balance) and the person's requests.
  */
-export function MyLeavePanel({ balance, rows, today }: { balance: Balance; rows: Row[]; today: string }) {
+export function MyLeavePanel({ balance, rows, today, years = [] }: { balance: Balance; rows: Row[]; today: string; years?: { year: number; current: boolean; href: string }[] }) {
   const [v, setV] = useState({ type: "annual" as LeaveType, startDate: today, endDate: today, reason: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
@@ -35,13 +36,28 @@ export function MyLeavePanel({ balance, rows, today }: { balance: Balance; rows:
     });
 
   return (
-    <PanelCard title="My leave">
+    <PanelCard title={`My leave · ${balance.year}`}>
+      {years.length > 1 ? (
+        <nav aria-label="Leave year" className="mb-3 flex flex-wrap items-center gap-1.5 text-xs">
+          <span className="text-[10px] font-black tracking-[0.05em] text-zinc-500 uppercase">Year</span>
+          {years.map((y) => (
+            <Link
+              key={y.year}
+              href={y.href}
+              aria-current={y.current ? "page" : undefined}
+              className={cn("rounded-lg border px-2.5 py-1 font-bold", y.current ? "border-brand/40 bg-brand-50 text-brand-700" : "border-zinc-200/80 text-zinc-700 hover:bg-zinc-50")}
+            >
+              {y.year}
+            </Link>
+          ))}
+        </nav>
+      ) : null}
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
           ["Allowance", `${balance.allowance}`, balance.provisional ? "Prorated from joining date (provisional method)" : balance.prorated ? "Prorated from joining date" : `${balance.year}`],
           ["Taken", `${balance.granted}`, "Approved days"],
           ["Pending", `${balance.pending}`, "Awaiting approval"],
-          ["Remaining", `${balance.remaining}`, "Days left this year"],
+          ["Remaining", `${balance.remaining}`, `Days left in ${balance.year}`],
         ].map(([label, value, caption]) => (
           <div key={label} className="rounded-xl border border-zinc-200/80 px-3 py-2">
             <dt className="text-[10px] font-black tracking-[0.1em] text-zinc-500 uppercase">{label}</dt>

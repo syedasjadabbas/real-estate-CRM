@@ -4,7 +4,8 @@ import { advanceBooking, cancelBooking, createBooking } from "@/modules/bookings
 import { getBookingDetail, listBookings } from "@/modules/bookings/queries";
 import { addPaymentMethod, decideReversal, recordPayment, requestReversal, setPaymentMethodActive, updateFinanceSettings } from "@/modules/finance/commands";
 import { bookingPaymentHistory, listPaymentMethods, listPayments, reversalRequestsForActor } from "@/modules/finance/queries";
-import { getPaymentDetail, outstandingBookings, payableBookings } from "@/modules/finance/views";
+import { getPaymentDetail, outstandingBookings, payableBookings, scheduleDueByBooking } from "@/modules/finance/views";
+import { businessToday } from "@/modules/bookings/today";
 import { createUnit } from "@/modules/inventory/commands";
 import { createLead } from "@/modules/leads/commands";
 import { hashPassword } from "@/server/auth/password";
@@ -326,6 +327,56 @@ describe.skipIf(!hasTestDb)("Finance F1: booking payments (PostgreSQL integratio
     });
   });
 
+  describe("list filters (FINANCE_MODULE_PLAN §4)", () => {
+    it("Payments filter by method; a reversal follows the method of the payment it reverses", async () => {
+      const chequeId = (await listPaymentMethods(db, { activeOnly: true })).find((m) => m.name === "Cheque")!.id;
+      const a = await bookingAt();
+      const cash = await pay(a, "1000");
+      const cheque = await pay(a, "2000", { methodId: chequeId, reference: "CHQ-1" });
+      const { requestId } = await requestReversal(db, accountant, cheque.paymentId, { reason: "Cheque bounced at the bank" });
+      const { reversalId } = await decideReversal(db, f.actors.manager, requestId, { approve: true });
+
+      const ids = async (method: string) => (await listPayments(db, accountant, { method })).rows.map((r) => r.id).sort();
+      expect(await ids(cashId)).toEqual([cash.paymentId]);
+      expect(await ids(chequeId)).toEqual([cheque.paymentId, reversalId!].sort());
+      expect((await listPayments(db, accountant, { method: chequeId, kind: "reversal" })).rows.map((r) => r.id)).toEqual([reversalId]);
+      // An unknown or malformed method is ignored rather than failing the page.
+      expect((await listPayments(db, accountant, { method: "not-a-uuid" })).total).toBe(3);
+    });
+
+    it("Bookings list sorts by paid (net of reversals), unit and lead, both directions (FR-005)", async () => {
+      const a = await bookingAt();
+      const b = await bookingAt();
+      const c = await bookingAt();
+      await pay(a, "300000");
+      const { paymentId } = await pay(b, "900000");
+      await pay(c, "600000");
+      // Reversing b's payment drops it to 0 paid: sorting uses the same net the column shows.
+      const { requestId } = await requestReversal(db, accountant, paymentId, { reason: "Entered against the wrong booking" });
+      await decideReversal(db, f.actors.manager, requestId, { approve: true });
+
+      const order = async (q: Record<string, string>) => (await listBookings(db, f.actors.superAdmin, q, f.projectId, TODAY)).rows.map((r) => r.id);
+      expect(await order({ sort: "paid", dir: "asc" })).toEqual([b, a, c]);
+      expect(await order({ sort: "paid", dir: "desc" })).toEqual([c, a, b]);
+      const rows = (await listBookings(db, f.actors.superAdmin, { sort: "unit", dir: "asc" }, f.projectId, TODAY)).rows.map((r) => r.unitNo.toLowerCase());
+      expect(rows).toEqual([...rows].sort());
+      // Default: most recently changed first; unknown sort values fall back to it.
+      expect(await order({ sort: "bogus" })).toEqual(await order({}));
+      expect((await listBookings(db, f.actors.superAdmin, { sort: "bogus" }, f.projectId, TODAY)).query).toMatchObject({ sort: "updatedAt", dir: "desc" });
+    });
+
+    it("Outstanding filters by sales agent and lists the agents that have bookings", async () => {
+      const mine = await bookingAt();
+      const theirs = await bookingAt(["token_pending"], f.actors.outsideAgent);
+      const all = await outstandingBookings(db, accountant, {}, TODAY);
+      expect(all.agents.map((x) => x.id).sort()).toEqual([f.actors.agent1.id, f.actors.outsideAgent.id].sort());
+      expect((await outstandingBookings(db, accountant, { agent: f.actors.outsideAgent.id }, TODAY)).rows.map((r) => r.bookingId)).toEqual([theirs]);
+      const filtered = await outstandingBookings(db, accountant, { agent: f.actors.agent1.id }, TODAY);
+      expect(filtered.rows.map((r) => r.bookingId)).toEqual([mine]);
+      expect(filtered.totals.total).toBe(12_500_000);
+    });
+  });
+
   describe("overdue against the payment plan (FR-203)", () => {
     const plan = async (bookingId: string, rows: { amount: number; dueOn: string | null }[], status: "open" | "cancelled" = "open") => {
       const [t] = await db
@@ -360,6 +411,93 @@ describe.skipIf(!hasTestDb)("Finance F1: booking payments (PostgreSQL integratio
       expect(row(none)).toMatchObject({ planTaskId: null, dueToDate: null, overdue: null });
       expect(out.totals.overdue).toBe(500_000);
       expect((await outstandingBookings(db, accountant, { overdue: "yes" })).rows.map((r) => r.bookingId)).toEqual([a]);
+    });
+
+
+    it("a reversed payment no longer counts: the booking becomes overdue again", async () => {
+      const a = await bookingAt();
+      await plan(a, [
+        { amount: 1_000_000, dueOn: "2026-01-10" },
+        { amount: 1_000_000, dueOn: "2026-02-10" },
+      ]);
+      await pay(a, "1000000");
+      const { paymentId } = await pay(a, "1000000");
+      expect((await outstandingBookings(db, accountant, {}, TODAY)).rows[0]).toMatchObject({ paid: 2_000_000, dueToDate: 2_000_000, overdue: 0 });
+
+      const { requestId } = await requestReversal(db, accountant, paymentId, { reason: "Cheque bounced at the bank" });
+      // Requested but not decided: still counted.
+      expect((await outstandingBookings(db, accountant, {}, TODAY)).rows[0].overdue).toBe(0);
+      await decideReversal(db, f.actors.manager, requestId, { approve: true });
+      expect((await outstandingBookings(db, accountant, {}, TODAY)).rows[0]).toMatchObject({ paid: 1_000_000, overdue: 1_000_000 });
+    });
+
+    it("partial payments reduce the overdue amount; overpaying the schedule never goes below zero", async () => {
+      const a = await bookingAt();
+      await plan(a, [
+        { amount: 1_000_000, dueOn: "2026-01-10" },
+        { amount: 1_000_000, dueOn: "2026-02-10" },
+        { amount: 1_000_000, dueOn: "2026-03-10" },
+      ]);
+      const overdue = async () => (await outstandingBookings(db, accountant, {}, TODAY)).rows[0].overdue;
+      expect(await overdue()).toBe(3_000_000);
+      await pay(a, "250000.50");
+      expect(await overdue()).toBe(2_749_999.5);
+      await pay(a, "2749999.50");
+      expect(await overdue()).toBe(0);
+      await pay(a, "5000000");
+      expect(await overdue()).toBe(0);
+    });
+
+    it("an installment counts from its due date in Pakistan, not UTC", async () => {
+      const a = await bookingAt();
+      await plan(a, [{ amount: 700_000, dueOn: "2026-11-10" }]);
+      // 2026-11-09 19:00 UTC is already the 10th in Pakistan (UTC+5); 18:59 UTC is still the 9th.
+      expect(businessToday(new Date("2026-11-09T18:59:59Z"))).toBe("2026-11-09");
+      expect(businessToday(new Date("2026-11-09T19:00:00Z"))).toBe("2026-11-10");
+      const dueOn = async (today: string) => (await scheduleDueByBooking(db, [a], today)).get(a)!.dueToDate;
+      expect(await dueOn("2026-11-09")).toBe(0);
+      expect(await dueOn("2026-11-10")).toBe(700_000);
+      expect((await outstandingBookings(db, accountant, {}, businessToday(new Date("2026-11-09T18:59:59Z")))).rows[0].overdue).toBe(0);
+      expect((await outstandingBookings(db, accountant, {}, businessToday(new Date("2026-11-09T19:00:00Z")))).rows[0].overdue).toBe(700_000);
+    });
+
+    it("the most recent open plan is the schedule when a booking has several", async () => {
+      const a = await bookingAt();
+      await plan(a, [{ amount: 100, dueOn: "2026-01-10" }]);
+      await new Promise((r) => setTimeout(r, 5));
+      const latest = await plan(a, [{ amount: 900, dueOn: "2026-01-10" }]);
+      expect((await outstandingBookings(db, accountant, {}, TODAY)).rows[0]).toMatchObject({ planTaskId: latest, dueToDate: 900 });
+    });
+
+    it("totals equal the sums of the rows, and Paid equals the posted payment records", async () => {
+      const a = await bookingAt();
+      const b = await bookingAt();
+      await bookingAt();
+      await plan(a, [{ amount: 2_000_000, dueOn: "2026-01-10" }]);
+      await plan(b, [
+        { amount: 1_000_000, dueOn: "2026-01-10" },
+        { amount: 1_000_000, dueOn: null },
+      ]);
+      await pay(a, "1234567.89");
+      const { paymentId } = await pay(b, "300000");
+      await pay(b, "50000.25");
+      const { requestId } = await requestReversal(db, accountant, paymentId, { reason: "Duplicate entry recorded" });
+      await decideReversal(db, f.actors.manager, requestId, { approve: true });
+
+      const out = await outstandingBookings(db, accountant, {}, TODAY);
+      const cents = (n: number) => Math.round(n * 100);
+      const sum = (pick: (r: (typeof out.rows)[number]) => number) => out.rows.reduce((acc, r) => acc + cents(pick(r)), 0) / 100;
+      expect(out.totals).toEqual({ total: sum((r) => r.totalSale), paid: sum((r) => r.paid), outstanding: sum((r) => r.outstanding), overdue: sum((r) => r.overdue ?? 0) });
+
+      // Paid per booking against the ledger rows themselves (a reversal is a positive amount of kind "reversal").
+      const ledger = await db.select({ bookingId: bookingPayments.bookingId, amount: bookingPayments.amount, kind: bookingPayments.kind }).from(bookingPayments);
+      for (const r of out.rows) {
+        const posted = ledger.filter((l) => l.bookingId === r.bookingId).reduce((acc, l) => acc + cents(Number(l.amount)) * (l.kind === "reversal" ? -1 : 1), 0) / 100;
+        expect(r.paid, r.bookingId).toBe(posted);
+      }
+      expect(out.rows.find((r) => r.bookingId === a)!.overdue).toBe(765_432.11);
+      expect(out.rows.find((r) => r.bookingId === b)).toMatchObject({ paid: 50_000.25, dueToDate: 1_000_000, undatedRows: 1, overdue: 949_999.75 });
+      expect(out.totals.overdue).toBe(1_715_431.86);
     });
   });
 });

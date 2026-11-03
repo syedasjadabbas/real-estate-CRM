@@ -31,13 +31,32 @@ const FIELD: Record<(typeof UNIT_IMPORT_COLUMNS)[number], string> = {
 export const MAX_IMPORT_ROWS = 2000;
 export const MAX_IMPORT_BYTES = 2 * 1024 * 1024;
 
-/** RFC 4180 CSV: commas, double-quoted fields with "" escapes, CRLF or LF line ends. */
-export function parseCsv(text: string): string[][] {
-  const rows: string[][] = [];
+/** A file that isn't valid CSV (an unclosed quote). `line` is where the quoted field starts. */
+export class CsvFormatError extends Error {
+  constructor(readonly line: number) {
+    super(`Line ${line}: a quoted value is never closed.`);
+  }
+}
+
+/**
+ * RFC 4180 CSV: commas, double-quoted fields with "" escapes, CRLF or LF line ends. Each row keeps
+ * the file line it starts on (blank lines and line breaks inside quotes shift it). Blank rows are dropped.
+ */
+export function parseCsvRows(text: string): { line: number; cells: string[] }[] {
+  const rows: { line: number; cells: string[] }[] = [];
   let row: string[] = [];
   let field = "";
   let quoted = false;
-  const src = text.replace(/^﻿/, "");
+  let line = 1;
+  let rowLine = 1;
+  let quoteLine = 1;
+  const src = text.replace(/^\uFEFF/, "");
+  const endRow = () => {
+    row.push(field);
+    if (row.some((v) => v.trim() !== "")) rows.push({ line: rowLine, cells: row });
+    row = [];
+    field = "";
+  };
   for (let i = 0; i < src.length; i++) {
     const c = src[i];
     if (quoted) {
@@ -45,25 +64,29 @@ export function parseCsv(text: string): string[][] {
         field += '"';
         i++;
       } else if (c === '"') quoted = false;
-      else field += c;
-    } else if (c === '"' && field === "") quoted = true;
-    else if (c === ",") {
+      else {
+        if (c === "\n") line++;
+        field += c;
+      }
+    } else if (c === '"' && field === "") {
+      quoted = true;
+      quoteLine = line;
+    } else if (c === ",") {
       row.push(field);
       field = "";
     } else if (c === "\n" || c === "\r") {
       if (c === "\r" && src[i + 1] === "\n") i++;
-      row.push(field);
-      rows.push(row);
-      row = [];
-      field = "";
+      endRow();
+      line++;
+      rowLine = line;
     } else field += c;
   }
-  if (field !== "" || row.length) {
-    row.push(field);
-    rows.push(row);
-  }
-  return rows.filter((r) => r.some((v) => v.trim() !== ""));
+  if (quoted) throw new CsvFormatError(quoteLine);
+  if (field !== "" || row.length) endRow();
+  return rows;
 }
+
+export const parseCsv = (text: string) => parseCsvRows(text).map((r) => r.cells);
 
 export type ImportRowResult = { line: number; unitNo: string; ok: boolean; message?: string };
 
@@ -72,9 +95,15 @@ class Rollback extends Error {}
 export async function importUnits(db: Database, actor: Actor, input: { projectId: string; csv: string; apply: boolean }) {
   assertCanInventory(actor, "manage");
   if (input.csv.length > MAX_IMPORT_BYTES) throw new AppError("VALIDATION_FAILED", "The file is too large (at most 2 MB).", { fields: { file: "At most 2 MB" } });
-  const rows = parseCsv(input.csv);
+  let rows: { line: number; cells: string[] }[];
+  try {
+    rows = parseCsvRows(input.csv);
+  } catch (error) {
+    if (error instanceof CsvFormatError) throw new AppError("VALIDATION_FAILED", `The file isn't valid CSV. ${error.message}`, { fields: { file: error.message } });
+    throw error;
+  }
   if (rows.length < 2) throw new AppError("VALIDATION_FAILED", "The file has no unit rows.", { fields: { file: "Add a header row and at least one unit" } });
-  const header = rows[0].map((h) => h.trim().toLowerCase().replace(/\s+/g, "_"));
+  const header = rows[0].cells.map((h) => h.trim().toLowerCase().replace(/\s+/g, "_"));
   const unknown = header.filter((h) => h && !(UNIT_IMPORT_COLUMNS as readonly string[]).includes(h));
   const missing = REQUIRED.filter((r) => !header.includes(r));
   if (unknown.length || missing.length) {
@@ -87,21 +116,26 @@ export async function importUnits(db: Database, actor: Actor, input: { projectId
   const results: ImportRowResult[] = [];
   try {
     await db.transaction(async (tx) => {
-      for (const [i, cells] of body.entries()) {
+      for (const { line, cells } of body) {
+        const unitNo = (cells[header.indexOf("unit_no")] ?? "").trim();
+        if (cells.slice(header.length).some((v) => v.trim() !== "")) {
+          // Extra values would be dropped silently: reported instead (usually an unquoted comma). Trailing empty cells are fine.
+          results.push({ line, unitNo, ok: false, message: `${cells.length} values but the header has ${header.length} columns (quote values that contain commas)` });
+          continue;
+        }
         const record: Record<string, unknown> = { projectId: input.projectId };
         header.forEach((h, j) => {
           const v = (cells[j] ?? "").trim();
           if (h && v !== "") record[FIELD[h as (typeof UNIT_IMPORT_COLUMNS)[number]]] = v;
         });
-        const unitNo = String(record.unitNo ?? "");
         try {
           // Each row is its own savepoint: a bad row is rolled back and reported, the rest continue.
           await createUnit(tx as unknown as Database, actor, record);
-          results.push({ line: i + 2, unitNo, ok: true });
+          results.push({ line, unitNo, ok: true });
         } catch (error) {
           if (!(error instanceof AppError)) throw error;
           const detail = error.fields ? Object.entries(error.fields).map(([k, m]) => `${k}: ${m}`).join("; ") : error.message;
-          results.push({ line: i + 2, unitNo, ok: false, message: detail });
+          results.push({ line, unitNo, ok: false, message: detail });
         }
       }
       const failed = results.filter((r) => !r.ok).length;

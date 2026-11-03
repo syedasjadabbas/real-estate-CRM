@@ -7,6 +7,7 @@ import { MiniStat } from "@/components/ui/stat";
 import { EntryForm } from "@/features/finance/components/entry-forms";
 import { formatListedOn, formatPrice } from "@/features/inventory/format";
 import { PanelCard } from "@/features/leads/components/detail-panels";
+import { Pagination } from "@/features/leads/components/pagination";
 import { flattenParams } from "@/features/leads/url";
 import { businessToday } from "@/modules/bookings/today";
 import { ENTRY_KIND_LABELS, listCategories, listEntries } from "@/modules/finance/entries";
@@ -30,12 +31,13 @@ export default async function EntriesPage({ searchParams }: PageProps<"/dashboar
     <section className="space-y-6" aria-label="Income and expenses">
       <PageHeader as="h2" title="Income & expenses" description="Company income and expense records. Entries are never deleted: a voided entry stays on record and is left out of totals." />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <MiniStat label="Income" value={formatPrice(data.totals.income)} caption="Listed entries" />
-        <MiniStat label="Expenses" value={formatPrice(data.totals.expense)} caption="Listed entries" />
+        <MiniStat label="Income" value={formatPrice(data.totals.income)} caption="All matching entries" />
+        <MiniStat label="Expenses" value={formatPrice(data.totals.expense)} caption="All matching entries" />
         <MiniStat label="Net" value={formatPrice(data.totals.net)} caption="Income minus expenses" />
       </div>
       <form method="get" className="flex flex-wrap items-end gap-2" aria-label="Filter entries">
         {[
+          ["q", "Search", <input key="q" type="search" name="q" defaultValue={data.query.q ?? ""} placeholder="Payee, reference, note, category" maxLength={100} className="mt-1 block h-9 w-56 max-w-full rounded-xl border border-zinc-200/80 px-2 text-xs font-semibold" />],
           ["kind", "Kind", <select key="k" name="kind" defaultValue={data.query.kind ?? ""} className="mt-1 block h-9 rounded-xl border border-zinc-200/80 px-2 text-xs font-semibold"><option value="">All</option><option value="income">Income</option><option value="expense">Expense</option></select>],
           ["from", "From", <input key="f" type="date" name="from" defaultValue={data.query.from ?? ""} className="mt-1 block h-9 rounded-xl border border-zinc-200/80 px-2 text-xs font-semibold" />],
           ["to", "To", <input key="t" type="date" name="to" defaultValue={data.query.to ?? ""} className="mt-1 block h-9 rounded-xl border border-zinc-200/80 px-2 text-xs font-semibold" />],
@@ -54,7 +56,7 @@ export default async function EntriesPage({ searchParams }: PageProps<"/dashboar
         </button>
       </form>
 
-      <PanelCard title={`Entries · ${data.rows.length}`}>
+      <PanelCard title={`Entries · ${data.total}`}>
         {data.rows.length === 0 ? (
           <EmptyState size="sm">No entries match.</EmptyState>
         ) : (
@@ -90,6 +92,7 @@ export default async function EntriesPage({ searchParams }: PageProps<"/dashboar
           </div>
         )}
       </PanelCard>
+      {data.total > 0 ? <Pagination page={data.page} pageCount={data.pageCount} total={data.total} params={params} /> : null}
 
       {canRecord ? (
         <PanelCard title="Record income or expense">

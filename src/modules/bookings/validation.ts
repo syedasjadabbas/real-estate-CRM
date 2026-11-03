@@ -59,10 +59,16 @@ export const updateBookingSchema = z
   })
   .partial();
 
+/** FR-005 column sorting on the Bookings list; newest change first by default. */
+export const BOOKING_SORT_COLUMNS = ["lead", "agent", "unit", "project", "stage", "paid", "updatedAt"] as const;
+export type BookingSortColumn = (typeof BOOKING_SORT_COLUMNS)[number];
+
 export const bookingListQuerySchema = z.object({
   q: z.string().trim().max(100).optional().catch(undefined),
   project: z.union([z.literal("all"), z.uuid()]).optional().catch(undefined),
   stage: z.enum(BOOKING_STAGES).optional().catch(undefined),
+  sort: z.enum(BOOKING_SORT_COLUMNS).catch("updatedAt"),
+  dir: z.enum(["asc", "desc"]).catch("desc"),
   page: z.coerce.number().int().min(1).max(10_000).catch(1),
 });
 export type BookingListQuery = z.output<typeof bookingListQuerySchema>;

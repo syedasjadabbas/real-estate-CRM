@@ -71,6 +71,9 @@ export function ExecutiveEssentials({ data, filters = { range: "mtd" } }: { data
     go({ range: value, team: filters.team });
   };
   const maxProject = Math.max(1, ...data.topProjects.map((p) => p.count));
+  // KPI tiles open the matching list for the same days (leads created in the range; MODULES_AND_FEATURES §1).
+  const days = data.lost ? `?${new URLSearchParams({ from: data.lost.from, to: data.lost.to })}` : "";
+  const listHref = (path: string) => (data.isSample ? undefined : `${path}${days}`);
 
   return (
     <section aria-labelledby="exec-title">
@@ -89,6 +92,8 @@ export function ExecutiveEssentials({ data, filters = { range: "mtd" } }: { data
             icon={Inbox}
             category="Pipeline"
             label="Total leads"
+            href={listHref("/dashboard/leads")}
+            linkLabel="Open the leads list for these days"
             value={formatCompact(kpis?.totalLeads)}
             caption="Active portfolio leads"
             footer={
@@ -115,6 +120,8 @@ export function ExecutiveEssentials({ data, filters = { range: "mtd" } }: { data
             tone="neutral"
             category="Outcomes"
             label="Won / Lost"
+            href={listHref("/dashboard/leads/won")}
+            linkLabel="Open won leads for these days"
             value={
               <>
                 <span className="text-brand">{formatInt(kpis?.won)}</span>
@@ -129,6 +136,8 @@ export function ExecutiveEssentials({ data, filters = { range: "mtd" } }: { data
             tone="sky"
             category="Re-inquiries"
             label="Regenerated"
+            href={listHref("/dashboard/leads/regenerated")}
+            linkLabel="Open regenerated leads for these days"
             value={<span className="text-sky-800">{formatInt(kpis?.regenerated)}</span>}
             caption={`${kpis ? formatInt(kpis.awaitingFirstTouch) : NO_VALUE} awaiting first touch`}
           />
