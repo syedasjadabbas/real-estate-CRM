@@ -155,6 +155,13 @@
       "when": 1793694654754,
       "tag": "0021_income_expense",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1793718640851,
+      "tag": "0022_lead_stage_follows_open_booking",
+      "breakpoints": true
     }
   ]
 }

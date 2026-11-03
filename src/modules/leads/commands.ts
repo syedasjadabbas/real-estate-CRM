@@ -21,17 +21,8 @@ import { generateLeadCode } from "./code";
 import { STAGE_LABELS } from "./constants";
 import { normalizePhone } from "./phone";
 import { assertCan, canAccessLead, canAssignTo, canDo } from "./policy";
-import { assertStageChange, pickNextAssignee } from "./rules";
-import {
-  audit,
-  isUniqueViolation,
-  loadAccessibleLead,
-  logActivity,
-  refreshNextFollowUp,
-  teamMemberIds,
-  touchValues,
-  type Tx,
-} from "./support";
+import { assertStageChange, OPEN_BOOKING_MESSAGE, pickNextAssignee } from "./rules";
+import { audit, hasOpenBooking, isUniqueViolation, loadAccessibleLead, logActivity, refreshNextFollowUp, teamMemberIds, touchValues, type Tx } from "./support";
 import {
   assignSchema,
   createLeadSchema,
@@ -301,7 +292,7 @@ export async function changeStage(db: Database, actor: Actor, leadId: string, in
   const { stage } = parse(stageChangeSchema, input);
   return db.transaction(async (tx) => {
     const { lead } = await loadAccessibleLead(tx, actor, leadId, true);
-    assertStageChange(lead.stage, stage);
+    assertStageChange(lead.stage, stage, await hasOpenBooking(tx, leadId));
     const now = new Date();
     await tx
       .update(leads)
@@ -448,6 +439,8 @@ export async function markLost(db: Database, actor: Actor, leadId: string, input
     const { lead } = await loadAccessibleLead(tx, actor, leadId, true);
     if (lead.stage === "lost_lead") throw new AppError("BUSINESS_RULE", "The lead is already lost.");
     if (lead.stage === "booked") throw new AppError("BUSINESS_RULE", "Booked leads are managed from their booking.");
+    // Checked for agents' requests too: an approval could otherwise only be refused later.
+    if (await hasOpenBooking(tx, leadId)) throw new AppError("BUSINESS_RULE", OPEN_BOOKING_MESSAGE);
     const reason = await assertLostReason(tx, lostReasonId);
     const now = new Date();
 
@@ -506,6 +499,11 @@ export async function decideLostRequest(db: Database, actor: Actor, approvalId: 
     if (!request) throw notFound("Request");
     const { lead } = await loadAccessibleLead(tx, actor, request.leadId, true);
     if (request.status !== "pending") throw new AppError("BUSINESS_RULE", "This request has already been decided.");
+    // A booking opened after the request: approving would contradict it. The request stays pending
+    // (it can still be rejected) until the booking is cancelled.
+    if (approve && lead.stage !== "lost_lead" && lead.stage !== "booked" && (await hasOpenBooking(tx, lead.id))) {
+      throw new AppError("BUSINESS_RULE", OPEN_BOOKING_MESSAGE);
+    }
     const now = new Date();
     await tx
       .update(approvals)

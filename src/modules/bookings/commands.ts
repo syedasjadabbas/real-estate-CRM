@@ -24,6 +24,11 @@ async function auditBooking(db: DbOrTx, actor: Actor, action: string, entityId: 
 async function setLeadStage(tx: Tx, actor: Actor, leadId: string, to: "booking_in_process" | "booked", reason: string) {
   const [lead] = await tx.select().from(leads).where(eq(leads.id, leadId)).for("update");
   if (lead.stage === to) return lead;
+  // Re-checked under the lock: the lead may have been marked Lost (or booked) since createBooking
+  // read it. Throwing rolls back the whole booking, including the unit reservation.
+  if (to === "booking_in_process" && (lead.stage === "lost_lead" || lead.stage === "booked")) {
+    throw new AppError("CONFLICT", `The lead was marked ${STAGE_LABELS[lead.stage]} while the booking was being created. Reload and try again.`);
+  }
   const now = new Date();
   await tx
     .update(leads)

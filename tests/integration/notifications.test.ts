@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { assignLead, createLead, decideLostRequest, markLost, scheduleFollowUp, completeFollowUp } from "@/modules/leads/commands";
+import { assignLead, changeStage, createLead, decideLostRequest, markLost, scheduleFollowUp, completeFollowUp } from "@/modules/leads/commands";
 import { listNotifications, markAllRead, markRead, reminderMinutes, updateReminderMinutes } from "@/modules/notifications/service";
 import { approvals, auditLogs, followUps, notifications, users } from "@/server/db/schema";
 import { loadActor } from "@/server/auth/session-store";
@@ -169,4 +169,44 @@ describe.skipIf(!hasTestDb)("Notifications (PostgreSQL integration)", () => {
       await expect(db.insert(notifications).values({ ...base, dedupeKey: "k2", link: "https://evil.example" })).rejects.toThrow();
     });
   });
+  describe("F-2: no follow-up reminders for Lost leads", () => {
+    it("Lost leads get no reminder; active leads still do; moving the lead back reminds again", async () => {
+      await updateReminderMinutes(db, admin, { minutes: "30" });
+      const now = new Date();
+      const active = await lead(f.actors.agent1, { name: "Active Buyer" });
+      const lost = await lead(f.actors.agent1, { name: "Lost Buyer" });
+      await scheduleFollowUp(db, f.actors.agent1, active, { dueAt: new Date(now.getTime() + 20 * 60_000) }, now);
+      await scheduleFollowUp(db, f.actors.agent1, lost, { dueAt: new Date(now.getTime() + 20 * 60_000) }, now);
+      await markLost(db, f.actors.manager, lost, { lostReasonId: f.lostReasonId });
+
+      for (let i = 0; i < 2; i++) await listNotifications(db, f.actors.agent1); // repeated polls
+      const reminders = (await mine(f.actors.agent1)).filter((r) => r.type === "follow_up_soon");
+      expect(reminders.map((r) => r.title)).toEqual(["Follow-up soon · Active Buyer"]);
+      expect(reminders[0].popup).toBe(true);
+
+      await changeStage(db, f.actors.manager, lost, { stage: "contacted" });
+      const again = (await mine(f.actors.agent1)).filter((r) => r.type === "follow_up_soon").map((r) => r.title).sort();
+      expect(again).toEqual(["Follow-up soon · Active Buyer", "Follow-up soon · Lost Buyer"]);
+    });
+
+    it("a reminder created before the lead was lost stays listed (history) but no longer pops up", async () => {
+      await updateReminderMinutes(db, admin, { minutes: "30" });
+      const now = new Date();
+      const id = await lead(f.actors.agent1, { name: "Late Lost" });
+      await scheduleFollowUp(db, f.actors.agent1, id, { dueAt: new Date(now.getTime() + 15 * 60_000) }, now);
+      const [created] = (await mine(f.actors.agent1)).filter((r) => r.type === "follow_up_soon");
+      expect(created.popup).toBe(true);
+
+      await markLost(db, f.actors.manager, id, { lostReasonId: f.lostReasonId });
+      const [kept] = (await mine(f.actors.agent1)).filter((r) => r.type === "follow_up_soon");
+      expect(kept).toMatchObject({ id: created.id, title: created.title, readAt: null, popup: false });
+      // The stored notification row is unchanged.
+      const [row] = await db.select().from(notifications).where(eq(notifications.id, created.id));
+      expect(row).toMatchObject({ readAt: null, title: "Follow-up soon · Late Lost" });
+
+      await changeStage(db, f.actors.manager, id, { stage: "contacted" });
+      expect((await mine(f.actors.agent1)).find((r) => r.id === created.id)?.popup).toBe(true);
+    });
+  });
+
 });

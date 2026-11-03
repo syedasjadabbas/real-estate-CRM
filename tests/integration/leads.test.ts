@@ -16,7 +16,7 @@ import {
 import { getLeadDetail, leadTodos, listLeads, pendingLostRequests, pipelineBoard, sharedPhoneGroups } from "@/modules/leads/queries";
 import { authenticate } from "@/server/auth/login";
 import { findActorByToken, hashToken, revokeSession } from "@/server/auth/session-store";
-import { approvals, auditLogs, leads, sessions, signinLogs } from "@/server/db/schema";
+import { approvals, auditLogs, followUps, leads, sessions, signinLogs } from "@/server/db/schema";
 import type { Database } from "@/server/db";
 import { AppError } from "@/server/errors";
 import { connectTestDb, hasTestDb, leadInput, resetDb, seedFixture, type Fixture } from "../support/db";
@@ -324,4 +324,70 @@ describe.skipIf(!hasTestDb)("Leads module (PostgreSQL integration)", () => {
       expect(await sharedPhoneGroups(db, f.actors.superAdmin, f.projectId)).toHaveLength(0);
     });
   });
+  describe("F-2: follow-ups of Lost leads leave To-dos and the follow-up filter", () => {
+    // 11:00 in Pakistan, so "today" and "overdue" don't depend on when the suite runs.
+    const NOW = new Date("2026-11-03T06:00:00Z");
+    const at = (minutes: number) => new Date(NOW.getTime() + minutes * 60_000);
+    const keys = async (bucket: "today" | "overdue" | "tomorrow" | "7d" | "doneToday") =>
+      [...new Set((await leadTodos(db, f.actors.agent1, f.projectId, bucket, NOW)).items.map((i) => i.leadId))];
+    const counts = async () => (await leadTodos(db, f.actors.agent1, f.projectId, "today", NOW)).counts;
+
+    /** A lead with one follow-up due later today and one already overdue (due earlier today, so it is in Today too). */
+    const leadWithFollowUps = async (name: string) => {
+      const r = await createLead(db, f.actors.agent1, leadInput(f, { name }));
+      if (r.outcome !== "created") throw new Error("setup");
+      await scheduleFollowUp(db, f.actors.agent1, r.leadId, { dueAt: at(120), note: `${name} today` }, NOW);
+      await scheduleFollowUp(db, f.actors.agent1, r.leadId, { dueAt: at(-60), note: `${name} overdue` }, at(-180));
+      return r.leadId;
+    };
+
+    it("Lost leads drop out of Today and Overdue (lists and counts); active leads stay; history is untouched", async () => {
+      const active = await leadWithFollowUps("Active Buyer");
+      const lost = await leadWithFollowUps("Lost Buyer");
+      expect((await keys("today")).sort()).toEqual([active, lost].sort());
+      expect((await keys("overdue")).sort()).toEqual([active, lost].sort());
+      expect(await counts()).toMatchObject({ today: 4, overdue: 2 });
+      const before = await db.select().from(followUps).where(eq(followUps.leadId, lost)).orderBy(followUps.dueAt);
+
+      await markLost(db, f.actors.manager, lost, { lostReasonId: f.lostReasonId });
+      expect(await keys("today")).toEqual([active]);
+      expect(await keys("overdue")).toEqual([active]);
+      expect(await counts()).toMatchObject({ today: 2, overdue: 1 });
+
+      // The follow-ups themselves are unchanged (still pending, same times and notes) and still on the lead page.
+      const after = await db.select().from(followUps).where(eq(followUps.leadId, lost)).orderBy(followUps.dueAt);
+      expect(after).toEqual(before);
+      expect((await getLeadDetail(db, f.actors.agent1, lost)).followUps).toHaveLength(2);
+    });
+
+    it("an agent's lost request keeps the follow-ups active until a manager approves it", async () => {
+      const lead = await leadWithFollowUps("Pending Lost");
+      await markLost(db, f.actors.agent1, lead, { lostReasonId: f.lostReasonId });
+      expect(await keys("overdue")).toEqual([lead]);
+      const [request] = await pendingLostRequests(db, f.actors.manager, f.projectId);
+      await decideLostRequest(db, f.actors.manager, request.id, { approve: true });
+      expect(await keys("overdue")).toEqual([]);
+    });
+
+    it("moving a Lost lead back to an active stage brings its follow-ups back", async () => {
+      const lead = await leadWithFollowUps("Comeback");
+      await markLost(db, f.actors.manager, lead, { lostReasonId: f.lostReasonId });
+      expect(await counts()).toMatchObject({ today: 0, overdue: 0 });
+      await changeStage(db, f.actors.manager, lead, { stage: "contacted" });
+      expect(await keys("today")).toEqual([lead]);
+      expect(await keys("overdue")).toEqual([lead]);
+      expect(await counts()).toMatchObject({ today: 2, overdue: 1 });
+    });
+
+    it("the leads list follow-up filter (overdue / due soon) leaves Lost leads out; the Lost view still lists them", async () => {
+      const active = await leadWithFollowUps("Filter Active");
+      const lost = await leadWithFollowUps("Filter Lost");
+      await markLost(db, f.actors.manager, lost, { lostReasonId: f.lostReasonId });
+      const overdue = (await listLeads(db, f.actors.agent1, f.projectId, { followUp: "overdue" }, NOW)).rows.map((r) => r.id);
+      expect(overdue).toEqual([active]);
+      const lostView = (await listLeads(db, f.actors.agent1, f.projectId, { view: "lost" }, NOW)).rows.map((r) => r.id);
+      expect(lostView).toEqual([lost]);
+    });
+  });
+
 });

@@ -1,6 +1,6 @@
 import { and, eq, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
 import type { Database } from "@/server/db";
-import { auditLogs, followUps, leadActivities, leads, teamMembers } from "@/server/db/schema";
+import { auditLogs, bookings, followUps, leadActivities, leads, teamMembers } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
 import { forbidden, notFound } from "@/server/errors";
 import { canAccessLead, leadScope } from "./policy";
@@ -77,6 +77,31 @@ export async function audit(
     after: after ?? null,
   });
 }
+
+/**
+ * Whether the lead has an open booking (any stage except Confirmed and Cancelled). While it does, the
+ * lead's stage follows the booking (FR-080 / FR-082): it stays in Booking in Process until the booking
+ * is confirmed (→ Booked) or cancelled. Call it after locking the lead row, so a booking created
+ * concurrently is either visible here or re-checks the lead itself (bookings/commands.ts setLeadStage).
+ * The database enforces the same rule (trigger `leads_stage_follows_open_booking`, migration 0022).
+ */
+export async function hasOpenBooking(db: DbOrTx, leadId: string) {
+  const [row] = await db
+    .select({ id: bookings.id })
+    .from(bookings)
+    .where(and(eq(bookings.leadId, leadId), sql`${bookings.stage} not in ('confirmed', 'cancelled')`))
+    .limit(1);
+  return Boolean(row);
+}
+
+
+/**
+ * F-2: pending follow-ups count as active work only while their lead is not Lost. Used by every reader
+ * of pending follow-ups (To-dos, reminders, the follow-up filter) so the rule lives in one place. The
+ * follow-ups themselves are never changed: moving a lost lead back to another stage brings them back.
+ */
+export const FOLLOW_UP_INACTIVE_STAGE = "lost_lead";
+export const followUpLeadActive = (): SQL => sql`${leads.stage} <> ${FOLLOW_UP_INACTIVE_STAGE}`;
 
 /** Marks a human interaction: first touch (once) and last activity. */
 export function touchValues(lead: { firstTouchAt: Date | null }, now: Date) {

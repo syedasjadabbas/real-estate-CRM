@@ -1,9 +1,10 @@
 import { and, eq } from "drizzle-orm";
+import { createBooking } from "@/modules/bookings/commands";
 import { createUnit } from "@/modules/inventory/commands";
-import { createLead } from "@/modules/leads/commands";
+import { createLead, scheduleFollowUp } from "@/modules/leads/commands";
 import { createTeam, setTeamMembers } from "@/modules/teams/commands";
 import { loadActor } from "@/server/auth/session-store";
-import { auditLogs, bookingPayments, leads, users } from "@/server/db/schema";
+import { auditLogs, bookingPayments, bookings, leads, units, users } from "@/server/db/schema";
 import { connectTestDb } from "../../tests/support/db";
 import { testDatabaseUrl } from "./guard";
 import { seed, uniquePhone, type Role } from "./seed";
@@ -77,3 +78,32 @@ export function createTeamWithAgent(name: string) {
 export function seededPaymentId() {
   return withDb(async (db) => (await db.select({ id: bookingPayments.id }).from(bookingPayments).where(eq(bookingPayments.kind, "payment")).orderBy(bookingPayments.recordedAt).limit(1))[0].id);
 }
+
+/** An open booking (Negotiation) for `leadId` on `unitId`, created by the manager through the real service. */
+export function createBookingFor(leadId: string, unitId: string) {
+  return withDb(async (db) => {
+    const actor = await actorOf(db, "manager");
+    const { bookingId } = await createBooking(db, actor, { projectId: seed().projectId, leadId, unitId, ratePerSqft: "20000", tokenAmount: "100000" });
+    return bookingId;
+  });
+}
+
+/** Stage of a booking and status of its unit, for asserting that lead, booking and unit agree. */
+export function bookingState(bookingId: string) {
+  return withDb(async (db) => {
+    const [row] = await db.select({ stage: bookings.stage, unitStatus: units.status }).from(bookings).innerJoin(units, eq(units.id, bookings.unitId)).where(eq(bookings.id, bookingId));
+    return row;
+  });
+}
+
+/** A pending follow-up on `leadId`, `minutesFromNow` from now (negative = already overdue), scheduled by the lead's owner. */
+export function scheduleFollowUpFor(owner: Role, leadId: string, minutesFromNow: number, note: string) {
+  return withDb(async (db) => {
+    const actor = await actorOf(db, owner);
+    const now = new Date();
+    const dueAt = new Date(now.getTime() + minutesFromNow * 60_000);
+    // Scheduled "before" it fell due, as the service only takes future times.
+    await scheduleFollowUp(db, actor, leadId, { dueAt, note }, new Date(Math.min(now.getTime(), dueAt.getTime()) - 60_000));
+  });
+}
+

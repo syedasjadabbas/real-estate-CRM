@@ -799,3 +799,507 @@ Unchanged from §15.3:
 
 **One unexplained Vitest stall.** During development, `finance.test.ts` had two tests fail at about 10 s (the hook timeout) in one run out of five. The next three consecutive runs of that file passed 25 / 25, and the test database had no other sessions. It couldn't be reproduced and is recorded here rather than hidden.
 
+## 17. Requirement-by-requirement completion audit (3 Nov 2026, after round 6)
+
+**Method.**
+- **Source of truth:** the signed-off quotation (14 modules and their feature lines) and the client's 53 questionnaire answers. `REQUIREMENTS.md` (FR-001 – FR-206, NFR-01 – 07) is the breakdown of the quotation and is used as the row list.
+- **How each row was checked:** against the service, the page, the API and the permission policy, and against its tests. Pages, buttons or fields were not taken as proof on their own.
+- **Spot-checks:** the high-impact findings were checked again directly in the code (F-1, F-2, F-6, F-7, FR-204).
+- **Verification runs:** no code was changed and no tests were re-run for this audit. The round 6 results below are the latest.
+
+### 17.A Executive summary
+
+| Set | Rows | Result |
+|---|---|---|
+| Functional requirements (quotation breakdown) | 85 | 60 Implemented · 13 Partially Implemented · 0 Not Implemented · 12 Blocked |
+| Non-functional requirements | 7 | 2 Implemented · 3 Partially Implemented · 0 Not Implemented · 2 Blocked |
+| Questionnaire answers | 53 | 28 Implemented · 8 Partially Implemented · 0 Not Implemented · 17 Blocked |
+
+- **Overall completion: about 81 %** of the agreed functional requirements, counting a partial as half. This leaves out the 3 excluded integrations (FR-039 AI, FR-040 Meta, FR-041 TikTok). See §17.H.
+- **Nothing in the quotation is "Not Implemented" without a reason.** Every gap is either a defined fix (§17.C) or waits on the client (§17.D).
+- **Remaining agreed development is small:** about 6–7 developer-days (§17.C). It covers:
+  - one data-integrity defect (F-1);
+  - two to-do and duplicate correctness defects (F-2, F-3);
+  - audit-log completeness;
+  - list consistency;
+  - three small feature gaps;
+  - test coverage.
+- **The client decides the rest.** These items are blocked:
+  - receipts and sales order layout and numbering;
+  - hold expiry;
+  - SPU and 50% shares;
+  - refunds;
+  - PDP / CDP;
+  - attendance (CR-1);
+  - Critical and Pipeline pressure;
+  - floor prices and ROI;
+  - task statuses;
+  - leave approval order, cross-year leave and proration;
+  - lead import format and merge rules;
+  - the access removals that wait for the signature (S-1).
+- **Production readiness:** the code and scripts are ready. The server, domain, backups and live checks are not, and depend on client inputs H-1 – H-12. The runbook (P3) and administrator guide (P4) are not written, and the clean-install rehearsal (P5) is not recorded (§17.E).
+
+### 17.B Complete requirement matrix
+
+#### Functional requirements
+| ID | Requirement | Status | Current implementation | Code | Tests | Evidence / gap | Remaining work | Dependency |
+|---|---|---|---|---|---|---|---|---|
+| FR-001 | Email + password sign-in; session until logout / expiry | Implemented | Argon2id, hashed session tokens, 12 h idle / 7 d absolute, logout | src/server/auth/login.ts, session-store.ts | e2e/auth.spec.ts, security.test.ts | Wrong password and sign-out tested in browser | — | — |
+| FR-002 | Sign-in / sign-out logged with time and IP | Implemented | Rows with verified IP + user agent; own log in My Workplace; counted in Performance | src/server/auth/session-store.ts, src/modules/workplace/service.ts | workplace.test.ts, security.test.ts | Inserted on sign-in and sign-out | Expired sessions write no sign-out row (acceptable) | — |
+| FR-003 | Access denied card + API 403 | Implemented | Policy per module; RestrictedState card; API 403 / 404 out of scope. HR / Accountant land on a dashboard with empty states by design | src/components/ui/empty-state.tsx, src/server/http.ts | auth.spec.ts (every role), module integration tests | Per-role page + API refusal tests | — | — |
+| FR-004 | Global project selector, remembered per user and device | Partially Implemented | Header selector stores the project in a per-device cookie; lists, inventory, bookings and dashboard follow it | src/server/project-scope.ts, src/components/shell/header.tsx | e2e selectTestProject | Cookie is per device, not per user | Remember the choice per user (two users on one device share it today) | — |
+| FR-005 | Lists: search, filters, sorting, 50 per page | Partially Implemented | Leads, clients, bookings, inventory, payments, entries, employees, leave: all four. Meetings 25, tasks 25, performance 25, sign-in log 25, notifications 20, projects 24; projects and teams not sortable | src/modules/*/constants.ts | list-controls.spec.ts, module query tests | PAGE_SIZE constants | 50 per page on the remaining lists; sorting on projects and teams | — |
+| FR-006 | Notifications, unread count, follow-up pop-up | Implemented | Bell with unread count, polling, once-per-session follow-up pop-up; reminder window is an admin setting | src/modules/notifications/service.ts, notification-bell.tsx | notifications.test.ts, leads-notifications.spec.ts | Pop-up tested in browser | Production: set the reminder minutes (off until set) | N2–N6 (other events) undefined |
+| FR-007 | Responsive, hamburger below tablet | Implemented | Sidebar collapses; no overflow at 375 / 768 / 1440 px | src/components/shell/app-shell.tsx | responsive.spec.ts | Overflow checks on key pages | Real-device check (NFR-05) | — |
+| FR-008 | Create / update / delete on business records audit-logged | Partially Implemented | audit_logs with before / after in most commands | src/modules/*/commands.ts | module integration tests | Lead notes, follow-ups, reviews, favourites and client notes / follow-ups write timeline rows only; audit_logs.ip never written; no audit-log viewer (SECURITY_AND_PRIVACY §3: 'Admins can view audit logs') | Add audit rows for those commands, store IP, add an admin audit-log view | — |
+| FR-009 | App settings: discount cap, price / sq ft, ROI / sq ft, rotation | Implemented | Settings screens in Tasks, Teams, Notifications, Security, Leave; all audited; affect new proposals and assignments | src/modules/tasks/settings.ts | tasks.test.ts, notifications.test.ts | Cap and defaults tested | Values (price / sq ft, ROI) to enter | C-28 (values) |
+| FR-010 | KPI tiles | Implemented | Total / open / won / lost %, conversion, open pipeline, regenerated; tiles link to the lists | src/modules/dashboard/queries.ts | dashboard.test.ts, dashboard.spec.ts, list-controls.spec.ts | KPI equals leads list for same range | — | — |
+| FR-011 | Range chips + team filter | Implemented | 24h / 7d / 30d / MTD / 6m / Custom; team filter for managers | executive-essentials.tsx | dashboard.spec.ts | Chips update URL and figures | Pipeline-health counts are 'as of now', not range-bound (L) | — |
+| FR-012 | Source and inbound channel breakdown | Implemented | Counts and % by source and channel | src/modules/dashboard/queries.ts | dashboard.test.ts | Totals equal in-range count | — | — |
+| FR-013 | Pipeline health (stale ≥14 d, no meeting, meetings done) | Implemented | Computed per project as of now | src/modules/dashboard/queries.ts | dashboard.test.ts | Stale rule tested | — | — |
+| FR-014 | Aging × meetings matrix | Blocked | Card explains it is waiting; no rows | pipeline-health.tsx | none | rows: [] | Build when defined | M-Q1–M-Q5 (definitions) |
+| FR-015 | Recent leads (20) and top projects | Implemented | Rows open the lead | recent-leads.tsx | dashboard.spec.ts | Linked rows | — | — |
+| FR-016 | Lost by reason and by team | Implemented | Reason opens filtered Lost list; team rows expand | lost-leads.tsx | dashboard.test.ts, dashboard.spec.ts | Click-through tested | Owner in several teams counted under each (D1 proposal) | D1 (multi-team owner) |
+| FR-020 | Create lead with required fields and 8-char code | Implemented | Validated create, unique code, audit + timeline | src/modules/leads/commands.ts | leads.test.ts, leads-notifications.spec.ts | Code and field errors tested | — | — |
+| FR-021 | Ten stages, change logged from → to | Implemented | Fixed stages; Booked only via Bookings; Lost via lost flow | src/modules/leads/rules.ts | leads.test.ts, pipeline.spec.ts | stage_change rows | See finding F-1 (active booking) | — |
+| FR-022 | Leads table, reference columns, sortable | Implemented | All columns, sortable, search, 50 / page | leads-table.tsx, leads/queries.ts | leads.test.ts | Sort map covers all columns | More sort tests | — |
+| FR-023 | Kanban by stage with counts; table toggle | Implemented | Drag moves stage with permission | kanban-board.tsx | pipeline.spec.ts (desktop + touch) | Drag tested | — | — |
+| FR-024 | Pipeline filters combined with AND | Implemented | Stage, follow-up window, source, priority, city, lost reason, date field + range | leads/queries.ts | leads.test.ts | One AND list | Tests for source / city / date filters | — |
+| FR-025 | Lead detail with timeline and files | Implemented | Facts, newest-first timeline, notes, follow-ups, documents, recordings, edits | leads/[id]/page.tsx | leads.test.ts, files.spec.ts | All actions write timeline rows | — | — |
+| FR-026 | Follow-ups; overdue in To-dos; follow-up % | Implemented | Schedule / complete; % in Performance | leads/follow-ups.ts | leads.test.ts, performance.test.ts | Schedule and complete tested | — | — |
+| FR-027 | To-dos buckets, counts match lists | Partially Implemented | 8 lead buckets + overdue tasks / meetings | leads/queries.ts (leadTodos) | leads.test.ts (doneToday) | Pending follow-ups of Lost / Booked leads stay in Today / Overdue: no stage filter, and losing a lead doesn't close them (F-2) | Exclude closed leads' follow-ups; tests for each bucket | — |
+| FR-028 | Time to first touch | Implemented | firstTouchAt from note, file, follow-up, meeting, booking, stage change | leads/support.ts | recordings.test.ts | Set once | — | — |
+| FR-029 | Rotation among active agents of active teams | Implemented | Locked round-robin per project; skips inactive teams and agents on leave; timeline 'rotation' | leads/commands.ts (rotateOwner) | leads.test.ts, leave.test.ts | Even rotation tested | — | — |
+| FR-030 | Manual reassignment, logged | Implemented | Manager (team) / admin; moves pending follow-ups; audit + notification | leads/commands.ts (assignLead) | leads.test.ts, accounts.test.ts | Scope refusal tested | — | C-15 (warn on leave) |
+| FR-031 | Duplicate detection on phone | Partially Implemented | Same-project phone match: regenerate, or saved as Duplicate linked to the original (agreed rule, LEADS_MODULE_PLAN Q1) | leads/commands.ts:135 | leads.test.ts | Create path tested | Editing a lead's phone skips the duplicate check (F-3) | — |
+| FR-032 | Shared-phone groups; merge or reassign | Blocked | View only | phone-overlap/page.tsx | leads.test.ts (empty case) | No merge command | Merge after rules | Merge 1–6 (LEADS_MODULE_PLAN §13) |
+| FR-033 | Regenerated leads, unworked first | Implemented | Flag, timeline, owner notified, sorted unworked first | leads/commands.ts | leads.test.ts | Flag + sort | — | — |
+| FR-034 | Favourites per user | Implemented | Own stars only | leads/commands.ts (setFavorite) | leads.test.ts | Other users' stars hidden | — | — |
+| FR-035 | Lost with reason; agent requests need approval | Implemented | One pending request per lead; decision logged and notified | leads/commands.ts | leads.test.ts, leads-notifications.spec.ts | Approve / reject tested | — | — |
+| FR-036 | Manager reviews visible to agent | Implemented | Reviews feed scoped to own leads | leads/queries.ts | leads.test.ts | Scope filter | Positive-path test | — |
+| FR-037 | Won view = Booked | Implemented | View filter stage = booked | leads/won/page.tsx | bookings.test.ts (indirect) | — | — | — |
+| FR-038 | Recordings and documents, type and size validated | Implemented | Sniffed types, 25 MB / 10 MB, private storage | recordings/validation.ts, documents/validation.ts | recordings.test.ts, documents.test.ts, files.spec.ts | Disguised and oversized files refused | — | — |
+| FR-039 | AI call analysis | Blocked | Not built | — | none | — | — | Excluded integration (separate quote) |
+| FR-040 | Meta lead ads | Blocked | Channel label only | — | none | — | — | Excluded integration (client credentials, approval) |
+| FR-041 | TikTok lead ads | Blocked | Channel label only | — | none | — | — | Excluded integration (client credentials, approval) |
+| FR-042 | City from managed list, with 'Other' | Partially Implemented | Select from the cities lookup (FK); free text impossible | leads/validation.ts, lead-fields.tsx | none | No 'Other' option | Add 'Other' with a validated free-text city; test | — |
+| FR-043 | Lead CSV import (migration) | Blocked | Not built | — | none | — | Build importer | Q-P5 (SaleStorm export sample) |
+| FR-050 | Client created at Confirmed or by admin | Implemented | ensureClientForLead on confirm; manual convert | bookings/commands.ts, clients/commands.ts | bookings.test.ts, clients.test.ts | Confirm creates client | — | — |
+| FR-051 | Clients list, search, investment filter | Implemented | Columns, search, project-investment filter | clients/queries.ts | clients-investments.test.ts | Filter tested | — | — |
+| FR-052 | Client detail: investments, contracts / documents, payments, follow-ups, notes | Partially Implemented | All except contracts / documents (placeholder text) | clients/[id]/page.tsx | clients.test.ts | Placeholder 'Contract documents arrive with the client's templates' | Show the client's lead documents on the client page | Contract templates (Q-B5) for generated contracts only |
+| FR-060 | Projects CRUD; inactive hidden from agents | Implemented | Type, status, company, location, description | projects/commands.ts | projects.test.ts | Selector filter tested | — | — |
+| FR-061 | Per-project inventory dimensions | Implemented | Lists constrain unit fields | projects/commands.ts, inventory/commands.ts | inventory.test.ts | Out-of-list value refused | — | — |
+| FR-062 | Project cards | Implemented | Type, status, units tracked, links | project-card.tsx | projects.test.ts | — | — | — |
+| FR-070 | Unit fields | Implemented | All fields, unique unit no., audited, proposal price sync | inventory/commands.ts | inventory.test.ts | — | — | — |
+| FR-071 | Statuses driven by bookings | Partially Implemented | Create → Reserved, Confirm → Booked, Cancel → Available | inventory/status.ts, bookings/commands.ts | inventory.test.ts, bookings.test.ts | No path to Sold; Partially booked never set | Booked → Sold trigger | Q-B4 |
+| FR-072 | Sale models: whole, SPU, 50% | Blocked | Stored and filterable; booking refuses non-whole units | inventory/status.ts | inventory.test.ts | BUSINESS_RULE on SPU booking | Shares, pricing, partial status | Q-B1 |
+| FR-073 | Inventory filters | Implemented | Search, project, status, nature, sale model | inventory/queries.ts | inventory.test.ts | All five tested | — | — |
+| FR-074 | Unit detail with booking history | Implemented | Dimensions, status history, bookings | inventory/[id]/page.tsx | none | Page reads bookingsFor(unit) | Page test | — |
+| FR-075 | Unit CSV import with validation report | Implemented | Check, then all-or-nothing import, audited | inventory/import.ts | unit-import.test.ts, inventory-import.spec.ts | 13 integration tests | — | — |
+| FR-080 | New booking on Available unit; lead → Booking in Process | Implemented | Guarded unit claim, lead moved | bookings/commands.ts | bookings.test.ts | Concurrent claim tested | See F-1 | — |
+| FR-081 | Hold from token; auto-release at expiry | Blocked | Reserved-until entered by hand; overdue flagged only | bookings/queries.ts | bookings.test.ts (flag) | No expiry job | Duration rule + release job | Q-B2 |
+| FR-082 | Booking stages, logged, no invalid jumps | Implemented | One step forward; confirm / cancel by manager / admin | bookings/commands.ts, policy.ts | bookings.test.ts | Jump and concurrency tests | — | Q-B3 (stage rules are proposed defaults) |
+| FR-083 | Overview incl. 30% milestone | Implemented | Total, paid / total, milestone, reserved until, agreement, docs status | bookings/[id]/page.tsx | finance.test.ts (30% boundary) | 'turns the 30% milestone on exactly at 30%' test | — | — |
+| FR-084 | Printable Provisional receipt and Sales order | Blocked | Tabs show 'awaiting template' | bookings/[id]/page.tsx | none | Placeholder text | Print views, numbering | Q-B5 layout + C-21 numbering |
+| FR-085 | Bookings list: search, project, stage | Implemented | Plus sorting and paging | bookings/queries.ts | bookings.test.ts, list-controls.spec.ts | — | — | — |
+| FR-090 | Tasks with type, status, due, assignee, links | Implemented | CRUD, history, scopes | tasks/commands.ts | tasks.test.ts | — | — | C-30 (status list) |
+| FR-091 | Proposal builder, cap, 36 default, print | Implemented | Total = area × rate; agent cap; editable rows; print page | tasks/plan.ts, app/print/proposal | tasks.test.ts, tasks-rules.test.ts | Cap and total tested | Floor map is CR-2 | — |
+| FR-092 | Overdue tasks in To-dos | Implemented | Overdue tab | tasks/queries.ts | tasks.test.ts | — | — | — |
+| FR-100 | Meetings with status and notes | Implemented | Create / edit / complete / cancel | meetings/commands.ts | meetings.test.ts | Concurrency test | Browser test | — |
+| FR-101 | Completing a meeting can move lead to Meeting Done | Implemented | Ticked-by-default option, forward-only | meetings/commands.ts | meetings.test.ts | — | — | D1 rule unconfirmed |
+| FR-102 | Meetings list filters | Implemented | Search, status, organizer, lead, overdue, sort | meetings/queries.ts | meetings.test.ts | 25 per page (FR-005) | — | — |
+| FR-110 | Per-agent targets, daily / weekly / monthly | Implemented | Calls, meetings, sold sq ft; audited | targets/service.ts | teams-targets.test.ts | Scope tested | — | — |
+| FR-111 | Achievement vs target | Partially Implemented | Meetings and sold sq ft computed; calls null | targets/service.ts | teams-targets.test.ts | 'calls unavailable' test | Calls % when a call source exists | C-19 |
+| FR-120 | Teams with manager, members, active | Implemented | Inactive teams excluded from rotation | teams/commands.ts | teams-targets.test.ts | — | — | — |
+| FR-121 | Daily report per team per date | Implemented | Unique per team/date, same-day edit, admin review | teams/commands.ts | teams-targets.test.ts | — | — | Q-H3 (manual values default) |
+| FR-122 | Duty roster; Leads off skipped by rotation | Partially Implemented | Statuses, day / month views, 11:00 lock | teams/commands.ts | teams-targets.test.ts, questionnaire-screens.spec.ts | Rotation ignores roster | Skip 'Leads off' in rotation once confirmed | C-15 / TQ3 |
+| FR-130 | My Workplace: leave, holidays, sign-ins | Implemented | Own data only, year selector | workspace/page.tsx | workplace.test.ts, leave.test.ts | — | — | — |
+| FR-140 | Employee directory | Implemented | Records with or without login | employees/service.ts | employees.test.ts, questionnaire-screens.spec.ts | — | — | Q12 (fixed lists, low) |
+| FR-141 | Holiday calendar, company and regional | Implemented | Team region filter in My Workplace | holidays/service.ts | holidays.test.ts, workplace.test.ts | — | — | C-3 (multi-team) |
+| FR-142 | Leave: types, balance, approvals | Partially Implemented | Calendar days, medical from annual, over-balance blocked, overlap refused, balances, cancellation | leave/service.ts | leave.test.ts, leave.spec.ts | Staff requests can't be approved until approvers set; same person can approve both steps (F-6) | Require two different approvers | C-4, C-5, C-6, C-13 |
+| FR-143 | Attendance | Blocked | Not built; screens say 'not available' | hr/page.tsx | none | — | Whole module | CR-1 (commercial) + C-16 |
+| FR-150 | Agent KPI table | Partially Implemented | All columns except calls / call minutes ('—') | performance/service.ts | performance.test.ts | — | Calls if recordings count | C-19 |
+| FR-151 | Performance charts | Partially Implemented | Outcome mix, top closers; call charts are placeholders | performance/page.tsx | performance.test.ts | — | Call charts | C-19 |
+| FR-152 | Call quality buckets | Blocked | Duration stored, not aggregated | performance/page.tsx | none | — | Buckets | C-19 |
+| FR-153 | Critical agent flag | Blocked | Disabled filter, 'rule not defined' | performance/page.tsx | none | — | Flag + thresholds | C-17 |
+| FR-200 | Income records | Implemented | CRUD (void, no delete), attachments, audited, totals over all matches | finance/entries.ts | finance-entries.test.ts, finance-entries.spec.ts | — | — | Category lists (client data) |
+| FR-201 | Expense records | Implemented | Same, with payee | finance/entries.ts | finance-entries.test.ts | — | — | — |
+| FR-202 | Booking payments | Implemented | Locked booking row, no overpayment, receipt sequence, idempotent | finance/commands.ts | finance.test.ts, workflows.test.ts | Concurrency tested | — | C-24 (PDP / CDP types) |
+| FR-203 | Outstanding and overdue vs schedule | Implemented | Net of reversals; overdue from payment plan | finance/views.ts | finance.test.ts | Partial, reversed, undated, timezone tests | — | C-27 (down-payment date) |
+| FR-204 | Payment history per booking and client, receipt numbers | Implemented | Booking detail, client detail (all bookings), payments list | finance/queries.ts, clients/[id]/page.tsx:52 | finance.test.ts | — | Receipt code format | C-21 |
+| FR-205 | Reports + CSV | Implemented | Collections, outstanding by project / agent, income vs expense; audited CSV | finance/reports.ts | finance-reports.test.ts, finance.spec.ts | Totals reconcile | See F-7 (reversal date) | — |
+| FR-206 | No hard delete; reversals | Implemented | DB triggers block UPDATE / DELETE | drizzle/0005_finance_payments.sql | finance.test.ts | Trigger tests | — | Q31 (S-1) |
+
+#### Non-functional requirements
+| ID | Requirement | Status | Current implementation | Code | Tests | Evidence / gap | Remaining work | Dependency |
+|---|---|---|---|---|---|---|---|---|
+| NFR-01 | Up to 10 concurrent users | Partially Implemented | Pool of 10 connections | src/server/db/index.ts | none | Not load-tested | 10-user smoke test | — |
+| NFR-02 | List pages < 1.5 s at 10k leads | Partially Implemented | Indexes on key columns | schema.ts | none | No load test | Seed 10k leads and time lists | — |
+| NFR-03 | Business hours; daily backups | Blocked | backup.sh, restore-check.sh exist | scripts/ops | restore-check (test DB) | Not scheduled | Schedule on server | H-1, H-5 (production) |
+| NFR-04 | Security | Implemented | Argon2id, hashed sessions, origin check, rate limit, headers, private files | src/server/* | security.test.ts, security-headers.spec.ts | — | Live checks on server | Production |
+| NFR-05 | Chrome, Edge, Safari, mobile | Partially Implemented | Desktop Chrome + Chrome mobile emulation automated | playwright.config.ts | 72 browser tests | Edge / Safari / real phones untested | Manual cross-browser pass | Devices |
+| NFR-06 | English, PKR, Asia/Karachi, UTC stored | Implemented | Formatting in Asia/Karachi | src/lib/format.ts | dashboard.test.ts, finance.test.ts | Timezone boundary test | — | — |
+| NFR-07 | Source handover after final payment | Blocked | Process item | — | — | — | Hand over repository | Commercial (final payment) |
+
+#### Questionnaire answers (exact answers in `CLIENT_ANSWERS_RECONCILIATION.md`)
+| ID | Requirement | Status | Current implementation | Code | Tests | Evidence / gap | Remaining work | Dependency |
+|---|---|---|---|---|---|---|---|---|
+| Q1 | Records without login | Implemented | Nullable user link; linkable later | employees/service.ts | employees.test.ts, accounts.test.ts | — | — | C-6 (their leave) |
+| Q2 | Admin / Super Admin manage accounts | Implemented | Create, role, reset, deactivate; SA-only for SA | accounts/service.ts | accounts.test.ts, accounts.spec.ts | — | — | C-1 (confirm) |
+| Q3 | Manual disable with lead shift | Implemented | Admin chooses open / lost / booked groups | accounts/service.ts | accounts.test.ts | — | — | C-2 (confirm) |
+| Q4 | Same allowance for all | Implemented | One setting, default 30 | leave/service.ts | leave.test.ts | — | — | C-7 (confirm 30) |
+| Q5 | Holidays by team region | Partially Implemented | Team region filter | workplace/service.ts | workplace.test.ts | Multi-team rule open | — | C-3 |
+| Q6 | 2-step approval | Blocked | Mechanism built; approvers not set | leave/service.ts | leave.test.ts | Requests stay pending | Set order; distinct approvers | C-4 |
+| Q7 | Senior leave by Super Admin | Partially Implemented | Super Admin decides; no self-approval | leave/service.ts | leave.test.ts | — | One or two steps; SA's own leave | C-5 |
+| Q8 | Calendar days | Implemented | Inclusive calendar days | leave/rules.ts | leave-rules.test.ts | — | — | — |
+| Q9 | Team weekends | Implemented | Per-team weekend days on roster | teams | teams-targets.test.ts, questionnaire-screens.spec.ts | — | Attendance use (CR-1) | C-8 |
+| Q10 | CPL = medical | Implemented | Label 'Medical (CPL)' | leave/rules.ts | leave.test.ts | — | — | C-9 (label, certificate) |
+| Q11 | Medical from annual | Implemented | Single balance | leave/service.ts | leave.test.ts | — | — | — |
+| Q12 | Over balance blocked | Implemented | Refused with remaining days | leave/service.ts | leave.test.ts, leave.spec.ts | — | — | — |
+| Q13 | Prorate joiners | Partially Implemented | Provisional day-based method, flagged | leave/rules.ts | leave-rules.test.ts | — | Confirmed method | C-10 |
+| Q14 | No carry-forward | Implemented | Calendar-year balances | leave/service.ts | leave.test.ts | — | — | C-11 (confirm Jan–Dec) |
+| Q15 | Cancel approved leave via Admin / SA | Implemented | Request → decide, days returned, roster cleaned | leave/service.ts | leave.test.ts | — | — | C-12 (confirm details) |
+| Q16 | Past-dated allowed | Implemented | — | leave/service.ts | leave.test.ts | — | — | — |
+| Q17 | Cross-year deduction | Blocked | Held: recorded, not counted, not approvable | leave/service.ts, drizzle/0020 | leave.test.ts | — | Deduction rule | C-13 |
+| Q18 | Approved leave on roster | Partially Implemented | First active team; never overwrites a manager entry | leave/service.ts | leave.test.ts | Bypasses the 11:00 lock for past days | Multi-team, overwrite rule | C-14 |
+| Q19 | Rotation skips agents on leave | Implemented | Approved leave today excluded | leads/commands.ts | leave.test.ts | — | — | C-15 (Leads off, manual assign) |
+| Q20 | Attendance wanted | Blocked | Not built | — | none | — | Module | CR-1 commercial |
+| Q21 | Check-in / out, late, absences, hours, breaks | Blocked | Not built | — | none | — | Module | C-16 |
+| Q22 | HR and Super Admin manage attendance | Blocked | Not built | — | none | — | Module | CR-1, C-16 |
+| Q23 | Critical | Blocked | Not built | — | none | — | — | C-17 |
+| Q24 | Open leads definition | Implemented | Open stages | leads/constants.ts | performance.test.ts | — | — | — |
+| Q25 | Original assignment date | Partially Implemented | Date = original assignment; credit goes to current owner | performance/service.ts | performance.test.ts | Page footnote outdated | Attribute to the original assignee if confirmed | C-18 |
+| Q26 | Completed meetings only | Implemented | — | performance/service.ts | performance.test.ts | — | — | — |
+| Q27 | No manual call entry | Implemented | Calls 'not available' | performance/page.tsx | performance.test.ts | — | — | C-19 (recordings as calls?) |
+| Q28 | Pipeline pressure | Blocked | Not built | — | none | — | Metric | C-20 |
+| Q29 | Receipt code BH-GF/FF/SS-123 | Blocked | Prefix + sequence number | finance/queries.ts | finance.test.ts | — | Code format | C-21 |
+| Q30 | Gaps allowed | Implemented | Sequence | finance/commands.ts | finance.test.ts | — | — | — |
+| Q31 | Reversal approval Admin / SA only | Blocked | Manager still approves (access kept until signature) | finance/policy.ts | finance.test.ts | — | Remove manager | S-1 |
+| Q32 | Refund after deduction | Blocked | Cancel blocked when paid | bookings/commands.ts | finance.test.ts | — | Refund workflow | C-22, CR-3 |
+| Q33 | Methods + proofs | Implemented | Pay order added; proof attachments on payments | finance/proofs.ts | payment-proofs.test.ts, payment-proofs.spec.ts | — | Remove / replace a wrong proof (none today) | C-23 (mandatory?) |
+| Q34 | PDP / CDP | Blocked | Not defined | — | none | — | Types / stages | C-24 |
+| Q35 | Overpayment blocked | Implemented | In locked transaction | finance/commands.ts | finance.test.ts | — | — | — |
+| Q36 | Only Super Admin edits proposals | Blocked | Unchanged (access kept) | tasks/policy.ts | tasks.test.ts | — | Restrict editing | S-1, C-25 |
+| Q37 | Remainder on last installment | Implemented | — | tasks/plan.ts | tasks-rules.test.ts | — | — | — |
+| Q38 | Default discount 0% | Implemented | — | tasks/validation.ts | tasks.test.ts | — | — | — |
+| Q39 | Save with warning | Implemented | Client-side warning | task-form.tsx | none | — | Test | — |
+| Q40 | Agent cap 5% | Implemented | Seeded | tasks/constants.ts | tasks.test.ts | — | — | — |
+| Q41 | Manager cap 5% | Implemented | Migration 0014 | drizzle/0014 | tasks.test.ts | — | — | — |
+| Q42 | Down payment 25% | Implemented | Default 25%, 36 installments kept | tasks/constants.ts | tasks.test.ts | — | — | C-26 (installments) |
+| Q43 | Installments on the 10th | Partially Implemented | Dated rows from a chosen first month; down payment undated | tasks/plan.ts | tasks.test.ts, questionnaire-screens.spec.ts | — | First-month and down-payment rule | C-27 |
+| Q44 | Floor prices GF / FF / SF + ROI | Blocked | One global price setting, unit prices used | tasks/settings.ts | none | — | Floor pricing | C-28 |
+| Q45 | Admin / SA assign to all | Partially Implemented | Admins assign to everyone incl. HR / Accountant; others still assign in scope | tasks/policy.ts | tasks.test.ts | — | Removal half | S-1, C-29 |
+| Q46 | Task status list | Blocked | Statuses unchanged | tasks/constants.ts | none | — | — | C-30 |
+| Q47 | Proposals reflect unit changes | Implemented | Auto-sync + reconciliation | tasks/price-sync.ts | tasks.test.ts | — | — | C-31 (printed copy?) |
+| Q48 | Only Available units | Implemented | Picker and server | tasks/commands.ts | tasks.test.ts, questionnaire-screens.spec.ts | — | — | — |
+| Q49 | Floor map on print | Blocked | Not built | — | none | — | CR-2 | Plan images + CR-2 approval |
+| Q50 | Sign-in log deletion | Blocked | 12-month setting, deletion off, dry-run job | security/service.ts | security.test.ts | — | Turn on after dry run | S-1 + scheduler |
+| Q51 | Sign-ins = authentication only | Implemented | — | workplace/service.ts | workplace.test.ts | — | — | — |
+| Q52 | Playback: Manager, Admin, SA | Blocked | Owner agent can still play (access kept) | files/lead-files.ts | recordings.test.ts | — | Remove agent playback | S-1, C-32 |
+| Q53 | Lifetime retention, SA delete | Partially Implemented | Kept; Super Admin hides (file kept), audited | files/lead-files.ts | recordings.test.ts | — | Permanent erase if wanted | C-33 |
+
+#### Quotation feature lines → rows
+- **Dashboard:**
+  - Sales overview / statistics / source reports / charts: FR-010 – 013, FR-016.
+  - Recent leads: FR-015.
+  - Notifications & follow-up alerts: FR-006.
+- **Leads:** FR-020 – 038, FR-042 (lead history: FR-025).
+- **Clients:** FR-050 – 052, FR-204.
+- **Projects:** FR-060 – 062.
+- **Inventory:** FR-070 – 075.
+- **Bookings:**
+  - Create / unit selection: FR-080.
+  - Token & hold: FR-081.
+  - Status: FR-082.
+  - Payment tracking: FR-083, FR-202.
+  - Receipts & sales order: FR-084.
+- **Tasks:** FR-090 – 092.
+- **Meetings:** FR-100 – 102.
+- **Targets:** FR-110 – 111.
+- **Teams:**
+  - Team management / members: FR-120.
+  - Performance: FR-120 – 121.
+  - Daily reports: FR-121.
+  - Duty roster: FR-122.
+- **HR:**
+  - Employee records: FR-140.
+  - Holidays: FR-141.
+  - Leave requests, approvals and balances: FR-142.
+- **My Workplace:** FR-130.
+- **Performance:**
+  - Agent performance, lead conversion, calls & follow-ups, meetings: FR-150.
+  - Attendance: FR-143.
+  - Charts: FR-151.
+- **Accounts & Finance:** FR-200 – 206.
+
+#### Findings (checked in code)
+| # | Severity | Finding | Where |
+|---|---|---|---|
+| F-1 | **High** | A lead in "Booking in Process" with an active booking can still be moved to another stage or marked Lost. The unit stays Reserved and the booking stays open, so the lead and the booking disagree. Only Booked leads are protected. | `leads/commands.ts` changeStage :299, markLost :450; `leads/rules.ts` |
+| F-2 | Medium | Pending follow-ups of Lost or Booked leads stay in To-dos (Today, Overdue) and in reminders. Losing a lead does not close them, and the buckets have no stage filter. | `leads/queries.ts` :343–366 |
+| F-3 | Medium | Editing a lead's phone number skips the duplicate check. | `leads/commands.ts` updateLead |
+| F-4 | Medium | Audit-log gaps: lead notes, follow-ups, reviews and favourites, and client notes and follow-ups, write no audit row. The audit row's IP is never stored. There is no admin view of the audit log (SECURITY_AND_PRIVACY §3). | `leads/commands.ts`, `clients/commands.ts` |
+| F-5 | Medium | Lists below 50 per page: meetings, tasks, performance and sign-in log (25), notifications (20), projects (24). Projects and teams can't be sorted (FR-005). | `*/constants.ts` |
+| F-6 | Medium | One person can approve both leave steps when both steps are the same role, for example two Admin steps. | `leave/service.ts` :198–255 |
+| F-7 | Low–Medium | A reversal takes the original payment's date, so a later reversal changes an earlier month's collections and doesn't appear in the month it happened. Which date should count is a finance decision (D-F1). | `finance/commands.ts` :165, `finance/reports.ts` :54 |
+| F-8 | Low | Leave approved for past days writes roster days that are already locked (after 11:00). The roster keeps one entry per person per day, so a member in two teams overwrites the other team's entry. | `leave/service.ts` :220, `teams/commands.ts` :342 |
+| F-9 | Low | The Performance page footnote still describes counting by creation date. Credit goes to the current owner on the original assignment date (C-18). | `performance/page.tsx` :214 |
+| F-10 | Low | A wrong password on an inactive account says "This account is inactive", which reveals that the account exists. The login rate limit is kept in memory and resets on restart. | `auth/login.ts` :42–47, `auth/rate-limit.ts` |
+| F-11 | Low | The finance CSV export falls back to "collections" for an unknown report name. Payment proofs can't be removed or replaced. | `finance/reports.ts`, `finance/proofs.ts` |
+| F-12 | Docs | This file, §12.2 Q17, says cross-year leave is "refused"; the code holds it (corrected in §13.1). `PRODUCTION_HANDOVER_CHECKLIST.md` and §4 above still say "13 migrations / 0000–0012"; there are 22. | docs |
+
+### 17.C Remaining development work (agreed, no client decision needed)
+| # | Item | Rows | Estimate |
+|---|---|---|---|
+| 1 | Block lead stage moves and Lost while the lead has an active (not cancelled) booking: "managed from the booking", like Booked leads (F-1) | FR-021, FR-080 | 0.5 d |
+| 2 | Leave closed leads' follow-ups out of To-dos and reminders (F-2) | FR-027 | 0.25 d |
+| 3 | Duplicate check when a phone is edited (F-3) | FR-031 | 0.25 d |
+| 4 | Audit rows for the missing commands; store the IP; an Admin / Super Admin audit-log view with filters (F-4) | FR-008 | 1 d |
+| 5 | 50 per page and sorting on the remaining lists (F-5) | FR-005 | 0.5 d |
+| 6 | Require two different people for two-step leave approval (F-6). The approval order itself stays C-4. | FR-142 | 0.25 d |
+| 7 | City "Other" with a validated free-text city | FR-042 | 0.5 d |
+| 8 | Remember the active project per user, not only per device | FR-004 | 0.25 d |
+| 9 | Client page: list the client's lead documents (contract templates stay with Q-B5) | FR-052 | 0.25 d |
+| 10 | Small fixes: Performance footnote (F-9), generic sign-in message (F-10), export report validation (F-11), stale docs (F-12) | — | 0.25 d |
+| 11 | Missing tests: browser tests for booking create / advance / cancel, meetings, targets, daily reports and task pages; API-level 403 tests for the reports export, leave and performance routes; to-do bucket parity; pipeline filters | — | 1.5 d |
+| 12 | NFR checks: 10k-lead timing (NFR-02) and a 10-user smoke test (NFR-01) | NFR-01, 02 | 0.5 d |
+| | **Total** | | **≈ 6–6.5 developer-days (45–50 h)** |
+
+### 17.D Client decisions and dependencies
+| ID | Decision needed | Why the build depends on it | Rows |
+|---|---|---|---|
+| S-1 | Sign and date the questionnaire | Required before any access is removed (Q31, Q36, Q45, Q52) and before sign-in log deletion (Q50) | Q31, Q36, Q45, Q50, Q52 |
+| C-1 | May an Admin manage a Super Admin account? | Today only a Super Admin can | Q2 |
+| C-2 | Which leads (and follow-ups, tasks, meetings) move on deactivation | Defines the shift | Q3 |
+| C-3 | Region and weekend for a person in several teams | Two teams can give two answers | Q5, Q9, FR-141 |
+| C-4 | Who approves leave first and second; what happens without a manager | No staff request can be approved until set | Q6, FR-142 |
+| C-5 | Senior leave: one step? Who approves a Super Admin's own leave? | Self-approval is blocked | Q7 |
+| C-6 | Leave for staff without a login | They can't submit | Q1, FR-142 |
+| C-7 | Confirm 30 days | Allowance value | Q4 |
+| C-8 | What team weekends are used for | Roster only vs attendance | Q9 |
+| C-9 | "Medical" label; certificate? | Form and labels | Q10 |
+| C-10 | Proration method and rounding | Joiners' balances (provisional now) | Q13 |
+| C-11 | Leave year Jan–Dec? | Balance reset | Q14 |
+| C-12 | Cancellation details | Confirms the flow built | Q15 |
+| C-13 | Cross-year deduction: split, or old year | Held requests can't be approved | Q17 |
+| C-14 | Leave vs a manager's roster entry; several teams | Roster writing | Q18 |
+| C-15 | Does "Leads off" skip rotation? Block or warn when assigning to someone on leave? | Rotation rules | Q19, FR-122 |
+| C-16 | Attendance capture, hours, lateness, breaks, absence, self-view | Attendance can't be designed | Q20–Q22, FR-143 |
+| CR-1 | Commercial decision on attendance (quoted as one Performance line; the answers describe a full module, 6–9 d) | Scope and price | FR-143 |
+| C-17 | Critical: an agent or a lead, and the thresholds | No rule | Q23, FR-153 |
+| C-18 | Original assignment: is the original assignee credited? | Performance attribution | Q25 |
+| C-19 | Does each uploaded recording count as a call? | Calls in performance, targets and call quality | Q27, FR-111, FR-150 – 152 |
+| C-20 | Pipeline pressure formula and period | No formula | Q28 |
+| C-21 | Receipt code: BH, floor codes (SS vs SF), restart rule, reversals | Printed on legal documents | Q29, FR-084, FR-204 |
+| C-22 / CR-3 | Refund deduction: who decides and approves; income treatment; unit release | Paid bookings can't be cancelled today | Q32 |
+| C-23 | Is a payment proof mandatory? | Proofs are optional now | Q33 |
+| C-24 | What PDP and CDP mean | Payment types and stages | Q34 |
+| C-25 | May proposal owners fix a proposal before printing? | Proposal locking | Q36 |
+| C-26 | Keep 36 installments? | Default count | Q42 |
+| C-27 | First installment month; down-payment due date | Generated dates; overdue on the down payment | Q43, FR-203 |
+| C-28 | Floor prices: which projects, override or fill, ROI rate | Proposal prices | Q44, FR-009 |
+| C-29 | Can agents and managers still create their own tasks? | Assignment policy | Q45 |
+| C-30 | Task types vs statuses; full list | Overdue logic depends on statuses | Q46, FR-090 |
+| C-31 | Keep a copy of what was printed? | Price disputes | Q47 |
+| C-32 | Agents upload but can't play their own recordings? | Removes access | Q52 |
+| C-33 | Recording delete: erase, or hide | Irreversible | Q53 |
+| CR-2 | Floor map on proposals (plan images, change request) | Assets + scope | Q49 |
+| Q-B1 | SPU / 50% shares: sizing, pricing, Sold | Share bookings | FR-072 |
+| Q-B2 | Token amount → hold duration; auto-release | Holds never expire today | FR-081 |
+| Q-B3 / Q-B4 | Mandatory stages; when Booked becomes Sold | Unit status lifecycle | FR-071, FR-082 |
+| Q-B5 | Provisional receipt and Sales order templates | Print views | FR-084, FR-052 |
+| D-F1 | Date a reversal counts in collections: original date or reversal date (F-7) | Monthly figures | FR-205 |
+| M-Q1 – M-Q5 | Aging matrix definitions | No definition | FR-014 |
+| Merge 1–6 | Shared-phone merge rules | Merge is irreversible | FR-032 |
+| Q-L7 | Who may delete leads (soft delete) | No deletion today | Leads |
+| Q-P5 | SaleStorm export sample and mapping | Lead import | FR-043 |
+| N2 – N6 | Further notification events; email or push | Only 5 events exist | FR-006 |
+| D1 | Owner in several teams on the dashboard | Lost-by-team count | FR-016 |
+| Q12, TQ2 – TQ8, Q-H3 | Fixed department lists; roster and report details; daily-report values manual | Defaults in use | FR-121, FR-140 |
+| **Production** | H-1 – H-12: server, SSH, domain / DNS, database, backup destination, first Super Admin, users, lookup lists, company details, CDN, maintainer | Deployment and handover | NFR-03 |
+
+**Excluded integrations, not unfinished work:**
+- AI call analysis (FR-039), Meta (FR-040) and TikTok (FR-041) lead ads;
+- WhatsApp, email and SMS;
+- telephony, payment gateways, bank integrations and maps.
+
+The quotation excludes these unless they are quoted separately.
+
+### 17.E Production deployment checklist (before handover)
+1. Client supplies H-1 – H-5 and H-11 (server, SSH, domain / DNS, database, backup destination, CDN).
+2. Client supplies H-6 – H-10 (first Super Admin, users, lookup lists, company details).
+3. Write the P3 runbook (systemd unit, update and rollback, log location) and the P4 administrator guide. Fix the stale migration counts.
+4. Harden scripts:
+   - `db-seed` must refuse any database that isn't a development one, not only when `NODE_ENV=production`;
+   - never ship `.env.local`;
+   - fail at startup in production if `FILE_STORAGE_DIR` is missing.
+5. Run and record the P5 clean-install rehearsal on the test database.
+6. Freeze the release commit: typecheck, lint, Vitest, Playwright (idle machine), drift check and build.
+7. Server hardening: firewall 22 / 80 / 443, key-only SSH, app user, UTC, automatic security updates.
+8. Production database and role. Fresh secrets. Env file mode 600, without `TEST_DATABASE_URL`.
+9. File-storage volume, mode 700, outside the app folder.
+10. Caddy: TLS, a request body cap, and no duplicate headers.
+11. `npm ci`, `npm run build`, `npm run db:migrate`, then start the systemd service.
+12. P1 setup with `--confirm-database` and the approved lookups. The client types the Super Admin password.
+13. Client creates users and teams and sets the settings: reminder minutes, approval steps, price and ROI if known.
+14. Confirm that no development account or demo project exists.
+15. Live checks:
+    - headers;
+    - real IP, and a spoofed forwarded header ignored;
+    - app port closed;
+    - upload and playback over HTTPS;
+    - login rate limit;
+    - a spot-check for each role.
+16. Schedule sign-in log pruning (deletion off) and run one `--dry-run`.
+17. Nightly backup (database + files) to an off-server destination, with retention and a failure alert. Take the first backup and check it.
+18. Run the restore check on the server and record the row counts.
+19. Client acceptance testing on desktop and phone (`PRODUCTION_HANDOVER_CHECKLIST.md` §8–§9). Close severity 1–2 defects.
+20. Hand over the runbook, the administrator guide and the list of deferred and excluded items. Get written acceptance. Rotate any secrets Zeploy Tech held.
+
+**Production readiness by area:**
+- **Ready:** authentication and authorization, upload security, migrations and P1 setup (client lists still needed), env template.
+- **Partially ready:** HTTPS / server configuration (no unit file, live checks never run), backups (no pruning, alert or encryption), restore (rehearsed only on the test database), error logging (stdout only), removal of development accounts (the seed guard depends on `NODE_ENV` alone), build and deployment (P3 and P4 missing).
+- **Not ready:** live environment testing.
+
+### 17.F Test and quality assessment
+- **Latest verified results (round 6, 3 Nov 2026):**
+  - typecheck: pass;
+  - lint: 0 problems;
+  - Vitest: 46 files, 426 / 426;
+  - Playwright: 72 / 72 in three consecutive full runs on an idle machine;
+  - build: 101 / 101 pages;
+  - 22 additive migrations, no drift.
+- **What the tests prove:** most integration tests check real behaviour against a PostgreSQL test database: permissions per role, concurrency (payments, unit claims, stage moves), database triggers (payment immutability), calculations against ledger rows, and audit rows. Browser tests drive the production build with real sign-in.
+- **Gaps:**
+  - no browser tests for creating, advancing or cancelling a booking, or for meetings, targets, daily reports and task pages;
+  - no API-level 403 tests for the finance export, leave or performance routes (the services are tested);
+  - to-do bucket parity is tested for one bucket only;
+  - pipeline filters beyond stage and priority are untested;
+  - the review feed's positive path is untested;
+  - unit detail and printed proposal output are untested;
+  - NFR-01 / NFR-02 have no load or concurrency tests;
+  - Edge, Safari and real phones are untested;
+  - the shared-phone test only asserts that there are zero groups.
+- **Weak spots:** a few tests assert only that something is refused, not the positive path (reviews, shared phones). Some Q-rules are covered only by unit tests of the rules module, not end to end (the Q39 warning).
+
+### 17.G Recommended implementation order
+1. **F-1, the booking ↔ lead integrity guard.** It's data integrity, small and high impact.
+2. **F-2 and F-3**, to-do and duplicate correctness. Users see wrong lists today.
+3. **F-6**, the two-person leave approval. It's a control weakness.
+4. **F-4**, audit completeness and the audit-log view, needed before production data exists.
+5. **Production hardening in code**: the seed guard, the storage startup check and the sign-in message.
+6. **F-5, FR-042, FR-004, FR-052**: consistency and small gaps.
+7. **The missing tests and the NFR timing checks.**
+8. **P3, P4 and the P5 rehearsal.** Then deployment once H-1 – H-12 arrive.
+9. **Client-dependent work, in this order once answered:**
+   - S-1 access removals (small);
+   - C-4 / C-13 / C-10 leave;
+   - C-21 + Q-B5 receipts and sales order;
+   - Q-B2 hold expiry;
+   - C-27 / C-28 proposals;
+   - C-19 calls;
+   - C-17 / C-20 metrics;
+   - Q-B1 shares;
+   - Merge and Q-L7;
+   - Q-P5 import;
+   - CR-3, CR-2 and CR-1 if approved and quoted.
+
+### 17.H Completion estimate
+**How it's calculated:** the 82 in-scope functional rows (85 minus the 3 excluded integrations). Implemented counts 1, Partially Implemented counts 0.5, Blocked counts 0: (60 + 13 × 0.5) / 82 = **81 %**.
+
+This ignores how big each item is. Most Blocked rows are small once the client decides; attendance (CR-1) is the exception. By effort, the agreed build is about 93–95 % done.
+
+| Bucket | Remaining |
+|---|---|
+| **Agreed development** (§17.C) | **≈ 6–6.5 developer-days** |
+| **Client-dependent**, once decided | ≈ 8–12 developer-days without change requests: <br>- leave decisions 1–1.5 d<br>- receipts / sales order + code 2 d<br>- hold expiry 1 d<br>- SPU shares 2–3 d<br>- calls from recordings 1 d<br>- Critical + Pipeline pressure 1–1.5 d<br>- aging matrix 1 d<br>- merge 1.5 d<br>- lead import 1–2 d<br>- floor prices 0.5–1 d<br>- task statuses 0.5–1 d<br>- S-1 removals 0.5 d<br>- recording erase 0.25 d<br><br>Change requests on top: CR-1 attendance 6–9 d, CR-2 floor map 3–4 d, CR-3 refunds 3–5 d. |
+| **External integrations** | Not in scope. Quoted separately on request (AI, Meta, TikTok, WhatsApp, email, SMS). |
+| **Deployment and handover** | ≈ 1.5 d preparation (P3, P4, P5, script hardening), plus 1 d deployment, live checks and backup / restore on the server once H-1 – H-12 are provided, plus client acceptance time. |
+
+
+## 18. F-1 fixed: a lead's stage follows its open booking (3 Nov 2026)
+
+**Root cause.** Creating a booking moves the lead to Booking in Process, but the Leads paths only protected **Booked** leads. A lead with an open booking (any stage except Confirmed or Cancelled) could still be marked Lost, or moved to any stage through the pipeline or stage menu. Approving an agent's earlier lost request didn't check either. The unit then stayed Reserved and the booking open while the lead said otherwise.
+
+**Rule applied (existing rules, nothing new):** "managed from the booking", the rule that already covers Booked leads, now also covers a lead with an open booking. To mark it Lost or move it, cancel the booking first; that releases the unit, as before. Nothing is cancelled automatically, and no cancellation rule changed.
+
+**Where it is enforced:**
+- `leads/commands.ts`:
+  - `changeStage`: only a move back to Booking in Process is allowed;
+  - `markLost`: direct, and the agent request;
+  - `decideLostRequest`: approval is refused and the request stays pending (it can still be rejected).
+- `meetings/commands.ts` `moveLeadForward`: the meeting is saved, the lead isn't moved.
+- `bookings/commands.ts` `setLeadStage`: re-checks the lead after locking it. If it became Lost meanwhile, the whole booking, including the unit claim, rolls back.
+- Migration **0022** (additive): trigger `leads_stage_follows_open_booking` refuses the same change from any other writer. No existing row changed. Development data was checked first and had no inconsistent lead.
+
+**Concurrency:** every path locks the lead row, then checks for open bookings. Booking creation re-checks under the same lock, so a concurrent Lost and booking can't both succeed.
+
+**Tests:**
+- `bookings.test.ts` "F-1", 9 tests:
+  - Lost direct, request and approval refused;
+  - every other stage refused;
+  - meetings don't move the lead;
+  - the database trigger;
+  - free moves without a booking;
+  - cancel → unit Available → Lost allowed → unit bookable again;
+  - confirmed leads still locked;
+  - concurrent Lost vs booking and concurrent move vs booking, 6 rounds each.
+- `e2e/booking-lead-stage.spec.ts`:
+  - Mark lost refused on the lead page, and the pipeline drag refused, both with the explanation;
+  - cancel the booking in the UI, then the unit is Available and the lead can be marked lost.
+
+**Verification:**
+
+| Check | Result |
+|---|---|
+| Typecheck, lint | Pass |
+| Vitest | 46 files, 435 / 435 |
+| `bookings.test.ts` alone | 21 / 21, three runs |
+| Schema drift | Clean (23 migrations) |
+| Build | 101 / 101 pages |
+| Playwright full suite | 73 / 73 |
+
+The first full Vitest run had 20 timeouts at about 10 s, starting mid-file and continuing into later files. The test database showed no stuck session afterwards, and the next full run passed 435 / 435. This is the same intermittent database stall noted in §16.6, still unexplained.
+
+## 19. F-2 fixed: Lost leads leave To-dos and reminders (3 Nov 2026)
+
+**Root cause.** Every reader of pending follow-ups filtered on the follow-up's own status (`pending`) and never on the lead's stage. Marking a lead Lost doesn't touch its follow-ups (by design: they are history). So a Lost lead's follow-ups stayed in To-dos, in the follow-up window filter, and in reminders.
+
+**Rule (no new business rule):** a pending follow-up is active work only while its lead isn't Lost. The source of truth is `leads.stage`. One shared condition, `followUpLeadActive()` in `leads/support.ts`, is used by every reader:
+
+| Reader | Change |
+|---|---|
+| `leadTodos` (To-dos, every pending bucket: Today, Tomorrow, 7 / 15 / 30 days, Overdue) | Lists and counts both exclude Lost leads. "Done today" (history) is unchanged. |
+| Leads list / pipeline "follow-up window" filter | Excludes Lost leads; the Lost view itself is unchanged |
+| `syncFollowUpReminders` (reminder creation, run on every notifications read; there is no separate job) | No reminder for a Lost lead |
+| Notification list → bell pop-up | A reminder created **before** the lead was lost stays listed (history) but doesn't pop up (`popup: false`) |
+
+**Not changed:**
+- **Follow-up records:** they stay pending, with the same times and notes.
+- **Notification rows** are not modified.
+- **The lead page** still lists the follow-ups.
+- **Performance follow-up %** is a historical KPI; changing its definition would be a business rule.
+- **Permissions, sorting, filters and paging** are as before.
+
+**Restoring a lead:** moving a Lost lead back to an active stage restores its follow-ups in To-dos and reminders, because nothing was deleted. An agent's lost request keeps the follow-ups active until a manager approves it.
+
+**Tests:**
+- `leads.test.ts` "F-2", 4 tests:
+  - Today and Overdue lists and counts, before and after Lost, with history untouched;
+  - the agent's request, then approval;
+  - restore;
+  - the follow-up filter vs the Lost view.
+- `notifications.test.ts` "F-2", 2 tests:
+  - no reminder for a Lost lead, active leads still reminded, restore reminds again;
+  - an earlier reminder is kept but doesn't pop up, and pops up again after restore.
+- `e2e/todos-lost-leads.spec.ts`: overdue follow-up in To-dos → mark lost → gone (still on the lead page) → move back to Contacted → back in Overdue.
+
+**Verification:**
+
+| Check | Result |
+|---|---|
+| Typecheck, lint | Pass |
+| Vitest | 46 files, 441 / 441 |
+| Schema drift | Clean (no migration for F-2) |
+| Build | 101 / 101 pages |
+| Playwright full suite | 74 / 74 |

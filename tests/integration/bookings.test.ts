@@ -4,10 +4,12 @@ import { advanceBooking, cancelBooking, createBooking, updateBookingDetails } fr
 import { bookingFormOptions, getBookingDetail, listBookings } from "@/modules/bookings/queries";
 import { convertLeadToClient, createClient } from "@/modules/clients/commands";
 import { createUnit, setUnitStatus } from "@/modules/inventory/commands";
-import { createLead, markLost } from "@/modules/leads/commands";
+import { changeStage, createLead, decideLostRequest, markLost } from "@/modules/leads/commands";
+import { pendingLostRequests } from "@/modules/leads/queries";
+import { completeMeeting, createMeeting } from "@/modules/meetings/commands";
 import { hashPassword } from "@/server/auth/password";
 import { loadActor } from "@/server/auth/session-store";
-import { auditLogs, bookingStageHistory, bookings, clients, leads, units, users } from "@/server/db/schema";
+import { auditLogs, bookingStageHistory, bookings, clients, leadActivities, leads, units, users } from "@/server/db/schema";
 import type { Database } from "@/server/db";
 import type { Actor } from "@/server/auth/types";
 import { AppError } from "@/server/errors";
@@ -240,6 +242,136 @@ describe.skipIf(!hasTestDb)("Bookings module (PostgreSQL integration)", () => {
       const copy: Partial<typeof b> = { ...b, leadId: await leadOf(f.actors.agent2) };
       delete copy.id;
       await expect(db.insert(bookings).values(copy as typeof b)).rejects.toThrow();
+    });
+  });
+
+  describe("F-1: a lead's stage follows its open booking", () => {
+    const OPEN_BOOKING = /open booking/;
+    const msg = async (p: Promise<unknown>) => (await errorOf(p))?.message ?? "ok";
+
+    it("refuses Lost (direct, agent request and approval) while the booking is open; nothing changes", async () => {
+      const unitId = await unit();
+      const leadId = await leadOf(f.actors.agent1);
+      const { bookingId } = await book(f.actors.agent1, leadId, unitId);
+      await advanceTo(f.actors.agent1, bookingId, ["token_pending"]);
+      const activitiesBefore = (await db.select().from(leadActivities).where(eq(leadActivities.leadId, leadId))).length;
+
+      expect(await msg(markLost(db, f.actors.manager, leadId, { lostReasonId: f.lostReasonId }))).toMatch(OPEN_BOOKING);
+      expect(await msg(markLost(db, f.actors.superAdmin, leadId, { lostReasonId: f.lostReasonId }))).toMatch(OPEN_BOOKING);
+      expect(await msg(markLost(db, f.actors.agent1, leadId, { lostReasonId: f.lostReasonId }))).toMatch(OPEN_BOOKING);
+      expect(await pendingLostRequests(db, f.actors.manager, f.projectId)).toEqual([]);
+
+      expect(await leadStage(leadId)).toBe("booking_in_process");
+      expect(await statusOf(unitId)).toBe("reserved");
+      expect((await db.select().from(bookings).where(eq(bookings.id, bookingId)))[0].stage).toBe("token_pending");
+      expect((await db.select().from(leadActivities).where(eq(leadActivities.leadId, leadId))).length).toBe(activitiesBefore);
+    });
+
+    it("an agent's lost request made before the booking can't be approved while the booking is open, but can be rejected", async () => {
+      const unitId = await unit();
+      const leadId = await leadOf(f.actors.agent1);
+      expect(await markLost(db, f.actors.agent1, leadId, { lostReasonId: f.lostReasonId })).toEqual({ status: "pending_approval" });
+      const { bookingId } = await book(f.actors.manager, leadId, unitId);
+      const [request] = await pendingLostRequests(db, f.actors.manager, f.projectId);
+
+      expect(await msg(decideLostRequest(db, f.actors.manager, request.id, { approve: true }))).toMatch(OPEN_BOOKING);
+      expect(await leadStage(leadId)).toBe("booking_in_process");
+      expect(await pendingLostRequests(db, f.actors.manager, f.projectId)).toHaveLength(1); // still pending
+      await decideLostRequest(db, f.actors.manager, request.id, { approve: false, comment: "Booking in progress" });
+      expect(await pendingLostRequests(db, f.actors.manager, f.projectId)).toEqual([]);
+      expect((await db.select().from(bookings).where(eq(bookings.id, bookingId)))[0].stage).toBe("negotiation");
+    });
+
+    it("refuses every other stage while the booking is open (pipeline drag / stage menu)", async () => {
+      const leadId = await leadOf(f.actors.agent1);
+      await book(f.actors.agent1, leadId, await unit());
+      for (const stage of ["new_lead", "contacted", "qualified_lead", "meeting_scheduled", "meeting_done", "future_opportunity"]) {
+        expect(await msg(changeStage(db, f.actors.manager, leadId, { stage })), stage).toMatch(OPEN_BOOKING);
+      }
+      expect(await leadStage(leadId)).toBe("booking_in_process");
+    });
+
+    it("meetings still save but never move a lead that has an open booking", async () => {
+      // A lead left in an early stage with an open booking (data from before this rule): the booking is
+      // moved onto it directly, as no service can produce this state any more.
+      const { bookingId } = await book(f.actors.manager, await leadOf(f.actors.agent1), await unit());
+      const early = await leadOf(f.actors.agent1);
+      await db.update(bookings).set({ leadId: early }).where(eq(bookings.id, bookingId));
+      const { meetingId } = await createMeeting(db, f.actors.agent1, { title: "Site visit", startsAt: new Date(Date.now() + 3_600_000).toISOString(), leadId: early, moveLead: true });
+      expect(await leadStage(early)).toBe("new_lead");
+      await completeMeeting(db, f.actors.agent1, meetingId, { moveLead: true });
+      expect(await leadStage(early)).toBe("new_lead");
+      // The one manual move allowed is back to Booking in Process, which repairs it.
+      await changeStage(db, f.actors.manager, early, { stage: "booking_in_process" });
+      expect(await leadStage(early)).toBe("booking_in_process");
+    });
+
+    it("the database refuses the same change from any other writer", async () => {
+      const leadId = await leadOf(f.actors.agent1);
+      await book(f.actors.agent1, leadId, await unit());
+      await expect(db.update(leads).set({ stage: "lost_lead" }).where(eq(leads.id, leadId))).rejects.toThrow();
+      await expect(db.update(leads).set({ stage: "contacted" }).where(eq(leads.id, leadId))).rejects.toThrow();
+      expect(await leadStage(leadId)).toBe("booking_in_process");
+    });
+
+    it("leads without an open booking move freely; after cancelling, the unit is Available and the lead can be lost", async () => {
+      const free = await leadOf(f.actors.agent1);
+      await changeStage(db, f.actors.agent1, free, { stage: "contacted" });
+      expect(await leadStage(free)).toBe("contacted");
+
+      const unitId = await unit();
+      const leadId = await leadOf(f.actors.agent1);
+      const { bookingId } = await book(f.actors.agent1, leadId, unitId);
+      await cancelBooking(db, f.actors.manager, bookingId, { reason: "Buyer withdrew before the token" });
+      expect(await statusOf(unitId)).toBe("available");
+      expect(await leadStage(leadId)).toBe("booking_in_process"); // left as is (29 Oct decision)
+      await changeStage(db, f.actors.agent1, leadId, { stage: "future_opportunity" });
+      expect(await markLost(db, f.actors.manager, leadId, { lostReasonId: f.lostReasonId })).toEqual({ status: "lost" });
+      expect(await leadStage(leadId)).toBe("lost_lead");
+      // The released unit can be booked again by another lead.
+      const other = await leadOf(f.actors.agent1);
+      await book(f.actors.agent1, other, unitId);
+      expect(await statusOf(unitId)).toBe("reserved");
+    });
+
+    it("a confirmed booking leaves the lead Booked and still locked; a confirmed lead with no open booking is unchanged", async () => {
+      const unitId = await unit();
+      const leadId = await leadOf(f.actors.agent1);
+      const { bookingId } = await book(f.actors.agent1, leadId, unitId);
+      await advanceTo(f.actors.manager, bookingId, [...PATH, "confirmed"]);
+      expect(await leadStage(leadId)).toBe("booked");
+      expect(await statusOf(unitId)).toBe("booked");
+      expect(await errorCode(markLost(db, f.actors.manager, leadId, { lostReasonId: f.lostReasonId }))).toBe("BUSINESS_RULE");
+      expect(await errorCode(changeStage(db, f.actors.manager, leadId, { stage: "contacted" }))).toBe("BUSINESS_RULE");
+    });
+
+    it("concurrent Lost and booking: one wins, and lead, booking and unit always agree", async () => {
+      for (let i = 0; i < 6; i++) {
+        const unitId = await unit();
+        const leadId = await leadOf(f.actors.agent1);
+        const results = await Promise.allSettled([
+          markLost(db, f.actors.manager, leadId, { lostReasonId: f.lostReasonId }),
+          book(f.actors.manager, leadId, unitId),
+        ]);
+        expect(results.filter((r) => r.status === "fulfilled"), `round ${i}`).toHaveLength(1);
+        for (const r of results) if (r.status === "rejected") expect(r.reason, `round ${i}`).toBeInstanceOf(AppError);
+        const open = await db.select().from(bookings).where(and(eq(bookings.leadId, leadId)));
+        if (open.length) {
+          expect([await leadStage(leadId), await statusOf(unitId)], `round ${i}`).toEqual(["booking_in_process", "reserved"]);
+        } else {
+          expect([await leadStage(leadId), await statusOf(unitId)], `round ${i}`).toEqual(["lost_lead", "available"]);
+        }
+      }
+    });
+
+    it("concurrent stage move and booking never leave the lead outside Booking in Process", async () => {
+      for (let i = 0; i < 6; i++) {
+        const unitId = await unit();
+        const leadId = await leadOf(f.actors.agent1);
+        await Promise.allSettled([changeStage(db, f.actors.manager, leadId, { stage: "contacted" }), book(f.actors.manager, leadId, unitId)]);
+        expect(await leadStage(leadId), `round ${i}`).toBe("booking_in_process");
+        expect(await statusOf(unitId), `round ${i}`).toBe("reserved");
+      }
     });
   });
 

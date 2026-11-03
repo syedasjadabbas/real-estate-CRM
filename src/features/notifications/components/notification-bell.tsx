@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
 
-type Item = { id: string; type: string; title: string; body: string | null; link: string | null; readAt: string | null; createdAt: string };
+type Item = { id: string; type: string; title: string; body: string | null; link: string | null; readAt: string | null; createdAt: string; popup?: boolean };
 type Feed = { unread: number; rows: Item[] };
 
 /** Polling interval (SYSTEM_ARCHITECTURE.md: 30–60 s polling). */
@@ -43,7 +43,7 @@ export function NotificationBell() {
       const { data } = (await res.json()) as { data: Feed };
       setFeed(data);
       const shown = readShown();
-      const next = data.rows.find((r) => r.type === "follow_up_soon" && !r.readAt && !shown.includes(r.id));
+      const next = data.rows.find((r) => r.type === "follow_up_soon" && r.popup !== false && !r.readAt && !shown.includes(r.id));
       if (next) {
         setPopup(next);
         try {

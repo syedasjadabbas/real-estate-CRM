@@ -21,7 +21,7 @@ import { forbidden } from "@/server/errors";
 import { BUSINESS_TIME_ZONE, LEAD_STAGES, PAGE_SIZE, UNATTENDED_HOURS, type LeadStage } from "./constants";
 import { formatPhone } from "./phone";
 import { canAccessLead, canDo, leadScope } from "./policy";
-import { loadAccessibleLead, scopeFilter, teamMemberIds } from "./support";
+import { followUpLeadActive, loadAccessibleLead, scopeFilter, teamMemberIds } from "./support";
 import { leadListQuerySchema, type LeadListQuery } from "./validation";
 
 const owner = alias(users, "owner");
@@ -56,6 +56,8 @@ function filterConditions(query: LeadListQuery, now: Date): SQL[] {
   if (query.lostReason.length) out.push(inArray(leads.lostReasonId, query.lostReason));
   if (query.priority.length) out.push(inArray(leads.priority, query.priority));
   if (query.followUp) {
+    // The follow-up window describes pending work, so Lost leads are not in it (F-2).
+    out.push(followUpLeadActive());
     const day = 24 * 60 * 60 * 1000;
     const inDays = (n: number) => new Date(now.getTime() + n * day);
     const f = leads.nextFollowUpAt;
@@ -340,7 +342,8 @@ export async function leadTodos(db: Database, actor: Actor, projectId: string, b
   const tomorrow = dayStart(now, 1);
   const dayAfter = dayStart(now, 2);
 
-  const pending = eq(followUps.status, "pending");
+  // Pending work only on leads that aren't Lost (F-2); counts and lists both use `ranges`.
+  const pending = and(eq(followUps.status, "pending"), followUpLeadActive())!;
   const ranges: Record<Exclude<TodoBucket, "unattended" | "doneToday">, SQL> = {
     today: and(pending, gte(followUps.dueAt, today), lt(followUps.dueAt, tomorrow))!,
     tomorrow: and(pending, gte(followUps.dueAt, tomorrow), lt(followUps.dueAt, dayAfter))!,

@@ -4,7 +4,7 @@ import type { Database } from "@/server/db";
 import { appSettings, auditLogs, followUps, leads, notifications, teamMembers, teams } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
 import { forbidden, notFound } from "@/server/errors";
-import type { DbOrTx } from "@/modules/leads/support";
+import { followUpLeadActive, type DbOrTx } from "@/modules/leads/support";
 import { parseTask } from "@/modules/tasks/support";
 
 /**
@@ -75,6 +75,7 @@ export async function syncFollowUpReminders(db: DbOrTx, actor: Actor, now = new 
         gte(followUps.dueAt, now),
         lte(followUps.dueAt, new Date(now.getTime() + minutes * 60_000)),
         isNull(leads.deletedAt),
+        followUpLeadActive(),
       ),
     );
   return notify(
@@ -154,6 +155,8 @@ export async function listNotifications(db: Database, actor: Actor, input: unkno
       link: notifications.link,
       readAt: notifications.readAt,
       createdAt: notifications.createdAt,
+      // A reminder created before its lead was marked Lost stays listed (history) but no longer pops up (F-2).
+      popup: sql<boolean>`${notifications.type} = 'follow_up_soon' and not exists (select 1 from ${leads} where ${notifications.link} = '/dashboard/leads/' || ${leads.id}::text and ${leads.stage} = 'lost_lead')`,
     })
     .from(notifications)
     .where(where)

@@ -4,7 +4,7 @@ import { auditLogs, leads, meetingHistory, meetings, users } from "@/server/db/s
 import type { Actor } from "@/server/auth/types";
 import { AppError, notFound } from "@/server/errors";
 import { STAGE_LABELS, type LeadStage } from "@/modules/leads/constants";
-import { loadAccessibleLead, logActivity, teamMemberIds, touchValues, type DbOrTx, type Tx } from "@/modules/leads/support";
+import { hasOpenBooking, loadAccessibleLead, logActivity, teamMemberIds, touchValues, type DbOrTx, type Tx } from "@/modules/leads/support";
 import { parseTask as parse, taskFieldError as fieldError } from "@/modules/tasks/support";
 import { COMPLETE_MOVES_FROM, MEETING_STATUS_LABELS, SCHEDULE_MOVES_FROM } from "./constants";
 import { ORGANIZER_ROLES, assertCanMeeting, canAccessMeeting, canPickOrganizer } from "./policy";
@@ -48,6 +48,8 @@ async function accessibleLead(tx: Tx, actor: Actor, leadId: string) {
  */
 async function moveLeadForward(tx: Tx, actor: Actor, lead: typeof leads.$inferSelect, to: LeadStage, from: LeadStage[], reason: string) {
   if (!from.includes(lead.stage)) return false;
+  // The stage of a lead with an open booking follows the booking (FR-080); the meeting is still saved.
+  if (await hasOpenBooking(tx, lead.id)) return false;
   const now = new Date();
   const [row] = await tx
     .update(leads)
