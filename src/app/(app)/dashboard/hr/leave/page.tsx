@@ -9,7 +9,7 @@ import { CancelApprovedLeave, LeaveDecision, LeaveSettingsForm } from "@/feature
 import { LeaveStatusTag } from "@/features/leave/components/leave-status";
 import { canViewEmployees } from "@/modules/employees/policy";
 import { canViewHolidays } from "@/modules/holidays/policy";
-import { LEAVE_TYPE_LABELS, STAFF_STEP_LABELS } from "@/modules/leave/rules";
+import { CROSS_YEAR_HELD_NOTE, isCrossYear, LEAVE_TYPE_LABELS, STAFF_STEP_LABELS } from "@/modules/leave/rules";
 import { canCancelApprovedLeave, canManageLeaveSettings, canOpenLeaveAdmin, leaveOverview, type LeaveRow } from "@/modules/leave/service";
 import { requirePageUser } from "@/server/auth/current-user";
 import { ROLE_LABELS, type Role } from "@/server/auth/types";
@@ -106,7 +106,7 @@ export default async function LeavePage() {
                     <td className="py-2 pr-3 whitespace-nowrap">{when(r)}</td>
                     <td className="py-2 pr-3">
                       <LeaveStatusTag status={r.status} />
-                      {r.status === "pending" ? <span className="mt-1 block text-[11px] text-zinc-500">{stepNote(r)}</span> : null}
+                      {r.status === "pending" ? <span className="mt-1 block text-[11px] text-zinc-500">{isCrossYear(r) ? CROSS_YEAR_HELD_NOTE : stepNote(r)}</span> : null}
                     </td>
                     <td className="py-2">{canCancelApprovedLeave(actor) && r.status === "approved" && r.userId !== actor.id ? <CancelApprovedLeave id={r.id} name={r.userName} /> : null}</td>
                   </tr>
@@ -119,7 +119,7 @@ export default async function LeavePage() {
 
       {canManageLeaveSettings(actor) ? (
         <PanelCard title="Leave settings">
-          <LeaveSettingsForm annualDays={settings.annualDays} staffStep1={settings.staffStep1} staffStep2={settings.staffStep2} />
+          <LeaveSettingsForm annualDays={settings.annualDays} staffStep1={settings.staffStep1} staffStep2={settings.staffStep2} prorationMethod={settings.prorationMethod} />
         </PanelCard>
       ) : null}
     </PageStack>

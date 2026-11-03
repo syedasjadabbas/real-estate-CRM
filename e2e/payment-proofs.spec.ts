@@ -36,11 +36,20 @@ test("the accountant attaches a cash photo; finance and the team manager can ope
   expect(Buffer.compare(await readFile(await download.path()), png)).toBe(0);
   await accCtx.close();
 
+  // Signed out: the file URL and the list API refuse.
+  const anon = await browser.newContext();
+  const anonPage = await anon.newPage();
+  expect((await anonPage.request.get(href)).status()).toBe(401);
+  expect((await anonPage.request.get(`/api/v1/finance/payments/${paymentId}/proofs`)).status()).toBe(401);
+  await anon.close();
+
   for (const [role, status] of [["admin", 200], ["manager", 200], ["agent1", 403], ["hr", 403]] as const) {
     const ctx = await browser.newContext();
     const page = await ctx.newPage();
     await login(page, role);
     expect((await page.request.get(href)).status(), role).toBe(status);
+    expect((await page.request.get(`${href}?download=1`)).status(), `${role} download`).toBe(status);
+    expect((await api(page, `/api/v1/finance/payments/${paymentId}/proofs`)).status, `${role} list`).toBe(status);
     if (role === "admin") {
       expect((await api(page, `/api/v1/finance/payments/${paymentId}/proofs`, { method: "POST", multipart: { file: { name: "x.png", mimeType: "image/png", buffer: png } } })).status).toBe(403);
       await page.goto(`/dashboard/finance/payments/${paymentId}`);

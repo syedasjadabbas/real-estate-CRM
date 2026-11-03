@@ -1,5 +1,6 @@
 import { and, asc, gte, lte, sql, eq } from "drizzle-orm";
 import { z } from "zod";
+import { incomeExpenseByMonth } from "./entries";
 import type { Database } from "@/server/db";
 import { auditLogs, bookingPayments, bookings, projects } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
@@ -84,7 +85,7 @@ export async function outstandingBy(db: Database, actor: Actor, by: "project" | 
   return { by, rows: out, totals: { ...totals, bookings: rows.length } };
 }
 
-export const REPORT_KINDS = ["collections", "outstanding_project", "outstanding_agent"] as const;
+export const REPORT_KINDS = ["collections", "outstanding_project", "outstanding_agent", "income_expense"] as const;
 export type ReportKind = (typeof REPORT_KINDS)[number];
 
 const esc = (v: string | number | null) => {
@@ -101,7 +102,15 @@ export async function exportReport(db: Database, actor: Actor, input: Record<str
   let body: string;
   let filename: string;
   let summary: Record<string, unknown>;
-  if (kind === "collections") {
+  if (kind === "income_expense") {
+    const r = await incomeExpenseByMonth(db, actor, input);
+    body = csv(
+      ["Month", "Income (PKR)", "Expense (PKR)", "Net (PKR)"],
+      [...r.months.map((m) => [m.month, m.income, m.expense, m.net]), ["Total", r.totals.income, r.totals.expense, r.totals.net]],
+    );
+    filename = `income-vs-expense-${r.year}.csv`;
+    summary = { year: r.year, totals: r.totals };
+  } else if (kind === "collections") {
     const r = await collectionsByProject(db, actor, input);
     body = csv(
       ["Project", "From", "To", "Receipts", "Received (PKR)", "Reversals", "Reversed (PKR)", "Net collected (PKR)"],

@@ -64,18 +64,29 @@ describe.skipIf(!hasTestDb)("Leave (questionnaire Q4–Q19, PostgreSQL integrati
     expect((await leaveBalance(db, m.id, YEAR)).remaining).toBe(0);
   });
 
-  it("allows past dates (Q16), refuses overlaps and requests across two calendar years (C-13 pending)", async () => {
+  it("allows past dates (Q16) and refuses overlaps", async () => {
     const m = f.actors.manager;
     expect(await errorCode(req(m, "01-02", "01-03"))).toBe("ok");
     expect((await errorOf(req(m, "01-03", "01-04")))?.fields?.startDate).toMatch(/already have leave/);
-    const cross = await errorOf(submitLeave(db, m, { type: "annual", startDate: `${YEAR}-12-30`, endDate: `${YEAR + 1}-01-02` }));
-    expect(cross?.fields?.endDate).toMatch(/two calendar years/);
     expect(await errorCode(submitLeave(db, m, { type: "annual", startDate: d("02-05"), endDate: d("02-04") }))).toBe("VALIDATION_FAILED");
+  });
+
+  it("Q17: a request across two calendar years is recorded but held: not counted in either year and not approvable", async () => {
+    const m = f.actors.manager;
+    const held = await submitLeave(db, m, { type: "annual", startDate: `${YEAR}-12-29`, endDate: `${YEAR + 1}-01-03` });
+    expect(held).toMatchObject({ days: 6, held: true });
+    expect(await leaveBalance(db, m.id, YEAR)).toMatchObject({ granted: 0, pending: 0, remaining: 30 });
+    expect(await leaveBalance(db, m.id, YEAR + 1)).toMatchObject({ granted: 0, pending: 0, remaining: 30 });
+    expect((await errorOf(decideLeave(db, f.actors.superAdmin, held.id, { approve: true })))?.message).toMatch(/two calendar years/);
+    expect((await leaveOverview(db, f.actors.superAdmin, YEAR)).decidable).toEqual([]);
+    // It still blocks overlapping days, and it can be withdrawn.
+    expect((await errorOf(req(m, "12-30", "12-31")))?.fields?.startDate).toMatch(/already have leave/);
+    expect(await withdrawLeave(db, m, held.id)).toEqual({ status: "withdrawn" });
   });
 
   it("prorates joiners from their joining date (Q13, provisional method)", async () => {
     await db.insert(employeeProfiles).values({ userId: f.actors.agent1.id, joiningDate: d("07-02") });
-    expect(await leaveBalance(db, f.actors.agent1.id, YEAR)).toMatchObject({ prorated: true });
+    expect(await leaveBalance(db, f.actors.agent1.id, YEAR)).toMatchObject({ prorated: true, provisional: true });
     const { allowance } = await leaveBalance(db, f.actors.agent1.id, YEAR);
     expect(allowance).toBeGreaterThan(14);
     expect(allowance).toBeLessThan(16);

@@ -1,4 +1,5 @@
 import { and, eq, ne } from "drizzle-orm";
+import { syncProposalsForUnit } from "@/modules/tasks/price-sync";
 import type { Database } from "@/server/db";
 import { auditLogs, bookings, projects, units, type ProjectDimensions } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
@@ -128,7 +129,9 @@ export async function updateUnit(db: Database, actor: Actor, unitId: string, inp
       Object.fromEntries(changed.map((k) => [k, unit[k as keyof typeof unit]])),
       Object.fromEntries(changed.map((k) => [k, changes[k as keyof typeof changes]])),
     );
-    return { changed };
+    // Q47: saved proposals follow the unit's price; each recalculation is recorded on the proposal.
+    const proposalsUpdated = changed.includes("basePrice") || changed.includes("areaSqft") ? (await syncProposalsForUnit(tx, actor, unitId)).updated : 0;
+    return proposalsUpdated ? { changed, proposalsUpdated } : { changed };
   });
 }
 

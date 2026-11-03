@@ -9,6 +9,7 @@ import {
   setPaymentMethodActive,
   updateFinanceSettings,
 } from "@/modules/finance/commands";
+import { addCategory, createEntry, setCategoryActive, updateEntry, voidEntry } from "@/modules/finance/entries";
 import { requireActor } from "@/server/auth/current-user";
 import { getDb } from "@/server/db";
 import { toActionError, type ActionResult } from "@/server/errors";
@@ -53,4 +54,24 @@ export async function addPaymentMethodAction(name: string) {
 
 export async function setPaymentMethodActiveAction(methodId: string, active: boolean) {
   return run((db, actor) => setPaymentMethodActive(db, actor, methodId, active));
+}
+
+export async function createEntryAction(input: Record<string, unknown>) {
+  return run((db, actor) => createEntry(db, actor, input));
+}
+
+export async function updateEntryAction(entryId: string, input: Record<string, unknown>) {
+  return run((db, actor) => updateEntry(db, actor, entryId, input));
+}
+
+export async function voidEntryAction(entryId: string, input: Record<string, unknown>) {
+  return run((db, actor) => voidEntry(db, actor, entryId, input));
+}
+
+export async function addCategoryAction(input: Record<string, unknown>) {
+  return run((db, actor) => addCategory(db, actor, input));
+}
+
+export async function setCategoryActiveAction(categoryId: string, active: boolean) {
+  return run((db, actor) => setCategoryActive(db, actor, categoryId, active));
 }

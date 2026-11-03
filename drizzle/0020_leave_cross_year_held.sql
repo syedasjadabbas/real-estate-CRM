@@ -1,0 +1,2 @@
+ALTER TABLE "leave_requests" DROP CONSTRAINT "leave_requests_dates";--> statement-breakpoint
+ALTER TABLE "leave_requests" ADD CONSTRAINT "leave_requests_dates" CHECK ("leave_requests"."start_date" <= "leave_requests"."end_date");

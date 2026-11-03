@@ -1,4 +1,5 @@
 import { Download } from "lucide-react";
+import { incomeExpenseByMonth } from "@/modules/finance/entries";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { PageHeader } from "@/components/shell/page-header";
@@ -66,7 +67,7 @@ export default async function FinanceReportsPage({ searchParams }: PageProps<"/d
   if (!canDoFinance(actor, "viewAll")) return <RestrictedState />;
   const params = flattenParams(await searchParams);
   const db = getDb();
-  const [collections, byProject, byAgent] = await Promise.all([collectionsByProject(db, actor, params), outstandingBy(db, actor, "project"), outstandingBy(db, actor, "agent")]);
+  const [collections, byProject, byAgent, ie] = await Promise.all([collectionsByProject(db, actor, params), outstandingBy(db, actor, "project"), outstandingBy(db, actor, "agent"), incomeExpenseByMonth(db, actor, params)]);
   const { from, to } = collections.range;
   const c = collections.totals;
 
@@ -135,10 +136,22 @@ export default async function FinanceReportsPage({ searchParams }: PageProps<"/d
         ))}
       </div>
 
-      <PanelCard title="Income vs expense by month">
-        <EmptyState size="sm">
-          Waits for income and expense records (Finance phase F3), which need the client&apos;s category lists and attachment rules (Q-F4, Q-F9).
-        </EmptyState>
+      <PanelCard title={`Income vs expense by month · ${ie.year}`}>
+        <form method="get" className="mb-4 flex flex-wrap items-end gap-2">
+          <label className="text-[10px] font-black tracking-[0.05em] text-zinc-500 uppercase">
+            Year
+            <input type="number" name="year" min={2000} max={2100} defaultValue={ie.year} className="mt-1 block h-9 w-24 rounded-xl border border-zinc-200/80 px-2 text-xs font-semibold text-zinc-900" />
+          </label>
+          <button type="submit" className={buttonClasses({ variant: "primary", className: "h-9 px-3.5 text-xs" })}>
+            Apply
+          </button>
+          <span className="ml-auto">{exportLink("income_expense", `&year=${ie.year}`)}</span>
+        </form>
+        <Table
+          head={["Month", "Income", "Expense", "Net"]}
+          rows={ie.months.map((m) => [m.month, formatPrice(m.income), formatPrice(m.expense), formatPrice(m.net)])}
+          foot={["Total", formatPrice(ie.totals.income), formatPrice(ie.totals.expense), formatPrice(ie.totals.net)]}
+        />
       </PanelCard>
     </section>
   );

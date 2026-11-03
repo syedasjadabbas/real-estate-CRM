@@ -8,12 +8,12 @@ import { formatListedOn } from "@/features/inventory/format";
 import { selectClass } from "@/features/leads/components/lead-fields";
 import { PanelCard } from "@/features/leads/components/detail-panels";
 import { cn } from "@/lib/cn";
-import { calendarDays, LEAVE_TYPE_LABELS, LEAVE_TYPES, type LeaveStatus, type LeaveType } from "@/modules/leave/rules";
+import { calendarDays, CROSS_YEAR_HELD_NOTE, isCrossYear, LEAVE_TYPE_LABELS, LEAVE_TYPES, type LeaveStatus, type LeaveType } from "@/modules/leave/rules";
 import { LeaveStatusTag } from "./leave-status";
 import { requestLeaveCancellationAction, submitLeaveAction, withdrawLeaveAction } from "../actions";
 
 type Row = { id: string; type: LeaveType; startDate: string; endDate: string; days: number; reason: string | null; status: LeaveStatus };
-type Balance = { year: number; allowance: number; prorated: boolean; granted: number; pending: number; remaining: number };
+type Balance = { year: number; allowance: number; prorated: boolean; provisional: boolean; granted: number; pending: number; remaining: number };
 
 /**
  * My leave (FR-130, questionnaire Q4–Q17): balance for the year, a request form (calendar days,
@@ -38,7 +38,7 @@ export function MyLeavePanel({ balance, rows, today }: { balance: Balance; rows:
     <PanelCard title="My leave">
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
-          ["Allowance", `${balance.allowance}`, balance.prorated ? "Prorated from joining date" : `${balance.year}`],
+          ["Allowance", `${balance.allowance}`, balance.provisional ? "Prorated from joining date (provisional method)" : balance.prorated ? "Prorated from joining date" : `${balance.year}`],
           ["Taken", `${balance.granted}`, "Approved days"],
           ["Pending", `${balance.pending}`, "Awaiting approval"],
           ["Remaining", `${balance.remaining}`, "Days left this year"],
@@ -64,7 +64,7 @@ export function MyLeavePanel({ balance, rows, today }: { balance: Balance; rows:
             const r = await submitLeaveAction(v);
             if (r.ok) {
               setErrors({});
-              setMsg({ text: `Leave requested: ${r.data.days} day${r.data.days === 1 ? "" : "s"}.`, ok: true });
+              setMsg({ text: r.data.held ? `Leave requested: ${r.data.days} days, held (two calendar years).` : `Leave requested: ${r.data.days} day${r.data.days === 1 ? "" : "s"}.`, ok: true });
               setV((s) => ({ ...s, reason: "" }));
             } else {
               setErrors(r.fields ?? {});
@@ -134,6 +134,7 @@ export function MyLeavePanel({ balance, rows, today }: { balance: Balance; rows:
                   </span>
                 </div>
                 {r.reason ? <p className="text-[11px] text-zinc-500">{r.reason}</p> : null}
+                {r.status === "pending" && isCrossYear(r) ? <p className="text-[11px] font-semibold text-amber-800">{CROSS_YEAR_HELD_NOTE}</p> : null}
                 {cancelFor === r.id ? (
                   <div className="mt-2 flex flex-wrap items-end gap-2">
                     <Field label="Why cancel?" className="min-w-[220px] flex-1">

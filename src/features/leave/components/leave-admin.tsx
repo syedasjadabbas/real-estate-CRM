@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
 import { selectClass } from "@/features/leads/components/lead-fields";
 import { cn } from "@/lib/cn";
-import { STAFF_STEP_APPROVERS, STAFF_STEP_LABELS, type StaffStepApprover } from "@/modules/leave/rules";
+import { PRORATION_METHODS, STAFF_STEP_APPROVERS, STAFF_STEP_LABELS, type ProrationMethod, type StaffStepApprover } from "@/modules/leave/rules";
 import { cancelApprovedLeaveAction, decideLeaveAction, decideLeaveCancellationAction, updateLeaveSettingsAction } from "../actions";
 
 type Msg = { text: string; ok: boolean } | null;
@@ -82,8 +82,18 @@ export function CancelApprovedLeave({ id, name }: { id: string; name: string }) 
 }
 
 /** Admin / Super Admin: allowance and the two staff approval steps (Q4, Q6; the order is the client's decision, C-4). */
-export function LeaveSettingsForm({ annualDays, staffStep1, staffStep2 }: { annualDays: number; staffStep1: StaffStepApprover | null; staffStep2: StaffStepApprover | null }) {
-  const [v, setV] = useState({ annualDays: String(annualDays), staffStep1: staffStep1 ?? "", staffStep2: staffStep2 ?? "" });
+export function LeaveSettingsForm({
+  annualDays,
+  staffStep1,
+  staffStep2,
+  prorationMethod,
+}: {
+  annualDays: number;
+  staffStep1: StaffStepApprover | null;
+  staffStep2: StaffStepApprover | null;
+  prorationMethod: ProrationMethod;
+}) {
+  const [v, setV] = useState({ annualDays: String(annualDays), staffStep1: staffStep1 ?? "", staffStep2: staffStep2 ?? "", prorationMethod: prorationMethod as string });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState<Msg>(null);
   const [pending, startTransition] = useTransition();
@@ -109,7 +119,7 @@ export function LeaveSettingsForm({ annualDays, staffStep1, staffStep2 }: { annu
       onSubmit={(e) => {
         e.preventDefault();
         startTransition(async () => {
-          const r = await updateLeaveSettingsAction({ annualDays: v.annualDays, staffStep1: v.staffStep1 || null, staffStep2: v.staffStep2 || null });
+          const r = await updateLeaveSettingsAction({ annualDays: v.annualDays, staffStep1: v.staffStep1 || null, staffStep2: v.staffStep2 || null, prorationMethod: v.prorationMethod });
           if (r.ok) {
             setErrors({});
             setMsg({ text: r.data.changed.length ? "Leave settings saved." : "No changes to save.", ok: true });
@@ -127,6 +137,17 @@ export function LeaveSettingsForm({ annualDays, staffStep1, staffStep2 }: { annu
         {step("staffStep1", "Staff approval: first step")}
         {step("staffStep2", "Staff approval: second step")}
       </div>
+      <Field label="Proration for joiners (Q13)" error={errors.prorationMethod} hint="The company hasn't confirmed the method yet; only the provisional method is available.">
+        {(id, d) => (
+          <select id={id} aria-describedby={d} className={selectClass} value={v.prorationMethod} disabled={pending} onChange={(e) => setV((s) => ({ ...s, prorationMethod: e.target.value }))}>
+            {(Object.keys(PRORATION_METHODS) as ProrationMethod[]).map((k) => (
+              <option key={k} value={k}>
+                {PRORATION_METHODS[k].label}
+              </option>
+            ))}
+          </select>
+        )}
+      </Field>
       <p className="text-[11px] text-zinc-500">
         Agents and accountants need two approvals (Q6). Set who approves first and second once the company confirms the order. Until then their requests stay pending. Managers, HR, Admins
         and Super Admins are approved by a Super Admin (Q7); nobody approves their own leave.

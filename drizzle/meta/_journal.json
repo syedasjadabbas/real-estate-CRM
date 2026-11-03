@@ -141,6 +141,20 @@
       "when": 1793692508546,
       "tag": "0019_team_region",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1793694287930,
+      "tag": "0020_leave_cross_year_held",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1793694654754,
+      "tag": "0021_income_expense",
+      "breakpoints": true
     }
   ]
 }

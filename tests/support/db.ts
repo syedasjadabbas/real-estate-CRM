@@ -19,6 +19,8 @@ const TABLES = [
   "audit_logs",
   "leave_decisions",
   "leave_requests",
+  "finance_entries",
+  "finance_categories",
   "notifications",
   "files",
   "holidays",

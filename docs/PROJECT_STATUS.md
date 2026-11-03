@@ -555,3 +555,65 @@ All 17 migrations apply cleanly to an empty test database (`e2e` global setup, e
 | `npm run test:e2e` | Production build passes (96 / 96 pages, 0 warnings, no runtime warnings); Playwright **61 / 61** (desktop and mobile) |
 
 Migrations 0017–0019 are additive and applied to the development and test databases. The development database still has its 11 users, 5 leads and 6 payments; no leave was created there.
+
+## 13. Corrections and round 3 (3 Nov 2026)
+
+### 13.1 Corrections to round 2
+
+| Item | Was | Now |
+|---|---|---|
+| **Q47: proposals reflect unit price changes** | The new price applied only when someone saved the proposal again, which doesn't meet "reflect unit changes" | **Automatic.** When a unit's price or area changes (`updateUnit`), every Proposal on that unit that isn't cancelled is recalculated in the same transaction: price, total, discount amount, down payment and installments. Discount %, down payment %, installment count and ROI stay as saved. A generated schedule is regenerated; a hand-edited schedule is **kept** and flagged in the history ("edited schedule kept: check the rows"). Each change writes a task-history entry and a `task.price_sync` audit row with the **previous and new figures**, so the original quote is never lost. Booking payment plans keep their agreed rate. A proposal saved before this release still shows the price-changed notice until its unit changes again or it is saved |
+| **Q17: cross-year leave** | Refused, which wasn't a client rule | **Accepted and held.** The request is recorded but counts against **neither year's** balance, can't be approved by anyone, still blocks overlapping days and can be withdrawn. The employee and HR see "Held: spans two calendar years…". The database check that forbade such requests was relaxed (migration 0020). The rule waits for C-13 |
+| **Leave proration** | One hard-coded provisional function | **Configurable.** Methods are registered in `PRORATION_METHODS` and chosen in Leave settings (`leave.proration_method`). The only method so far is labelled provisional wherever it appears (Leave settings; My leave shows "Prorated from joining date (provisional method)"). Adding the confirmed method is one entry |
+| **Payment proof permissions** | Tested through the UI and role checks | **Re-verified against the Finance model:** viewing = itemised-payment access (finance roles; team manager for their bookings); uploading = payment recorders (Accountant, Super Admin). New tests: signed-out file and list requests get 401; agent and HR get 403 on file, download and list; a proof id is 404 through the lead document and recording routes, even for a Super Admin |
+
+**The provisional proration formula (not client-approved):**
+- **Formula:** `allowance = round to nearest 0.5 day of ( annualDays × days from joining date to 31 Dec inclusive ÷ days in year )`.
+- **Example:** 30 days, joining 2 July 2026: 30 × 183 ÷ 365 = 15.04 → **15**.
+- **Edge cases:** someone who joined in an earlier year, or has no joining date, gets the full allowance; joining in a later year gives 0.
+
+### 13.2 New: income and expense records (FR-200, FR-201, FR-205)
+
+**What was built:**
+- **Finance → Income & expenses:** list with kind and date filters and totals; recording; a detail page with edit, attachments, void and history.
+- **Categories:** Finance → Settings → "Income and expense categories" (Super Admin), deactivated rather than deleted. The lists are the client's (Q-F4); none are seeded.
+- **Report:** Finance → Reports → "Income vs expense by month" for a year, with an audited CSV (`income_expense`).
+
+**Access** follows the existing Finance model:
+- view: Super Admin, Admin, Accountant;
+- record, edit, void and attach: Accountant, Super Admin;
+- categories: Super Admin;
+- managers, agents and HR are refused.
+
+**Fields** (FR-200 / 201):
+- category, amount, date, method (optional), reference, note;
+- payee, for expenses only;
+- attachments (PDF, JPG, PNG, DOCX, XLSX; private; content-checked).
+
+**Never deleted:**
+- Voiding needs a reason and keeps the figures. Voided entries are excluded from totals and listed only on request.
+- Edits are audited with before and after values; a voided entry can't be edited.
+
+**Migration 0021 (additive or relaxing):** `finance_categories`, `finance_entries`, `files.finance_entry_id`, and `files.lead_id` made optional with a check that every file still belongs to a lead or an entry.
+
+**Tests:** `finance-entries.test.ts` (5); `e2e/finance-entries.spec.ts` (1: category, record, attach, Admin view-only, void).
+
+### 13.3 Still not built (current behaviour preserved)
+- **Undefined:** receipt format (C-21), PDP / CDP (C-24), refunds (C-22, CR-3), floor prices and ROI (C-28), task statuses (C-30), Critical (C-17), Pipeline pressure (C-20), aging matrix (M-Q1–M-Q5).
+- **No events specified:** notifications (N2–N6).
+- **Commercial decision:** attendance (CR-1, C-16).
+- **Leave decisions:** staff step order (C-4), cross-year deduction (C-13), proration method (C-10).
+- **Waiting on the signature (S-1):** Q31, Q36, Q45 (removal half), Q52, Q50.
+
+### 13.4 Verification (3 Nov 2026, end of round 3)
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | Pass |
+| `npm run lint` | Pass, 0 problems |
+| `npm test` (Vitest) | **45 files, 396 / 396** |
+| `drizzle-kit check` / `generate --name drift_probe` | "Everything's fine" / "No schema changes" (22 migrations) |
+| Production build | Pass (99 / 99 pages, 0 warnings) |
+| Playwright | **62 / 62** (desktop and mobile) |
+
+**One flaky assertion fixed.** The new income / expense spec failed once in the full run: it waited for a status message that disappears when the page refreshes after voiding. It now waits for the voided state. It then passed 3 / 3 alone and 62 / 62 in the full suite.

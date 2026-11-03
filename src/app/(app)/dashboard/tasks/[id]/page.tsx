@@ -57,6 +57,11 @@ function historyText(h: TaskDetail["history"][number], names: Record<string, str
       return `Plan saved: ${d.discountPct}% discount, ${d.downPaymentPct}% down, ${d.installmentCount} installments${d.rowsEdited ? " (rows edited)" : ""}`;
     case "rebuild":
       return `Installment rows rebuilt (${d.rows} rows)`;
+    case "price_sync": {
+      const before = (d.before ?? {}) as Record<string, number | null>;
+      const after = (d.after ?? {}) as Record<string, number | null>;
+      return `Unit price changed: ${formatPrice(before.pricePerSqft)} → ${formatPrice(after.pricePerSqft)} / sq ft; total ${formatPrice(before.afterDiscount)} → ${formatPrice(after.afterDiscount)}${d.rowsRegenerated ? "" : " (edited schedule kept: check the rows)"}`;
+    }
     default:
       return h.action;
   }

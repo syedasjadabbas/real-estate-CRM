@@ -11,7 +11,12 @@ import {
   approvalPathFor,
   calendarDays,
   datesOf,
+  CROSS_YEAR_HELD_NOTE,
   DEFAULT_ANNUAL_DAYS,
+  DEFAULT_PRORATION_METHOD,
+  PRORATION_METHODS,
+  type ProrationMethod,
+  isCrossYear,
   GRANTED_STATUSES,
   HOLDING_STATUSES,
   LEAVE_TYPES,
@@ -25,7 +30,7 @@ import {
 type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 type DbOrTx = Database | Tx;
 
-const KEYS = { annualDays: "leave.annual_days", staffStep1: "leave.staff_step1", staffStep2: "leave.staff_step2" } as const;
+const KEYS = { annualDays: "leave.annual_days", staffStep1: "leave.staff_step1", staffStep2: "leave.staff_step2", prorationMethod: "leave.proration_method" } as const;
 const requester = alias(users, "leave_requester");
 const deciderUser = alias(users, "leave_decider");
 const fieldError = (field: string, message: string) => new AppError("VALIDATION_FAILED", "Check the highlighted fields.", { fields: { [field]: message } });
@@ -41,14 +46,20 @@ export const canCancelApprovedLeave = (actor: Pick<Actor, "role">) => actor.role
 
 // ─── Settings ────────────────────────────────────────────────────────────────
 
-export type LeaveSettings = { annualDays: number; staffStep1: StaffStepApprover | null; staffStep2: StaffStepApprover | null };
+export type LeaveSettings = { annualDays: number; staffStep1: StaffStepApprover | null; staffStep2: StaffStepApprover | null; prorationMethod: ProrationMethod };
 
 export async function getLeaveSettings(db: DbOrTx): Promise<LeaveSettings> {
   const rows = await db.select().from(appSettings).where(inArray(appSettings.key, Object.values(KEYS)));
   const get = (k: string) => rows.find((r) => r.key === k)?.value ?? null;
   const step = (v: string | null) => (STAFF_STEP_APPROVERS as readonly string[]).includes(v ?? "") ? (v as StaffStepApprover) : null;
   const annual = Number(get(KEYS.annualDays));
-  return { annualDays: Number.isFinite(annual) && annual > 0 ? annual : DEFAULT_ANNUAL_DAYS, staffStep1: step(get(KEYS.staffStep1)), staffStep2: step(get(KEYS.staffStep2)) };
+  const method = get(KEYS.prorationMethod);
+  return {
+    annualDays: Number.isFinite(annual) && annual > 0 ? annual : DEFAULT_ANNUAL_DAYS,
+    staffStep1: step(get(KEYS.staffStep1)),
+    staffStep2: step(get(KEYS.staffStep2)),
+    prorationMethod: method && method in PRORATION_METHODS ? (method as ProrationMethod) : DEFAULT_PRORATION_METHOD,
+  };
 }
 
 const settingsSchema = z
@@ -56,6 +67,7 @@ const settingsSchema = z
     annualDays: z.coerce.number("Enter a number").int("Use whole days").min(1, "At least 1 day").max(366, "At most 366 days"),
     staffStep1: z.enum(STAFF_STEP_APPROVERS).nullable().optional().transform((v) => v ?? null),
     staffStep2: z.enum(STAFF_STEP_APPROVERS).nullable().optional().transform((v) => v ?? null),
+    prorationMethod: z.enum(Object.keys(PRORATION_METHODS) as [ProrationMethod, ...ProrationMethod[]]).optional().default(DEFAULT_PRORATION_METHOD),
   })
   .strict()
   .refine((v) => (v.staffStep1 === null) === (v.staffStep2 === null), { path: ["staffStep2"], message: "Set both approval steps, or neither (Q6: two-step approval)" });
@@ -95,13 +107,16 @@ export async function leaveBalance(db: DbOrTx, userId: string, year: number) {
         medical: sql<number>`coalesce(sum(${leaveRequests.days}) filter (where ${leaveRequests.status} in ('approved', 'cancel_requested') and ${leaveRequests.type} = 'medical'), 0)::int`,
       })
       .from(leaveRequests)
-      .where(and(eq(leaveRequests.userId, userId), sql`extract(year from ${leaveRequests.startDate}) = ${year}`));
-  const allowance = proratedAllowance(settings.annualDays, profile?.joiningDate ?? null, year);
+      // Held cross-year requests (Q17, C-13) count against neither year until the rule is confirmed.
+      .where(and(eq(leaveRequests.userId, userId), sql`extract(year from ${leaveRequests.startDate}) = ${year}`, sql`extract(year from ${leaveRequests.endDate}) = ${year}`));
+  const allowance = proratedAllowance(settings.annualDays, profile?.joiningDate ?? null, year, settings.prorationMethod);
   return {
     year,
     annualDays: settings.annualDays,
     allowance: allowance.days,
     prorated: allowance.prorated,
+    /** True when the allowance used a proration method the client hasn't confirmed (C-10). */
+    provisional: allowance.provisional,
     granted: sums.granted,
     pending: sums.pending,
     medical: sums.medical,
@@ -131,13 +146,12 @@ async function audit(tx: Tx, actor: Actor, action: string, id: string, after: Re
 
 /**
  * Submit own leave (all roles). Past dates are allowed (Q16); a request over the remaining balance
- * is refused (Q12); overlapping requests are refused (FR-142). Cross-year requests wait for C-13.
+ * is refused (Q12); overlapping requests are refused (FR-142). A request across two calendar years
+ * is recorded but held (Q17, C-13): no balance is checked or deducted and it can't be approved yet.
  */
 export async function submitLeave(db: Database, actor: Actor, input: unknown) {
   const data = parse(requestSchema, input);
-  if (yearOf(data.startDate) !== yearOf(data.endDate)) {
-    throw fieldError("endDate", "Leave across two calendar years can't be requested yet: the company rule for splitting it is pending. Submit one request per year.");
-  }
+  const held = isCrossYear(data);
   const days = calendarDays(data.startDate, data.endDate);
   return db.transaction(async (tx) => {
     // Serialise this person's requests so two submissions can't both pass the balance check.
@@ -148,16 +162,16 @@ export async function submitLeave(db: Database, actor: Actor, input: unknown) {
       .where(and(eq(leaveRequests.userId, actor.id), inArray(leaveRequests.status, HOLDING_STATUSES), sql`${leaveRequests.startDate} <= ${data.endDate} and ${data.startDate} <= ${leaveRequests.endDate}`))
       .limit(1);
     if (clash.length) throw fieldError("startDate", "You already have leave requested or approved on some of these days.");
-    const balance = await leaveBalance(tx, actor.id, yearOf(data.startDate));
-    if (days > balance.remaining) {
+    const balance = held ? null : await leaveBalance(tx, actor.id, yearOf(data.startDate));
+    if (balance && days > balance.remaining) {
       throw fieldError("endDate", `This is ${days} day${days === 1 ? "" : "s"}, but only ${Math.max(0, balance.remaining)} remain for ${balance.year}.`);
     }
     const [row] = await tx
       .insert(leaveRequests)
       .values({ userId: actor.id, type: data.type, startDate: data.startDate, endDate: data.endDate, days, reason: data.reason, approvalPath: approvalPathFor(actor.role) })
       .returning({ id: leaveRequests.id });
-    await audit(tx, actor, "leave.request", row.id, { type: data.type, startDate: data.startDate, endDate: data.endDate, days });
-    return { id: row.id, days };
+    await audit(tx, actor, "leave.request", row.id, { type: data.type, startDate: data.startDate, endDate: data.endDate, days, held });
+    return { id: row.id, days, held };
   });
 }
 
@@ -181,8 +195,9 @@ async function managesRequester(db: DbOrTx, managerId: string, requesterId: stri
 }
 
 /** Whether `actor` may decide the request's current approval step. Nobody approves their own leave. */
-export async function canDecideStep(db: DbOrTx, actor: Actor, request: { userId: string; approvalPath: string; currentStep: number; status: string }, settings: LeaveSettings) {
+export async function canDecideStep(db: DbOrTx, actor: Actor, request: { userId: string; approvalPath: string; currentStep: number; status: string; startDate: string; endDate: string }, settings: LeaveSettings) {
   if (request.status !== "pending" || actor.id === request.userId) return false;
+  if (isCrossYear(request)) return false;
   if (request.approvalPath === "senior") return actor.role === "super_admin";
   const approver = request.currentStep === 1 ? settings.staffStep1 : settings.staffStep2;
   if (approver === null) return false;
@@ -217,6 +232,7 @@ export async function decideLeave(db: Database, actor: Actor, id: string, input:
     const request = await loadRequest(tx, id, true);
     const settings = await getLeaveSettings(tx);
     if (request.status !== "pending") throw new AppError("BUSINESS_RULE", "This request has already been decided.");
+    if (isCrossYear(request)) throw new AppError("BUSINESS_RULE", CROSS_YEAR_HELD_NOTE);
     if (!(await canDecideStep(tx, actor, request, settings))) {
       if (request.approvalPath === "staff" && !settings.staffStep1) throw new AppError("BUSINESS_RULE", "Staff leave approval steps are not set yet (awaiting the company's approval order).");
       throw forbidden(actor.id === request.userId ? "You can't decide your own leave." : "You can't decide this step.");

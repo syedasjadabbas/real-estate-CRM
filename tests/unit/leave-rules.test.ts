@@ -11,10 +11,11 @@ describe("leave rules (questionnaire Q4–Q17)", () => {
   });
 
   it("gives the full allowance to earlier joiners and none before joining; prorates joiners (provisional, C-10)", () => {
-    expect(proratedAllowance(30, null, 2026)).toEqual({ days: 30, prorated: false });
-    expect(proratedAllowance(30, "2025-06-01", 2026)).toEqual({ days: 30, prorated: false });
-    expect(proratedAllowance(30, "2027-01-15", 2026)).toEqual({ days: 0, prorated: true });
-    expect(proratedAllowance(30, "2026-01-01", 2026)).toEqual({ days: 30, prorated: true });
+    expect(proratedAllowance(30, null, 2026)).toEqual({ days: 30, prorated: false, provisional: false });
+    expect(proratedAllowance(30, "2025-06-01", 2026)).toEqual({ days: 30, prorated: false, provisional: false });
+    expect(proratedAllowance(30, "2027-01-15", 2026)).toEqual({ days: 0, prorated: true, provisional: false });
+    // Only the provisional method exists until the company confirms one (C-10); it is flagged as such.
+    expect(proratedAllowance(30, "2026-01-01", 2026)).toEqual({ days: 30, prorated: true, provisional: true });
     expect(proratedAllowance(30, "2026-07-02", 2026).days).toBe(15); // 183 / 365 days
     expect(proratedAllowance(30, "2026-12-31", 2026).days).toBe(0); // 0.08 days rounds to 0
   });

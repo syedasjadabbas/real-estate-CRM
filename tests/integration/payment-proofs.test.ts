@@ -4,7 +4,8 @@ import path from "node:path";
 import { and, eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { advanceBooking, createBooking } from "@/modules/bookings/commands";
-import { listDocuments } from "@/modules/documents/service";
+import { listDocuments, openDocument } from "@/modules/documents/service";
+import { openRecording } from "@/modules/recordings/service";
 import { recordPayment, requestReversal, decideReversal } from "@/modules/finance/commands";
 import { listPaymentProofs, openPaymentProof, uploadPaymentProof } from "@/modules/finance/proofs";
 import { listPaymentMethods } from "@/modules/finance/queries";
@@ -110,6 +111,10 @@ describe.skipIf(!hasTestDb)("Payment proofs (Q33, PostgreSQL integration)", () =
     const om = await loadActor(db, { id: outsideManager.id, name: outsideManager.name, email: outsideManager.email, role: "manager" });
     expect(await errorCode(openPaymentProof(db, om, id))).toBe("NOT_FOUND");
     expect(await errorCode(listPaymentProofs(db, om, paymentId))).toBe("NOT_FOUND");
+    for (const actor of [f.actors.agent1, f.actors.hr]) expect(await errorCode(listPaymentProofs(db, actor, paymentId)), actor.role).toBe("FORBIDDEN");
+    // A proof id can't be opened through the lead document or recording routes, even by a Super Admin.
+    expect(await errorCode(openDocument(db, f.actors.superAdmin, id))).toBe("NOT_FOUND");
+    expect(await errorCode(openRecording(db, f.actors.superAdmin, id))).toBe("NOT_FOUND");
   });
 
   it("checks content, size and target: wrong content, empty files, reversals and other file kinds are refused", async () => {

@@ -95,14 +95,15 @@ export async function openLeadFile(db: Database, actor: Actor, fileId: string, k
   if (!canDo(actor, "view")) throw forbidden();
   if (!/^[0-9a-f-]{36}$/i.test(fileId)) throw notFound(LABEL[kind]);
   const [file] = await db.select().from(files).where(and(eq(files.id, fileId), eq(files.kind, kind), isNull(files.deletedAt))).limit(1);
-  if (!file) throw notFound(LABEL[kind]);
+  if (!file?.leadId) throw notFound(LABEL[kind]);
+  const leadId = file.leadId;
   try {
-    await loadAccessibleLead(db, actor, file.leadId);
+    await loadAccessibleLead(db, actor, leadId);
   } catch (error) {
     if (error instanceof AppError && error.code === "NOT_FOUND") throw notFound(LABEL[kind]);
     throw error;
   }
-  return file;
+  return { ...file, leadId };
 }
 
 /**

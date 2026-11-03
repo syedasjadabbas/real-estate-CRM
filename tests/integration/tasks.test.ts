@@ -1,7 +1,7 @@
-import { count, eq } from "drizzle-orm";
+import { and, count, eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createBooking } from "@/modules/bookings/commands";
-import { createUnit } from "@/modules/inventory/commands";
+import { createUnit, updateUnit } from "@/modules/inventory/commands";
 import { createLead } from "@/modules/leads/commands";
 import { createTask, rebuildInstallments, setTaskStatus, updateTask } from "@/modules/tasks/commands";
 import { getTaskDetail, listTasks, overdueTasks, taskFormOptions } from "@/modules/tasks/queries";
@@ -311,15 +311,41 @@ describe.skipIf(!hasTestDb)("Tasks module (PostgreSQL integration)", () => {
       expect((await taskRow(taskId)).proposal).toMatchObject({ customerName: "Ali C", unitId });
     });
 
-    it("Q47: a saved proposal follows later unit price changes on its next save, and flags them until then", async () => {
-      const { taskId } = await proposal(f.actors.agent1);
-      expect((await taskRow(taskId)).proposal).toMatchObject({ pricePerSqft: 20_000, totalList: 10_000_000 });
-      expect((await getTaskDetail(db, f.actors.agent1, taskId)).unitChanged).toBeNull();
-      await db.update(units).set({ basePrice: 11_000_000 }).where(eq(units.id, unitId));
-      expect((await getTaskDetail(db, f.actors.agent1, taskId)).unitChanged).toMatchObject({ savedPricePerSqft: 20_000, currentPricePerSqft: 22_000 });
-      await updateTask(db, f.actors.agent1, taskId, { proposal: { customerName: "Ali", projectId: f.projectId, unitId } });
-      expect((await taskRow(taskId)).proposal).toMatchObject({ pricePerSqft: 22_000, totalList: 11_000_000 });
-      expect((await getTaskDetail(db, f.actors.agent1, taskId)).unitChanged).toBeNull();
+    it("Q47: a unit price change updates saved proposals automatically, keeping the old figures in history", async () => {
+      const { taskId: generated } = await proposal(f.actors.agent1, { installmentCount: "2" });
+      const { taskId: edited } = await proposal(f.actors.agent1, { installmentCount: "2" });
+      const editedRows = [
+        { label: "Down payment", amount: "2500000" },
+        { label: "Grey structure", amount: "4000000", dueOn: "2027-02-10" },
+        { label: "Possession", amount: "3500000", dueOn: "2027-08-10" },
+      ];
+      await updateTask(db, f.actors.agent1, edited, { rows: editedRows });
+      const { taskId: cancelled } = await proposal(f.actors.agent1);
+      await setTaskStatus(db, f.actors.agent1, cancelled, { status: "cancelled" });
+      const { taskId: plan } = await proposal(f.actors.agent1, {}, { type: "payment_plan" });
+
+      const result = await updateUnit(db, f.actors.superAdmin, unitId, { basePrice: "11000000" });
+      expect(result).toMatchObject({ proposalsUpdated: 2 });
+
+      // Generated schedule: figures and rows follow the new price (the fixture uses 30% down).
+      expect((await taskRow(generated)).proposal).toMatchObject({ pricePerSqft: 22_000, totalList: 11_000_000, afterDiscount: 11_000_000, downPayment: 3_300_000 });
+      expect((await rowsOf(generated)).map((r) => r.amount)).toEqual([3_300_000, 3_850_000, 3_850_000]);
+      // Hand-edited schedule: figures follow, the rows are kept as edited.
+      expect((await taskRow(edited)).proposal).toMatchObject({ totalList: 11_000_000 });
+      expect((await rowsOf(edited)).map((r) => r.label)).toEqual(["Down payment", "Grey structure", "Possession"]);
+      // Cancelled proposals and booking payment plans are not touched.
+      expect((await taskRow(cancelled)).proposal).toMatchObject({ totalList: 10_000_000 });
+      expect((await taskRow(plan)).proposal).toMatchObject({ totalList: 10_000_000 });
+
+      // The previous figures stay in the history and audit log.
+      const history = await db.select().from(taskHistory).where(and(eq(taskHistory.taskId, generated), eq(taskHistory.action, "price_sync")));
+      expect(history[0].data).toMatchObject({ before: { pricePerSqft: 20_000, totalList: 10_000_000 }, after: { pricePerSqft: 22_000, totalList: 11_000_000 }, rowsRegenerated: true });
+      expect((await db.select().from(taskHistory).where(and(eq(taskHistory.taskId, edited), eq(taskHistory.action, "price_sync"))))[0].data).toMatchObject({ rowsRegenerated: false });
+      expect((await db.select().from(auditLogs).where(and(eq(auditLogs.action, "task.price_sync"), eq(auditLogs.entityId, generated)))).length).toBe(1);
+      expect((await getTaskDetail(db, f.actors.agent1, generated)).unitChanged).toBeNull();
+
+      // Changing something other than price or area doesn't touch proposals.
+      expect(await updateUnit(db, f.actors.superAdmin, unitId, { comment: "Corner unit" })).toEqual({ changed: ["comment"] });
     });
 
     it("managers fall back to the 5% manager cap from migration 0014 (Q41)", async () => {

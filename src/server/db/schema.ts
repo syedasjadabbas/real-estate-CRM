@@ -301,9 +301,10 @@ export const files = pgTable(
   "files",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    leadId: uuid("lead_id")
-      .notNull()
-      .references(() => leads.id, { onDelete: "restrict" }),
+    /** The lead (recordings, documents, payment proofs). Null only for income / expense attachments. */
+    leadId: uuid("lead_id").references(() => leads.id, { onDelete: "restrict" }),
+    /** For income / expense attachments (kind "receipt", FR-200 / FR-201): the entry the file belongs to. */
+    financeEntryId: uuid("finance_entry_id").references((): AnyPgColumn => financeEntries.id, { onDelete: "restrict" }),
     /** For payment proofs (kind "receipt", questionnaire Q33): the payment the file belongs to. */
     paymentId: uuid("payment_id").references((): AnyPgColumn => bookingPayments.id, { onDelete: "restrict" }),
     kind: fileKind("kind").notNull(),
@@ -324,6 +325,7 @@ export const files = pgTable(
     uniqueIndex("files_storage_key_uq").on(t.storageKey),
     index("files_lead_created_idx").on(t.leadId, t.createdAt),
     check("files_size_positive", sql`${t.sizeBytes} > 0`),
+    check("files_owner", sql`${t.leadId} is not null or ${t.financeEntryId} is not null`),
     check("files_duration_range", sql`${t.durationSec} is null or (${t.durationSec} >= 0 and ${t.durationSec} <= 86400)`),
     check("files_name_length", sql`char_length(${t.originalName}) between 1 and 200`),
   ],
@@ -602,6 +604,58 @@ export const paymentReversalRequests = pgTable(
   ],
 );
 
+/** FR-200 / FR-201: income and expense entries share one ledger table. */
+export const financeEntryKind = pgEnum("finance_entry_kind", ["income", "expense"]);
+
+/** Income and expense categories (Q-F4: the client's lists, entered by a Super Admin). Never deleted. */
+export const financeCategories = pgTable(
+  "finance_categories",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    kind: financeEntryKind("kind").notNull(),
+    name: text("name").notNull(),
+    isActive: boolean("is_active").notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(100),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("finance_categories_kind_name_uq").on(t.kind, sql`lower(${t.name})`), check("finance_categories_name", sql`length(btrim(${t.name})) between 1 and 80`)],
+);
+
+/**
+ * Income (FR-200) and expense (FR-201) records: category, amount, date, method, reference, payee
+ * (expenses), note; attachments live in `files`. Never hard-deleted: a voided entry keeps its
+ * figures and is left out of totals (same principle as payments, FR-206). Edits are audited.
+ */
+export const financeEntries = pgTable(
+  "finance_entries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    kind: financeEntryKind("kind").notNull(),
+    categoryId: uuid("category_id")
+      .notNull()
+      .references(() => financeCategories.id, { onDelete: "restrict" }),
+    amount: numeric("amount", { precision: 15, scale: 2, mode: "number" }).notNull(),
+    entryDate: date("entry_date").notNull(),
+    methodId: uuid("method_id").references(() => paymentMethods.id, { onDelete: "restrict" }),
+    reference: text("reference"),
+    payee: text("payee"),
+    note: text("note"),
+    createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
+    updatedById: uuid("updated_by_id").references(() => users.id, { onDelete: "set null" }),
+    voidedAt: timestamp("voided_at", { withTimezone: true }),
+    voidedById: uuid("voided_by_id").references(() => users.id, { onDelete: "set null" }),
+    voidReason: text("void_reason"),
+    ...timestamps,
+  },
+  (t) => [
+    index("finance_entries_kind_date_idx").on(t.kind, t.entryDate),
+    check("finance_entries_amount_positive", sql`${t.amount} > 0`),
+    check("finance_entries_payee_expense_only", sql`${t.payee} is null or ${t.kind} = 'expense'`),
+    check("finance_entries_void_reason", sql`(${t.voidedAt} is null) = (${t.voidReason} is null)`),
+    check("finance_entries_text_lengths", sql`coalesce(length(${t.reference}), 0) <= 120 and coalesce(length(${t.payee}), 0) <= 120 and coalesce(length(${t.note}), 0) <= 1000`),
+  ],
+);
+
 /** Configurable finance display settings (receipt / reversal prefixes; final format pending Q-F3). */
 export const financeSettings = pgTable("finance_settings", {
   key: text("key").primaryKey(),
@@ -815,7 +869,8 @@ export const rosterEntries = pgTable(
 
 /**
  * Leave requests (FR-142, questionnaire Q4–Q19). Days are calendar days, inclusive (Q8). A request
- * never spans two calendar years until the client decides how to split it (C-13).
+ * spanning two calendar years is accepted but held (not counted, not approvable) until the client
+ * confirms how its days are deducted (Q17, clarification C-13).
  */
 export const leaveRequests = pgTable(
   "leave_requests",
@@ -839,7 +894,7 @@ export const leaveRequests = pgTable(
   },
   (t) => [
     index("leave_requests_user_start_idx").on(t.userId, t.startDate),
-    check("leave_requests_dates", sql`${t.startDate} <= ${t.endDate} and extract(year from ${t.startDate}) = extract(year from ${t.endDate})`),
+    check("leave_requests_dates", sql`${t.startDate} <= ${t.endDate}`),
     check("leave_requests_days", sql`${t.days} = (${t.endDate} - ${t.startDate}) + 1`),
     check("leave_requests_path", sql`${t.approvalPath} in ('senior', 'staff')`),
     check("leave_requests_reason_length", sql`coalesce(length(${t.reason}), 0) <= 500`),
