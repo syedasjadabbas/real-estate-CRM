@@ -26,7 +26,7 @@ async function scopedAgents(db: Database, actor: Actor) {
  * FR-110 / FR-111 grid: each agent's target for the period and the achievement so far.
  * Meetings achieved = completed meetings they organized that started in the window (T-A10);
  * sold sq ft = area of their bookings confirmed in the window (Q-H4 default, T-A11);
- * calls = not available, no call data exists yet (T-A12).
+ * calls = not available: uploaded recordings don't count as calls unless confirmed (C-19, T-A12).
  */
 export async function listTargets(db: Database, actor: Actor, rawQuery: unknown, now = new Date()) {
   if (!canViewTargets(actor)) throw forbidden();

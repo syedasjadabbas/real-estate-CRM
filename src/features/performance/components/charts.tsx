@@ -91,11 +91,11 @@ export function TopClosers({ rows }: { rows: { userId: string; name: string; boo
   );
 }
 
-/** Reference charts that need call data, which this system does not record yet (FR-152). */
+/** Reference charts that need calls, which aren't available until recordings are confirmed to count as calls (FR-152, C-19). */
 export function NeedsCallData({ title, badge, description }: { title: string; badge: string; description: string }) {
   return (
     <Panel title={title} badge={<Badge tone="neutral">{badge}</Badge>} description={description}>
-      <EmptyState size="sm">Not available yet: needs call recordings with durations, which the CRM does not capture.</EmptyState>
+      <EmptyState size="sm">Not available: uploaded call recordings are not counted as calls unless the client confirms that rule.</EmptyState>
     </Panel>
   );
 }

@@ -4,6 +4,7 @@ import { api, expect, login, type Role } from "./support/seed";
 /** F-9: the Performance footnote says what the page actually does (calculation: performance.test.ts "Q25"). */
 
 const CALLS_NOTE = "Calls and call minutes are not available: uploaded call recordings are not counted as calls unless the client confirms that rule.";
+const CHART_NOTE = "Not available: uploaded call recordings are not counted as calls unless the client confirms that rule.";
 const LEADS_NOTE = "Leads are counted under their current owner, on their original assignment date.";
 
 for (const role of ["superAdmin", "admin", "manager", "agent1"] satisfies Role[]) {
@@ -14,6 +15,9 @@ for (const role of ["superAdmin", "admin", "manager", "agent1"] satisfies Role[]
     await expect(page.getByText(LEADS_NOTE, { exact: false })).toBeVisible();
     await expect(page.getByText("the date they were added")).toHaveCount(0);
     await expect(page.getByText("need call recordings, which the CRM does not capture yet")).toHaveCount(0);
+    // The three call charts give the same reason.
+    await expect(page.getByText(CHART_NOTE, { exact: true })).toHaveCount(3);
+    await expect(page.getByText("which the CRM does not capture")).toHaveCount(0);
     // The sign-in note beside it is unchanged.
     await expect(page.getByText("They are not attendance", { exact: false })).toBeVisible();
   });

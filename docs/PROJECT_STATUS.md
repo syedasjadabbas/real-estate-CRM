@@ -2150,3 +2150,36 @@ Both are valid accounting choices with different monthly figures, so this belong
 **Completion counts, unchanged:** 47 implemented and verified, 26 partial, 0 not implemented, 7 blocked, 5 excluded. F-9 was wording, and FR-150 and FR-151 stay partial on C-19.
 
 **Remaining agreed development:** about 7.5 developer-days (F-9 was under 0.1 d of §24.C item 14). **Test baseline:** Vitest 518 / 518, Playwright 104 / 104.
+
+## 29. Follow-up to F-9: call-recording wording (5 Nov 2026)
+
+Corrects the two remaining items in §28. Wording only: no calculation, call or recording behaviour, permission, report or schema changed. C-19 stays open.
+
+| Where | Before | After |
+|---|---|---|
+| Empty call charts, shown on three panels (`performance/components/charts.tsx`) | "Not available yet: needs call recordings with durations, which the CRM does not capture." | "Not available: uploaded call recordings are not counted as calls unless the client confirms that rule." |
+| Doc comment on `NeedsCallData`, same file | "Reference charts that need call data, which this system does not record yet (FR-152)." | "Reference charts that need calls, which aren't available until recordings are confirmed to count as calls (FR-152, C-19)." |
+| Comment on `listTargets` (`targets/service.ts`) | "calls = not available, no call data exists yet (T-A12)." | "calls = not available: uploaded recordings don't count as calls unless confirmed (C-19, T-A12)." |
+
+**Test:** `e2e/performance-page.spec.ts` now checks that all three charts show the new message and the old wording is gone, for Super Admin, Admin, Manager and Agent, on desktop and mobile.
+
+**Verification:**
+
+| Check | Result |
+|---|---|
+| Typecheck, lint | Pass |
+| Performance and targets tests | 31 / 31 |
+| Build | 103 / 103 pages |
+| `performance-page.spec.ts` | 11 / 11 |
+
+Full Vitest and Playwright were not run, as the change is wording only.
+
+**Similar wording still present, outside this request:**
+- `performance/page.tsx:95`: "Needs scored call recordings (not captured)".
+- `performance/page.tsx:25`: the Calls column tooltip, "Needs call data, which is not recorded yet".
+- `performance/page.tsx:125`: "No call data yet".
+- `performance/service.ts:205`: a comment, "no call data".
+
+Line 95 is about *scored* recordings, which really aren't captured. The others are loosely accurate, because no call figure exists, but they could read better alongside the corrected notes.
+
+**Counts unchanged:** 47 implemented and verified, 26 partial, 0 not implemented, 7 blocked, 5 excluded. About 7.5 developer-days of agreed work remain.
