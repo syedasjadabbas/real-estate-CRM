@@ -10,6 +10,7 @@ import {
   leaveBalances,
   leaveOverview,
   myLeave,
+  SAME_APPROVER_MESSAGE,
   requestLeaveCancellation,
   submitLeave,
   updateLeaveSettings,
@@ -17,7 +18,7 @@ import {
 } from "@/modules/leave/service";
 import { businessToday } from "@/modules/bookings/today";
 import { loadActor } from "@/server/auth/session-store";
-import { auditLogs, employeeProfiles, leads, leaveRequests, rosterEntries, teamMembers, users } from "@/server/db/schema";
+import { auditLogs, employeeProfiles, leads, leaveDecisions, leaveRequests, rosterEntries, teamMembers, teams, users } from "@/server/db/schema";
 import type { Database } from "@/server/db";
 import type { Actor } from "@/server/auth/types";
 import { AppError } from "@/server/errors";
@@ -271,6 +272,149 @@ describe.skipIf(!hasTestDb)("Leave (questionnaire Q4–Q19, PostgreSQL integrati
     expect(await errorCode(leaveOverview(db, f.actors.agent1, YEAR))).toBe("FORBIDDEN");
     const [row] = await db.select().from(leaveRequests).where(and(eq(leaveRequests.userId, f.actors.agent1.id)));
     expect(row.approvalPath).toBe("staff");
+  });
+
+  describe("F-6: the two staff steps are approved by two different people", () => {
+    const makeActor = async (name: string, email: string, role: "hr" | "manager" | "admin") => {
+      const [u] = await db.insert(users).values({ name, email, role, passwordHash: "x" }).returning();
+      return loadActor(db, { id: u.id, name: u.name, email: u.email, role: u.role });
+    };
+    const steps = (staffStep1: string, staffStep2: string) => updateLeaveSettings(db, admin, { annualDays: 30, staffStep1, staffStep2 });
+    const approvals = async (id: string) =>
+      (await db.select().from(leaveDecisions).where(and(eq(leaveDecisions.requestId, id), eq(leaveDecisions.kind, "approval")))).sort((a, b) => (a.step ?? 0) - (b.step ?? 0));
+    const state = async (id: string) => (await db.select({ status: leaveRequests.status, currentStep: leaveRequests.currentStep }).from(leaveRequests).where(eq(leaveRequests.id, id)))[0];
+
+    it("same role at both steps (HR / HR): the step 1 approver can't decide step 2; a second HR user completes it", async () => {
+      await steps("hr", "hr");
+      const hr2 = await makeActor("HR Two", "hr2@test.local", "hr");
+      const a = f.actors.agent1;
+      const { id } = await req(a, "09-07", "09-08");
+
+      expect(await decideLeave(db, f.actors.hr, id, { approve: true, comment: "Fine by me" })).toEqual({ status: "pending", nextStep: 2 });
+      const refused = await errorOf(decideLeave(db, f.actors.hr, id, { approve: true }));
+      expect(refused).toMatchObject({ code: "FORBIDDEN", message: SAME_APPROVER_MESSAGE });
+      // Rejecting step 2 is deciding it too: also refused.
+      expect((await errorOf(decideLeave(db, f.actors.hr, id, { approve: false })))?.message).toBe(SAME_APPROVER_MESSAGE);
+      // Nothing changed: still pending at step 2, days still held, no roster, one decision.
+      expect(await state(id)).toEqual({ status: "pending", currentStep: 2 });
+      expect(await leaveBalance(db, a.id, YEAR)).toMatchObject({ pending: 2, granted: 0 });
+      expect(await db.select().from(rosterEntries).where(eq(rosterEntries.userId, a.id))).toEqual([]);
+      expect(await approvals(id)).toHaveLength(1);
+      // It isn't offered to the first approver, but is to the second.
+      expect((await leaveOverview(db, f.actors.hr, YEAR)).decidable.map((r) => r.id)).not.toContain(id);
+      expect((await leaveOverview(db, hr2, YEAR)).decidable.map((r) => r.id)).toContain(id);
+
+      expect(await decideLeave(db, hr2, id, { approve: true })).toEqual({ status: "approved", rosterDays: 2 });
+      // Both approvers and their times are recorded.
+      const both = await approvals(id);
+      expect(both.map((r) => [r.step, r.actorId, r.approved])).toEqual([
+        [1, f.actors.hr.id, true],
+        [2, hr2.id, true],
+      ]);
+      expect(both[0].comment).toBe("Fine by me");
+      expect(both[1].createdAt.getTime()).toBeGreaterThanOrEqual(both[0].createdAt.getTime());
+      expect(await leaveBalance(db, a.id, YEAR)).toMatchObject({ pending: 0, granted: 2 });
+      expect((await db.select().from(rosterEntries).where(eq(rosterEntries.userId, a.id))).map((r) => [r.date, r.status, r.leaveRequestId])).toEqual([
+        [d("09-07"), "on_leave", id],
+        [d("09-08"), "on_leave", id],
+      ]);
+      const actions = (await db.select({ a: auditLogs.action, by: auditLogs.actorId }).from(auditLogs).where(eq(auditLogs.entityId, id))).map((r) => [r.a, r.by]);
+      expect(actions).toEqual(expect.arrayContaining([["leave.approve_step", f.actors.hr.id], ["leave.approve", hr2.id]]));
+    });
+
+    it("Admin / Admin: the same Admin is refused at step 2; a Super Admin (also an authorised Admin-step approver) completes it", async () => {
+      await steps("admin", "admin");
+      const { id } = await req(f.actors.agent2, "09-14", "09-14");
+      await decideLeave(db, admin, id, { approve: true });
+      expect((await errorOf(decideLeave(db, admin, id, { approve: true })))?.message).toBe(SAME_APPROVER_MESSAGE);
+      expect(await decideLeave(db, f.actors.superAdmin, id, { approve: true })).toMatchObject({ status: "approved" });
+      expect((await approvals(id)).map((r) => r.actorId)).toEqual([admin.id, f.actors.superAdmin.id]);
+    });
+
+    it("team manager / team manager: the same manager is refused at step 2; another manager of the agent completes it", async () => {
+      await steps("team_manager", "team_manager");
+      const m2 = await makeActor("Second Mgr", "mgr2@test.local", "manager");
+      const [team] = await db.insert(teams).values({ name: "Team 3", managerId: m2.id }).returning();
+      await db.insert(teamMembers).values({ teamId: team.id, userId: f.actors.agent1.id });
+      const { id } = await req(f.actors.agent1, "09-21", "09-21");
+      await decideLeave(db, f.actors.manager, id, { approve: true });
+      expect((await errorOf(decideLeave(db, f.actors.manager, id, { approve: true })))?.message).toBe(SAME_APPROVER_MESSAGE);
+      expect(await decideLeave(db, m2, id, { approve: true })).toMatchObject({ status: "approved" });
+    });
+
+    it("different roles at each step keep working, with unauthorised and self-approval still refused", async () => {
+      await steps("team_manager", "hr");
+      const a = f.actors.agent1;
+      const { id } = await req(a, "10-05", "10-06");
+      for (const who of [f.actors.agent2, f.actors.outsideAgent, f.actors.hr, a]) expect(await errorCode(decideLeave(db, who, id, { approve: true }))).toBe("FORBIDDEN");
+      await decideLeave(db, f.actors.manager, id, { approve: true });
+      for (const who of [f.actors.manager, f.actors.agent2, a, admin]) expect(await errorCode(decideLeave(db, who, id, { approve: true }))).toBe("FORBIDDEN");
+      expect(await decideLeave(db, f.actors.hr, id, { approve: true })).toMatchObject({ status: "approved" });
+      // Decided requests stay decided.
+      expect(await errorCode(decideLeave(db, f.actors.hr, id, { approve: true }))).toBe("BUSINESS_RULE");
+    });
+
+    it("a rejection at step 1 or 2 still ends the request and returns its days", async () => {
+      await steps("hr", "hr");
+      const hr2 = await makeActor("HR Two", "hr2@test.local", "hr");
+      const a = f.actors.agent2;
+      const first = await req(a, "10-12", "10-12");
+      expect(await decideLeave(db, f.actors.hr, first.id, { approve: false, comment: "No cover" })).toEqual({ status: "rejected" });
+      expect(await errorCode(decideLeave(db, hr2, first.id, { approve: true }))).toBe("BUSINESS_RULE");
+      const second = await req(a, "10-19", "10-19");
+      await decideLeave(db, f.actors.hr, second.id, { approve: true });
+      expect(await decideLeave(db, hr2, second.id, { approve: false })).toEqual({ status: "rejected" });
+      expect(await leaveBalance(db, a.id, YEAR)).toMatchObject({ pending: 0, granted: 0 });
+      expect(await db.select().from(rosterEntries).where(eq(rosterEntries.userId, a.id))).toEqual([]);
+    });
+
+    it("concurrent attempts by one person can't approve both steps", async () => {
+      await steps("hr", "hr");
+      for (let round = 0; round < 6; round++) {
+        const { id } = await req(f.actors.agent1, `11-${String(round + 2).padStart(2, "0")}`, `11-${String(round + 2).padStart(2, "0")}`);
+        const results = await Promise.allSettled([decideLeave(db, f.actors.hr, id, { approve: true }), decideLeave(db, f.actors.hr, id, { approve: true })]);
+        const ok = results.filter((r) => r.status === "fulfilled");
+        const failed = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+        expect(ok).toHaveLength(1);
+        expect((ok[0] as PromiseFulfilledResult<unknown>).value).toEqual({ status: "pending", nextStep: 2 });
+        expect(failed.map((r) => (r.reason as AppError).message)).toEqual([SAME_APPROVER_MESSAGE]);
+        expect(await state(id)).toEqual({ status: "pending", currentStep: 2 });
+        expect(await approvals(id)).toHaveLength(1);
+      }
+    });
+
+    it("concurrent attempts by two different approvers give one decision per step", async () => {
+      await steps("hr", "hr");
+      const hr2 = await makeActor("HR Two", "hr2@test.local", "hr");
+      for (let round = 0; round < 4; round++) {
+        const day = `12-${String(round + 2).padStart(2, "0")}`;
+        const { id } = await req(f.actors.agent2, day, day);
+        const results = await Promise.all([decideLeave(db, f.actors.hr, id, { approve: true }), decideLeave(db, hr2, id, { approve: true })]);
+        expect(results.map((r) => r.status).sort()).toEqual(["approved", "pending"]);
+        const both = await approvals(id);
+        expect(both.map((r) => r.step)).toEqual([1, 2]);
+        expect(new Set(both.map((r) => r.actorId)).size).toBe(2);
+      }
+    });
+
+    it("the Super Admin single-step path for senior staff is unchanged", async () => {
+      await steps("hr", "hr");
+      const { id } = await req(f.actors.hr, "10-26", "10-27"); // HR is senior: one step, by a Super Admin
+      expect(await errorCode(decideLeave(db, admin, id, { approve: true }))).toBe("FORBIDDEN");
+      expect(await errorCode(decideLeave(db, f.actors.hr, id, { approve: true }))).toBe("FORBIDDEN");
+      expect(await decideLeave(db, f.actors.superAdmin, id, { approve: true })).toMatchObject({ status: "approved" });
+      expect(await approvals(id)).toHaveLength(1);
+      const own = await req(f.actors.superAdmin, "10-28", "10-28");
+      expect((await errorOf(decideLeave(db, f.actors.superAdmin, own.id, { approve: true })))?.message).toMatch(/own leave/);
+    });
+
+    it("the database refuses a second approval by the same person on one request", async () => {
+      const { id } = await req(f.actors.agent1, "11-23", "11-23");
+      await db.insert(leaveDecisions).values({ requestId: id, kind: "approval", step: 1, approved: true, actorId: f.actors.hr.id });
+      await expect(db.insert(leaveDecisions).values({ requestId: id, kind: "approval", step: 2, approved: true, actorId: f.actors.hr.id })).rejects.toThrow();
+      // Other decision kinds by the same person are unaffected.
+      await db.insert(leaveDecisions).values({ requestId: id, kind: "withdrawal", approved: true, actorId: f.actors.hr.id });
+    });
   });
 
   async function teamOf(userId: string) {

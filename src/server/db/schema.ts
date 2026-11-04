@@ -917,7 +917,11 @@ export const leaveDecisions = pgTable(
     comment: text("comment"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("leave_decisions_request_idx").on(t.requestId, t.createdAt)],
+  (t) => [
+    index("leave_decisions_request_idx").on(t.requestId, t.createdAt),
+    // F-6: one approval decision per person per request, so the two staff steps are two different people.
+    uniqueIndex("leave_decisions_one_approval_per_actor_uq").on(t.requestId, t.actorId).where(sql`${t.kind} = 'approval'`),
+  ],
 );
 
 // ─── HR: holidays ─────────────────────────────────────────────────────────────

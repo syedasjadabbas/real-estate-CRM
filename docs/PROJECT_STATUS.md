@@ -1347,3 +1347,72 @@ The first full Vitest run had 20 timeouts at about 10 s, starting mid-file and c
 | Schema drift | Clean (23 migrations, none new) |
 | Build | 101 / 101 pages |
 | Playwright full | **76 / 76** after the leave spec fix (the first run was 75 / 76) |
+
+## 21. F-6 fixed: two-step staff leave needs two different approvers (4 Nov 2026)
+
+Requested as "F-4"; in the §17 findings table this is **F-6** (F-4 there is the audit-log gaps, not started).
+
+**Root cause.** `canDecideStep` checked only the step's approver **role**: step 1 against `leave.staff_step1`, step 2 against `leave.staff_step2`. It never looked at who decided step 1. When both steps resolve to the same role (HR / HR, Admin / Admin, team manager / team manager), the step 1 approver passed the step 2 check and could complete the request alone. The request row lock serialized decisions but didn't stop the same person deciding twice in a row.
+
+**What changed:**
+- **Service (`leave/service.ts`).**
+  - `canDecideStep` now refuses step 2 to whoever approved step 1, read from `leave_decisions`. This applies to approving and to rejecting step 2.
+  - `decideLeave` refuses with **"You approved step 1 of this request. Step 2 needs a different approver."** (403).
+  - The "Waiting for your decision" queue uses the same check, so the request is offered only to someone else.
+- **Database (migration `0023`, additive).** A partial unique index, `leave_decisions_one_approval_per_actor_uq` on (request, actor) where kind = 'approval'. It is the backstop for any other writer. `decideLeave` maps a violation to the same message. Before the index was added, the dev and test databases had no leave decisions, so no row conflicts.
+- **Concurrency.** Decisions still lock the request row first. A second simultaneous attempt by the same person waits, then sees step 1 already recorded as theirs and is refused. If anything bypassed the service, the index would refuse it.
+
+**Unchanged:**
+- **Approval rules.** The step roles and order (still unset, waiting for C-4, so staff requests stay pending with the notice) and senior leave (one step, Super Admin only; Admins can't).
+- **Refusals.** Self-approval, and decided or held cross-year requests.
+- **Balances, roster and audit.** Balances; roster writing on final approval; cancellation; the `leave.approve_step` / `leave.approve` / `leave.reject` audit rows.
+- **No new rules.** No staff approval order was invented, and the settings form still accepts the same role for both steps. Two different people in that role are now required.
+
+**Recorded approvers.** Each step already wrote a `leave_decisions` row with step, approver, decision, comment and time. Both rows are now guaranteed to have different approvers.
+
+**Tests:**
+- `leave.test.ts` "F-6", 9 tests:
+  - **Same role at both steps:**
+    - HR / HR: the step 1 approver is refused at step 2, both approve and reject. Nothing changes: still step 2, days held, no roster. The request isn't in their queue; it is in a second HR user's. That user completes it, and both approvers, times, audit rows, roster days and balance are checked.
+    - Admin / Admin, completed by a Super Admin.
+    - Team manager / team manager, completed by the agent's other team manager.
+  - **Unchanged behaviour:**
+    - different roles per step, with unauthorised users and the requester refused and a decided request staying decided;
+    - rejection at step 1 or 2;
+    - the Super Admin single-step path and its self-approval refusal.
+  - **Concurrency:**
+    - the same person approving twice at once (6 rounds): one step 1, one refusal;
+    - two different approvers at once (4 rounds): one decision per step, two people.
+  - **The database index** refuses a second approval row by the same person.
+- **Checked to be meaningful.** With the service check removed, the database index still refused the second approval with the same message. Only the queue test failed, so both layers work independently.
+- `e2e/leave-two-step.spec.ts` (desktop):
+  - Admin / Admin is set for the test and cleared afterwards. An agent requests leave, and the Admin approves step 1 in one tab.
+  - The same Admin's second, stale tab tries step 2 and gets the message; after a reload, the request is gone from their queue.
+  - The Super Admin completes step 2, and the database shows two different approvers.
+  - Run 8 times in a row: 8 / 8.
+
+**Verification:**
+
+| Check | Result |
+|---|---|
+| Typecheck, lint | Pass |
+| `leave.test.ts` | 24 / 24 |
+| Vitest full | **46 files, 457 / 457** (idle machine), and again 457 / 457 under heavy CPU load (below) |
+| Schema drift | Clean (24 migrations; `0023` applied to development and test) |
+| Build | 101 / 101 pages |
+| Playwright full | **77 / 77** |
+
+**The recurring Vitest stall (investigated separately; not reproduced).** Timeouts were not raised and no retries were added.
+- **Run 1 (idle machine):** a once-a-second sampler of the test database's sessions recorded any query running over 3 s, any idle-in-transaction session over 3 s, and any blocked session. Nothing slow; at most 4 connections at once, so no leaked pools between files.
+- **Run 2 (heavy load):** two production builds and a typecheck ran alongside. 457 / 457 passed in 401 s. The sampler saw only sub-second lock waits from the concurrency tests themselves.
+- **What this rules out:**
+  - CPU load alone;
+  - leaked connections;
+  - a long-held lock inside the suite;
+  - an outside process on the test database (none was connected; the only other Node process was an unrelated Vite server on port 5500).
+- **Still open.** The failures (§16.6, §18, §20) were all on the first full run after a change, all ~10 s hook timeouts that carried over into later files. Next time it happens, run the same sampler during the failing run. That would capture what the stuck `beforeEach` (truncate and fixture seeding) is waiting on.
+
+**Remaining risks:**
+- **No second person, no approval.** With the same role at both steps and only one person in that role (for example a single HR user), staff requests can't complete; they stay pending, visibly. That's the intended consequence of "two different people", but the C-4 decision should name roles with at least two people, or two different roles.
+- **The step 1 approver can't reject step 2 either.** That follows "two different people decide the two steps". If the client wants the first approver to be able to withdraw their approval, that's a new rule (not added).
+- **Deleted approvers.** A decision whose approver account is later deleted keeps `actor_id` null, so the index can't compare it. Users are deactivated, not deleted, in the app, so this is theoretical.

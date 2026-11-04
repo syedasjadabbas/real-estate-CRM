@@ -6,6 +6,7 @@ import { appSettings, auditLogs, employeeProfiles, leaveDecisions, leaveRequests
 import type { Actor } from "@/server/auth/types";
 import { AppError, forbidden, notFound } from "@/server/errors";
 import { businessToday } from "@/modules/bookings/today";
+import { isUniqueViolation } from "@/modules/leads/support";
 import { parseTask as parse } from "@/modules/tasks/support";
 import {
   approvalPathFor,
@@ -194,13 +195,29 @@ async function managesRequester(db: DbOrTx, managerId: string, requesterId: stri
   return Boolean(row);
 }
 
-/** Whether `actor` may decide the request's current approval step. Nobody approves their own leave. */
-export async function canDecideStep(db: DbOrTx, actor: Actor, request: { userId: string; approvalPath: string; currentStep: number; status: string; startDate: string; endDate: string }, settings: LeaveSettings) {
+export const SAME_APPROVER_MESSAGE = "You approved step 1 of this request. Step 2 needs a different approver.";
+
+/** Who approved step 1 of a two-step request (null when nobody has yet). */
+async function stepOneApproverId(db: DbOrTx, requestId: string) {
+  const [row] = await db
+    .select({ actorId: leaveDecisions.actorId })
+    .from(leaveDecisions)
+    .where(and(eq(leaveDecisions.requestId, requestId), eq(leaveDecisions.kind, "approval"), eq(leaveDecisions.step, 1), eq(leaveDecisions.approved, true)))
+    .limit(1);
+  return row?.actorId ?? null;
+}
+
+/**
+ * Whether `actor` may decide the request's current approval step. Nobody approves their own leave,
+ * and the two staff steps need two different people (F-6), even when both steps are the same role.
+ */
+export async function canDecideStep(db: DbOrTx, actor: Actor, request: { id: string; userId: string; approvalPath: string; currentStep: number; status: string; startDate: string; endDate: string }, settings: LeaveSettings) {
   if (request.status !== "pending" || actor.id === request.userId) return false;
   if (isCrossYear(request)) return false;
   if (request.approvalPath === "senior") return actor.role === "super_admin";
   const approver = request.currentStep === 1 ? settings.staffStep1 : settings.staffStep2;
   if (approver === null) return false;
+  if (request.currentStep === 2 && (await stepOneApproverId(db, request.id)) === actor.id) return false;
   if (approver === "hr") return actor.role === "hr";
   if (approver === "admin") return actor.role === "admin" || actor.role === "super_admin";
   return actor.role === "manager" && (await managesRequester(db, actor.id, request.userId));
@@ -235,9 +252,15 @@ export async function decideLeave(db: Database, actor: Actor, id: string, input:
     if (isCrossYear(request)) throw new AppError("BUSINESS_RULE", CROSS_YEAR_HELD_NOTE);
     if (!(await canDecideStep(tx, actor, request, settings))) {
       if (request.approvalPath === "staff" && !settings.staffStep1) throw new AppError("BUSINESS_RULE", "Staff leave approval steps are not set yet (awaiting the company's approval order).");
+      if (request.approvalPath === "staff" && request.currentStep === 2 && (await stepOneApproverId(tx, id)) === actor.id) throw forbidden(SAME_APPROVER_MESSAGE);
       throw forbidden(actor.id === request.userId ? "You can't decide your own leave." : "You can't decide this step.");
     }
-    await tx.insert(leaveDecisions).values({ requestId: id, kind: "approval", step: request.currentStep, approved: data.approve, actorId: actor.id, comment: data.comment });
+    try {
+      await tx.transaction((sp) => sp.insert(leaveDecisions).values({ requestId: id, kind: "approval", step: request.currentStep, approved: data.approve, actorId: actor.id, comment: data.comment }));
+    } catch (error) {
+      if (isUniqueViolation(error, "leave_decisions_one_approval_per_actor_uq")) throw forbidden(SAME_APPROVER_MESSAGE);
+      throw error;
+    }
     const now = new Date();
     const finalStep = request.approvalPath === "senior" || request.currentStep === 2;
     if (!data.approve) {

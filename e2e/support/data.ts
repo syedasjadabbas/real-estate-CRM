@@ -1,10 +1,11 @@
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { createBooking } from "@/modules/bookings/commands";
 import { createUnit } from "@/modules/inventory/commands";
 import { createLead, scheduleFollowUp } from "@/modules/leads/commands";
+import { getLeaveSettings, updateLeaveSettings } from "@/modules/leave/service";
 import { createTeam, setTeamMembers } from "@/modules/teams/commands";
 import { loadActor } from "@/server/auth/session-store";
-import { auditLogs, bookingPayments, bookings, leads, units, users } from "@/server/db/schema";
+import { auditLogs, bookingPayments, bookings, leads, leaveDecisions, units, users } from "@/server/db/schema";
 import { connectTestDb } from "../../tests/support/db";
 import { testDatabaseUrl } from "./guard";
 import { seed, uniquePhone, type Role } from "./seed";
@@ -112,3 +113,15 @@ export function leadPhone(leadId: string) {
   return withDb(async (db) => (await db.select({ code: leads.code, phoneE164: leads.phoneE164, phoneNumber: leads.phoneNumber }).from(leads).where(eq(leads.id, leadId)))[0]);
 }
 
+
+/** Sets (or, with nulls, clears) the two staff leave approval steps through the real service, as the Admin. */
+export function setStaffLeaveSteps(staffStep1: string | null, staffStep2: string | null) {
+  return withDb(async (db) => updateLeaveSettings(db, await actorOf(db, "admin"), { annualDays: (await getLeaveSettings(db)).annualDays, staffStep1, staffStep2 }));
+}
+
+/** Approval decisions on a leave request, step order. */
+export function leaveApprovals(requestId: string) {
+  return withDb(async (db) =>
+    db.select({ step: leaveDecisions.step, actorId: leaveDecisions.actorId, approved: leaveDecisions.approved }).from(leaveDecisions).where(and(eq(leaveDecisions.requestId, requestId), eq(leaveDecisions.kind, "approval"))).orderBy(asc(leaveDecisions.step)),
+  );
+}
