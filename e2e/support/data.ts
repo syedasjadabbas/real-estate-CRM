@@ -107,3 +107,8 @@ export function scheduleFollowUpFor(owner: Role, leadId: string, minutesFromNow:
   });
 }
 
+/** A lead's code and stored (normalized) phone. */
+export function leadPhone(leadId: string) {
+  return withDb(async (db) => (await db.select({ code: leads.code, phoneE164: leads.phoneE164, phoneNumber: leads.phoneNumber }).from(leads).where(eq(leads.id, leadId)))[0]);
+}
+

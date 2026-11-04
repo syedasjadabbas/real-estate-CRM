@@ -1303,3 +1303,47 @@ The first full Vitest run had 20 timeouts at about 10 s, starting mid-file and c
 | Schema drift | Clean (no migration for F-2) |
 | Build | 101 / 101 pages |
 | Playwright full suite | 74 / 74 |
+
+## 20. F-3 fixed: duplicate phone check when a lead's phone is edited (4 Nov 2026)
+
+**Root cause.** `createLead` ran the duplicate rule, but `updateLead` only normalized a new phone and saved it, without looking for another lead with that number. Separately, nothing serialized two requests claiming the same number. Even creation could race: two simultaneous creates could both pass the check.
+
+**Rule (unchanged, LEADS_MODULE_PLAN Q1).** A match is the earliest lead in the **same project** with the same normalized number, not deleted, and not itself a flagged duplicate. Normalization is the existing `phoneOrThrow` / `normalizePhone`, so "0300-1234567", "+92 300 1234567" and "0092 3001234567" are the same number.
+
+**What changed (`leads/commands.ts` only):**
+- **One shared helper, used by both flows.** `findPhoneMatch()` is the rule; create uses it as before, and edit uses it with the edited lead excluded. `duplicatePhoneError()` gives both the same message: "A lead with this phone number already exists in this project."
+  - On edit, the error is also attached to the Mobile number field: "Already used by lead <code>", or "…by another lead in this project" when the editor can't see that lead.
+  - Nothing about a hidden lead is revealed.
+- **The check runs only when the normalized number actually changes.** Keeping the number in a different format, or editing a flagged duplicate's other fields, behaves exactly as before.
+- **Concurrency: `lockPhone()`.** A transaction-scoped database lock on project + number is taken in both create and edit before the check, so simultaneous claims of one number are serialized. On edit it is taken before the lead's row lock, the same order create uses when it regenerates a lead, so the two can't deadlock.
+
+**No schema change, and why.** The only phone index is a lookup index. A unique index can't be added, because flagged duplicates and shared-phone groups (FR-032) legitimately share a number. Development data checked: 0 shared-phone groups and 0 flagged duplicates.
+
+**Kept as before:** permissions, which are checked before the phone check (other teams' leads → 404, HR → 403); the `lead.update` audit row and timeline entry (nothing is written on a refusal); and every other field.
+
+**Tests:**
+- `leads.test.ts` "F-3", 7 tests:
+  - unchanged number in another format, including a flagged duplicate;
+  - unused number saved, normalized, audited and on the timeline;
+  - taken number refused in 5 formats plus a separate country code, with nothing written;
+  - another project or a deleted lead allowed;
+  - hidden lead not revealed, permissions unchanged;
+  - concurrent edits for one number (6 rounds);
+  - edit vs create race (4 rounds), and creation's own duplicate handling.
+- **The race tests were checked to be meaningful.** With the lock temporarily disabled, both failed; with it they pass.
+- `e2e/lead-phone-edit.spec.ts` (desktop and mobile):
+  - the taken number written as "+92 …" is refused, with the message and the field error, and nothing is saved;
+  - a new number then saves normalized and audited.
+
+**Outside F-3, needed for the suite to pass.** `e2e/leave.spec.ts` checked the live day count with a substring match. From 4 Nov, "52 calendar days" (dates lost to a late page load, then 4 Nov → 25 Dec) satisfied a check for "2 calendar days", and the mobile run then hit an overlap. The match is now exact, so the existing retry refills the dates.
+
+**Verification:**
+
+| Check | Result |
+|---|---|
+| Typecheck, lint | Pass |
+| `leads.test.ts` | 29 / 29 |
+| Vitest full | First run: about ten leave and holiday tests hit the 10 s stall seen before (§16.6, §18). The re-run, with a once-a-second database lock sampler, passed **46 files, 448 / 448** and saw no blocked or idle-in-transaction session. The cause is still unidentified. |
+| Schema drift | Clean (23 migrations, none new) |
+| Build | 101 / 101 pages |
+| Playwright full | **76 / 76** after the leave spec fix (the first run was 75 / 76) |

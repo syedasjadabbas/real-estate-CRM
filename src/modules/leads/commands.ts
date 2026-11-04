@@ -1,5 +1,5 @@
 import { leadLink, notify, teamManagersOf } from "@/modules/notifications/service";
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, ne, sql } from "drizzle-orm";
 import { businessToday } from "@/modules/bookings/today";
 import type { Database } from "@/server/db";
 import {
@@ -106,6 +106,47 @@ async function rotateOwner(tx: Tx, projectId: string, now = new Date()): Promise
   return next;
 }
 
+/**
+ * Duplicate phone rule (LEADS_MODULE_PLAN.md Q1), shared by create and edit: the earliest lead in the
+ * same project with the same normalized number that is not deleted and is not itself a flagged
+ * duplicate. `exceptLeadId` leaves out the lead being edited.
+ */
+async function findPhoneMatch(tx: Tx, projectId: string, e164: string, exceptLeadId?: string) {
+  const [existing] = await tx
+    .select()
+    .from(leads)
+    .where(
+      and(
+        eq(leads.projectId, projectId),
+        eq(leads.phoneE164, e164),
+        isNull(leads.deletedAt),
+        isNull(leads.duplicateOfId),
+        exceptLeadId ? ne(leads.id, exceptLeadId) : undefined,
+      ),
+    )
+    .orderBy(asc(leads.createdAt))
+    .limit(1);
+  return existing ?? null;
+}
+
+/**
+ * Serializes concurrent claims of one number in one project (create and edit) until the transaction
+ * ends, so two requests can't both pass the duplicate check. A unique index can't be used: flagged
+ * duplicates and shared-phone groups (FR-032) legitimately share a number.
+ */
+async function lockPhone(tx: Tx, projectId: string, e164: string) {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`lead-phone:${projectId}:${e164}`}, 0))`);
+}
+
+const DUPLICATE_PHONE_MESSAGE = "A lead with this phone number already exists in this project.";
+
+function duplicatePhoneError(existing: typeof leads.$inferSelect, visible: boolean, field?: string) {
+  return new AppError("CONFLICT", DUPLICATE_PHONE_MESSAGE, {
+    details: visible ? { existingLeadId: existing.id, existingCode: existing.code, existingName: existing.name } : {},
+    ...(field ? { fields: { [field]: visible ? `Already used by lead ${existing.code}` : "Already used by another lead in this project" } } : {}),
+  });
+}
+
 export type CreateLeadOutcome =
   | { outcome: "created"; leadId: string; code: string }
   | { outcome: "regenerated"; leadId: string | null; code: string | null };
@@ -124,28 +165,11 @@ export async function createLead(db: Database, actor: Actor, input: unknown): Pr
     const now = new Date();
 
     // Duplicate / re-inquiry handling (LEADS_MODULE_PLAN.md Q1).
-    const [existing] = await tx
-      .select()
-      .from(leads)
-      .where(
-        and(
-          eq(leads.projectId, data.projectId),
-          eq(leads.phoneE164, phone.e164),
-          isNull(leads.deletedAt),
-          isNull(leads.duplicateOfId),
-        ),
-      )
-      .orderBy(asc(leads.createdAt))
-      .limit(1);
+    await lockPhone(tx, data.projectId, phone.e164);
+    const existing = await findPhoneMatch(tx, data.projectId, phone.e164);
     const existingVisible = existing ? canAccessLead(actor, existing.ownerId, members) : false;
 
-    if (existing && data.onDuplicate === "reject") {
-      throw new AppError("CONFLICT", "A lead with this phone number already exists in this project.", {
-        details: existingVisible
-          ? { existingLeadId: existing.id, existingCode: existing.code, existingName: existing.name }
-          : {},
-      });
-    }
+    if (existing && data.onDuplicate === "reject") throw duplicatePhoneError(existing, existingVisible);
 
     if (existing && data.onDuplicate === "regenerate") {
       await tx
@@ -249,12 +273,26 @@ export async function createLead(db: Database, actor: Actor, input: unknown): Pr
 export async function updateLead(db: Database, actor: Actor, leadId: string, input: unknown) {
   assertCan(actor, "edit");
   const data = parse(updateLeadSchema, input);
+  const phoneOf = (lead: typeof leads.$inferSelect) => phoneOrThrow(data.phoneCountryCode ?? lead.phoneCountryCode, data.phoneNumber ?? lead.phoneNumber);
+  const phoneEdited = data.phoneNumber !== undefined || data.phoneCountryCode !== undefined;
   return db.transaction(async (tx) => {
-    const { lead } = await loadAccessibleLead(tx, actor, leadId, true);
+    // F-3: a changed number is checked like a new lead's. The number lock is taken before the lead's
+    // row lock (the order createLead uses when it regenerates an existing lead), so they can't deadlock.
+    if (phoneEdited) {
+      const { lead: current } = await loadAccessibleLead(tx, actor, leadId);
+      const target = phoneOf(current);
+      if (target.e164 !== current.phoneE164) await lockPhone(tx, current.projectId, target.e164);
+    }
+    const { lead, members } = await loadAccessibleLead(tx, actor, leadId, true);
     const changes: Partial<typeof leads.$inferInsert> = {};
     if (data.name !== undefined) changes.name = data.name;
-    if (data.phoneNumber !== undefined || data.phoneCountryCode !== undefined) {
-      const phone = phoneOrThrow(data.phoneCountryCode ?? lead.phoneCountryCode, data.phoneNumber ?? lead.phoneNumber);
+    if (phoneEdited) {
+      const phone = phoneOf(lead);
+      if (phone.e164 !== lead.phoneE164) {
+        await lockPhone(tx, lead.projectId, phone.e164); // no-op if already held; covers a change made meanwhile
+        const existing = await findPhoneMatch(tx, lead.projectId, phone.e164, lead.id);
+        if (existing) throw duplicatePhoneError(existing, canAccessLead(actor, existing.ownerId, members), "phoneNumber");
+      }
       changes.phoneCountryCode = phone.countryCode;
       changes.phoneNumber = phone.national;
       changes.phoneE164 = phone.e164;

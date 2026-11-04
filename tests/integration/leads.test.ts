@@ -390,4 +390,123 @@ describe.skipIf(!hasTestDb)("Leads module (PostgreSQL integration)", () => {
     });
   });
 
+
+  describe("F-3: duplicate phone check when a lead's phone is edited", () => {
+    const errorOf = async (p: Promise<unknown>) => {
+      try {
+        await p;
+        return null;
+      } catch (e) {
+        if (e instanceof AppError) return e;
+        throw e;
+      }
+    };
+    const make = async (actor = f.actors.agent1, phoneNumber?: string, extra: Record<string, unknown> = {}) => {
+      const r = await createLead(db, actor, leadInput(f, { ...(phoneNumber ? { phoneNumber } : {}), ...extra }));
+      if (r.outcome !== "created") throw new Error("setup");
+      return r;
+    };
+    const row = async (id: string) => (await db.select().from(leads).where(eq(leads.id, id)))[0];
+    const updates = async (id: string) => (await db.select().from(auditLogs).where(eq(auditLogs.entityId, id))).filter((a) => a.action === "lead.update").length;
+
+    it("an edit that keeps the number (any formatting) is unchanged behaviour, even for a flagged duplicate", async () => {
+      const a = await make(f.actors.agent1, "03001234567");
+      const dup = await createLead(db, f.actors.agent1, leadInput(f, { phoneNumber: "0300-1234567", onDuplicate: "duplicate" }));
+      if (dup.outcome !== "created") throw new Error("setup");
+      // Same number written differently: nothing to check, nothing changes.
+      expect(await updateLead(db, f.actors.agent1, a.leadId, { phoneNumber: "+92 300 1234567" })).toEqual({ changed: [] });
+      // The flagged duplicate keeps sharing the number while other fields are edited.
+      expect(await updateLead(db, f.actors.agent1, dup.leadId, { name: "Renamed duplicate", phoneNumber: "300 1234567" })).toEqual({ changed: ["name"] });
+    });
+
+    it("a new, unused number is saved, normalized, audited and on the timeline", async () => {
+      const a = await make();
+      const before = await updates(a.leadId);
+      expect(await updateLead(db, f.actors.agent1, a.leadId, { phoneNumber: "0333-7654321" })).toEqual({ changed: ["phoneNumber", "phoneE164"] });
+      expect(await row(a.leadId)).toMatchObject({ phoneNumber: "3337654321", phoneE164: "+923337654321" });
+      expect(await updates(a.leadId)).toBe(before + 1);
+      const detail = await getLeadDetail(db, f.actors.agent1, a.leadId);
+      expect(detail.activities.find((x) => x.type === "update")?.data).toMatchObject({ fields: ["phoneNumber", "phoneE164"] });
+    });
+
+    it("a number another lead in the project already uses is refused, in any format; nothing is written", async () => {
+      const original = await make(f.actors.agent1, "03001112222");
+      const b = await make();
+      const stored = await row(b.leadId);
+      const auditsBefore = await updates(b.leadId);
+      for (const phoneNumber of ["03001112222", "0300-111 2222", "+92 300 1112222", "0092 3001112222", "3001112222"]) {
+        const e = await errorOf(updateLead(db, f.actors.agent1, b.leadId, { phoneNumber, name: "Should not save" }));
+        expect(e?.code, phoneNumber).toBe("CONFLICT");
+        expect(e?.message).toBe("A lead with this phone number already exists in this project.");
+        expect(e?.fields?.phoneNumber).toBe(`Already used by lead ${original.code}`);
+        expect(e?.details).toMatchObject({ existingLeadId: original.leadId, existingCode: original.code });
+      }
+      // Country code given separately resolves to the same number.
+      expect((await errorOf(updateLead(db, f.actors.agent1, b.leadId, { phoneCountryCode: "+92", phoneNumber: "300 1112222" })))?.code).toBe("CONFLICT");
+      expect(await row(b.leadId)).toEqual(stored);
+      expect(await updates(b.leadId)).toBe(auditsBefore);
+    });
+
+    it("the same number in another project, or on a deleted lead, is allowed (same rule as create)", async () => {
+      await make(f.actors.agent1, "03004445555");
+      const elsewhere = await createLead(db, f.actors.superAdmin, leadInput(f, { projectId: f.otherProjectId }));
+      if (elsewhere.outcome !== "created") throw new Error("setup");
+      expect(await updateLead(db, f.actors.superAdmin, elsewhere.leadId, { phoneNumber: "03004445555" })).toEqual({ changed: ["phoneNumber", "phoneE164"] });
+
+      const gone = await make(f.actors.agent1, "03006667777");
+      await db.update(leads).set({ deletedAt: new Date() }).where(eq(leads.id, gone.leadId));
+      const c = await make();
+      expect(await updateLead(db, f.actors.agent1, c.leadId, { phoneNumber: "03006667777" })).toEqual({ changed: ["phoneNumber", "phoneE164"] });
+    });
+
+    it("doesn't reveal a lead the editor can't see; permissions are unchanged", async () => {
+      const hidden = await make(f.actors.outsideAgent, "03008889999");
+      const mine = await make(f.actors.agent1);
+      const e = await errorOf(updateLead(db, f.actors.agent1, mine.leadId, { phoneNumber: "03008889999" }));
+      expect(e?.code).toBe("CONFLICT");
+      expect(e?.details).toEqual({});
+      expect(e?.fields?.phoneNumber).toBe("Already used by another lead in this project");
+      expect(JSON.stringify(e)).not.toContain(hidden.code);
+      // Editing someone else's lead is still refused before any phone check; HR still can't edit.
+      expect(await errorCode(updateLead(db, f.actors.agent2, mine.leadId, { phoneNumber: "03331230000" }))).toBe("NOT_FOUND");
+      expect(await errorCode(updateLead(db, f.actors.hr, mine.leadId, { phoneNumber: "03331230000" }))).toBe("FORBIDDEN");
+    });
+
+    it("concurrent edits claiming the same new number: exactly one wins, the number is never shared", async () => {
+      for (let i = 0; i < 6; i++) {
+        const target = `0345${String(1_000_000 + i)}`;
+        const [b, c] = [await make(), await make()];
+        const results = await Promise.allSettled([
+          updateLead(db, f.actors.agent1, b.leadId, { phoneNumber: target }),
+          updateLead(db, f.actors.agent1, c.leadId, { phoneNumber: target }),
+        ]);
+        expect(results.filter((r) => r.status === "fulfilled"), `round ${i}`).toHaveLength(1);
+        const rejected = results.find((r) => r.status === "rejected") as PromiseRejectedResult;
+        expect((rejected.reason as AppError).code, `round ${i}`).toBe("CONFLICT");
+        const holders = await db.select({ id: leads.id }).from(leads).where(eq(leads.phoneE164, `+92345${String(1_000_000 + i)}`));
+        expect(holders, `round ${i}`).toHaveLength(1);
+      }
+    });
+
+    it("an edit and a new lead racing for the same number: one wins; creation's duplicate check still works", async () => {
+      for (let i = 0; i < 4; i++) {
+        const target = `0346${String(1_000_000 + i)}`;
+        const b = await make();
+        const results = await Promise.allSettled([
+          updateLead(db, f.actors.agent1, b.leadId, { phoneNumber: target }),
+          createLead(db, f.actors.agent1, leadInput(f, { phoneNumber: target })),
+        ]);
+        expect(results.filter((r) => r.status === "fulfilled"), `round ${i}`).toHaveLength(1);
+        const holders = await db.select({ id: leads.id }).from(leads).where(eq(leads.phoneE164, `+92346${String(1_000_000 + i)}`));
+        expect(holders, `round ${i}`).toHaveLength(1);
+      }
+      // Creation itself is unchanged: reject by default, or save as a linked duplicate when chosen.
+      const a = await make(f.actors.agent1, "03007778888");
+      expect(await errorCode(createLead(db, f.actors.agent1, leadInput(f, { phoneNumber: "0300 7778888" })))).toBe("CONFLICT");
+      const dup = await createLead(db, f.actors.agent1, leadInput(f, { phoneNumber: "+92 300 7778888", onDuplicate: "duplicate" }));
+      if (dup.outcome !== "created") throw new Error("expected a created duplicate");
+      expect((await row(dup.leadId)).duplicateOfId).toBe(a.leadId);
+    });
+  });
+
 });

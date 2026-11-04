@@ -6,7 +6,8 @@ async function fillDates(form: Locator, start: string, end: string, days: number
   await expect(async () => {
     await form.getByLabel("First day").fill(start);
     await form.getByLabel("Last day").fill(end);
-    await expect(form.getByText(`${days} calendar day${days === 1 ? "" : "s"}`)).toBeVisible({ timeout: 1_000 });
+    // Exact: "52 calendar days" must not satisfy a check for "2 calendar days".
+    await expect(form.getByText(`${days} calendar day${days === 1 ? "" : "s"}`, { exact: true })).toBeVisible({ timeout: 1_000 });
   }).toPass();
 }
 
