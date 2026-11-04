@@ -1,5 +1,8 @@
 import { and, asc, eq, like } from "drizzle-orm";
-import { createBooking } from "@/modules/bookings/commands";
+import { advanceBooking, cancelBooking, createBooking } from "@/modules/bookings/commands";
+import { convertLeadToClient } from "@/modules/clients/commands";
+import { recordPayment } from "@/modules/finance/commands";
+import { listPaymentMethods } from "@/modules/finance/queries";
 import { createUnit } from "@/modules/inventory/commands";
 import { createLead, scheduleFollowUp } from "@/modules/leads/commands";
 import { getLeaveSettings, updateLeaveSettings } from "@/modules/leave/service";
@@ -146,4 +149,23 @@ export function removeSeededLists(prefix: string) {
     await db.delete(projects).where(like(projects.name, `${prefix} %`));
     await db.delete(teams).where(like(teams.name, `${prefix} %`));
   });
+}
+
+/** Makes the lead's client now (through the real service), as a manager's "Convert to client" does. */
+export function convertLeadFor(leadId: string) {
+  return withDb(async (db) => (await convertLeadToClient(db, await actorOf(db, "manager"), { leadId })).clientId);
+}
+
+/** Moves a new booking to Token pending and records its token in cash, as the Accountant. Dated last year: other specs count this month's receipts. */
+export function payTokenFor(bookingId: string, amount: string) {
+  return withDb(async (db) => {
+    await advanceBooking(db, await actorOf(db, "manager"), bookingId, { toStage: "token_pending" });
+    const methodId = (await listPaymentMethods(db, { activeOnly: true })).find((m) => m.name === "Cash")!.id;
+    const lastYear = `${Number(seed().today.slice(0, 4)) - 1}-12-31`;
+    await recordPayment(db, await actorOf(db, "accountant"), { bookingId, type: "token", amount, receivedOn: lastYear, methodId });
+  });
+}
+
+export function cancelBookingFor(bookingId: string) {
+  return withDb(async (db) => cancelBooking(db, await actorOf(db, "manager"), bookingId, { reason: "Buyer chose another unit" }));
 }

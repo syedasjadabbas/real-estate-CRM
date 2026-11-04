@@ -220,7 +220,7 @@ export async function bookingFormOptions(db: Database, actor: Actor, projectId: 
   return { leads: leadRows, units: unitRows };
 }
 
-/** Bookings shown on unit, lead and client pages, within the actor's booking scope. */
+/** Bookings shown on unit, lead and client pages, within the actor's booking scope. The client page leaves cancelled ones out. */
 export async function bookingsFor(db: Database, actor: Actor, by: { unitId?: string; leadId?: string; clientId?: string }, today = businessToday()) {
   if (!canDoBooking(actor, "view")) return [];
   const members = await teamMemberIds(db, actor);
@@ -236,7 +236,7 @@ export async function bookingsFor(db: Database, actor: Actor, by: { unitId?: str
         bookingScopeFilter(actor, members),
         by.unitId ? eq(bookings.unitId, by.unitId) : undefined,
         by.leadId ? eq(bookings.leadId, by.leadId) : undefined,
-        by.clientId ? eq(bookings.clientId, by.clientId) : undefined,
+        by.clientId ? and(eq(bookings.clientId, by.clientId), sql`${bookings.stage} <> 'cancelled'`) : undefined,
       ),
     )
     .orderBy(desc(bookings.createdAt));

@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { and, eq, isNull, ne } from "drizzle-orm";
 import type { Database } from "@/server/db";
-import { clientFollowUps, clients, leads, users } from "@/server/db/schema";
+import { bookings, clientFollowUps, clients, leads, users } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
 import { AppError, forbidden, notFound } from "@/server/errors";
 import { normalizePhone } from "@/modules/leads/phone";
@@ -101,6 +101,17 @@ export async function createClient(db: Database, actor: Actor, input: unknown) {
 
 export type ConvertOutcome = { outcome: "created" | "linked"; clientId: string };
 
+const openUnlinkedBookings = (leadId: string) => and(eq(bookings.leadId, leadId), isNull(bookings.clientId), ne(bookings.stage, "cancelled"));
+
+/**
+ * F-13: a lead's open bookings belong to its client as soon as the lead has one, so they show on the
+ * client page. Only the link is written: payments, stages and units don't change.
+ */
+export async function linkLeadBookings(tx: Tx, leadId: string, clientId: string) {
+  const linked = await tx.update(bookings).set({ clientId }).where(openUnlinkedBookings(leadId)).returning({ id: bookings.id });
+  return linked.map((b) => b.id);
+}
+
 /**
  * Lead → client (managers for their team's leads, admins for any). A lead whose phone already
  * belongs to a visible client is linked to it on request instead of creating a second client.
@@ -110,6 +121,9 @@ export async function convertLeadToClient(db: Database, actor: Actor, input: unk
   const { leadId, onExisting } = parse(convertLeadSchema, input);
 
   return db.transaction(async (tx) => {
+    // The lead's bookings are locked before the lead itself, the order confirmation uses, so the two can't deadlock.
+    await loadAccessibleLead(tx, actor, leadId);
+    await tx.select({ id: bookings.id }).from(bookings).where(openUnlinkedBookings(leadId)).for("update");
     const { lead, members } = await loadAccessibleLead(tx, actor, leadId, true);
     if (lead.clientId) throw new AppError("BUSINESS_RULE", "This lead is already linked to a client.");
     const now = new Date();
@@ -125,7 +139,8 @@ export async function convertLeadToClient(db: Database, actor: Actor, input: unk
         type: "lead_linked",
         data: { leadId: lead.id, leadCode: lead.code },
       });
-      await auditClient(tx, actor, "client.link_lead", existing.client.id, null, { leadId: lead.id });
+      const bookingIds = await linkLeadBookings(tx, lead.id, existing.client.id);
+      await auditClient(tx, actor, "client.link_lead", existing.client.id, null, { leadId: lead.id, bookingIds });
       return { outcome: "linked", clientId: existing.client.id };
     }
 
@@ -153,7 +168,8 @@ export async function convertLeadToClient(db: Database, actor: Actor, input: unk
       type: "created",
       data: { mode: "lead", leadId: lead.id, leadCode: lead.code },
     });
-    await auditClient(tx, actor, "client.convert", created.id, null, { ...values, leadId: lead.id });
+    const bookingIds = await linkLeadBookings(tx, lead.id, created.id);
+    await auditClient(tx, actor, "client.convert", created.id, null, { ...values, leadId: lead.id, bookingIds });
     return { outcome: "created", clientId: created.id };
   });
 }
@@ -282,28 +298,37 @@ export async function completeClientFollowUp(db: Database, actor: Actor, followU
   });
 }
 
+type BookedLead = { id: string; code: string; name: string; phoneCountryCode: string; phoneNumber: string; phoneE164: string; email: string | null; cityId: string | null; ownerId: string | null; clientId: string | null };
+
 /**
- * FR-050: a confirmed booking's lead appears in Clients, linked. Uses the lead's existing client,
- * else the client with the same phone (one client per person), else creates one owned by the
- * lead's owner. Runs inside the booking transaction; visibility rules don't apply because this is
- * the system linking records, not a user browsing them.
+ * The client this lead already belongs to, or null. Uses the lead's client, else the client with the
+ * same phone (one client per person), linking the lead and its open bookings to it. Never creates a
+ * client: that waits for confirmation (FR-050). Runs inside the booking transaction with the lead
+ * row locked; visibility rules don't apply because this is the system linking records.
  */
-export async function ensureClientForLead(
-  tx: Tx,
-  actor: Actor,
-  lead: { id: string; code: string; name: string; phoneCountryCode: string; phoneNumber: string; phoneE164: string; email: string | null; cityId: string | null; ownerId: string | null; clientId: string | null },
-  bookingId: string,
-): Promise<{ clientId: string; created: boolean }> {
-  if (lead.clientId) return { clientId: lead.clientId, created: false };
+export async function linkExistingClient(tx: Tx, actor: Actor, lead: BookedLead, bookingId: string): Promise<string | null> {
+  if (lead.clientId) {
+    await linkLeadBookings(tx, lead.id, lead.clientId);
+    return lead.clientId;
+  }
   const now = new Date();
   const [existing] = await tx.select({ id: clients.id }).from(clients).where(eq(clients.phoneE164, lead.phoneE164)).limit(1).for("update");
-  if (existing) {
-    await tx.update(leads).set({ clientId: existing.id }).where(eq(leads.id, lead.id));
-    await tx.update(clients).set({ updatedAt: now, lastActivityAt: now }).where(eq(clients.id, existing.id));
-    await logClientActivity(tx, { clientId: existing.id, actorId: actor.id, type: "lead_linked", data: { leadId: lead.id, leadCode: lead.code, bookingId } });
-    await auditClient(tx, actor, "client.link_lead", existing.id, null, { leadId: lead.id, bookingId });
-    return { clientId: existing.id, created: false };
-  }
+  if (!existing) return null;
+  await tx.update(leads).set({ clientId: existing.id }).where(eq(leads.id, lead.id));
+  await tx.update(clients).set({ updatedAt: now, lastActivityAt: now }).where(eq(clients.id, existing.id));
+  await logClientActivity(tx, { clientId: existing.id, actorId: actor.id, type: "lead_linked", data: { leadId: lead.id, leadCode: lead.code, bookingId } });
+  await auditClient(tx, actor, "client.link_lead", existing.id, null, { leadId: lead.id, bookingId });
+  await linkLeadBookings(tx, lead.id, existing.id);
+  return existing.id;
+}
+
+/**
+ * FR-050: a confirmed booking's lead appears in Clients, linked: to the client it already belongs
+ * to (`linkExistingClient`), else to a new one owned by the lead's owner.
+ */
+export async function ensureClientForLead(tx: Tx, actor: Actor, lead: BookedLead, bookingId: string): Promise<{ clientId: string; created: boolean }> {
+  const clientId = await linkExistingClient(tx, actor, lead, bookingId);
+  if (clientId) return { clientId, created: false };
   const values = {
     name: lead.name,
     phoneCountryCode: lead.phoneCountryCode,
@@ -318,5 +343,6 @@ export async function ensureClientForLead(
   await tx.update(leads).set({ clientId: created.id }).where(eq(leads.id, lead.id));
   await logClientActivity(tx, { clientId: created.id, actorId: actor.id, type: "created", data: { mode: "booking", leadId: lead.id, leadCode: lead.code, bookingId } });
   await auditClient(tx, actor, "client.create_from_booking", created.id, null, { ...values, leadId: lead.id, bookingId });
+  await linkLeadBookings(tx, lead.id, created.id);
   return { clientId: created.id, created: true };
 }

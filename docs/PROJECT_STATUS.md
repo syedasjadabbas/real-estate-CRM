@@ -1585,3 +1585,419 @@ Requested as "F-4"; in the §17 findings table this is **F-6** (F-4 there is the
 - **Offset paging.** A record added or changed between two page loads can still shift rows, as on every list.
 - **Lists with no paging, outside F-5:** Holidays and the daily report list were not in the finding and were not changed.
 - **Sign-in history and notifications have no column sorting.** F-5 didn't list them, so they stay newest first. FR-005 taken literally would cover them; that needs a decision.
+
+## 24. Final Completion Reconciliation (4 Nov 2026, commit 7986782)
+
+**Method.**
+- **Authority order:** the quotation first, then `REQUIREMENTS.md`, then the 53 questionnaire answers (received, but unsigned: S-1).
+- **How rows were checked:** all 85 functional requirements were re-traced through the code by three independent read-only reviews, which did not read this file. Every high-impact claim was then rechecked by hand. Earlier percentages and statuses were not used as evidence.
+- **Tests:** no code changed and nothing was re-run. The baseline is the latest verified run: Vitest 486 / 486, Playwright 86 / 86, build 103 / 103, typecheck and lint pass, 24 migrations.
+
+**Three corrections to the brief and to earlier sections:**
+- **Requirement IDs.** There are exactly 85 functional requirements, but they are numbered FR-001 to FR-206 with gaps, not FR-001 to FR-085. All 85 are listed below under their real IDs.
+- **Quotation signature.** The repository's copy has blank approval fields, although `CHANGE_REQUESTS.md` calls it "signed-off". Keep the signed copy on file.
+- **This audit is stricter than §17, which overstated several rows.** §17 said Inventory, Payments and Finance entries had "all four" list controls (they have no column sorting), and marked FR-009, FR-022, FR-028, FR-029 and FR-061 Implemented. Those rows are now Partially implemented. §17's completion figures should not be quoted.
+
+### A. Executive Summary
+
+| Status | Requirements |
+|---|---|
+| Implemented and verified | **45** |
+| Partially implemented | **28** |
+| Not implemented | **0** |
+| Blocked by client decision | **7** |
+| Excluded from agreed scope | **5** |
+| **Total** | **85** |
+
+- **Actual state.** The CRM is a substantial working system: all 14 quoted modules exist and the core sales, booking, payment, proposal, HR and finance flows work end to end. It is **not finished**. Of the 80 requirements in scope, 45 are fully met. No blended percentage is given, because it would hide how different the gaps are.
+- **The quotation lines most at risk:**
+  - **Receipts & sales order:** nothing is built (client templates and code format are outstanding).
+  - **Attendance:** nothing is built (needs client rules and a commercial decision).
+  - **Calls:** all call metrics, targets and charts are empty (one client answer, C-19, unblocks them).
+  - **Token & unit hold:** holds never expire (Q-B2).
+  - **Leave approvals:** agents' and accountants' leave cannot be approved until C-4 is answered.
+- **This audit found new defects** that earlier rounds missed (table in §24.A.1). The most important: an existing client's open bookings and payments are missing from their client page (F-13).
+- **F-1 to F-6 are all confirmed fixed** in code. F-7 to F-12 are still open.
+- **Handover is not possible yet.** It needs agreed development, client decisions, the production preparation and deployment on a server that doesn't exist yet. The 10 Nov presentation of Version 1 is achievable; acceptance and handover by then are not.
+
+#### A.1 Audit findings
+
+| Finding | Status | Evidence |
+|---|---|---|
+| F-1 booking ↔ lead stage | **Confirmed fixed** | `leads/commands.ts:333,488,550`; `meetings/commands.ts:52`; trigger in `drizzle/0022` |
+| F-2 lost leads in To-dos and reminders | **Confirmed fixed** | `followUpLeadActive` in `leads/queries.ts:60,346` and `notifications/service.ts:78` |
+| F-3 duplicate phone on edit | **Confirmed fixed** | `leads/commands.ts:114,137,284–294` |
+| F-4 audit logging, IP, viewer | **Confirmed fixed**, with two limits | 33 audit writes carry the IP; viewer permission-checked; no code updates or deletes audit rows. Immutability is at application level: no database trigger or role protects `audit_logs`. "Permission denials (sampled)" in SECURITY_AND_PRIVACY §3 is not implemented |
+| F-5 page sizes, Projects and Teams sorting | **Confirmed fixed as scoped** | All 16 list constants are 50. FR-005 as a whole is still partial (see below) |
+| F-6 two distinct approvers | **Confirmed fixed** | `leave/service.ts:198–220,261`; `drizzle/0023`. Unusable in practice until C-4 |
+| F-7 reversal date | Open, client decision D-F1 | `finance/commands.ts:165` copies the original date |
+| F-8 roster on past or multi-team leave | Open, C-14 | Unchanged |
+| F-9 Performance footnote | Open, agreed | `performance/page.tsx:214` still says "the date they were added", and that recordings aren't captured |
+| F-10 sign-in message, in-memory limit | Open, agreed | `auth/login.ts:43` reveals an inactive account after a correct password; the rate limit resets on restart |
+| F-11 export fallback, proofs | Open, agreed (export); proofs low | `finance/reports.ts:101` `.catch("collections")` |
+| F-12 stale docs | Partly open | `PRODUCTION_HANDOVER_CHECKLIST.md` says 13 migrations; `REMAINING_CLIENT_CLARIFICATIONS.md` lists built items as unbuilt |
+| **F-13 (new, high)** open bookings not linked to the client | Open, agreed | `bookings.client_id` is set only on confirmation (`bookings/commands.ts:145`). A repeat buyer's open booking, token and payments are missing from Investments, Payment history and the project filter. FR-051, FR-052, FR-204 |
+| **F-14 (new, medium)** overdue understated | Open, needs C-27 | Net paid includes the undated down payment, but "due to date" excludes it (`finance/views.ts:192`). A buyer who paid only the down payment shows 0 overdue with installments past due. Documented in §15.2, but the figure misleads |
+| **F-15 (new, medium)** manager rotation crosses teams | Open, agreed | `rotateOwner` ignores the actor (`leads/commands.ts:77,210`). A manager's Auto-assign can give a lead to an agent outside their team, and they then can't open it |
+| **F-16 (new, medium)** missing list sorting | Open, agreed | Inventory, Payments, Finance entries and Outstanding have no column sorting; Outstanding has no paging; the Regenerated view's sort headers do nothing (`leads/queries.ts:145`) |
+| **F-17 (new)** Sold is unreachable | Open, Q-B4 | `inventory/commands.ts:151–156` blocks any override on a unit with a non-cancelled booking, and Confirmed is final, so a confirmed unit stays Booked |
+| **F-18 (new)** income report excludes collections | Open, new decision D-F2 | `finance/entries.ts:321` reads income entries only, so booking collections aren't income unless re-entered, risking double-recording |
+| **F-19 (new, control gap)** discount cap | Open, needs Q36 | Mismatched rows save with a warning, as the client asked (Q39), so an agent can stay within the cap and enter lower rows. Not a bug against the answers; Q36 (only Super Admin edits) would largely close it |
+| **F-20 (new)** contracts can't be stored after booking | Open, agreed | Uploads are refused on booked leads (`files/lead-files.ts:28`), and clients and bookings have no file target. The client page's contracts panel is a fixed empty state |
+| **F-21 (new, low)** receipt prefix applied at display | Open, with C-21 | `finance/queries.ts:20`: changing the prefix rewrites every past receipt reference shown |
+| **F-22 (new, low)** shared-phone view can't populate | Open, with merge rules | Create and edit both prevent two unflagged leads sharing a phone, so only legacy data appears (FR-032) |
+| **F-23 (new, low)** outstanding by agent | Open, agreed | Grouped by name, so two agents with the same name merge (`finance/reports.ts:74`) |
+
+#### A.2 The four list questions
+
+FR-005 reads: "List pages support search, a filter panel, column sorting and pagination (50 / page)." Its acceptance criteria mention filters, "Clear filters" and page navigation. **It names no pages**, so it neither explicitly requires nor excludes these four. What the code does:
+
+| List | Search / filter | Sorting | Paging | Assessment |
+|---|---|---|---|---|
+| Holidays | Yes | Yes | No (one year at a time) | Bounded by the year; a page of 50 would rarely be reached. A literal gap only |
+| Daily report list | Date and team filters | No | No (default 14 days, range unlimited) | Literal gap. FR-121 asks only for date-wise review |
+| Sign-in history | Event filter | No (newest first) | Yes, 50 | A log panel on My Workplace; FR-130 asks only that it is shown |
+| Notifications | Unread filter | No (newest first) | Yes, 50 | An inbox; FR-006 asks for no sorting |
+
+**Assessment:** treat FR-005 as binding for the main record lists (where F-16 is the real gap). These four are ambiguous, so they need a one-line client confirmation (D-L1), not a silent decision either way. Adding them if wanted: about 0.5 d.
+
+### B. Full 85-Requirement Matrix
+
+**Legend.**
+- **Status:** IV = Implemented and verified · PI = Partially implemented · BC = Blocked by client decision · EX = Excluded from agreed scope.
+- **Verified:** T = traced in code and covered by tests in the passing baseline · T* = traced; test coverage is weak or indirect · – = nothing to verify.
+- **In PKR 175k?** Yes = covered by a quotation line · Yes* = covered, but the rule must come from the client · No = not listed in the quotation.
+- Paths are relative to `src/modules/` unless shown otherwise.
+
+| ID | Requirement | Status | Current implementation | Evidence | Tests | Verified | Remaining work | In PKR 175k? |
+|---|---|---|---|---|---|---|---|---|
+| FR-001 | Email + password sign-in, sessions | IV | Argon2 login, sessions, logout | `server/auth/login.ts:19`, `session-store.ts` | auth.spec, security.test | T | — | Yes |
+| FR-002 | Sign-in / out logged with time and IP | IV | Logged, shown in Workplace, counted in Performance. Expired sessions log no sign-out | `session-store.ts:26,88` | workplace, performance | T | — | Yes |
+| FR-003 | Access-denied card, API 403 | IV | Restricted state and `forbidden()` | `components/ui/empty-state.tsx:28`, `server/errors.ts` | auth.spec | T | — | Yes |
+| FR-004 | Project selector, remembered per user and device | PI | Scoping real. One browser cookie, not per user, not cleared at logout | `server/project-scope.ts:16` | Cookie seeded in e2e only | T* | Remember per user; add a switching test | Yes |
+| FR-005 | Search, filters, sorting, 50 / page | PI | 50 everywhere paged; main lists complete | `*/constants.ts`, `list-pagination.test` | list-controls, projects-teams-lists | T | F-16; D-L1 | Yes |
+| FR-006 | Notifications, unread count, pop-up | IV | Bell, count, pop-up. Window is an admin setting, unset by default; created on poll | `notifications/service.ts:53,64` | notifications, leads-notifications | T | Set the window at handover. More events are N2–N6 | Yes |
+| FR-007 | Responsive at 375 px | IV | Collapsing shell | `components/shell/app-shell.tsx` | responsive.spec (7 pages) | T | — | Yes |
+| FR-008 | Audit log of all changes | IV | All exported writes audited | §22, `audit/service.ts` | audit.test, audit-log.spec | T | — | Yes |
+| FR-009 | App settings incl. rotation | PI | Cap, price and ROI work; no lead-rotation setting exists | `tasks/settings.ts:15`, `leads/commands.ts:77` | tasks | T | Define with C-15 what rotation settings mean, then build | Yes* |
+| FR-010 | KPI tiles match lists | PI | Tiles correct; custom range matches. Rolling-range and team links can differ. "Regenerated" counts leads created in range | `dashboard/queries.ts:34,129` | dashboard, list-controls | T* | Pass exact range and team to the list | Yes |
+| FR-011 | Date chips recalc all widgets | PI | Chips and team filter work. Stale, no-meeting, meetings-done and recent ignore the range (planned deviation) | `dashboard/queries.ts`, `DASHBOARD_PLAN.md:47–50` | dashboard | T | Client accepts the deviation, or scope the widgets | Yes |
+| FR-012 | Source and channel breakdown | IV | Counts and % | `dashboard/queries.ts:134` | dashboard.test | T | — | Yes |
+| FR-013 | Pipeline health | IV | Stale ≥14 d, no meeting, meetings done | `dashboard/queries.ts:159` | dashboard.test | T | — | Yes |
+| FR-014 | Aging × meetings matrix | EX | Placeholder card | `queries.ts:227` | — | – | Priority L; also needs M-Q1–5 | No |
+| FR-015 | Recent leads, top projects | IV | Latest 20; name links to lead | `dashboard/queries.ts:142` | dashboard.test | T | — | Yes |
+| FR-016 | Lost by reason and team | IV | Clickable reasons | `dashboard/queries.ts:180` | dashboard | T | — | Yes |
+| FR-020 | Create lead | IV | All fields, unique code. A forged id gives a 500 rather than a field error | `leads/commands.ts:236` | leads | T | Tidy with F-9 batch | Yes |
+| FR-021 | Ten stages, timeline from → to | PI | Stages work; an approved lost request logs no from → to line | `leads/commands.ts:339,567` | leads, bookings | T | Add the line | Yes |
+| FR-022 | Leads table, all columns sortable | PI | About half the columns sort; Inbound channel, Gender, External ID, Lost reason not shown | `leads/constants.ts:55`, `leads-table.tsx` | leads, list-controls | T | Add sorts and missing columns | Yes |
+| FR-023 | Kanban with counts | IV | Move with permission; 25 cards per stage, no "load more" | `kanban-board.tsx` | pipeline.spec | T | — | Yes |
+| FR-024 | Pipeline filters | IV | AND-combined | `leads/queries.ts:49` | leads, list-controls | T* | More filter tests | Yes |
+| FR-025 | Lead detail, everything in timeline | PI | Complete except client conversion / link; capped at 100 | `leads/queries.ts:250` | leads, recordings | T | Log the link; show all | Yes |
+| FR-026 | Follow-ups, %, overdue | IV | Schedule, done, metric | `leads/commands.ts:393,423` | leads, performance, todos | T | — | Yes |
+| FR-027 | To-dos, count = list | PI | All buckets. Lists stop at 200; tasks and meetings ignore the project | `leads/queries.ts:423–505` | leads, todos-lost-leads | T* | Page the lists; scope the two buckets; parity tests | Yes |
+| FR-028 | First touch, used in reports | PI | Captured and shown; not used in Performance | `leads/support.ts:109` | leads, recordings | T | Add to reports | Yes |
+| FR-029 | Rotation of an assignable team | PI | Works for admins, skips leave. F-15; pointer restart skews evenness | `leads/commands.ts:77` | leads, leave | T* | Fix F-15; add a manager test | Yes |
+| FR-030 | Manual reassign | IV | Logged | `leads/commands.ts:350` | leads | T | — | Yes |
+| FR-031 | Duplicate detection | IV | Same project; reject or flag | `leads/commands.ts:114` | leads, workflows, lead-phone-edit | T | — | Yes |
+| FR-032 | Shared-phone view, merge | BC | View only; no merge (F-22) | `leads/queries.ts:449` | Empty case only | T* | Merge rules 1–6, then 1.5 d | No (merge not listed) |
+| FR-033 | Regenerated leads | IV | Marked, listed, unworked first | `leads/commands.ts:174` | leads, workflows | T | — | Yes |
+| FR-034 | Favourites | IV | Per-user | `leads/commands.ts` | leads, audit | T | — | Yes |
+| FR-035 | Lost + approval | IV | Pending approval flow | `leads/commands.ts:480,538` | leads, workflows | T | — | Yes |
+| FR-036 | Manager reviews feed | IV | Visible to the agent | `leads/queries.ts:486` | leads, audit | T* | Positive feed test | Yes |
+| FR-037 | Won view | IV | Booked leads | `leads/queries.ts:77` | list-controls | T | — | Yes |
+| FR-038 | Upload recordings, documents | IV | Content sniffed, 25 / 10 MB | `recordings/service.ts:32`, `documents/service.ts:16` | recordings, documents, files.spec | T | — | Yes |
+| FR-039 | AI call analysis | EX | None | — | — | – | Separate quote | No |
+| FR-040 | Meta lead ads | EX | None (enum value only) | `schema.ts:51` | — | – | Separate quote | No |
+| FR-041 | TikTok lead ads | EX | None | — | — | – | Separate quote | No |
+| FR-042 | City from managed list, "Other" | PI | Select only, so numbers are impossible. No "Other", no city admin screen | `leads/validation.ts:37` | None for city | T* | Add both | Yes |
+| FR-043 | Lead CSV import | EX | None | `EXTERNAL_INTEGRATIONS.md` §10 | — | – | Quoted separately; needs Q-P5 | No |
+| FR-050 | Client from confirmed booking | IV | Automatic, or manual by admin | `bookings/commands.ts:141` | bookings, clients | T | — | Yes |
+| FR-051 | Clients list and filter | PI | List works; open bookings not counted (F-13) | `clients/queries.ts:56` | clients | T | Fix F-13 | Yes |
+| FR-052 | Client detail incl. contracts | PI | No contracts or documents; misses open bookings (F-13, F-20) | `app/.../clients/[id]/page.tsx` | No page-list test | T* | F-13, F-20 | Yes |
+| FR-060 | Projects CRUD | IV | Inactive hidden from agents' selector | `projects/commands.ts:34` | projects | T | — | Yes |
+| FR-061 | Per-project dimensions as fields / filters | PI | Fields constrained; no per-dimension list filters | `inventory-toolbar.tsx:69` | inventory | T | Add filters | Yes |
+| FR-062 | Project cards | IV | Units, type, link via detail | `project-card.tsx` | projects-teams-lists | T | — | Yes |
+| FR-070 | Unit fields | IV | All stored | `inventory/commands.ts:47` | inventory | T | — | Yes |
+| FR-071 | Unit statuses from bookings | PI | Reserved and Booked driven; Sold unreachable (F-17) | `inventory/status.ts:64` | inventory, bookings | T | Q-B4 | Yes* |
+| FR-072 | SPU, 50% fractional | BC | Stored and filterable; share booking refused | `inventory/status.ts:37` | inventory | T | Q-B1, then 2–3 d | Yes* |
+| FR-073 | Inventory filters | IV | Search, project, status, nature, model | `inventory/queries.ts:54` | inventory | T | — | Yes |
+| FR-074 | Unit detail | IV | Dimensions, booking history | `inventory/queries.ts:104` | inventory | T* | Page test | Yes |
+| FR-075 | Unit CSV import | IV | All-or-nothing, row report | `inventory/import.ts:95` | unit-import, inventory-import | T | — | Not listed; delivered |
+| FR-080 | New booking | PI | Whole units fully met; partially available waits on Q-B1 | `bookings/commands.ts:72` | bookings, booking-lead-stage | T | Q-B1 | Yes* |
+| FR-081 | Hold from token, auto-release | BC | Manual date and overdue chip; no job | `bookings/queries.ts:50` | bookings | T | Q-B2, then 1 d | Yes* |
+| FR-082 | Booking stages, cancel any stage | PI | Order and logs met. Paid or Confirmed bookings can't be cancelled; no payment gates | `bookings/commands.ts:132,161` | bookings | T | Q-B3; CR-3 | Yes* |
+| FR-083 | Booking overview, 30% | IV | Milestone exact; agreement and docs fields manual | `app/.../bookings/[id]/page.tsx:107` | finance, bookings | T | — | Yes |
+| FR-084 | Provisional receipt, Sales order | BC | **Nothing built**; placeholder only | `app/.../bookings/[id]/page.tsx:96` | None | – | Q-B5, C-21, then 2 d | Yes* |
+| FR-085 | Bookings list | IV | Search, project, stage, sort | `bookings/queries.ts:85` | bookings, list-controls | T* | Search test | Yes |
+| FR-090 | Tasks | IV | All fields and statuses | `tasks/commands.ts:143` | tasks | T | C-30 may change statuses | Yes |
+| FR-091 | Proposal builder, print | PI | Builder, cap, print work; print layout not final; F-19 | `tasks/commands.ts:132`, `app/print/proposal` | tasks, questionnaire-screens | T* | Q36, C-25, C-27, C-28; print test | Yes* |
+| FR-092 | Overdue tasks in To-dos | IV | For lead-access roles. HR and accountants (added by Q45) use the Tasks list | `tasks/queries.ts:259` | tasks, todos | T | — | Yes |
+| FR-100 | Meetings | IV | All fields | `meetings/commands.ts:72` | meetings | T | Browser test | Yes |
+| FR-101 | Meeting → Meeting Done | IV | Option, default on | `meetings/commands.ts:152` | meetings | T | — | Yes |
+| FR-102 | Meetings list | IV | Search, filters, sort, 50 | `meetings/queries.ts:52` | meetings | T | — | Yes |
+| FR-110 | Set targets | IV | Calls, meetings, sold sq ft | `targets/service.ts:73` | teams-targets | T | Browser test | Yes |
+| FR-111 | Achievement % | PI | Meetings and sq ft computed; calls always null | `targets/service.ts:29` | teams-targets | T | C-19 | Yes* |
+| FR-120 | Teams | IV | Inactive excluded from rotation | `teams/commands.ts:40` | teams-targets | T* | Rotation test | Yes |
+| FR-121 | Daily report | IV | One per team per date; typed by hand | `teams/commands.ts:128` | teams-targets | T | Browser test | Yes |
+| FR-122 | Duty roster | PI | Views work; Leads off doesn't affect rotation | `teams/commands.ts:161` | teams-targets | T | C-15 | Yes* |
+| FR-130 | My Workplace | IV | Leave, holidays, sign-ins | `workplace/service.ts:25` | workplace | T | — | Yes |
+| FR-140 | Employee directory, Admin / HR only | PI | Fields done; managers can read it (matrix says R, requirement says no) | `employees/policy.ts:9` | employees | T | D-H1 | Yes |
+| FR-141 | Holidays | IV | Company and regional | `holidays/service.ts:56` | holidays, workplace | T | C-3 region rule | Yes |
+| FR-142 | Leave, balance, approvals | PI | Balance, overlap, cancel, senior path done. **Staff leave can't be approved until set** | `leave/service.ts:49,212` | leave, leave.spec, leave-two-step | T | C-4, C-5, C-10, C-13 | Yes* |
+| FR-143 | Attendance | BC | **Nothing built**, by design; sign-ins are not attendance | `app/.../hr/page.tsx:83` | None | – | C-16, CR-1 | Yes* (extent is CR-1) |
+| FR-150 | Agent KPI table | PI | All but calls and call minutes ("—") | `performance/service.ts:42` | performance | T | C-19 | Yes* |
+| FR-151 | Performance charts | PI | Outcome mix and top closers real; two call charts are placeholders | `performance/service.ts:188` | performance | T* | C-19 | Yes* |
+| FR-152 | Call quality buckets | BC | Duration stored; not computed | `schema.ts:316` | Upload only | – | C-19, then with FR-150 | Yes* |
+| FR-153 | Critical flag | BC | Disabled toggle | `app/.../performance/page.tsx:157` | None | – | C-17 | Yes* |
+| FR-200 | Income records | IV | Finance role, attachments, void | `finance/entries.ts:113` | finance-entries | T | — | Yes |
+| FR-201 | Expense records | IV | Same, with payee | `finance/entries.ts:50` | finance-entries | T | — | Yes |
+| FR-202 | Booking payments | IV | Paid and milestone computed from the ledger | `finance/commands.ts:30` | finance, workflows | T | — | Yes |
+| FR-203 | Outstanding, overdue vs schedule | PI | Balance right; overdue understated (F-14); Finance page only | `finance/views.ts:133,192` | finance | T | C-27; show on booking | Yes* |
+| FR-204 | Payment history with receipt numbers | PI | Per booking done; per client misses open bookings (F-13); format waits on C-21 | `finance/queries.ts:20,82` | finance | T | F-13; C-21 | Yes* |
+| FR-205 | Reports, CSV | PI | All four and CSV. F-7, F-18, F-23 affect figures | `finance/reports.ts:39`, `entries.ts:321` | finance-reports, finance-entries | T | D-F1, D-F2, F-23 | Yes* |
+| FR-206 | No hard delete; reversals | IV | Database-level immutability | `drizzle/0005`, `finance/commands.ts:135` | finance, workflows | T | — | Yes |
+
+**Non-functional requirements:**
+
+| ID | Status | Note |
+|---|---|---|
+| NFR-01 10 users | Partially implemented | No concurrency or load test |
+| NFR-02 < 1.5 s at 10k leads | Partially implemented | Never measured |
+| NFR-03 Availability, backups | Blocked by client infrastructure | Script exists; no server |
+| NFR-04 Security | Partially implemented | Code controls in place; live checks never run; F-10 open |
+| NFR-05 Browsers | Partially implemented | Chrome only; Edge, Safari and phones untested |
+| NFR-06 Localization | Implemented and verified | English, PKR, Pakistan time, UTC stored |
+| NFR-07 Ownership | Blocked (commercial) | Source handover follows final payment |
+
+**Questionnaire.** The 53 answers stand as in §17 (28 implemented, 8 partial, 17 blocked). They were not re-audited row by row here. F-6 added distinct approvers to Q6, which stays Blocked on C-4. All remain unsigned.
+
+### C. Remaining Agreed Development
+
+Covered by the quotation, needing **no client decision**.
+
+**A. Unfinished (defects and missing behaviour)**
+
+| # | Task | Rows | Days |
+|---|---|---|---|
+| 1 | F-13: link a client's open bookings and payments | FR-051, 052, 204 | 0.5 |
+| 2 | F-15: keep manager rotation inside their team; fix pointer restart | FR-029 | 0.5 |
+| 3 | F-20: show lead documents on the client page and allow storing contracts after booking | FR-052 | 0.5 |
+| 4 | F-16: column sorting on Inventory, Payments, Finance entries, Outstanding; Outstanding paging; fix Regenerated headers | FR-005 | 1 |
+
+**B. Partially implemented**
+
+| # | Task | Rows | Days |
+|---|---|---|---|
+| 5 | Leads table: remaining sorts and missing columns | FR-022 | 0.5 |
+| 6 | City "Other" and a city admin screen | FR-042 | 0.75 |
+| 7 | Remember the project per user; clear at logout | FR-004 | 0.35 |
+| 8 | KPI links with the exact range and team; regenerated count | FR-010 | 0.5 |
+| 9 | To-dos: page the lists; project scope for tasks and meetings | FR-027 | 0.5 |
+| 10 | Timeline lines: lost approval, client link, full timeline | FR-021, 025 | 0.25 |
+| 11 | First touch in reports | FR-028 | 0.25 |
+| 12 | Per-dimension inventory filters | FR-061 | 0.25 |
+| 13 | Overdue shown on the booking; F-23 | FR-203, 205 | 0.25 |
+| 14 | Small fixes: F-9, F-10, F-11, forged-id 500, stale docs (F-12) | — | 0.35 |
+| 15 | Missing tests (§G) and NFR-01 / NFR-02 checks | — | 2 |
+| | **Total** | | **≈ 8.5 developer-days** |
+
+### D. Client Decisions
+
+The complete decision register stays in §17.D (S-1, C-1 – C-33, CR-1 – CR-3, Q-B1 – Q-B5, D-F1, M-Q1 – 5, Merge 1–6, Q-L7, Q-P5, N2 – N6, D1, Q12, TQ2 – 8, Q-H3, H-1 – H-12): nothing there has been answered since. **New from this audit:** D-F2 (does Income include booking collections?), D-H1 (may managers read the employee directory?), D-L1 (the four lists in §A.2).
+
+**Those that block quoted functionality, most valuable first:**
+
+| Decision | Why it matters | Blocks |
+|---|---|---|
+| **S-1** sign the questionnaire | Answers aren't approved until then | Q31, Q36, Q45, Q50, Q52 access changes; sign-in deletion; every answer's standing |
+| **C-4** leave approval order, no-manager fallback | Agents' and accountants' leave can't be approved. An accountant can't pass a "team manager" step at all, as they have no team | FR-142, Q6 |
+| **C-5, C-13, C-10** senior leave, cross-year, proration | Super Admin's own leave; held requests; provisional balances | FR-142 |
+| **Q-B5, C-21** receipt and sales order templates, code format | Legal documents; a quoted line with nothing built | FR-084, FR-204 |
+| **C-19** does a recording count as a call? | One answer unblocks calls everywhere | FR-111, 150, 151, 152 |
+| **Q-B2** token → hold duration | Holds never expire | FR-081 |
+| **Q-B3, Q-B4** mandatory stages; when Booked becomes Sold | Sold is unreachable | FR-071, 082 |
+| **Q-B1** SPU and 50% shares | These units can't be booked | FR-072, 080 |
+| **C-27** first installment, down-payment date | Overdue understated | FR-203 |
+| **C-25, C-28, C-30, Q36** proposal locking, floor prices and ROI, task statuses | Proposal control; prices | FR-009, 090, 091 |
+| **C-17, C-20** Critical; Pipeline pressure | No rule exists | FR-153, Q28 |
+| **C-15** Leads off and rotation | Roster has no effect | FR-122, 009 |
+| **C-24** PDP / CDP | Undefined; no code exists | Q34 |
+| **D-F1, D-F2** reversal date; income | Financial figures | FR-205 |
+| **C-16 + CR-1** attendance rules and commercial position | **Zeploy Tech's decision too:** the quotation lists "Attendance", so some is owed | FR-143 |
+| **C-22 / CR-3** refunds | Paid bookings can't be cancelled | FR-082, Q32 |
+
+### E. Excluded Scope
+
+**Excluded by the quotation or its priority:**
+- AI call analysis (FR-039), Meta (FR-040) and TikTok (FR-041) lead ads, the aging matrix (FR-014, priority L).
+- WhatsApp, SMS and email, telephony, maps.
+- Advanced accounting, tax filing, bank integrations, payment gateways, automated commissions.
+- Hosting, domain, server, third-party usage fees, maintenance.
+
+**Not listed in the quotation, so they need separate approval:**
+
+| Item | Estimate |
+|---|---|
+| Lead CSV import (FR-043; `EXTERNAL_INTEGRATIONS.md` §10 says quoted separately) | 1–2 d |
+| Lead merge (FR-032) | 1.5 d |
+| Lead deletion (Q-L7; none exists) | 0.5 d |
+| Refund workflow (CR-3; "other financial workflows" are excluded) | 3–5 d |
+| Floor map on proposals (CR-2) | 3–4 d |
+| Full attendance module, beyond what's owed (CR-1) | 6–9 d |
+| Further notification events (N2–N6), email or push | Not estimated |
+
+The questionnaire's clarifications don't extend the agreement by themselves. The unit CSV import (FR-075) wasn't listed either, but it is already delivered.
+
+### F. Production Readiness
+
+Nothing has been deployed. Classification is from the code and scripts.
+
+| Item | Class | Evidence and what remains |
+|---|---|---|
+| Clean database initialization | Partially ready | `setup-production.mjs` is sound: confirms the database name, hidden password, no dev data. Never rehearsed. Client lookup lists needed |
+| Migration execution | Ready | `scripts/db-migrate.mjs`, 24 additive migrations, no drift |
+| Seed protection | Partially ready | `db-seed.mjs` refuses only on `NODE_ENV=production`, so it could still seed a production database from a shell without that setting |
+| Environment validation | Partially ready | `DATABASE_URL` is checked at first use only. No start-up validation. Invalid proxy settings are handled |
+| Authentication and authorization | Ready | Server-side checks, tested per role. F-10 small; rate limit is per process (fine for one instance) |
+| Trusted proxy and IP | Blocked by client infrastructure | Code ready and tested; needs the real proxy, then the live spoof check |
+| HTTPS and security headers | Partially ready | Headers and CSP set (`next.config.ts`, security-headers.spec). CSP allows inline scripts by design. TLS depends on the server |
+| Persistent file storage | Blocked by client infrastructure | Code ready. A missing `FILE_STORAGE_DIR` only warns in production, and should fail |
+| Database and file backups | Partially ready | `backup.sh` does both with checksums. No retention, encryption or failure alert; needs a client destination |
+| Restore procedure | Partially ready | `RESTORE.md`, `restore-check.sh`; no recorded rehearsal |
+| Upload limits and security | Ready | 25 / 10 / 2 MB limits, content sniffing, private storage. The proxy body cap is not yet in `DEPLOYMENT_PROXY.md` |
+| Development account removal | Partially ready | Production setup creates none. Needs the seed guard and a check at go-live |
+| Secret rotation | Partially ready | `.env*` untracked; no written procedure |
+| Error logging and monitoring | Partially ready | Standard output only. No monitoring or alerting |
+| Deployment configuration | Blocked by client infrastructure | Caddy and timer examples exist; no systemd service; no runbook (P3) |
+| Clean-install rehearsal | Partially ready | **Not done** (P5). Can run now without the client |
+| Admin and user documentation | Partially ready | **Not written** (P4). Only a walkthrough checklist exists |
+
+### G. Testing and Quality
+
+**Latest verified evidence:** Vitest 486 / 486 (48 files), Playwright 86 / 86, build 103 / 103, typecheck and lint pass, 24 migrations, no drift. Not re-run for this audit, as no code changed.
+
+**Known intermittent problems, not hidden:**
+- The Vitest stall (10 s hook timeouts, cascading) appeared in several first runs (§16.6, §18, §20). It is unexplained. Runs on 4 Nov, including one under heavy load, didn't reproduce it.
+- One run took 651 s against the usual 180–290 s, with no timeouts and no explanation (§23).
+- Timeouts were never raised and no retries were added.
+
+**Coverage gaps against the requirements:**
+- **No browser test:** booking advance and cancel, meetings, targets, daily reports, task pages, printed proposal output, project selector switching.
+- **No test at all:** an existing client's open booking (F-13), manager auto-assign (F-15), inactive team in rotation, lead city validation, client page booking and payment lists.
+- **Too weak:** shared-phone test asserts empty only; To-do parity on one bucket; pipeline filters beyond stage and priority; the review feed's positive path; bookings search; Q39 warning.
+- **One test approves a defect:** `finance.test.ts:390` accepts the overdue logic behind F-14.
+- **API-level 403s** missing for the finance export, leave and performance routes (services are tested).
+- **Never run:** NFR-01 load, NFR-02 timing, Edge, Safari, real phones, any live-environment check.
+
+### H. Final Work Estimate
+
+One developer, full days.
+
+| Bucket | Developer-days | Notes |
+|---|---|---|
+| **Remaining agreed development** (§C) | **≈ 8.5** (range 7.5–9.5) | Needs nothing from the client |
+| **Client-dependent, inside the quotation** | **≈ 11–14** | Leave 1–1.5 · receipts and sales order 2 · hold 1 · shares 2–3 · calls 1 · Critical and Pressure 1–1.5 · floor prices 0.5–1 · task statuses 0.5–1 · S-1 removals 0.5 · recording delete 0.25 · Sold, overdue, income, reversal date ≈ 1 · PDP / CDP unknown until defined. **Attendance is not included**: its size depends on CR-1 |
+| **Production preparation** | **≈ 2–2.5** | Seed guard, storage and env start-up checks, logging, P3, P4 incl. user guide, P5 |
+| **Deployment and acceptance** | **≈ 3** (range 2–4) | 1 d deployment and live checks, then acceptance support and defect fixes. Client time is extra |
+| **Total to handover** | **≈ 25–28** | Plus attendance, if owed. Excludes §E |
+
+**Outside the agreement unless approved:** §E items, about 15–22 d in total.
+
+### I. Recommended Closure Plan
+
+1. **Now, in parallel:** send the client one decision pack: S-1, C-4, Q-B5 + C-21, C-19, Q-B2, Q-B3 / 4, C-27, and H-1 – H-12. Settle CR-1 commercially. Their turnaround sets the end date.
+2. **F-13** (open bookings on the client page): the only known defect that hides money from users.
+3. **F-15, F-20, then F-16** (remaining agreed defects and list gaps).
+4. **§C items 5–14** (partial requirements).
+5. **Production hardening in code:** seed guard, start-up checks, logging.
+6. **Tests and NFR checks** (§C item 15).
+7. **P3 runbook, P4 guides, P5 rehearsal.**
+8. **10 Nov: present Version 1,** stating openly what waits on the client.
+9. **Client-dependent work as answers arrive:** S-1 removals → C-4 and leave → receipts and sales order → C-19 calls → hold → Q-B3 / 4 → C-27 → proposals and prices → Critical and Pressure → shares.
+10. **Release freeze:** full verification on an idle machine.
+11. **Deploy** on the client's server, with live checks and a backup and restore check.
+12. **Client acceptance,** closing severity 1–2 defects.
+13. **Handover:** documents, secret rotation, written acceptance, the second 50% payment, then source ownership.
+
+## 25. F-13 fixed: open bookings and payments on the client page (4 Nov 2026)
+
+**Root cause.** `bookings.client_id` was written in one place only: on confirmation (`advanceBooking`). `createBooking` never set it, and converting a lead to a client never touched that lead's bookings. The client page, the Clients list and the project filter all read `bookings.client_id`, so an existing client's open bookings, token and payments were invisible until confirmation.
+
+**The rule now.** A booking is linked to its client as soon as the client is known. No new matching rule was added: it uses the lead's client, else the client with the same phone, exactly as confirmation already did. Only the timing changed.
+
+| Moment | Result |
+|---|---|
+| Booking created, lead already has a client | Booking linked |
+| Booking created, phone matches an existing client | Lead and booking linked; audited as `client.link_lead`, on the client timeline |
+| Booking created, no client exists | Not linked. **No client is created early** (FR-050) |
+| Lead converted, or linked on request | All the lead's open bookings linked; ids recorded in the audit row |
+| Booking confirmed | Unchanged: uses or creates the client. Also links the lead's other open bookings |
+| Booking cancelled | Stays off the client page, as before; still listed on the lead and unit |
+
+**What changed (`clients/commands.ts`, `bookings/commands.ts`, `bookings/queries.ts`):**
+- `linkLeadBookings` writes the link for a lead's open, unlinked bookings. It writes **only** `client_id`.
+- `linkExistingClient` is the first half of `ensureClientForLead`, split out so booking creation can use it without creating a client.
+- `bookingsFor` leaves cancelled bookings out of the client view. Without this they would have started appearing once linked.
+- `booking.create` audit rows now include `clientId`.
+- **Concurrency:** everything runs in the existing transaction. Conversion locks the lead's bookings before the lead, the order confirmation uses. Without that, the two deadlock: the race test failed when this was removed.
+- **No duplicates:** the link is one foreign key on the booking, so a booking can't have two clients, and only empty links are filled. An existing link is never overwritten.
+
+**Unchanged:** payment totals, reversals, booking stages, unit status, the "money received can't be cancelled" rule, and permissions. The client page still filters bookings by booking scope and itemised payments by role, so a client's owner doesn't see another team's booking.
+
+**Migration:** none. `bookings.client_id` already existed; still 24 migrations, no drift.
+
+**Existing data, checked on the development database (read-only):**
+
+| Check | Result |
+|---|---|
+| Open bookings not linked, whose lead has a client | 0 |
+| Open bookings not linked, whose phone matches a client | 0 |
+| Linked bookings that disagree with their lead | 0 |
+| Open bookings not linked at all | 1, correct: its buyer has no client yet |
+
+**No reconciliation is needed, and none was run.** No payment or other financial row was touched, and no production data exists. A booking from before this fix, if any, links the next time its lead's client is resolved (a new booking, conversion, or confirmation); a test covers this and proves its payment rows are unchanged.
+
+**Tests:**
+- `tests/integration/client-bookings.test.ts`, 16 tests:
+  - **Linking:** existing client (page, list, project filter, audit); repeat buyer by phone with no second client; new buyer with nothing created early; conversion linking open but not cancelled bookings; link on request.
+  - **Payments:** token and later payments, totals after a reversal, several bookings each with their own payments.
+  - **Lifecycle:** confirmation with an existing client and with a new one, cancellation and the next booking, a paid booking still not cancellable.
+  - **Access:** cross-team client owner, manager and agent restrictions, hidden client.
+  - **Existing records:** a booking from before the fix, payment rows unchanged, a hand-created client.
+  - **Concurrency:** conversion racing a new booking; conversion racing confirmation.
+- **Checked to be meaningful:** with the link removed, 12 of the 16 failed; with the lock order removed, the confirmation race failed.
+- `e2e/client-bookings.spec.ts`, desktop and mobile: open booking and token on the page, a cancelled booking leaving it, the Clients list, the agent seeing no itemised payments; desktop: another agent gets the not-found page for both client and booking.
+
+**Verification:**
+
+| Check | Result |
+|---|---|
+| Typecheck, lint | Pass |
+| Client and booking suites | 51 / 51 |
+| Vitest full | **49 files, 502 / 502** |
+| Schema drift | Clean, 24 migrations |
+| Build | 103 / 103 pages |
+| Playwright full | **89 / 89 in 7.1 min** (final run) |
+
+**The earlier Playwright runs failed, and this is why:**
+
+| Run | Time | Result | Cause |
+|---|---|---|---|
+| 1 | 20.2 min | 84 passed, 5 failed | 3: the new spec's token, dated today, broke other specs' "1 receipts" check. 2: 60 s timeouts |
+| 2 | 7.3 min | 87 passed, 2 failed | The token dated yesterday still fell in this month's default report. Moved to last year |
+| 3 | 16.0 min | 88 passed, 1 failed | `payment-proofs` 60 s timeout. Passed alone in 36 s |
+| 4 | 7.1 min | **89 passed** | Clean |
+
+The pollution was a mistake in the new test data, now fixed. The three timeouts all happened in the slow runs, while the machine's load was swinging up to 97% from processes outside the test run, and none happened in the 7-minute runs. That fits §16.1 (the suite needs an idle machine), but the cause was not proven beyond that. No timeout was raised and no retry was added.
+
+**Effect on §24:**
+- **FR-051** moves to Implemented and verified. FR-052 stays partial (contracts, F-20), and FR-204 stays partial (receipt format, C-21).
+- **Totals now:** 46 implemented and verified, 27 partial, 0 not implemented, 7 blocked, 5 excluded.
+- **Remaining agreed development:** about 8 developer-days.
+- **Test baseline:** Vitest 502 / 502, Playwright 89 / 89.
+
+**Remaining risks:**
+- **Two bookings on one lead at the same moment.** Confirming one while creating or confirming another could make PostgreSQL abort one of them as a deadlock. The transaction rolls back cleanly and the user retries. Rare, and no data is harmed.
+- **A client added by hand after the booking.** An open booking on a lead with that phone isn't linked until the lead is converted or linked, or a booking is created or confirmed. Automatic lead matching on client creation wasn't added, as it's a new rule.
+- **Phone-matched links name the lead on the client timeline,** which the client's owner can see even for another team's lead. Confirmation already did this; it now happens earlier.
+- **Agents see an open booking on a client page only within their booking scope,** so one person's page can show fewer bookings than the Admin's. This is the existing scope rule.
