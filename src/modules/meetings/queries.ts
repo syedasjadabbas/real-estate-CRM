@@ -5,7 +5,7 @@ import { leads, meetingHistory, meetings, users } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
 import { forbidden } from "@/server/errors";
 import { canAccessLead } from "@/modules/leads/policy";
-import { scopeFilter as leadScopeFilter, teamMemberIds, type DbOrTx } from "@/modules/leads/support";
+import { pageWithin, scopeFilter as leadScopeFilter, teamMemberIds, type DbOrTx } from "@/modules/leads/support";
 import { MEETING_PAGE_SIZE } from "./constants";
 import { loadAccessibleMeeting } from "./commands";
 import { ORGANIZER_ROLES, canAccessMeeting, canDoMeeting, meetingScope } from "./policy";
@@ -169,22 +169,22 @@ export async function getMeetingDetail(db: Database, actor: Actor, meetingId: st
 }
 export type MeetingDetail = Awaited<ReturnType<typeof getMeetingDetail>>;
 
-/** FR-027 overdue meetings for To-dos, in the actor's scope (oldest first). */
-export async function overdueMeetings(db: Database, actor: Actor, now = new Date(), limit = 200) {
-  if (!canDoMeeting(actor, "view")) return { count: 0, rows: [] };
+/** FR-027 overdue meetings for To-dos, in the actor's scope (oldest first), 50 per page. */
+export async function overdueMeetings(db: Database, actor: Actor, now = new Date(), requestedPage: unknown = 1) {
+  if (!canDoMeeting(actor, "view")) return { count: 0, rows: [], page: 1, pageCount: 1 };
   const members = await teamMemberIds(db, actor);
   const where = and(meetingScopeFilter(actor, members), overdueCondition(now));
-  const [[{ n }], rows] = await Promise.all([
-    db.select({ n: count() }).from(meetings).where(where),
-    db
-      .select({ id: meetings.id, title: meetings.title, startsAt: meetings.startsAt, organizerName: organizer.name })
-      .from(meetings)
-      .innerJoin(organizer, eq(organizer.id, meetings.organizerId))
-      .where(where)
-      .orderBy(asc(meetings.startsAt))
-      .limit(limit),
-  ]);
-  return { count: n, rows };
+  const [{ n }] = await db.select({ n: count() }).from(meetings).where(where);
+  const { page, pageCount } = pageWithin(requestedPage, n, MEETING_PAGE_SIZE);
+  const rows = await db
+    .select({ id: meetings.id, title: meetings.title, startsAt: meetings.startsAt, organizerName: organizer.name })
+    .from(meetings)
+    .innerJoin(organizer, eq(organizer.id, meetings.organizerId))
+    .where(where)
+    .orderBy(asc(meetings.startsAt), asc(meetings.id))
+    .limit(MEETING_PAGE_SIZE)
+    .offset((page - 1) * MEETING_PAGE_SIZE);
+  return { count: n, rows, page, pageCount };
 }
 
 /** Meetings for one lead (lead page panel), within the actor's meetings scope. */

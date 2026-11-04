@@ -6,7 +6,7 @@ import type { Actor } from "@/server/auth/types";
 import { forbidden } from "@/server/errors";
 import { canAccessBooking, canDoBooking } from "@/modules/bookings/policy";
 import { canAccessLead, leadScope } from "@/modules/leads/policy";
-import { scopeFilter as leadScopeFilter, teamMemberIds, type DbOrTx } from "@/modules/leads/support";
+import { pageWithin, scopeFilter as leadScopeFilter, teamMemberIds, type DbOrTx } from "@/modules/leads/support";
 import { selectableProjects } from "@/modules/projects/queries";
 import { ACTIVE_TASK_STATUSES, TASK_PAGE_SIZE } from "./constants";
 import { ASSIGNABLE_ROLES, canAccessTask, canDoTask, canEditDownPayment, discountCap, taskScope } from "./policy";
@@ -255,20 +255,20 @@ export async function getTaskDetail(db: Database, actor: Actor, taskId: string, 
 }
 export type TaskDetail = Awaited<ReturnType<typeof getTaskDetail>>;
 
-/** FR-092 overdue tasks for To-dos, in the actor's task scope (oldest due first). */
-export async function overdueTasks(db: Database, actor: Actor, now = new Date(), limit = 200) {
-  if (!canDoTask(actor, "view")) return { count: 0, rows: [] };
+/** FR-092 overdue tasks for To-dos, in the actor's task scope (oldest due first), 50 per page. */
+export async function overdueTasks(db: Database, actor: Actor, now = new Date(), requestedPage: unknown = 1) {
+  if (!canDoTask(actor, "view")) return { count: 0, rows: [], page: 1, pageCount: 1 };
   const members = await teamMemberIds(db, actor);
   const where = and(taskScopeFilter(actor, members), overdueCondition(now));
-  const [[{ n }], rows] = await Promise.all([
-    db.select({ n: count() }).from(tasks).where(where),
-    db
-      .select({ id: tasks.id, title: tasks.title, type: tasks.type, status: tasks.status, dueAt: tasks.dueAt, assigneeName: assignee.name })
-      .from(tasks)
-      .innerJoin(assignee, eq(assignee.id, tasks.assigneeId))
-      .where(where)
-      .orderBy(asc(tasks.dueAt))
-      .limit(limit),
-  ]);
-  return { count: n, rows };
+  const [{ n }] = await db.select({ n: count() }).from(tasks).where(where);
+  const { page, pageCount } = pageWithin(requestedPage, n, TASK_PAGE_SIZE);
+  const rows = await db
+    .select({ id: tasks.id, title: tasks.title, type: tasks.type, status: tasks.status, dueAt: tasks.dueAt, assigneeName: assignee.name })
+    .from(tasks)
+    .innerJoin(assignee, eq(assignee.id, tasks.assigneeId))
+    .where(where)
+    .orderBy(asc(tasks.dueAt), asc(tasks.id))
+    .limit(TASK_PAGE_SIZE)
+    .offset((page - 1) * TASK_PAGE_SIZE);
+  return { count: n, rows, page, pageCount };
 }

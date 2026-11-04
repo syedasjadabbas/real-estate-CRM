@@ -18,6 +18,13 @@ export async function teamMemberIds(db: DbOrTx, actor: Actor): Promise<string[]>
   return rows.map((r) => r.userId);
 }
 
+/** A requested page number, within the pages `total` rows fill: junk means page 1, too high means the last page. */
+export function pageWithin(requested: unknown, total: number, pageSize: number) {
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const asked = Number(requested);
+  return { page: Number.isInteger(asked) && asked >= 1 ? Math.min(asked, pageCount) : 1, pageCount };
+}
+
 /** SQL filter restricting leads to the actor's scope. */
 export function scopeFilter(actor: Actor, memberIds: string[]): SQL {
   switch (leadScope(actor.role)) {

@@ -8,7 +8,7 @@ import { createLead, scheduleFollowUp } from "@/modules/leads/commands";
 import { getLeaveSettings, updateLeaveSettings } from "@/modules/leave/service";
 import { createTeam, setTeamMembers } from "@/modules/teams/commands";
 import { loadActor } from "@/server/auth/session-store";
-import { auditLogs, bookingPayments, bookings, financeCategories, financeEntries, leads, leaveDecisions, projects, teams, units, users } from "@/server/db/schema";
+import { auditLogs, bookingPayments, bookings, financeCategories, financeEntries, followUps, leads, leaveDecisions, projects, teams, units, users } from "@/server/db/schema";
 import { connectTestDb } from "../../tests/support/db";
 import { testDatabaseUrl } from "./guard";
 import { seed, uniquePhone, type Role } from "./seed";
@@ -184,5 +184,20 @@ export function seedEntriesFor(categoryName: string, amounts: string[]) {
     const [category] = await db.insert(financeCategories).values({ kind: "expense", name: categoryName }).returning({ id: financeCategories.id });
     const entryDate = `${Number(seed().today.slice(0, 4)) - 1}-06-15`;
     await db.insert(financeEntries).values(amounts.map((amount) => ({ kind: "expense" as const, categoryId: category.id, amount: Number(amount), entryDate, createdById: seed().users.accountant.id })));
+  });
+}
+
+/** `count` overdue follow-ups on a lead, numbered in due order (`<note> 000`…). */
+export function overdueFollowUpsFor(owner: Role, leadId: string, note: string, count: number) {
+  return withDb(async (db) => {
+    const start = Date.now() - 2 * 86_400_000;
+    await db.insert(followUps).values(Array.from({ length: count }, (_, i) => ({ leadId, assigneeId: seed().users[owner].id, dueAt: new Date(start + i * 60_000), note: `${note} ${String(i).padStart(3, "0")}` })));
+  });
+}
+
+/** Removes a lead's follow-ups from the test database, so later specs see the usual counts. */
+export function removeFollowUpsFor(leadId: string) {
+  return withDb(async (db) => {
+    await db.delete(followUps).where(eq(followUps.leadId, leadId));
   });
 }

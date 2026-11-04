@@ -2329,3 +2329,62 @@ Line 95 is about *scored* recordings, which really aren't captured. The others a
 **Completion counts, unchanged:** 48 implemented and verified, 25 partial, 0 not implemented, 7 blocked, 5 excluded.
 
 **Remaining agreed development:** about 6 developer-days. **Baseline:** Vitest 543 / 543, Playwright 116 / 116, build 103 / 103, 25 migrations.
+
+## 32. F-24 fixed: To-dos reach every item a count promises (FR-027) (5 Nov 2026)
+
+**Finding.** New ID for §24.C item 9. FR-027 acceptance: "Each bucket's count matches its list." In the agreement, under Leads → "Follow-ups & notes". No client decision was needed.
+
+**Root cause.** Bucket counts had no limit, but each list ended in `.limit(200)`, with no paging or warning. With 350 overdue follow-ups the page showed "350" and 200 rows, and the 150 newest could not be reached. The list heading counted rows shown, so it said 200. Overdue tasks and meetings had the same cap. No test went near 200 rows.
+
+**What changed:**
+- **`leadTodos`, `overdueTasks`, `overdueMeetings`** now page in the database, 50 per page, and return `page` and `pageCount`. Counts are unchanged.
+- **Stable order.** Lists sort by due date (or created date), then id, so equal times don't move between pages.
+- **`pageWithin`,** one small shared helper: junk means page 1, too high means the last page. That also covers completing the last item on a page.
+- **To-dos page.** The existing pagination shows when a bucket has more than one page, and the heading shows the true total. Bucket links already leave `page` out, so changing bucket returns to page 1.
+- **API.** `GET /api/v1/leads/todos` takes `page`, and `items` is now one page rather than up to 200. `counts` is unchanged, and it adds `page` and `pageCount`.
+
+**Unchanged:** bucket definitions, role scope, the Lost rule (F-2), and the Done button. **Migration:** none; still 25, no drift. No data changed.
+
+**Correction to §24.** FR-027's row said tasks and meetings "ignore the project", and §24.C item 9 listed fixing that. It is not a defect. FR-004 names leads, inventory, bookings and dashboards only, and a general task has no project, so scoping them would be a new rule. Nothing was changed there.
+
+**Files changed:**
+- `modules/leads/queries.ts`, `modules/leads/support.ts`
+- `modules/tasks/queries.ts`, `modules/meetings/queries.ts`
+- `app/(app)/dashboard/leads/todos/page.tsx`, `app/api/v1/leads/todos/route.ts`
+- `tests/integration/todos-paging.test.ts` and `e2e/todos-paging.spec.ts` (both new); `e2e/support/data.ts`
+
+**Tests:**
+- `todos-paging.test.ts`, 8 tests:
+  - a bucket of 230 reaching its last item, in order;
+  - count equal to items across pages for all 8 lead buckets;
+  - equal due dates stable across pages;
+  - out-of-range, junk and empty pages;
+  - completing an item;
+  - agent, manager and admin scope, and Lost leads excluded, on every page;
+  - tasks and meetings paging, and HR still getting none.
+- **Checked to be meaningful:** with the old 200-row list restored, 4 failed.
+- `todos-paging.spec.ts`: an agent walks 55+ overdue follow-ups to the last one on desktop and mobile, with the bucket kept in the URL, the true total shown, a bucket change returning to page 1, and the API page; desktop also checks that a one-page bucket has no paging controls.
+
+**Verification (first full run, no failures):**
+
+| Check | Result |
+|---|---|
+| Typecheck, lint | Pass |
+| Paging, lead, task and meeting tests | 73 / 73 |
+| Vitest full | **53 files, 551 / 551** |
+| Schema drift | Clean, 25 migrations |
+| Build | 103 / 103 pages |
+| Playwright full | **119 / 119** |
+
+Both suites ran slower than recent runs (Vitest 384 s against about 200 s; Playwright 8.3 min against about 6), with no failures or timeouts. The cause was not investigated.
+
+**Remaining risks:**
+- **Offset paging.** Completing items while on a later page shifts rows by one, so an item can move to the previous page. It is never lost: the count stays right and the page can be reloaded.
+- **Overdue tasks and meetings counts** run before the rows now, not alongside them, so a change between the two queries could show a stale count for that one load.
+- **API callers** expecting up to 200 items now get 50 per page. Nothing in the app did.
+- **HR and accountants** still have no To-dos (Q45 tasks), as noted under FR-092.
+- **Other 200-row caps:** the Reviews feed still stops at 200 with no paging. It is outside FR-027.
+
+**Completion counts:** FR-027 moves to Implemented and verified. **49 implemented and verified, 24 partial, 0 not implemented, 7 blocked, 5 excluded.**
+
+**Remaining agreed development:** about 5.5 developer-days. **Baseline:** Vitest 551 / 551, Playwright 119 / 119, build 103 / 103, 25 migrations.

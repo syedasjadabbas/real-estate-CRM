@@ -21,7 +21,7 @@ import { forbidden } from "@/server/errors";
 import { BUSINESS_TIME_ZONE, LEAD_STAGES, PAGE_SIZE, UNATTENDED_HOURS, type LeadStage } from "./constants";
 import { formatPhone } from "./phone";
 import { canAccessLead, canDo, leadScope } from "./policy";
-import { followUpLeadActive, loadAccessibleLead, scopeFilter, teamMemberIds } from "./support";
+import { followUpLeadActive, loadAccessibleLead, pageWithin, scopeFilter, teamMemberIds } from "./support";
 import { leadListQuerySchema, type LeadListQuery } from "./validation";
 
 const owner = alias(users, "owner");
@@ -333,8 +333,11 @@ function dayStart(now: Date, offsetDays: number) {
 export const TODO_BUCKETS = ["today", "doneToday", "tomorrow", "7d", "15d", "30d", "overdue", "unattended"] as const;
 export type TodoBucket = (typeof TODO_BUCKETS)[number];
 
-/** To-dos & overdues (FR-027): lead follow-up buckets. Task and meeting buckets come from their own modules on the To-dos page. */
-export async function leadTodos(db: Database, actor: Actor, projectId: string, bucket: TodoBucket, now = new Date()) {
+/**
+ * To-dos & overdues (FR-027): lead follow-up buckets, 50 per page, so every item a count promises can
+ * be reached. Task and meeting buckets come from their own modules on the To-dos page.
+ */
+export async function leadTodos(db: Database, actor: Actor, projectId: string, bucket: TodoBucket, now = new Date(), requestedPage: unknown = 1) {
   if (!canDo(actor, "view")) throw forbidden();
   const members = await teamMemberIds(db, actor);
   const scope = and(...baseConditions(actor, members, projectId));
@@ -388,6 +391,8 @@ export async function leadTodos(db: Database, actor: Actor, projectId: string, b
     overdue: overdue_,
     unattended: unattended_,
   };
+  const { page, pageCount } = pageWithin(requestedPage, counts[bucket], PAGE_SIZE);
+  const offset = (page - 1) * PAGE_SIZE;
 
   const leadColumns = {
     leadId: leads.id,
@@ -419,8 +424,9 @@ export async function leadTodos(db: Database, actor: Actor, projectId: string, b
       .from(leads)
       .leftJoin(owner, eq(owner.id, leads.ownerId))
       .where(unattended)
-      .orderBy(asc(leads.createdAt))
-      .limit(200);
+      .orderBy(asc(leads.createdAt), asc(leads.id))
+      .limit(PAGE_SIZE)
+      .offset(offset);
     items = rows.map((r) => ({
       key: r.leadId,
       ...r,
@@ -438,11 +444,12 @@ export async function leadTodos(db: Database, actor: Actor, projectId: string, b
       .innerJoin(leads, eq(leads.id, followUps.leadId))
       .leftJoin(owner, eq(owner.id, leads.ownerId))
       .where(and(scope, cond))
-      .orderBy(asc(followUps.dueAt))
-      .limit(200);
+      .orderBy(asc(followUps.dueAt), asc(followUps.id))
+      .limit(PAGE_SIZE)
+      .offset(offset);
     items = rows.map((r) => ({ key: r.followUpId, ...r, phone: formatPhone(r.phoneCountryCode, r.phoneNumber) }));
   }
-  return { counts, items };
+  return { counts, items, page, pageCount };
 }
 
 /** Non-duplicate leads in scope that share a phone number (FR-032, view only). */

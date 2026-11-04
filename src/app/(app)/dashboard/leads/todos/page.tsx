@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StagePill } from "@/features/leads/components/chips";
 import { ScopeNotice, withLeadsAccess } from "@/features/leads/components/list-view";
+import { Pagination } from "@/features/leads/components/pagination";
 import { TodoDoneButton } from "@/features/leads/components/todo-done-button";
 import { formatDateTime } from "@/features/leads/format";
 import { flattenParams } from "@/features/leads/url";
@@ -64,11 +65,14 @@ export default function TodosPage({ searchParams }: PageProps<"/dashboard/leads/
           : (TODO_BUCKETS as readonly string[]).includes(params.bucket)
             ? (params.bucket as TodoBucket)
             : "today";
-    const [{ counts: leadCounts, items }, overdue, lateMeetings] = await Promise.all([
-      leadTodos(db, actor, projectId, bucket === "tasks" || bucket === "meetings" ? "overdue" : bucket),
-      overdueTasks(db, actor),
-      overdueMeetings(db, actor),
+    const listsTasks = bucket === "tasks";
+    const listsMeetings = bucket === "meetings";
+    const [{ counts: leadCounts, items, page: leadPage, pageCount: leadPages }, overdue, lateMeetings] = await Promise.all([
+      leadTodos(db, actor, projectId, listsTasks || listsMeetings ? "overdue" : bucket, undefined, listsTasks || listsMeetings ? 1 : params.page),
+      overdueTasks(db, actor, undefined, listsTasks ? params.page : 1),
+      overdueMeetings(db, actor, undefined, listsMeetings ? params.page : 1),
     ]);
+    const { page, pageCount } = listsTasks ? overdue : listsMeetings ? lateMeetings : { page: leadPage, pageCount: leadPages };
     const counts: Record<Bucket, number> = { ...leadCounts, tasks: overdue.count, meetings: lateMeetings.count };
     const groups = GROUPS.map((g) => ({ ...g, buckets: g.buckets.filter((b) => (b.key !== "tasks" || showTasks) && (b.key !== "meetings" || showMeetings)) }));
 
@@ -124,7 +128,7 @@ export default function TodosPage({ searchParams }: PageProps<"/dashboard/leads/
           <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-3.5">
             <h3 className="text-sm font-black">{TITLES[bucket]}</h3>
             <span className="text-[11px] font-semibold text-zinc-500">
-              {bucket === "tasks" ? overdue.rows.length : bucket === "meetings" ? lateMeetings.rows.length : items.length} in this view
+              {counts[bucket]} in this view
             </span>
           </div>
           {bucket === "meetings" ? (
@@ -199,6 +203,11 @@ export default function TodosPage({ searchParams }: PageProps<"/dashboard/leads/
               ))}
             </ul>
           )}
+          {pageCount > 1 ? (
+            <div className="border-t border-zinc-100 px-4 py-3">
+              <Pagination page={page} pageCount={pageCount} total={counts[bucket]} params={params} />
+            </div>
+          ) : null}
         </Card>
       </section>
     );
