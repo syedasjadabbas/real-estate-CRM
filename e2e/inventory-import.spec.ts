@@ -53,7 +53,7 @@ test("roles without inventory management can't open the import", async ({ page }
 test("the Outstanding screen shows the plan schedule and overdue columns", async ({ page }) => {
   await login(page, "accountant");
   await page.goto("/dashboard/finance/outstanding");
-  for (const name of ["Due to date (plan)", "Overdue"]) await expect(page.getByRole("columnheader", { name, exact: true })).toBeVisible();
+  for (const name of ["Due to date (plan)", "Overdue"]) await expect(page.getByRole("columnheader", { name: `Sort by ${name}`, exact: true })).toBeVisible();
   await expect(page.getByText("Past due on payment plans")).toBeVisible();
   // The seeded booking has no payment plan: no schedule is shown, never a guessed figure.
   await expect(page.getByRole("cell", { name: "No plan" }).first()).toBeVisible();

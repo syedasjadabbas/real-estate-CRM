@@ -21,7 +21,7 @@ export function OutstandingToolbar({
   const pathname = usePathname();
   const [pending, startTransition] = useTransition();
   const [q, setQ] = useState(params.q ?? "");
-  const go = (overrides: Record<string, string | null>) => startTransition(() => router.replace(withParams(pathname, params, overrides)));
+  const go = (overrides: Record<string, string | null>) => startTransition(() => router.replace(withParams(pathname, params, { ...overrides, page: null })));
   const onSubmit = (event: FormEvent) => {
     event.preventDefault();
     go({ q: q.trim() || null });

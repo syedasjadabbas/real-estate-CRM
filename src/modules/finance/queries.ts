@@ -6,7 +6,7 @@ import type { Actor } from "@/server/auth/types";
 import { forbidden, notFound } from "@/server/errors";
 import { bookingScope, canAccessBooking } from "@/modules/bookings/policy";
 import { teamMemberIds } from "@/modules/leads/support";
-import { PAYMENT_PAGE_SIZE, PAYMENT_TYPES, SETTING_KEYS, type SettingKey } from "./constants";
+import { PAYMENT_PAGE_SIZE, PAYMENT_SORT_COLUMNS, PAYMENT_TYPES, SETTING_KEYS, type PaymentSortColumn, type SettingKey } from "./constants";
 import { canDoFinance, canSeeItemisedPayments } from "./policy";
 import { z } from "zod";
 
@@ -119,8 +119,28 @@ const listQuerySchema = z.object({
   to: z.iso.date().optional().catch(undefined),
   bookingId: z.uuid().optional().catch(undefined),
   method: z.uuid().optional().catch(undefined),
+  sort: z.enum(PAYMENT_SORT_COLUMNS).optional().catch(undefined),
+  dir: z.enum(["asc", "desc"]).catch("desc"),
   page: z.coerce.number().int().min(1).max(10_000).catch(1),
 });
+
+/**
+ * The only expressions a sort can reach: `sort` is validated against this list's keys. They order
+ * what the table shows: receipts, then reversals, by number; a reversal's amount as a negative;
+ * Posted, then Reversed, then Reversal.
+ */
+const PAYMENT_SORTS: Record<PaymentSortColumn, SQL> = {
+  ref: sql`array[(${bookingPayments.kind} <> 'payment')::int, coalesce(${bookingPayments.receiptNo}, ${bookingPayments.reversalRef})]`,
+  receivedOn: sql`${bookingPayments.receivedOn}`,
+  lead: sql`lower(${leads.name})`,
+  unit: sql`lower(${units.unitNo})`,
+  project: sql`lower(${projects.name})`,
+  type: sql`${bookingPayments.type}::text`,
+  method: sql`lower(${paymentMethods.name})`,
+  amount: sql`case when ${bookingPayments.kind} = 'payment' then ${bookingPayments.amount} else -${bookingPayments.amount} end`,
+  status: sql`case when ${bookingPayments.kind} <> 'payment' then 2 when exists (select 1 from booking_payments r where r.reversal_of_id = ${bookingPayments.id}) then 1 else 0 end`,
+  recorded: sql`${bookingPayments.recordedAt}`,
+};
 
 /** Search by lead name / code, unit, payment reference, or receipt / reversal number (digits). */
 function searchCondition(q: string | undefined): SQL | undefined {
@@ -158,9 +178,12 @@ export async function listPayments(db: Database, actor: Actor, rawQuery: unknown
     .where(where);
   const pageCount = Math.max(1, Math.ceil(total / PAYMENT_PAGE_SIZE));
   const page = Math.min(q.page, pageCount);
+  // Newest first, then the id, settle ties, so equal values keep their order from page to page.
+  const byDefault = [desc(bookingPayments.recordedAt), desc(bookingPayments.id)];
+  const order = q.sort ? [q.dir === "asc" ? sql`${PAYMENT_SORTS[q.sort]} asc nulls last` : sql`${PAYMENT_SORTS[q.sort]} desc nulls last`, ...byDefault] : byDefault;
   const rows = await baseQuery(db)
     .where(where)
-    .orderBy(desc(bookingPayments.recordedAt))
+    .orderBy(...order)
     .limit(PAYMENT_PAGE_SIZE)
     .offset((page - 1) * PAYMENT_PAGE_SIZE);
   const ids = rows.filter((r) => r.kind === "payment").map((r) => r.id);

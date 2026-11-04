@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, ilike, inArray, ne, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, ilike, inArray, ne, or, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import type { Database } from "@/server/db";
@@ -9,7 +9,7 @@ import { MILESTONE_RATIO } from "@/modules/bookings/constants";
 import { canAccessBooking } from "@/modules/bookings/policy";
 import { businessToday } from "@/modules/bookings/today";
 import { teamMemberIds } from "@/modules/leads/support";
-import { PAYABLE_STAGES } from "./constants";
+import { OUTSTANDING_PAGE_SIZE, OUTSTANDING_SORT_COLUMNS, PAYABLE_STAGES, type OutstandingSortColumn } from "./constants";
 import { netPaidByBooking, toPaisa } from "./ledger";
 import { canDoFinance, canSeeItemisedPayments } from "./policy";
 import { formatReceipt, getFinanceSettings } from "./queries";
@@ -117,6 +117,11 @@ const outstandingQuerySchema = z.object({
   agent: z.uuid().optional().catch(undefined),
   q: z.string().trim().max(100).optional().catch(undefined),
 });
+const outstandingListSchema = outstandingQuerySchema.extend({
+  sort: z.enum(OUTSTANDING_SORT_COLUMNS).optional().catch(undefined),
+  dir: z.enum(["asc", "desc"]).catch("desc"),
+  page: z.coerce.number().int().min(1).max(10_000).catch(1),
+});
 
 /**
  * FR-203 per-booking balances (all bookings except cancelled): total, paid (from rows), outstanding,
@@ -155,38 +160,34 @@ export async function scheduleDueByBooking(db: Database, bookingIds: string[], t
   return out;
 }
 
-export async function outstandingBookings(db: Database, actor: Actor, rawQuery: unknown, today = businessToday()) {
-  if (!canDoFinance(actor, "viewAll")) throw forbidden();
-  const q = outstandingQuerySchema.parse(rawQuery ?? {});
-  const agent = alias(users, "agent");
+const outstandingAgent = alias(users, "agent");
+const outstandingFields = {
+  bookingId: bookings.id,
+  stage: bookings.stage,
+  totalSale: bookings.totalSale,
+  leadName: leads.name,
+  leadCode: leads.code,
+  unitNo: units.unitNo,
+  projectName: projects.name,
+  agentName: outstandingAgent.name,
+};
+type OutstandingBase = { bookingId: string; totalSale: number };
+
+/** Bookings that aren't cancelled, within the list's project, agent and search filters. */
+function outstandingWhere(q: { project?: string; agent?: string; q?: string }) {
   const term = q.q ? `%${q.q.replace(/[%_\\]/g, (c) => `\\${c}`)}%` : null;
-  const rows = await db
-    .select({
-      bookingId: bookings.id,
-      stage: bookings.stage,
-      totalSale: bookings.totalSale,
-      leadName: leads.name,
-      leadCode: leads.code,
-      unitNo: units.unitNo,
-      projectName: projects.name,
-      agentName: agent.name,
-    })
-    .from(bookings)
-    .innerJoin(leads, eq(leads.id, bookings.leadId))
-    .innerJoin(units, eq(units.id, bookings.unitId))
-    .innerJoin(projects, eq(projects.id, bookings.projectId))
-    .leftJoin(agent, eq(agent.id, bookings.agentId))
-    .where(
-      and(
-        ne(bookings.stage, "cancelled"),
-        q.project ? eq(bookings.projectId, q.project) : undefined,
-        q.agent ? eq(bookings.agentId, q.agent) : undefined,
-        term ? or(ilike(leads.name, term), ilike(leads.code, term), ilike(units.unitNo, term)) : undefined,
-      ),
-    )
-    .orderBy(asc(projects.name), asc(sql`lower(${units.unitNo})`));
+  return and(
+    ne(bookings.stage, "cancelled"),
+    q.project ? eq(bookings.projectId, q.project) : undefined,
+    q.agent ? eq(bookings.agentId, q.agent) : undefined,
+    term ? or(ilike(leads.name, term), ilike(leads.code, term), ilike(units.unitNo, term)) : undefined,
+  );
+}
+
+/** Adds each booking's balances (FR-203): the one place these figures are worked out for display. */
+async function withBalances<T extends OutstandingBase>(db: Database, rows: T[], today: string) {
   const [paid, schedule] = await Promise.all([netPaidByBooking(db, rows.map((r) => r.bookingId)), scheduleDueByBooking(db, rows.map((r) => r.bookingId), today)]);
-  const all = rows.map((r) => {
+  return rows.map((r) => {
     const p = paid.get(r.bookingId) ?? 0;
     const plan = schedule.get(r.bookingId) ?? null;
     const overdue = plan ? Math.max(0, toPaisa(plan.dueToDate) - toPaisa(p)) / 100 : null;
@@ -201,16 +202,113 @@ export async function outstandingBookings(db: Database, actor: Actor, rawQuery: 
       overdue,
     };
   });
+}
+
+/** Sales agents with an open (not cancelled) booking, for the agent filter. */
+function outstandingAgents(db: Database) {
+  return db
+    .selectDistinct({ id: outstandingAgent.id, name: outstandingAgent.name })
+    .from(bookings)
+    .innerJoin(outstandingAgent, eq(outstandingAgent.id, bookings.agentId))
+    .where(ne(bookings.stage, "cancelled"))
+    .orderBy(outstandingAgent.name);
+}
+
+/**
+ * The Outstanding screen (FR-005, FR-203): sorted, filtered and paged in the database, 50 per page.
+ * SQL only decides which bookings and in what order, and sums the totals; the figures shown on each
+ * row come from `withBalances`, like the reports. Tests hold the SQL and `outstandingBookings` equal.
+ */
+export async function listOutstanding(db: Database, actor: Actor, rawQuery: unknown, today = businessToday()) {
+  if (!canDoFinance(actor, "viewAll")) throw forbidden();
+  const q = outstandingListSchema.parse(rawQuery ?? {});
+  const planId = sql`(select t.id from tasks t where t.booking_id = ${bookings.id} and t.type = 'payment_plan' and t.status <> 'cancelled' order by t.created_at desc limit 1)`;
+  const base = db
+    .select({
+      ...outstandingFields,
+      // Three tables have a `name`: inside a subquery each needs its own.
+      leadName: sql<string>`${leads.name}`.as("lead_name"),
+      projectName: sql<string>`${projects.name}`.as("project_name"),
+      agentName: sql<string | null>`${outstandingAgent.name}`.as("agent_name"),
+      paid: sql<string>`(select coalesce(sum(case when p.kind = 'payment' then p.amount else -p.amount end), 0) from booking_payments p where p.booking_id = ${bookings.id})`.as("paid"),
+      due: sql<string | null>`case when ${planId} is null then null else (select coalesce(sum(r.amount), 0) from task_installment_rows r where r.task_id = ${planId} and r.due_on <= ${today}::date) end`.as("due"),
+    })
+    .from(bookings)
+    .innerJoin(leads, eq(leads.id, bookings.leadId))
+    .innerJoin(units, eq(units.id, bookings.unitId))
+    .innerJoin(projects, eq(projects.id, bookings.projectId))
+    .leftJoin(outstandingAgent, eq(outstandingAgent.id, bookings.agentId))
+    .where(outstandingWhere(q))
+    .as("o");
+  const owed = sql`(${base.totalSale} - ${base.paid})`;
+  const overdue = sql`(case when ${base.due} is null then null else greatest(0, ${base.due} - ${base.paid}) end)`;
+  const met = sql`(${base.paid} >= round(${base.totalSale} * ${MILESTONE_RATIO}, 2))`;
+  const where = and(q.milestone ? (q.milestone === "met" ? met : sql`not ${met}`) : undefined, q.overdue ? gt(overdue, 0) : undefined);
+  /** The only expressions a sort can reach: `sort` is validated against this list's keys. */
+  const SORTS: Record<OutstandingSortColumn, SQL> = {
+    lead: sql`lower(${base.leadName})`,
+    unit: sql`lower(${base.unitNo})`,
+    project: sql`lower(${base.projectName})`,
+    agent: sql`lower(${base.agentName})`,
+    stage: sql`${base.stage}`,
+    total: sql`${base.totalSale}`,
+    paid: sql`${base.paid}`,
+    outstanding: owed,
+    due: sql`${base.due}`,
+    overdue,
+    milestone: met,
+  };
+  const [sums] = await db
+    .select({
+      n: count(),
+      total: sql<string>`coalesce(sum(${base.totalSale}), 0)`,
+      paid: sql<string>`coalesce(sum(${base.paid}), 0)`,
+      outstanding: sql<string>`coalesce(sum(${owed}), 0)`,
+      overdue: sql<string>`coalesce(sum(${overdue}), 0)`,
+    })
+    .from(base)
+    .where(where);
+  const pageCount = Math.max(1, Math.ceil(sums.n / OUTSTANDING_PAGE_SIZE));
+  const page = Math.min(q.page, pageCount);
+  // The default order, then the id, settle ties, so equal values keep their order from page to page.
+  const byDefault = [asc(base.projectName), asc(sql`lower(${base.unitNo})`), asc(base.bookingId)];
+  const order = q.sort ? [q.dir === "asc" ? sql`${SORTS[q.sort]} asc nulls last` : sql`${SORTS[q.sort]} desc nulls last`, ...byDefault] : byDefault;
+  const rows = await db
+    .select({ bookingId: base.bookingId, stage: base.stage, totalSale: base.totalSale, leadName: base.leadName, leadCode: base.leadCode, unitNo: base.unitNo, projectName: base.projectName, agentName: base.agentName })
+    .from(base)
+    .where(where)
+    .orderBy(...order)
+    .limit(OUTSTANDING_PAGE_SIZE)
+    .offset((page - 1) * OUTSTANDING_PAGE_SIZE);
+  return {
+    query: { ...q, page },
+    total: sums.n,
+    page,
+    pageCount,
+    rows: await withBalances(db, rows, today),
+    agents: await outstandingAgents(db),
+    totals: { total: Number(sums.total), paid: Number(sums.paid), outstanding: Number(sums.outstanding), overdue: Number(sums.overdue) },
+  };
+}
+
+/** Every matching booking with its balances, for reports. The Outstanding screen pages through `listOutstanding`. */
+export async function outstandingBookings(db: Database, actor: Actor, rawQuery: unknown, today = businessToday()) {
+  if (!canDoFinance(actor, "viewAll")) throw forbidden();
+  const q = outstandingQuerySchema.parse(rawQuery ?? {});
+  const rows = await db
+    .select(outstandingFields)
+    .from(bookings)
+    .innerJoin(leads, eq(leads.id, bookings.leadId))
+    .innerJoin(units, eq(units.id, bookings.unitId))
+    .innerJoin(projects, eq(projects.id, bookings.projectId))
+    .leftJoin(outstandingAgent, eq(outstandingAgent.id, bookings.agentId))
+    .where(outstandingWhere(q))
+    .orderBy(asc(projects.name), asc(sql`lower(${units.unitNo})`));
+  const all = await withBalances(db, rows, today);
   let rowsOut = q.milestone ? all.filter((r) => (q.milestone === "met" ? r.milestoneMet : !r.milestoneMet)) : all;
   if (q.overdue) rowsOut = rowsOut.filter((r) => (r.overdue ?? 0) > 0);
   const sum = (pick: (r: (typeof rowsOut)[number]) => number) => rowsOut.reduce((acc, r) => acc + toPaisa(pick(r)), 0) / 100;
-  // Sales agents with an open (not cancelled) booking, for the agent filter.
-  const agents = await db
-    .selectDistinct({ id: agent.id, name: agent.name })
-    .from(bookings)
-    .innerJoin(agent, eq(agent.id, bookings.agentId))
-    .where(ne(bookings.stage, "cancelled"))
-    .orderBy(agent.name);
+  const agents = await outstandingAgents(db);
   return { rows: rowsOut, agents, totals: { total: sum((r) => r.totalSale), paid: sum((r) => r.paid), outstanding: sum((r) => r.outstanding), overdue: sum((r) => r.overdue ?? 0) } };
 }
 export type OutstandingRow = Awaited<ReturnType<typeof outstandingBookings>>["rows"][number];

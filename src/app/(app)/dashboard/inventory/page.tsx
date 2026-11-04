@@ -54,6 +54,9 @@ export default async function InventoryPage({ searchParams }: PageProps<"/dashbo
         rows={result.rows}
         offset={(result.page - 1) * result.pageSize}
         emptyMessage={filtered ? "No units match these filters." : "No units in this scope yet."}
+        params={params}
+        sort={result.query.sort}
+        dir={result.query.dir}
       />
       <Pagination page={result.page} pageCount={result.pageCount} total={result.total} params={params} />
     </section>

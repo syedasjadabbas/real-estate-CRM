@@ -8,7 +8,7 @@ import { createLead, scheduleFollowUp } from "@/modules/leads/commands";
 import { getLeaveSettings, updateLeaveSettings } from "@/modules/leave/service";
 import { createTeam, setTeamMembers } from "@/modules/teams/commands";
 import { loadActor } from "@/server/auth/session-store";
-import { auditLogs, bookingPayments, bookings, leads, leaveDecisions, projects, teams, units, users } from "@/server/db/schema";
+import { auditLogs, bookingPayments, bookings, financeCategories, financeEntries, leads, leaveDecisions, projects, teams, units, users } from "@/server/db/schema";
 import { connectTestDb } from "../../tests/support/db";
 import { testDatabaseUrl } from "./guard";
 import { seed, uniquePhone, type Role } from "./seed";
@@ -176,4 +176,13 @@ export function leadOwnerId(leadId: string) {
 
 export function userIdByEmail(email: string) {
   return withDb(async (db) => (await db.select({ id: users.id }).from(users).where(eq(users.email, email)))[0].id);
+}
+
+/** An expense category and one entry per amount, dated last year so other specs' current totals don't change. */
+export function seedEntriesFor(categoryName: string, amounts: string[]) {
+  return withDb(async (db) => {
+    const [category] = await db.insert(financeCategories).values({ kind: "expense", name: categoryName }).returning({ id: financeCategories.id });
+    const entryDate = `${Number(seed().today.slice(0, 4)) - 1}-06-15`;
+    await db.insert(financeEntries).values(amounts.map((amount) => ({ kind: "expense" as const, categoryId: category.id, amount: Number(amount), entryDate, createdById: seed().users.accountant.id })));
+  });
 }

@@ -26,3 +26,12 @@ export const SETTING_KEYS = ["receipt_prefix", "reversal_prefix"] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
 
 export const PAYMENT_PAGE_SIZE = 50;
+export const OUTSTANDING_PAGE_SIZE = 50;
+
+/** Sortable columns (FR-005). */
+export const PAYMENT_SORT_COLUMNS = ["ref", "receivedOn", "lead", "unit", "project", "type", "method", "amount", "status", "recorded"] as const;
+export type PaymentSortColumn = (typeof PAYMENT_SORT_COLUMNS)[number];
+export const OUTSTANDING_SORT_COLUMNS = ["lead", "unit", "project", "agent", "stage", "total", "paid", "outstanding", "due", "overdue", "milestone"] as const;
+export type OutstandingSortColumn = (typeof OUTSTANDING_SORT_COLUMNS)[number];
+export const ENTRY_SORT_COLUMNS = ["date", "kind", "category", "payee", "amount"] as const;
+export type EntrySortColumn = (typeof ENTRY_SORT_COLUMNS)[number];

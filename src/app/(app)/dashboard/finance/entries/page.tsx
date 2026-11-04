@@ -8,8 +8,10 @@ import { EntryForm } from "@/features/finance/components/entry-forms";
 import { formatListedOn, formatPrice } from "@/features/inventory/format";
 import { PanelCard } from "@/features/leads/components/detail-panels";
 import { Pagination } from "@/features/leads/components/pagination";
+import { SortTh } from "@/features/leads/components/sort-header";
 import { flattenParams } from "@/features/leads/url";
 import { businessToday } from "@/modules/bookings/today";
+import type { EntrySortColumn } from "@/modules/finance/constants";
 import { ENTRY_KIND_LABELS, listCategories, listEntries } from "@/modules/finance/entries";
 import { canDoFinance } from "@/modules/finance/policy";
 import { listPaymentMethods } from "@/modules/finance/queries";
@@ -26,6 +28,9 @@ export default async function EntriesPage({ searchParams }: PageProps<"/dashboar
   const db = getDb();
   const [data, categories, methods] = await Promise.all([listEntries(db, actor, params), listCategories(db), listPaymentMethods(db, { activeOnly: true })]);
   const canRecord = canDoFinance(actor, "record");
+  const sortHeader = (column: EntrySortColumn, label: string, align = "") => (
+    <SortTh path="/dashboard/finance/entries" params={params} column={column} label={label} sort={data.query.sort} dir={data.query.dir} className={`py-2 pr-3 ${align}`} />
+  );
 
   return (
     <section className="space-y-6" aria-label="Income and expenses">
@@ -51,6 +56,8 @@ export default async function EntriesPage({ searchParams }: PageProps<"/dashboar
           <input type="checkbox" name="voided" value="include" defaultChecked={data.query.voided === "include"} />
           Include voided
         </label>
+        {data.query.sort ? <input type="hidden" name="sort" value={data.query.sort} /> : null}
+        {data.query.sort ? <input type="hidden" name="dir" value={data.query.dir} /> : null}
         <button type="submit" className="h-9 rounded-xl bg-brand px-3.5 text-xs font-bold text-white">
           Apply
         </button>
@@ -64,11 +71,11 @@ export default async function EntriesPage({ searchParams }: PageProps<"/dashboar
             <table className="w-full min-w-[640px] border-collapse text-left text-xs">
               <thead>
                 <tr className="border-b border-zinc-200 text-[10px] font-black tracking-[0.05em] text-zinc-600 uppercase">
-                  <th scope="col" className="py-2 pr-3">Date</th>
-                  <th scope="col" className="py-2 pr-3">Kind</th>
-                  <th scope="col" className="py-2 pr-3">Category</th>
-                  <th scope="col" className="py-2 pr-3">Payee / reference</th>
-                  <th scope="col" className="py-2 pr-3 text-right">Amount</th>
+                  {sortHeader("date", "Date")}
+                  {sortHeader("kind", "Kind")}
+                  {sortHeader("category", "Category")}
+                  {sortHeader("payee", "Payee / reference")}
+                  {sortHeader("amount", "Amount", "text-right")}
                 </tr>
               </thead>
               <tbody>

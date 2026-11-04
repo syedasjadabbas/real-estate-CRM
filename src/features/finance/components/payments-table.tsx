@@ -1,26 +1,39 @@
 import Link from "next/link";
 import { EmptyState } from "@/components/ui/empty-state";
 import { formatListedOn, formatPrice } from "@/features/inventory/format";
+import { SortTh } from "@/features/leads/components/sort-header";
 import { formatDateTime } from "@/features/leads/format";
 import { cn } from "@/lib/cn";
-import { PAYMENT_TYPE_LABELS } from "@/modules/finance/constants";
+import { PAYMENT_TYPE_LABELS, type PaymentSortColumn } from "@/modules/finance/constants";
 import type { PaymentListRow } from "@/modules/finance/queries";
 
-const COLUMNS = ["Receipt / ref", "Received on", "Lead", "Unit", "Project", "Type", "Method", "Amount", "Status", "Recorded", ""];
+const COLUMNS: { label: string; sort: PaymentSortColumn }[] = [
+  { label: "Receipt / ref", sort: "ref" },
+  { label: "Received on", sort: "receivedOn" },
+  { label: "Lead", sort: "lead" },
+  { label: "Unit", sort: "unit" },
+  { label: "Project", sort: "project" },
+  { label: "Type", sort: "type" },
+  { label: "Method", sort: "method" },
+  { label: "Amount", sort: "amount" },
+  { label: "Status", sort: "status" },
+  { label: "Recorded", sort: "recorded" },
+];
 
 /** Payments and reversals in the Leads table style. Reversals show negative amounts and the receipt they reverse. */
-export function PaymentsTable({ rows, emptyMessage }: { rows: PaymentListRow[]; emptyMessage: string }) {
+export function PaymentsTable({ rows, emptyMessage, params, sort, dir }: { rows: PaymentListRow[]; emptyMessage: string; params: Record<string, string>; sort: PaymentSortColumn | undefined; dir: "asc" | "desc" }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-hairline">
       <div className="relative max-h-[540px] overflow-auto">
         <table className="w-full min-w-max border-collapse text-left text-xs">
           <thead className="sticky top-0 z-10 bg-zinc-100">
             <tr className="border-b border-zinc-200 text-[10px] font-black tracking-[0.05em] text-zinc-600 uppercase">
-              {COLUMNS.map((c, i) => (
-                <th key={i} scope="col" className="px-3 py-4 whitespace-nowrap">
-                  {c || <span className="sr-only">Open</span>}
-                </th>
+              {COLUMNS.map((c) => (
+                <SortTh key={c.sort} path="/dashboard/finance" params={params} column={c.sort} label={c.label} sort={sort} dir={dir} className="px-3 py-4 whitespace-nowrap" />
               ))}
+              <th scope="col" className="px-3 py-4 whitespace-nowrap">
+                <span className="sr-only">Open</span>
+              </th>
             </tr>
           </thead>
           <tbody>

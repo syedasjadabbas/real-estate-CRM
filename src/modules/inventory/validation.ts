@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DIMENSION_KEYS, SALE_MODELS, UNIT_STATUSES } from "./constants";
+import { DIMENSION_KEYS, SALE_MODELS, UNIT_STATUSES, UNIT_SORT_COLUMNS } from "./constants";
 
 const optionalText = (max: number) =>
   z
@@ -86,6 +86,8 @@ export const unitListQuerySchema = z.object({
   status: z.enum(UNIT_STATUSES).optional().catch(undefined),
   saleModel: z.enum(SALE_MODELS).optional().catch(undefined),
   nature: z.string().trim().max(60).optional().catch(undefined),
+  sort: z.enum(UNIT_SORT_COLUMNS).optional().catch(undefined),
+  dir: z.enum(["asc", "desc"]).catch("desc"),
   page: z.coerce.number().int().min(1).max(10_000).catch(1),
 });
 export type UnitListQuery = z.output<typeof unitListQuerySchema>;

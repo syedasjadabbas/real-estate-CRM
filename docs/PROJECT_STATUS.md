@@ -2250,3 +2250,82 @@ Line 95 is about *scored* recordings, which really aren't captured. The others a
 **Completion counts:** FR-052 moves to Implemented and verified. **48 implemented and verified, 25 partial, 0 not implemented, 7 blocked, 5 excluded.**
 
 **Remaining agreed development:** about 7 developer-days. **Baseline:** Vitest 530 / 530, Playwright 107 / 107, build 103 / 103, 25 migrations. **Next in §24.I:** F-16 (column sorting on Inventory, Payments, Finance entries and Outstanding).
+
+## 31. F-16 fixed: column sorting on Inventory and Finance lists (5 Nov 2026)
+
+**Scope.** FR-005: "List pages support search, a filter panel, column sorting and pagination (50 / page)." Included in the PKR 175,000 agreement, under the Inventory and Accounts & Finance lines.
+
+**Root cause.** The four lists were built with a fixed order and no `sort` parameter. §17 had wrongly recorded them as complete (corrected in §24). Outstanding also had no paging, because its figures were worked out in JavaScript for every booking.
+
+**Sortable columns:**
+
+| List | Sortable | Not sortable, and why |
+|---|---|---|
+| **Inventory** | Project, Floor, Unit, Sale model, Area, Base price, Nature, Category, Status, Type, Bed, Date | `#` is a row counter; Comment is free text |
+| **Payments** | Receipt / ref, Received on, Lead, Unit, Project, Type, Method, Amount, Status, Recorded | The Open link |
+| **Finance entries** | Date, Kind, Category, Payee / reference, Amount | — |
+| **Outstanding** | Lead, Unit, Project, Sales agent, Stage, Total sale, Paid, Outstanding, Due to date, Overdue, 30% milestone | — |
+
+**How it works:**
+- **Allowlists.** `sort` is validated against a fixed list per table, and each key maps to a fixed SQL expression. An invalid `sort` keeps the default order; an invalid `dir` falls back to descending.
+- **Stable.** Ties settle on the list's default order, then the id, so records don't move between pages. The default orders are unchanged, apart from gaining the id tie-break.
+- **Blanks.** Nulls, empty strings and spaces sort last in both directions.
+- **What each sort orders by is what the table shows:**
+  - receipts, then reversals, by number;
+  - a reversal's amount as the negative shown;
+  - Posted, then Reversed, then Reversal;
+  - Payee falling back to the reference;
+  - bookings in stage order.
+- **URL state.** Sort is kept with filters, search and paging. Sorting returns to page 1. The Entries filter form keeps the sort through hidden fields, and the Outstanding filters now return to page 1.
+- **Header.** One shared `SortTh` component, styled like the existing sort headers. First click sorts highest first.
+
+**Outstanding, in detail.** `outstandingBookings` still serves the reports and is unchanged in behaviour. A new `listOutstanding` serves the screen: filtering, sorting, paging (50) and totals run in SQL. **The figures on each row still come from the existing calculation**, now shared as `withBalances`. No financial formula changed. Tests hold the SQL equal to the JavaScript under every filter.
+
+**Migration:** none. Still 25 migrations, no drift. No data changed.
+
+**Files changed:**
+- **Inventory:** `modules/inventory/constants.ts`, `validation.ts`, `queries.ts`; `features/inventory/components/units-table.tsx`; `app/.../inventory/page.tsx`
+- **Finance:** `modules/finance/constants.ts`, `queries.ts`, `entries.ts`, `views.ts`; `features/finance/components/payments-table.tsx`, `outstanding-toolbar.tsx`; `app/.../finance/page.tsx`, `entries/page.tsx`, `outstanding/page.tsx`
+- **Shared:** `features/leads/components/sort-header.tsx` (new)
+- **Tests:** `tests/integration/list-sorting.test.ts` and `e2e/list-sorting.spec.ts` (new); `e2e/support/data.ts`; `e2e/inventory-import.spec.ts`
+
+**Tests:**
+- `list-sorting.test.ts`, 13 tests. Each column, both directions, is compared with a stable sort of the default list, which also proves ties and blanks.
+  - **Inventory:** all 12 columns; pages; filters with search; invalid values; roles.
+  - **Payments:** all 10 columns; reversal state and collections totals unchanged; pages; roles.
+  - **Entries:** all 5 columns; totals identical in every order; voided entries; pages; roles.
+  - **Outstanding:** all 11 columns, including no-plan and no-agent rows; rows and totals equal the report calculation under 8 filter combinations; a reversal moving both equally; paging; roles; the default order.
+- **Checked to be meaningful:** with the overdue SQL deliberately broken, 2 parity tests failed.
+- `list-sorting.spec.ts`, 9 runs: all four lists on desktop and mobile (header state, URL, column order, filters kept), plus refused roles.
+- `inventory-import.spec.ts` updated: a sortable header's accessible name is now "Sort by …".
+
+**Verification:**
+
+| Check | Result |
+|---|---|
+| Typecheck, lint | Pass |
+| `list-sorting.test.ts` | 13 / 13 |
+| Vitest full | **52 files, 543 / 543** in 207 s |
+| Schema drift | Clean, 25 migrations |
+| Build | 103 / 103 pages |
+| Playwright full | **116 / 116 in 5.8 min** (final run) |
+
+**Earlier Playwright runs:** two full runs ended 115 passed, 1 failed, both in `inventory-import.spec.ts`. The old locator expected a plain header name. The first fix attempt didn't match the line, so the second run failed the same way. Nothing intermittent was seen in this round.
+
+**Remaining risks:**
+- **Two calculations for Outstanding.** The SQL decides order, filters and totals; `withBalances` decides displayed figures. Tests hold them equal, but a future formula change must update both.
+- **Milestone rounding.** The SQL rounds 30% to two decimals, while JavaScript uses floating point. They could differ by a paisa on an exact boundary, for the filter and sort only.
+- **Natural order.** Floor and Unit sort as text, so "A-10" comes before "A-9", as in the default order.
+- **Reversal date.** Sorting Received on uses the stored date, which is still the original payment's date (F-7, D-F1).
+- **Status sort on Payments** is computed per row. Fine at this size, but it has no dedicated index.
+
+**Not done, outside this request:**
+- The Regenerated view's sort headers still do nothing. §24 listed this under F-16; this request named four lists.
+- The D-L1 question on Holidays, Daily reports, Sign-in history and Notifications is unanswered.
+- Targets, To-dos, Reviews and Shared phones still have no paging.
+
+**Status of F-16: complete for the four lists.** FR-005 stays partial for the items above.
+
+**Completion counts, unchanged:** 48 implemented and verified, 25 partial, 0 not implemented, 7 blocked, 5 excluded.
+
+**Remaining agreed development:** about 6 developer-days. **Baseline:** Vitest 543 / 543, Playwright 116 / 116, build 103 / 103, 25 migrations.

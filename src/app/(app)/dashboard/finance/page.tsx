@@ -45,7 +45,7 @@ export default async function FinancePaymentsPage({ searchParams }: PageProps<"/
         }
       />
       <PaymentsToolbar params={params} total={result.total} projects={projects} methods={methods.map((m) => ({ id: m.id, name: m.name }))} />
-      <PaymentsTable rows={result.rows} emptyMessage={filtered ? "No payments match these filters." : "No payments have been posted yet."} />
+      <PaymentsTable rows={result.rows} emptyMessage={filtered ? "No payments match these filters." : "No payments have been posted yet."} params={params} sort={result.query.sort} dir={result.query.dir} />
       <Pagination page={result.page} pageCount={result.pageCount} total={result.total} params={params} />
     </section>
   );

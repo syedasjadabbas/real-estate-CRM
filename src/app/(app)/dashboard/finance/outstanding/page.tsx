@@ -6,23 +6,38 @@ import { MiniStat } from "@/components/ui/stat";
 import { BookingStagePill } from "@/features/bookings/components/stage-pill";
 import { OutstandingToolbar } from "@/features/finance/components/outstanding-toolbar";
 import { formatPrice } from "@/features/inventory/format";
+import { Pagination } from "@/features/leads/components/pagination";
+import { SortTh } from "@/features/leads/components/sort-header";
 import { flattenParams } from "@/features/leads/url";
+import type { OutstandingSortColumn } from "@/modules/finance/constants";
 import { canDoFinance } from "@/modules/finance/policy";
-import { outstandingBookings } from "@/modules/finance/views";
+import { listOutstanding } from "@/modules/finance/views";
 import { inventoryProjects } from "@/modules/inventory/queries";
 import { requirePageUser } from "@/server/auth/current-user";
 import { getDb } from "@/server/db";
 
 export const metadata: Metadata = { title: "Finance · Outstanding" };
 
-const COLUMNS = ["Lead", "Unit", "Project", "Sales agent", "Stage", "Total sale", "Paid", "Outstanding", "Due to date (plan)", "Overdue", "30% milestone"];
+const COLUMNS: { label: string; sort: OutstandingSortColumn }[] = [
+  { label: "Lead", sort: "lead" },
+  { label: "Unit", sort: "unit" },
+  { label: "Project", sort: "project" },
+  { label: "Sales agent", sort: "agent" },
+  { label: "Stage", sort: "stage" },
+  { label: "Total sale", sort: "total" },
+  { label: "Paid", sort: "paid" },
+  { label: "Outstanding", sort: "outstanding" },
+  { label: "Due to date (plan)", sort: "due" },
+  { label: "Overdue", sort: "overdue" },
+  { label: "30% milestone", sort: "milestone" },
+];
 
 export default async function OutstandingPage({ searchParams }: PageProps<"/dashboard/finance/outstanding">) {
   const actor = await requirePageUser();
   if (!canDoFinance(actor, "viewAll")) return <RestrictedState />;
   const params = flattenParams(await searchParams);
   const db = getDb();
-  const [result, projects] = await Promise.all([outstandingBookings(db, actor, params), inventoryProjects(db)]);
+  const [result, projects] = await Promise.all([listOutstanding(db, actor, params), inventoryProjects(db)]);
 
   return (
     <section className="space-y-6" aria-label="Outstanding balances">
@@ -32,7 +47,7 @@ export default async function OutstandingPage({ searchParams }: PageProps<"/dash
         description="Per booking: total sale − posted payments (net of reversals). Overdue compares the booking's payment plan (installments due on the 10th) with what has been paid; installments without a date, such as the down payment, aren't counted."
       />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-        <MiniStat label="Total sale" value={formatPrice(result.totals.total)} caption={`${result.rows.length} bookings`} />
+        <MiniStat label="Total sale" value={formatPrice(result.totals.total)} caption={`${result.total} bookings`} />
         <MiniStat label="Paid" value={formatPrice(result.totals.paid)} caption="Posted payments − reversals" />
         <MiniStat label="Outstanding" value={formatPrice(result.totals.outstanding)} caption="Still to collect" />
         <MiniStat label="Overdue" value={formatPrice(result.totals.overdue)} caption="Past due on payment plans" />
@@ -44,9 +59,7 @@ export default async function OutstandingPage({ searchParams }: PageProps<"/dash
             <thead className="sticky top-0 z-10 bg-zinc-100">
               <tr className="border-b border-zinc-200 text-[10px] font-black tracking-[0.05em] text-zinc-600 uppercase">
                 {COLUMNS.map((c) => (
-                  <th key={c} scope="col" className="px-3 py-4 whitespace-nowrap">
-                    {c}
-                  </th>
+                  <SortTh key={c.sort} path="/dashboard/finance/outstanding" params={params} column={c.sort} label={c.label} sort={result.query.sort} dir={result.query.dir} className="px-3 py-4 whitespace-nowrap" />
                 ))}
               </tr>
             </thead>
@@ -91,6 +104,7 @@ export default async function OutstandingPage({ searchParams }: PageProps<"/dash
           ) : null}
         </div>
       </div>
+      <Pagination page={result.page} pageCount={result.pageCount} total={result.total} params={params} />
     </section>
   );
 }

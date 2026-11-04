@@ -1,10 +1,10 @@
-import { and, asc, count, desc, eq, ilike, isNotNull, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, isNotNull, or, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { Database } from "@/server/db";
 import { auditLogs, projects, units, users } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
 import { forbidden, notFound } from "@/server/errors";
-import { UNIT_PAGE_SIZE } from "./constants";
+import { UNIT_PAGE_SIZE, type UnitSortColumn } from "./constants";
 import { canDoInventory } from "./policy";
 import { unitListQuerySchema } from "./validation";
 
@@ -44,6 +44,25 @@ const rowSelection = {
   updatedAt: units.updatedAt,
 };
 
+/** Text columns sort case-insensitively, with blanks treated as empty. */
+const text = (column: SQLWrapper) => sql`nullif(lower(trim(${column})), '')`;
+
+/** The only expressions a sort can reach: `sort` is validated against this list's keys. */
+const SORTS: Record<UnitSortColumn, SQL> = {
+  project: sql`lower(${projects.name})`,
+  floor: text(units.floor),
+  unit: text(units.unitNo),
+  saleModel: sql`${units.saleModel}::text`,
+  area: sql`${units.areaSqft}`,
+  price: sql`${units.basePrice}`,
+  nature: text(units.nature),
+  category: text(units.category),
+  status: sql`${units.status}::text`,
+  type: text(units.type),
+  bedrooms: sql`${units.bedrooms}`,
+  listedOn: sql`${units.listedOn}`,
+};
+
 export type UnitRow = Awaited<ReturnType<typeof listUnits>>["rows"][number];
 
 /**
@@ -78,12 +97,15 @@ export async function listUnits(db: Database, actor: Actor, rawQuery: unknown, d
   ]);
   const pageCount = Math.max(1, Math.ceil(total / UNIT_PAGE_SIZE));
   const page = Math.min(query.page, pageCount);
+  // The default order, then the id, settle ties, so equal values keep their order from page to page.
+  const byDefault = [asc(projects.name), asc(sql`lower(${units.floor})`), asc(sql`lower(${units.unitNo})`), asc(units.id)];
+  const order = query.sort ? [query.dir === "asc" ? sql`${SORTS[query.sort]} asc nulls last` : sql`${SORTS[query.sort]} desc nulls last`, ...byDefault] : byDefault;
   const rows = await db
     .select(rowSelection)
     .from(units)
     .innerJoin(projects, eq(projects.id, units.projectId))
     .where(where)
-    .orderBy(asc(projects.name), asc(sql`lower(${units.floor})`), asc(sql`lower(${units.unitNo})`))
+    .orderBy(...order)
     .limit(UNIT_PAGE_SIZE)
     .offset((page - 1) * UNIT_PAGE_SIZE);
 

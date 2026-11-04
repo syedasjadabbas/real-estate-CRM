@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { and, asc, desc, eq, gte, ilike, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, isNull, lte, or, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import type { Database } from "@/server/db";
@@ -12,6 +12,7 @@ import { parse } from "@/modules/clients/support";
 import { DOCUMENT_FORMATS, documentFormatOf, MAX_DOCUMENT_BYTES, sniffDocument } from "@/modules/documents/validation";
 import { isUniqueViolation } from "@/modules/leads/support";
 import { cleanFileName, extensionOf } from "@/modules/recordings/validation";
+import { ENTRY_SORT_COLUMNS, type EntrySortColumn } from "./constants";
 import { assertCanFinance, canDoFinance } from "./policy";
 
 /**
@@ -168,8 +169,19 @@ const listQuery = z.object({
   from: z.iso.date().optional().catch(undefined),
   to: z.iso.date().optional().catch(undefined),
   voided: z.enum(["include", "only"]).optional().catch(undefined),
+  sort: z.enum(ENTRY_SORT_COLUMNS).optional().catch(undefined),
+  dir: z.enum(["asc", "desc"]).catch("desc"),
   page: z.coerce.number().int().min(1).max(10_000).catch(1),
 });
+
+/** The only expressions a sort can reach: `sort` is validated against this list's keys. Payee falls back to the reference, as the table shows. */
+const ENTRY_SORTS: Record<EntrySortColumn, SQL> = {
+  date: sql`${financeEntries.entryDate}`,
+  kind: sql`${financeEntries.kind}::text`,
+  category: sql`lower(${financeCategories.name})`,
+  payee: sql`coalesce(nullif(lower(trim(${financeEntries.payee})), ''), nullif(lower(trim(${financeEntries.reference})), ''))`,
+  amount: sql`${financeEntries.amount}`,
+};
 
 /**
  * FR-200 / FR-201 list, 50 per page, newest first. Search covers payee, reference, note and
@@ -199,6 +211,9 @@ export async function listEntries(db: Database, actor: Actor, input: unknown = {
     .where(where);
   const pageCount = Math.max(1, Math.ceil(agg.total / ENTRY_PAGE_SIZE));
   const page = Math.min(q.page, pageCount);
+  // Newest first, then the id, settle ties, so equal values keep their order from page to page.
+  const byDefault = [desc(financeEntries.entryDate), desc(financeEntries.createdAt), desc(financeEntries.id)];
+  const order = q.sort ? [q.dir === "asc" ? sql`${ENTRY_SORTS[q.sort]} asc nulls last` : sql`${ENTRY_SORTS[q.sort]} desc nulls last`, ...byDefault] : byDefault;
   const rows = await db
     .select({
       id: financeEntries.id,
@@ -217,7 +232,7 @@ export async function listEntries(db: Database, actor: Actor, input: unknown = {
     .leftJoin(paymentMethods, eq(paymentMethods.id, financeEntries.methodId))
     .leftJoin(creator, eq(creator.id, financeEntries.createdById))
     .where(where)
-    .orderBy(desc(financeEntries.entryDate), desc(financeEntries.createdAt), desc(financeEntries.id))
+    .orderBy(...order)
     .limit(ENTRY_PAGE_SIZE)
     .offset((page - 1) * ENTRY_PAGE_SIZE);
   const income = Number(agg.income);
