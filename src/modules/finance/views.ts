@@ -169,6 +169,7 @@ const outstandingFields = {
   leadCode: leads.code,
   unitNo: units.unitNo,
   projectName: projects.name,
+  agentId: bookings.agentId,
   agentName: outstandingAgent.name,
 };
 type OutstandingBase = { bookingId: string; totalSale: number };
@@ -274,7 +275,7 @@ export async function listOutstanding(db: Database, actor: Actor, rawQuery: unkn
   const byDefault = [asc(base.projectName), asc(sql`lower(${base.unitNo})`), asc(base.bookingId)];
   const order = q.sort ? [q.dir === "asc" ? sql`${SORTS[q.sort]} asc nulls last` : sql`${SORTS[q.sort]} desc nulls last`, ...byDefault] : byDefault;
   const rows = await db
-    .select({ bookingId: base.bookingId, stage: base.stage, totalSale: base.totalSale, leadName: base.leadName, leadCode: base.leadCode, unitNo: base.unitNo, projectName: base.projectName, agentName: base.agentName })
+    .select({ bookingId: base.bookingId, stage: base.stage, totalSale: base.totalSale, leadName: base.leadName, leadCode: base.leadCode, unitNo: base.unitNo, projectName: base.projectName, agentId: base.agentId, agentName: base.agentName })
     .from(base)
     .where(where)
     .orderBy(...order)

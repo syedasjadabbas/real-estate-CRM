@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { and, asc, eq, like } from "drizzle-orm";
 import { advanceBooking, cancelBooking, createBooking } from "@/modules/bookings/commands";
 import { convertLeadToClient } from "@/modules/clients/commands";
@@ -166,8 +167,17 @@ export function payTokenFor(bookingId: string, amount: string) {
   });
 }
 
-export function cancelBookingFor(bookingId: string) {
-  return withDb(async (db) => cancelBooking(db, await actorOf(db, "manager"), bookingId, { reason: "Buyer chose another unit" }));
+export function cancelBookingFor(bookingId: string, by: Role = "manager") {
+  return withDb(async (db) => cancelBooking(db, await actorOf(db, by), bookingId, { reason: "Buyer chose another unit" }));
+}
+
+/** Gives a booking to a new inactive agent called `name` (inactive: kept out of Performance and assignment lists). */
+export function assignBookingToNewAgent(bookingId: string, name: string) {
+  return withDb(async (db) => {
+    const [agent] = await db.insert(users).values({ name, email: `${randomUUID()}@test.local`, role: "agent", status: "inactive", passwordHash: "x" }).returning({ id: users.id });
+    await db.update(bookings).set({ agentId: agent.id }).where(eq(bookings.id, bookingId));
+    return agent.id;
+  });
 }
 
 export function leadOwnerId(leadId: string) {

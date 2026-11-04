@@ -72,16 +72,18 @@ export async function outstandingBy(db: Database, actor: Actor, by: "project" | 
   const groups = new Map<string, { key: string; label: string; bookings: number; total: number; paid: number; outstanding: number }>();
   for (const r of rows) {
     const label = by === "project" ? r.projectName : r.agentName ?? "No agent";
-    const g = groups.get(label) ?? { key: label, label, bookings: 0, total: 0, paid: 0, outstanding: 0 };
+    // Agents group by id: two people can share a name. Project names are unique.
+    const key = by === "project" ? label : (r.agentId ?? "none");
+    const g = groups.get(key) ?? { key, label, bookings: 0, total: 0, paid: 0, outstanding: 0 };
     g.bookings += 1;
     g.total += toPaisa(r.totalSale);
     g.paid += toPaisa(r.paid);
     g.outstanding += toPaisa(r.outstanding);
-    groups.set(label, g);
+    groups.set(key, g);
   }
   const out = [...groups.values()]
     .map((g) => ({ ...g, total: money(g.total), paid: money(g.paid), outstanding: money(g.outstanding) }))
-    .sort((a, b) => b.outstanding - a.outstanding || a.label.localeCompare(b.label));
+    .sort((a, b) => b.outstanding - a.outstanding || a.label.localeCompare(b.label) || a.key.localeCompare(b.key));
   return { by, rows: out, totals: { ...totals, bookings: rows.length } };
 }
 

@@ -1588,6 +1588,11 @@ Requested as "F-4"; in the §17 findings table this is **F-6** (F-4 there is the
 
 ## 24. Final Completion Reconciliation (4 Nov 2026, commit 7986782)
 
+> **Current status (updated 5 Nov 2026, §33).** This section is the 4 Nov baseline; its matrix and estimates are as written then, except the finding rows below, which now show their outcome.
+> - **Fixed since:** F-13 (§25), F-15 (§27), F-9 (§28), F-20 (§30), F-16 (§31), F-24 / FR-027 (§32), F-23 (§33). F-7 was assessed as blocked by D-F1 (§26).
+> - **Counts now:** 49 implemented and verified, 24 partial, 0 not implemented, 7 blocked, 5 excluded.
+> - **Remaining agreed development:** about 5.4 developer-days.
+
 **Method.**
 - **Authority order:** the quotation first, then `REQUIREMENTS.md`, then the 53 questionnaire answers (received, but unsigned: S-1).
 - **How rows were checked:** all 85 functional requirements were re-traced through the code by three independent read-only reviews, which did not read this file. Every high-impact claim was then rechecked by hand. Earlier percentages and statuses were not used as evidence.
@@ -1632,21 +1637,21 @@ Requested as "F-4"; in the §17 findings table this is **F-6** (F-4 there is the
 | F-6 two distinct approvers | **Confirmed fixed** | `leave/service.ts:198–220,261`; `drizzle/0023`. Unusable in practice until C-4 |
 | F-7 reversal date | Open, client decision D-F1 | `finance/commands.ts:165` copies the original date |
 | F-8 roster on past or multi-team leave | Open, C-14 | Unchanged |
-| F-9 Performance footnote | Open, agreed | `performance/page.tsx:214` still says "the date they were added", and that recordings aren't captured |
+| F-9 Performance footnote | **Fixed (§28, §29)** | `performance/page.tsx:214` still says "the date they were added", and that recordings aren't captured |
 | F-10 sign-in message, in-memory limit | Open, agreed | `auth/login.ts:43` reveals an inactive account after a correct password; the rate limit resets on restart |
 | F-11 export fallback, proofs | Open, agreed (export); proofs low | `finance/reports.ts:101` `.catch("collections")` |
 | F-12 stale docs | Partly open | `PRODUCTION_HANDOVER_CHECKLIST.md` says 13 migrations; `REMAINING_CLIENT_CLARIFICATIONS.md` lists built items as unbuilt |
-| **F-13 (new, high)** open bookings not linked to the client | Open, agreed | `bookings.client_id` is set only on confirmation (`bookings/commands.ts:145`). A repeat buyer's open booking, token and payments are missing from Investments, Payment history and the project filter. FR-051, FR-052, FR-204 |
+| **F-13 (new, high)** open bookings not linked to the client | **Fixed (§25)** | `bookings.client_id` is set only on confirmation (`bookings/commands.ts:145`). A repeat buyer's open booking, token and payments are missing from Investments, Payment history and the project filter. FR-051, FR-052, FR-204 |
 | **F-14 (new, medium)** overdue understated | Open, needs C-27 | Net paid includes the undated down payment, but "due to date" excludes it (`finance/views.ts:192`). A buyer who paid only the down payment shows 0 overdue with installments past due. Documented in §15.2, but the figure misleads |
-| **F-15 (new, medium)** manager rotation crosses teams | Open, agreed | `rotateOwner` ignores the actor (`leads/commands.ts:77,210`). A manager's Auto-assign can give a lead to an agent outside their team, and they then can't open it |
-| **F-16 (new, medium)** missing list sorting | Open, agreed | Inventory, Payments, Finance entries and Outstanding have no column sorting; Outstanding has no paging; the Regenerated view's sort headers do nothing (`leads/queries.ts:145`) |
+| **F-15 (new, medium)** manager rotation crosses teams | **Fixed (§27)** | `rotateOwner` ignores the actor (`leads/commands.ts:77,210`). A manager's Auto-assign can give a lead to an agent outside their team, and they then can't open it |
+| **F-16 (new, medium)** missing list sorting | **Fixed for the four lists (§31);** Regenerated headers open | Inventory, Payments, Finance entries and Outstanding have no column sorting; Outstanding has no paging; the Regenerated view's sort headers do nothing (`leads/queries.ts:145`) |
 | **F-17 (new)** Sold is unreachable | Open, Q-B4 | `inventory/commands.ts:151–156` blocks any override on a unit with a non-cancelled booking, and Confirmed is final, so a confirmed unit stays Booked |
 | **F-18 (new)** income report excludes collections | Open, new decision D-F2 | `finance/entries.ts:321` reads income entries only, so booking collections aren't income unless re-entered, risking double-recording |
 | **F-19 (new, control gap)** discount cap | Open, needs Q36 | Mismatched rows save with a warning, as the client asked (Q39), so an agent can stay within the cap and enter lower rows. Not a bug against the answers; Q36 (only Super Admin edits) would largely close it |
-| **F-20 (new)** contracts can't be stored after booking | Open, agreed | Uploads are refused on booked leads (`files/lead-files.ts:28`), and clients and bookings have no file target. The client page's contracts panel is a fixed empty state |
+| **F-20 (new)** contracts can't be stored after booking | **Fixed (§30)** | Uploads are refused on booked leads (`files/lead-files.ts:28`), and clients and bookings have no file target. The client page's contracts panel is a fixed empty state |
 | **F-21 (new, low)** receipt prefix applied at display | Open, with C-21 | `finance/queries.ts:20`: changing the prefix rewrites every past receipt reference shown |
 | **F-22 (new, low)** shared-phone view can't populate | Open, with merge rules | Create and edit both prevent two unflagged leads sharing a phone, so only legacy data appears (FR-032) |
-| **F-23 (new, low)** outstanding by agent | Open, agreed | Grouped by name, so two agents with the same name merge (`finance/reports.ts:74`) |
+| **F-23 (new, low)** outstanding by agent | **Fixed (§33)** | Grouped by name, so two agents with the same name merge (`finance/reports.ts:74`) |
 
 #### A.2 The four list questions
 
@@ -1754,7 +1759,7 @@ FR-005 reads: "List pages support search, a filter panel, column sorting and pag
 | FR-202 | Booking payments | IV | Paid and milestone computed from the ledger | `finance/commands.ts:30` | finance, workflows | T | — | Yes |
 | FR-203 | Outstanding, overdue vs schedule | PI | Balance right; overdue understated (F-14); Finance page only | `finance/views.ts:133,192` | finance | T | C-27; show on booking | Yes* |
 | FR-204 | Payment history with receipt numbers | PI | Per booking done; per client misses open bookings (F-13); format waits on C-21 | `finance/queries.ts:20,82` | finance | T | F-13; C-21 | Yes* |
-| FR-205 | Reports, CSV | PI | All four and CSV. F-7, F-18, F-23 affect figures | `finance/reports.ts:39`, `entries.ts:321` | finance-reports, finance-entries | T | D-F1, D-F2, F-23 | Yes* |
+| FR-205 | Reports, CSV | PI | All four and CSV. F-7 and F-18 affect figures (F-23 fixed, §33) | `finance/reports.ts:39`, `entries.ts:321` | finance-reports, finance-entries | T | D-F1, D-F2 | Yes* |
 | FR-206 | No hard delete; reversals | IV | Database-level immutability | `drizzle/0005`, `finance/commands.ts:135` | finance, workflows | T | — | Yes |
 
 **Non-functional requirements:**
@@ -2388,3 +2393,58 @@ Both suites ran slower than recent runs (Vitest 384 s against about 200 s; Playw
 **Completion counts:** FR-027 moves to Implemented and verified. **49 implemented and verified, 24 partial, 0 not implemented, 7 blocked, 5 excluded.**
 
 **Remaining agreed development:** about 5.5 developer-days. **Baseline:** Vitest 551 / 551, Playwright 119 / 119, build 103 / 103, 25 migrations.
+
+## 33. F-23 fixed: Outstanding by agent groups by the person (5 Nov 2026)
+
+**Root cause, confirmed in the code.** `outstandingBy` used the displayed name as its group key, and the agent's id never reached it. Two agents with the same name became one row, with their bookings and money added together. Overall totals were still right. It matched the audit, so nothing else was changed.
+
+**What changed:**
+- `outstandingBy` groups agents by id, and the row label is still the name. Bookings with no agent stay in one "No agent" row.
+- The agent id is now part of the Outstanding row data, for the report and the screen.
+- Rows with equal figures and the same name settle on the id, so their order is fixed.
+
+**Everything that uses these figures, checked:**
+
+| Place | Result |
+|---|---|
+| Finance → Reports, Outstanding by sales agent | Fixed: reads `outstandingBy` |
+| CSV export (`outstanding_agent`) | Fixed: reads `outstandingBy`; total row unchanged |
+| Outstanding by project | Unchanged; project names are unique |
+| Outstanding screen and agent filter | Already used the id |
+| Combined totals | Unchanged: they never came from the groups |
+
+**Migration:** none. Still 25, no drift. No data or formula changed.
+
+**Files changed:** `modules/finance/reports.ts`, `modules/finance/views.ts`, `tests/integration/finance-reports.test.ts`, `e2e/outstanding-agents.spec.ts` (new), `e2e/support/data.ts`.
+
+**Tests:**
+- `finance-reports.test.ts`, 5 new tests with two agents both named "Ali Khan":
+  - separate figures under the same name, summing to correct totals, with the project view not split;
+  - one CSV row each, total unchanged;
+  - the agent filter separating them on the report rows and the screen;
+  - a reversal moving only that agent's figures, and no-agent bookings in one row;
+  - a fixed order for equal figures.
+- **Checked to be meaningful:** with grouping by name restored, 4 failed.
+- `outstanding-agents.spec.ts`, desktop and mobile: two rows on the report and two in the CSV, with one booking each. Its bookings are cancelled afterwards, so other specs' totals don't change.
+
+**Verification (first full run, no failures):**
+
+| Check | Result |
+|---|---|
+| Typecheck, lint | Pass |
+| Reports, sorting and finance tests | 48 / 48 |
+| Vitest full | **53 files, 556 / 556** |
+| Schema drift | Clean, 25 migrations |
+| Build | 103 / 103 pages |
+| Playwright full | **121 / 121** |
+
+Both suites were slower than the fastest recent runs (Vitest 435 s, Playwright 8.5 min), with no failures or timeouts. The cause was not investigated.
+
+**Remaining risks and limits:**
+- **Same-named agents look identical.** The report, the CSV and the agent filter show two "Ali Khan" entries with nothing to tell them apart. Adding something to the label would be a display choice, so none was added.
+- **Other screens.** Performance already works by user id. Dashboard and target screens were not re-audited for this.
+- **Project grouping** relies on project names being unique, which project creation enforces.
+
+**Completion counts, unchanged:** 49 implemented and verified, 24 partial, 0 not implemented, 7 blocked, 5 excluded. FR-205 stays partial on D-F1 and D-F2.
+
+**Remaining agreed development:** about 5.4 developer-days. **Baseline:** Vitest 556 / 556, Playwright 121 / 121, build 103 / 103, 25 migrations.
