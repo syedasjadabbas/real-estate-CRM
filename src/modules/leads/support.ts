@@ -49,7 +49,7 @@ export async function loadAccessibleLead(db: DbOrTx, actor: Actor, leadId: strin
 
 export async function logActivity(
   db: DbOrTx,
-  values: { leadId: string; actorId: string | null; type: typeof leadActivities.$inferInsert.type; body?: string | null; data?: Record<string, unknown> },
+  values: { leadId: string; actorId: string | null; type: typeof leadActivities.$inferInsert.type; body?: string | null; data?: Record<string, unknown>; createdAt?: SQL },
 ) {
   await db.insert(leadActivities).values({
     leadId: values.leadId,
@@ -57,6 +57,7 @@ export async function logActivity(
     type: values.type,
     body: values.body ?? null,
     data: values.data ?? null,
+    ...(values.createdAt ? { createdAt: values.createdAt } : {}),
   });
 }
 

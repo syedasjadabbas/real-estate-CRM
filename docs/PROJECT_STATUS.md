@@ -2001,3 +2001,106 @@ The pollution was a mistake in the new test data, now fixed. The three timeouts 
 - **A client added by hand after the booking.** An open booking on a lead with that phone isn't linked until the lead is converted or linked, or a booking is created or confirmed. Automatic lead matching on client creation wasn't added, as it's a new rule.
 - **Phone-matched links name the lead on the client timeline,** which the client's owner can see even for another team's lead. Confirmation already did this; it now happens earlier.
 - **Agents see an open booking on a client page only within their booking scope,** so one person's page can show fewer bookings than the Admin's. This is the existing scope rule.
+
+## 26. F-7 assessed: blocked by client decision D-F1 (5 Nov 2026)
+
+**Status: Blocked. Nothing was implemented.** No code, schema, migration, test or data changed. Only this section was added.
+
+**F-7 (§17, §24.A.1).** A reversal takes the original payment's date, so a later reversal changes an earlier month's collections and doesn't appear in the month it happened. Requirement: FR-205, "Totals reconcile with records". In scope: yes, under the quotation line "Financial reports".
+
+**Current behaviour, traced:**
+- `decideReversal` writes the reversal with `receivedOn: payment.receivedOn` (`finance/commands.ts:165`).
+- `collectionsByProject` filters on `received_on` (`finance/reports.ts:54`), so the reversal lands in the original month.
+- The Finance Reports page says "Each ledger entry counts on its own date" (`reports/page.tsx:112`), which is true of the stored date but misleading.
+- `finance-reports.test.ts:62` checks that totals reconcile; it does not settle which date is right.
+- Totals over a full history are the same either way. Only the split between periods differs.
+
+**Why it's blocked.** Nothing in the quotation, `REQUIREMENTS.md`, the 53 answers or the finance plan says which date counts. Worked example: PKR 100,000 received in October, reversed on 5 November.
+
+| | October collections | November collections | Effect |
+|---|---|---|---|
+| **A. Original date (today)** | 0 | 0 | The error never counted, but October's figure changes after it may have been reported |
+| **B. Reversal date** | 100,000 | −100,000 | Closed months never change, but November shows a negative that wasn't November's activity |
+
+Both are valid accounting choices with different monthly figures, so this belongs to the client's finance side.
+
+**Who decides and how.** D-F1 is recorded only in this file. It is **not** in `REMAINING_CLIENT_CLARIFICATIONS.md` or in §24.I's first decision pack, so the client has not yet been asked. It should be added to the pack.
+
+**Dependencies.** F-7 depends on no other finding. It is separate from F-18 (D-F2, does Income include collections?), though both could go in the same question.
+
+**Work once answered (about 0.25 d, no migration either way):**
+- **A:** keep the behaviour; reword the report note and add a test that fixes the rule.
+- **B:** date new reversals on the day they're approved, and have the report use the reversal's `recorded_at` date (Pakistan time) for reversal rows. `booking_payments` is immutable by trigger, so existing rows can't be re-dated, and this covers them without touching them. The Payments list and the receipt-date display need checking for the same choice.
+
+**Next unblocked agreed finding:**
+- **F-8 is also blocked** (C-14: leave against a manager's roster entry, and members of several teams).
+- **In number order: F-9,** the Performance footnote, part of §24.C item 14 (0.35 d together with F-10, F-11 and small fixes).
+- **By priority: F-15,** manager rotation crossing teams (§24.I step 3, 0.5 d). It affects real assignments, so it should come first.
+
+**Verification.** No tests were run, because nothing changed. The latest results stand: Vitest 502 / 502, Playwright 89 / 89, build 103 / 103, typecheck and lint pass, 24 migrations.
+
+**Completion counts, unchanged since §25:** 46 implemented and verified, 27 partial, 0 not implemented, 7 blocked, 5 excluded. **Remaining agreed development:** about 8 developer-days. F-7's 0.25 d sits in the client-dependent estimate (§24.H).
+
+## 27. F-15 fixed: a manager's Auto-assign stays inside their teams (5 Nov 2026)
+
+**Root cause.** `rotateOwner` chose among all active agents in all active teams and never looked at who was asking. A manager's manual choice went through `canAssignTo`; Auto-assign skipped it. The lead could go to another team's agent, and the manager then got a 404 on the page they were redirected to.
+
+**Assignment paths checked:**
+
+| Path | Scope check before | Now |
+|---|---|---|
+| Auto-assign on create (`rotateOwner`) | **None: the defect** | Manager's active teams |
+| Owner chosen on create (`assertAssignable`) | `canAssignTo`, with the team list from sign-in | Same rule, teams read in the transaction |
+| Reassign (`assignLead`) | Same | Same fix |
+| Lead shift on deactivation | Admin only, through `assignLead` | Unchanged |
+| Agent-created leads | Always the agent | Unchanged |
+| Regenerated leads | Owner doesn't change | Unchanged |
+| Client assignment (`assignClient`) | `canAssignTo`, team list from sign-in | **Not changed:** clients are outside F-15 (see risks) |
+
+**What changed (`leads/commands.ts`, plus one line in `leads/support.ts` and the Add lead page text):**
+- **Rotation scope.** A manager's rotation covers only the active teams they run, including several if they run several. Admins and Super Admins take the same path as before.
+- **No available agent.** The existing fallback applies: the lead stays with the manager. It never reaches outside the team.
+- **Fresh and locked.** `lockManagedTeams` reads the manager's teams inside the transaction with a shared lock. `actor.managedTeamIds` dates from the start of the request. Team changes lock the team row, so an assignment and a team change run one after the other. Team commands never lock leads, so this can't deadlock with the lead's lock.
+- **Even rotation.** The project's single pointer can't serve several teams: each team's turn would send the other back to its first agent. A manager's rotation continues from the last of their agents to get a rotated lead, read from the existing timeline entries. No schema change.
+- **Timeline stamp.** Rotation entries now use the clock time (`clock_timestamp()`), not the transaction start. See below.
+
+**A bug in the first version of this fix, caught by the tests.** Timeline times default to the transaction start, so simultaneous Auto-assigns sorted in the wrong order and 4 of 6 leads went to one agent. The clock time, taken under the rotation lock, follows the order rotations actually ran.
+
+**Preserved:** timeline entries, `lead.create` and `lead.assign` audit rows, notifications, assignment timestamps, lead visibility rules, the leave skip and the inactive-team rule. Admins' rotation order is unchanged.
+
+**Migration:** none. Still 24 migrations, no drift. No data was changed.
+
+**Existing data (read-only check on development):** no rotated leads exist, so none was misassigned. No repair is needed.
+
+**Security implications.** This closes a gap in which a manager could place a lead with another team without being allowed to. It wasn't a data leak, because the manager lost sight of the lead rather than gaining access. Refusals happen in the service, and the API returns 403. A manager moved off a team also loses assignment rights immediately, rather than keeping them until their next request. The audit trail is unchanged.
+
+**Tests:**
+- `tests/integration/lead-assignment.test.ts`, 16 tests:
+  - **Auto-assign:** own team only, and every lead opens for the manager; timeline, audit and notification; even with another team's rotation in between, and with an admin's; several teams, with an inactive one left out; leave; a manager with no team; Admin and Super Admin unchanged.
+  - **Manual:** team and self allowed; an outsider refused on create and reassign, with nothing written; reassignment history; admins, agents and HR.
+  - **Team changes:** teams read fresh, not from sign-in; Auto-assign and manual assignment each wait for a team change in progress; simultaneous assignments and a member change.
+  - **Concurrency:** six simultaneous Auto-assigns split 3 and 3.
+- **Checked to be meaningful:** with the team filter removed, 5 failed; with the lock removed, both lock tests failed. The even-split test found the real bug above.
+- `e2e/lead-auto-assign.spec.ts`: the manager's form on desktop and mobile (lead opens, timeline shows the rotation, owner is in the team); repeated API Auto-assign going round the team; an outsider refused with 403; HR refused with 403.
+
+**Verification:**
+
+| Check | Result |
+|---|---|
+| Typecheck, lint | Pass |
+| `lead-assignment.test.ts` | 16 / 16, three runs in a row |
+| Vitest full | **50 files, 518 / 518**, first full run. It took 400 s, about double the usual, with no timeouts; not investigated |
+| Schema drift | Clean, 24 migrations |
+| Build | 103 / 103 pages |
+| Playwright full | **93 / 93 in 6.8 min**, first full run |
+
+**Remaining risks:**
+- **Admin rotation keeps its pointer quirk.** If the last agent is on leave, the next admin rotation restarts at the first agent, a small unevenness. Left alone because Admin behaviour had to stay unchanged. §24 had listed this fix under F-15.
+- **Client assignment** uses the sign-in team list and no lock, so a manager removed from a team moments ago could still assign that team's client until their next request. Its scope check itself is correct.
+- **Team changes after assignment.** Removing an agent from a team later still takes the agent's leads out of the manager's view, as it always has. No rule exists for this.
+- **Evenness is by rotated leads only.** Manual assignments don't count as a turn, as before.
+- **Rotation reads the timeline.** The lookup is by project; fine at this size, but it has no dedicated index.
+
+**Completion counts:** FR-029 moves to Implemented and verified, with the Admin quirk above noted. **47 implemented and verified, 26 partial, 0 not implemented, 7 blocked, 5 excluded.**
+
+**Remaining agreed development:** about 7.5 developer-days. **Test baseline:** Vitest 518 / 518, Playwright 93 / 93.

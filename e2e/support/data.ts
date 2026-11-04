@@ -169,3 +169,11 @@ export function payTokenFor(bookingId: string, amount: string) {
 export function cancelBookingFor(bookingId: string) {
   return withDb(async (db) => cancelBooking(db, await actorOf(db, "manager"), bookingId, { reason: "Buyer chose another unit" }));
 }
+
+export function leadOwnerId(leadId: string) {
+  return withDb(async (db) => (await db.select({ ownerId: leads.ownerId }).from(leads).where(eq(leads.id, leadId)))[0].ownerId);
+}
+
+export function userIdByEmail(email: string) {
+  return withDb(async (db) => (await db.select({ id: users.id }).from(users).where(eq(users.email, email)))[0].id);
+}

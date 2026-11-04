@@ -1,10 +1,11 @@
 import { leadLink, notify, teamManagersOf } from "@/modules/notifications/service";
-import { and, asc, eq, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { businessToday } from "@/modules/bookings/today";
 import type { Database } from "@/server/db";
 import {
   approvals,
   followUps,
+  leadActivities,
   leadFavorites,
   leadReviews,
   leads,
@@ -20,7 +21,7 @@ import { AppError, forbidden, notFound } from "@/server/errors";
 import { generateLeadCode } from "./code";
 import { STAGE_LABELS } from "./constants";
 import { normalizePhone } from "./phone";
-import { assertCan, canAccessLead, canAssignTo, canDo } from "./policy";
+import { assertCan, canAccessLead, canAssignTo, canDo, leadScope } from "./policy";
 import { assertStageChange, OPEN_BOOKING_MESSAGE, pickNextAssignee } from "./rules";
 import { audit, hasOpenBooking, isUniqueViolation, loadAccessibleLead, logActivity, refreshNextFollowUp, teamMemberIds, touchValues, type Tx } from "./support";
 import {
@@ -55,8 +56,18 @@ function phoneOrThrow(countryCode: string, number: string) {
   return phone;
 }
 
+/**
+ * The teams this manager runs now, read inside the transaction (`actor.managedTeamIds` dates from
+ * before it) and share-locked until it ends. Team changes lock the team row, so an assignment and a
+ * change to the team's manager, members or active flag run one after the other. They never lock
+ * leads, so taking this after the lead's lock can't deadlock.
+ */
+async function lockManagedTeams(tx: Tx, actor: Actor) {
+  return tx.select({ id: teams.id, isActive: teams.isActive }).from(teams).where(eq(teams.managerId, actor.id)).orderBy(asc(teams.id)).for("share");
+}
+
 /** Validates a prospective owner: active agent/manager the actor is allowed to assign to. */
-async function assertAssignable(tx: Tx, actor: Actor, ownerId: string, members: string[]) {
+async function assertAssignable(tx: Tx, actor: Actor, ownerId: string) {
   const [owner] = await tx
     .select({ id: users.id, role: users.role, status: users.status })
     .from(users)
@@ -67,15 +78,36 @@ async function assertAssignable(tx: Tx, actor: Actor, ownerId: string, members: 
       fields: { ownerId: "Choose an active agent or manager" },
     });
   }
+  const members = leadScope(actor.role) === "team" ? await teamMemberIds(tx, { ...actor, managedTeamIds: (await lockManagedTeams(tx, actor)).map((t) => t.id) }) : [];
   if (!canAssignTo(actor, ownerId, members)) throw forbidden("You cannot assign leads to that user.");
 }
 
 /**
- * Round-robin owner for a project among active agents in active teams (Q2). Agents on approved
- * leave today (Pakistan date) are skipped (questionnaire Q19).
+ * The manager's rotation continues from the last of these agents to get a rotated lead in the
+ * project. The project's single pointer can't serve here: another team's rotation moves it, which
+ * would send this team back to its first agent every time.
  */
-async function rotateOwner(tx: Tx, projectId: string, now = new Date()): Promise<string | null> {
+async function lastRotatedTo(tx: Tx, projectId: string, agentIds: string[]) {
+  const ownerId = sql<string>`${leadActivities.data}->>'ownerId'`;
+  const [row] = await tx
+    .select({ ownerId })
+    .from(leadActivities)
+    .innerJoin(leads, eq(leads.id, leadActivities.leadId))
+    .where(and(eq(leads.projectId, projectId), eq(leadActivities.type, "assignment"), sql`${leadActivities.data}->>'mode' = 'rotation'`, inArray(ownerId, agentIds)))
+    .orderBy(desc(leadActivities.createdAt))
+    .limit(1);
+  return row?.ownerId ?? null;
+}
+
+/**
+ * Round-robin owner for a project among active agents in active teams (Q2). Agents on approved
+ * leave today (Pakistan date) are skipped (questionnaire Q19). A manager's rotation stays inside the
+ * active teams they run, like their manual assignment (F-15); admins rotate across all teams.
+ */
+async function rotateOwner(tx: Tx, actor: Actor, projectId: string, now = new Date()): Promise<string | null> {
   const today = businessToday(now);
+  const teamIds = leadScope(actor.role) === "team" ? (await lockManagedTeams(tx, actor)).filter((t) => t.isActive).map((t) => t.id) : null;
+  if (teamIds?.length === 0) return null;
   const eligible = await tx
     .selectDistinct({ id: users.id, name: users.name })
     .from(users)
@@ -86,6 +118,7 @@ async function rotateOwner(tx: Tx, projectId: string, now = new Date()): Promise
         eq(users.role, "agent"),
         eq(users.status, "active"),
         eq(teams.isActive, true),
+        teamIds ? inArray(teams.id, teamIds) : undefined,
         sql`not exists (select 1 from leave_requests lr where lr.user_id = ${users.id} and lr.status in ('approved', 'cancel_requested') and lr.start_date <= ${today} and lr.end_date >= ${today})`,
       ),
     )
@@ -98,10 +131,8 @@ async function rotateOwner(tx: Tx, projectId: string, now = new Date()): Promise
     .from(rotationState)
     .where(eq(rotationState.projectId, projectId))
     .for("update");
-  const next = pickNextAssignee(
-    eligible.map((u) => u.id),
-    state?.lastUserId ?? null,
-  );
+  const eligibleIds = eligible.map((u) => u.id);
+  const next = pickNextAssignee(eligibleIds, teamIds ? await lastRotatedTo(tx, projectId, eligibleIds) : (state?.lastUserId ?? null));
   await tx.update(rotationState).set({ lastUserId: next, updatedAt: new Date() }).where(eq(rotationState.projectId, projectId));
   return next;
 }
@@ -204,10 +235,10 @@ export async function createLead(db: Database, actor: Actor, input: unknown): Pr
     if (actor.role === "agent") {
       ownerId = actor.id;
     } else if (data.ownerId) {
-      await assertAssignable(tx, actor, data.ownerId, members);
+      await assertAssignable(tx, actor, data.ownerId);
       ownerId = data.ownerId;
     } else {
-      ownerId = await rotateOwner(tx, data.projectId);
+      ownerId = await rotateOwner(tx, actor, data.projectId);
       rotated = true;
       if (!ownerId && actor.role === "manager") ownerId = actor.id;
     }
@@ -253,7 +284,8 @@ export async function createLead(db: Database, actor: Actor, input: unknown): Pr
       data: { duplicateOf: values.duplicateOfId ? existing?.code ?? null : null },
     });
     if (rotated && ownerId) {
-      await logActivity(tx, { leadId: created.id, actorId: null, type: "assignment", data: { mode: "rotation", ownerId } });
+      // Clock time, not the default transaction start: written under the rotation lock, so rotations sort in the order they ran (lastRotatedTo).
+      await logActivity(tx, { leadId: created.id, actorId: null, type: "assignment", data: { mode: "rotation", ownerId }, createdAt: sql`clock_timestamp()` });
     }
     if (data.note) {
       await logActivity(tx, { leadId: created.id, actorId: actor.id, type: "note", body: data.note });
@@ -351,9 +383,9 @@ export async function assignLead(db: Database, actor: Actor, leadId: string, inp
   assertCan(actor, "assign");
   const { ownerId } = parse(assignSchema, input);
   return db.transaction(async (tx) => {
-    const { lead, members } = await loadAccessibleLead(tx, actor, leadId, true);
+    const { lead } = await loadAccessibleLead(tx, actor, leadId, true);
     if (lead.ownerId === ownerId) throw new AppError("BUSINESS_RULE", "The lead is already assigned to that user.");
-    await assertAssignable(tx, actor, ownerId, members);
+    await assertAssignable(tx, actor, ownerId);
     const now = new Date();
     await tx.update(leads).set({ ownerId, updatedAt: now }).where(eq(leads.id, leadId));
     await tx

@@ -23,7 +23,7 @@ export default function NewLeadPage() {
           description={
             actor.role === "agent"
               ? "The lead will be assigned to you."
-              : "Choose an owner, or leave it empty to assign by rotation among active agents."
+              : `Choose an owner, or leave it empty to assign by rotation among ${actor.role === "manager" ? "your teams' active agents" : "active agents"}.`
           }
           actions={
             <Link href="/dashboard/leads" className={buttonClasses({ variant: "secondary", size: "lg" })}>
