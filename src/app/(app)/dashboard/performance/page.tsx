@@ -211,7 +211,7 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
         )}
         <Pagination page={report.page} pageCount={report.pageCount} total={report.total} params={params} />
         <p className="text-[11px] text-zinc-500">
-          Calls and call minutes need call recordings, which the CRM does not capture yet. Leads are counted by their current owner and the date they were added.
+          Calls and call minutes are not available: uploaded call recordings are not counted as calls unless the client confirms that rule. Leads are counted under their current owner, on their original assignment date.
         </p>
         <p className="text-[11px] text-zinc-500">
           CRM sign-ins and sign-outs are authentication activity only. They are not attendance and are not used to work out hours, lateness or absences;

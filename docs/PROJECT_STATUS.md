@@ -2104,3 +2104,49 @@ Both are valid accounting choices with different monthly figures, so this belong
 **Completion counts:** FR-029 moves to Implemented and verified, with the Admin quirk above noted. **47 implemented and verified, 26 partial, 0 not implemented, 7 blocked, 5 excluded.**
 
 **Remaining agreed development:** about 7.5 developer-days. **Test baseline:** Vitest 518 / 518, Playwright 93 / 93.
+
+## 28. F-9 fixed: Performance footnote corrected (5 Nov 2026)
+
+**Finding (§17, §24).** The footnote at `performance/page.tsx:214` said leads count by "the date they were added", and that recordings aren't captured. Both claims were checked against the code and the client's answers, and both were wrong.
+
+| Sentence | Claim | What is true | Evidence |
+|---|---|---|---|
+| Leads | "the date they were added" | Leads count on their **original assignment date**. It equals the creation date unless the lead was created without an owner. "Current owner" was right | Q25; `assignedAt` and `leads.ownerId` in `performance/service.ts`; `performance.test.ts` "Q25" |
+| Calls | "the CRM does not capture" recordings | Recordings are uploaded and stored with their length. Calls stay unavailable because whether a recording counts as a call is unanswered (C-19), and calls won't be entered by hand (Q27) | `recordings/service.ts`; `schema.ts:316`; Q27, C-19 |
+
+**Wording.**
+- **Before:** "Calls and call minutes need call recordings, which the CRM does not capture yet. Leads are counted by their current owner and the date they were added."
+- **After:** "Calls and call minutes are not available: uploaded call recordings are not counted as calls unless the client confirms that rule. Leads are counted under their current owner, on their original assignment date."
+
+**Changed:** one line of text. No metric, formula, filter, permission, report or layout changed. No migration.
+
+**Not decided here.** The footnote describes what is implemented. C-18 (should the original assignee be credited?) and C-19 (do recordings count as calls?) stay open. If either answer changes the calculation, this text changes with it.
+
+**Files changed:** `src/app/(app)/dashboard/performance/page.tsx`, `e2e/performance-page.spec.ts` (new), and this section.
+
+**Tests:**
+- `e2e/performance-page.spec.ts`, 11 runs across desktop and mobile:
+  - Super Admin, Admin, Manager and Agent see both corrected sentences, not the old wording, and the sign-in note is unchanged;
+  - HR and Accountant get "Access denied", no footnote, and 403 from the API;
+  - sorting, paging and the CSV export still work.
+- **Calculations:** no test was changed. `performance.test.ts` still passes, including "Q25", which proves a reassigned lead counts under its current owner on the original date and a lead created unassigned counts on its first assignment.
+
+**Verification (first full run, no failures):**
+
+| Check | Result |
+|---|---|
+| Typecheck, lint | Pass |
+| Performance tests | 10 / 10 |
+| Vitest full | **50 files, 518 / 518** in 189 s |
+| Build | 103 / 103 pages |
+| Playwright full | **104 / 104 in 5.3 min** |
+
+**Remaining risks (same claim elsewhere, left alone because F-9 is the footnote):**
+- The empty call charts (`performance/charts.tsx:98`) still say "needs call recordings with durations, which the CRM does not capture", which is wrong in the same way.
+- `targets/service.ts:29` has a comment saying no call data exists.
+
+**Status of F-9: complete.** Q25 stays partial until C-18 is confirmed, though its "footnote outdated" note is resolved.
+
+**Completion counts, unchanged:** 47 implemented and verified, 26 partial, 0 not implemented, 7 blocked, 5 excluded. F-9 was wording, and FR-150 and FR-151 stay partial on C-19.
+
+**Remaining agreed development:** about 7.5 developer-days (F-9 was under 0.1 d of §24.C item 14). **Test baseline:** Vitest 518 / 518, Playwright 104 / 104.
