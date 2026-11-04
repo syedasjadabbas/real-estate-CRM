@@ -108,6 +108,7 @@ export const clientActivityType = pgEnum("client_activity_type", [
   "follow_up_done",
   "lead_linked",
   "assignment",
+  "file_uploaded",
 ]);
 
 // ─── Identity ─────────────────────────────────────────────────────────────────
@@ -301,12 +302,14 @@ export const files = pgTable(
   "files",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    /** The lead (recordings, documents, payment proofs). Null only for income / expense attachments. */
+    /** The lead (recordings, documents, payment proofs). Null for income / expense attachments and client documents. */
     leadId: uuid("lead_id").references(() => leads.id, { onDelete: "restrict" }),
     /** For income / expense attachments (kind "receipt", FR-200 / FR-201): the entry the file belongs to. */
     financeEntryId: uuid("finance_entry_id").references((): AnyPgColumn => financeEntries.id, { onDelete: "restrict" }),
     /** For payment proofs (kind "receipt", questionnaire Q33): the payment the file belongs to. */
     paymentId: uuid("payment_id").references((): AnyPgColumn => bookingPayments.id, { onDelete: "restrict" }),
+    /** For contracts and other documents kept on the client itself (kind "document", FR-052). */
+    clientId: uuid("client_id").references((): AnyPgColumn => clients.id, { onDelete: "restrict" }),
     kind: fileKind("kind").notNull(),
     storageKey: text("storage_key").notNull(),
     originalName: text("original_name").notNull(),
@@ -324,8 +327,9 @@ export const files = pgTable(
   (t) => [
     uniqueIndex("files_storage_key_uq").on(t.storageKey),
     index("files_lead_created_idx").on(t.leadId, t.createdAt),
+    index("files_client_created_idx").on(t.clientId, t.createdAt),
     check("files_size_positive", sql`${t.sizeBytes} > 0`),
-    check("files_owner", sql`${t.leadId} is not null or ${t.financeEntryId} is not null`),
+    check("files_owner", sql`${t.leadId} is not null or ${t.financeEntryId} is not null or ${t.clientId} is not null`),
     check("files_duration_range", sql`${t.durationSec} is null or (${t.durationSec} >= 0 and ${t.durationSec} <= 86400)`),
     check("files_name_length", sql`char_length(${t.originalName}) between 1 and 200`),
   ],

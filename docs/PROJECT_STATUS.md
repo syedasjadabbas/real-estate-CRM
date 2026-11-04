@@ -2183,3 +2183,70 @@ Full Vitest and Playwright were not run, as the change is wording only.
 Line 95 is about *scored* recordings, which really aren't captured. The others are loosely accurate, because no call figure exists, but they could read better alongside the corrected notes.
 
 **Counts unchanged:** 47 implemented and verified, 26 partial, 0 not implemented, 7 blocked, 5 excluded. About 7.5 developer-days of agreed work remain.
+
+## 30. F-20 fixed: contracts and documents on the client (FR-052) (5 Nov 2026)
+
+**Why this one.** It was the highest-priority unblocked agreed item left in §24.I after F-13 and F-15.
+- **Requirement:** FR-052, "Client detail: investments (bookings), contracts / documents, payment history, follow-ups, notes." Acceptance: "Shows all bookings and payments of the client" (F-13).
+- **In the PKR 175,000 agreement:** yes, under Clients → "Client profiles".
+- **Not blocked:** Q-B5 covers generated contract *templates*, not uploaded files.
+
+**Root cause.** There was nowhere to keep a contract. The client page had a fixed empty panel, lead uploads are refused once a lead is Booked (when contracts exist), and clients had no file target. A client added by hand has no lead at all.
+
+**Correction to §24.** §24.C item 3 said to "allow storing contracts after booking" on the lead. That would have changed a documented rule with a test behind it ("booked leads are read-only", LEADS_MODULE_PLAN). The rule stays. Files now belong to the client instead.
+
+**What changed:**
+- **Upload.** Contracts and documents can be kept on the client (`uploadClientDocument`, `POST /api/v1/clients/:id/documents`): same file types, 10 MB limit, content check and private storage as lead documents.
+- **List.** The client page's new "Contracts and documents" panel shows the client's own files, then the documents of its leads, labelled with the lead code.
+- **Open.** The existing `/api/v1/documents/:id` route serves both, checking the client or the lead.
+- **Traceability.** Each upload writes a client timeline entry and a `client.document_upload` audit row (no file contents). A failed save removes the stored file.
+
+**Permissions (existing rules, none new):**
+
+| Action | Allowed | Refused |
+|---|---|---|
+| Upload (client `edit`) | Owner agent, their manager, Admin, Super Admin | Accountant and HR: 403. Out of scope: 404 |
+| See and open client documents (client `view`) | The above, and Accountant (Clients: read) | HR: 403. Out of scope: 404 |
+| See lead documents on the client page | Only those who may open that lead | Accountant sees the client's own files only |
+
+**Migration: `0024_client_documents` (additive).** Adds the nullable `files.client_id` with its index, and the client timeline value `file_uploaded`, and widens the `files_owner` check. No existing row changes. Applied to development and test. **25 migrations**, no drift.
+
+**Files changed:**
+- `drizzle/0024_client_documents.sql` and its snapshot and journal entries; `server/db/schema.ts`
+- `modules/documents/service.ts`
+- `app/api/v1/clients/[id]/documents/route.ts` (new)
+- `app/(app)/dashboard/clients/[id]/page.tsx`
+- `features/documents/components/documents-panel.tsx` (optional origin label)
+- `features/clients/components/client-timeline.tsx`
+- `tests/integration/client-documents.test.ts` and `e2e/client-documents.spec.ts` (both new)
+
+**Tests:**
+- `client-documents.test.ts`, 12 tests:
+  - **Upload:** client with no lead, with exact bytes, timeline and audit; after booking, with the lead still read-only; empty, oversized, wrong-type and disguised files refused, leaving nothing stored; simultaneous uploads.
+  - **Permissions:** every role for upload, list and open; access moving with the client's owner.
+  - **Lead documents:** origin label, lead scope, accountants, recordings and hidden files left out.
+  - **Existing behaviour:** lead documents and recordings unchanged; the database still refuses a file with no owner.
+- **Checked to be meaningful:** with the lead scope filter removed, 1 failed; with the client access check removed, 2 failed.
+- `client-documents.spec.ts`, desktop and mobile: an agent uploads and downloads identical bytes; each role's access to the file; the timeline and audit entries; desktop: a disguised file refused, and an accountant reading without an upload control and getting 403 from the API.
+
+**Verification (first full run, no failures):**
+
+| Check | Result |
+|---|---|
+| Typecheck, lint | Pass |
+| Client, document and recording tests | 36 / 36 |
+| Vitest full | **51 files, 530 / 530** in 200 s |
+| Schema drift | Clean, 25 migrations |
+| Build | 103 / 103 pages |
+| Playwright full | **107 / 107 in 5.8 min** |
+
+**Remaining risks:**
+- **No removal.** A wrong upload can't be deleted or replaced. Lead documents and payment proofs have the same gap, and no deletion rule exists for documents, so none was invented.
+- **Lead documents depend on the link.** A lead not linked to the client doesn't show here.
+- **Accountants can read client documents,** following "Clients: read". If contracts should be more restricted, that's a client decision.
+- **No file-type label.** "Contract" isn't a separate category; there are no agreed types.
+- **Generated contracts and receipts** still wait on Q-B5 and C-21.
+
+**Completion counts:** FR-052 moves to Implemented and verified. **48 implemented and verified, 25 partial, 0 not implemented, 7 blocked, 5 excluded.**
+
+**Remaining agreed development:** about 7 developer-days. **Baseline:** Vitest 530 / 530, Playwright 107 / 107, build 103 / 103, 25 migrations. **Next in §24.I:** F-16 (column sorting on Inventory, Payments, Finance entries and Outstanding).

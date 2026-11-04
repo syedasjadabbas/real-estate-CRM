@@ -12,7 +12,7 @@ import { DOCUMENT_ACCEPT, documentFormatOf, MAX_DOCUMENT_BYTES } from "@/modules
 import type { LeadFileRow } from "@/modules/files/lead-files";
 import { extensionOf, formatBytes } from "@/modules/recordings/validation";
 
-type FileRow = Pick<LeadFileRow, "id" | "name" | "mime" | "sizeBytes" | "createdAt" | "uploadedBy">;
+type FileRow = Pick<LeadFileRow, "id" | "name" | "mime" | "sizeBytes" | "createdAt" | "uploadedBy"> & { /** Where it came from, when the list mixes sources. */ origin?: string | null };
 
 /** Wording and endpoints; the defaults are the lead documents panel. */
 type PanelText = { title: string; empty: string; field: string; button: string; uploaded: string; noun: string };
@@ -88,6 +88,7 @@ export function DocumentsPanel({
                 <div className="min-w-0">
                   <p className="text-xs font-bold break-words text-zinc-900">{d.name}</p>
                   <p className="text-[11px] text-zinc-500">
+                    {d.origin ? `${d.origin} · ` : ""}
                     {d.uploadedBy ?? "—"} · {formatDateTime(d.createdAt)} · {formatBytes(d.sizeBytes)}
                   </p>
                 </div>

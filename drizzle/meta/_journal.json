@@ -169,6 +169,13 @@
       "when": 1793787677480,
       "tag": "0023_leave_two_distinct_approvers",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1793828912306,
+      "tag": "0024_client_documents",
+      "breakpoints": true
     }
   ]
 }

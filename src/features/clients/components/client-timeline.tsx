@@ -29,6 +29,8 @@ function describeClient(a: TimelineActivity): { title: string; tag: string } {
       return { title: `Follow-up scheduled for ${formatDateTime(String(d.dueAt))}`, tag: "Follow-up" };
     case "follow_up_done":
       return { title: `Follow-up completed (was due ${formatDateTime(String(d.dueAt))})`, tag: "Follow-up" };
+    case "file_uploaded":
+      return { title: "Document uploaded", tag: "Document" };
     default:
       return { title: a.type, tag: "Activity" };
   }

@@ -7,6 +7,7 @@ import { buttonClasses } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState, RestrictedState } from "@/components/ui/empty-state";
 import { BookingsMiniList } from "@/features/bookings/components/bookings-table";
+import { DocumentsPanel } from "@/features/documents/components/documents-panel";
 import { ClientTimeline, relationshipLabel } from "@/features/clients/components/client-timeline";
 import { PaymentHistoryList } from "@/features/finance/components/payment-history";
 import { AssignClientPanel, ClientFollowUpsPanel, ClientNotePanel, EditClientForm } from "@/features/clients/components/detail-panels";
@@ -16,10 +17,13 @@ import { PanelCard } from "@/features/leads/components/detail-panels";
 import { formatDateTime } from "@/features/leads/format";
 import { bookingsFor } from "@/modules/bookings/queries";
 import { getClientDetail } from "@/modules/clients/queries";
+import { listClientDocuments } from "@/modules/documents/service";
 import { canSeeItemisedPayments } from "@/modules/finance/policy";
 import { bookingPaymentHistory } from "@/modules/finance/queries";
 import { assignableUsers, leadLookups } from "@/modules/leads/queries";
 import { AppError } from "@/server/errors";
+
+const CLIENT_DOCUMENTS = { title: "Contracts and documents", empty: "No contracts or documents yet.", field: "Upload a contract or document", button: "Upload document", uploaded: "Document uploaded.", noun: "Documents" };
 
 export const metadata: Metadata = { title: "Client" };
 
@@ -43,10 +47,11 @@ export default async function ClientDetailPage({ params }: PageProps<"/dashboard
     if (error instanceof AppError && error.code === "NOT_FOUND") notFound();
     throw error;
   }
-  const [lookups, owners, investments] = await Promise.all([
+  const [lookups, owners, investments, documents] = await Promise.all([
     leadLookups(db),
     detail.permissions.assign ? assignableUsers(db, actor) : [],
     bookingsFor(db, actor, { clientId: id }),
+    listClientDocuments(db, actor, id),
   ]);
   const { client } = detail;
   // FR-204 per-client history across the client's bookings, for roles that may see itemised payments.
@@ -125,9 +130,7 @@ export default async function ClientDetailPage({ params }: PageProps<"/dashboard
               <PaymentHistoryList rows={paymentHistory} empty="No payments posted on this client's bookings." showBooking />
             </PanelCard>
           ) : null}
-          <PanelCard title="Contracts">
-            <EmptyState size="sm">Contract documents arrive with the client&apos;s templates.</EmptyState>
-          </PanelCard>
+          <DocumentsPanel documents={documents} canUpload={detail.permissions.edit} uploadUrl={`/api/v1/clients/${id}/documents`} text={CLIENT_DOCUMENTS} />
 
           <ClientTimeline activities={detail.activities} />
         </div>
