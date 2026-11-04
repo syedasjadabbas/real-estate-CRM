@@ -16,7 +16,7 @@ const UNIT_TAKEN = "This unit number already exists in the project.";
 type DimensionField = (typeof DIMENSION_FIELD)[DimensionKey];
 
 async function auditUnit(db: DbOrTx, actor: Actor, action: string, entityId: string, before: unknown, after: unknown) {
-  await db.insert(auditLogs).values({ actorId: actor.id, action, entity: "unit", entityId, before: before ?? null, after: after ?? null });
+  await db.insert(auditLogs).values({ actorId: actor.id, ip: actor.ip ?? null, action, entity: "unit", entityId, before: before ?? null, after: after ?? null });
 }
 
 /**
@@ -159,7 +159,7 @@ export async function setUnitStatus(db: Database, actor: Actor, unitId: string, 
         fields: { status: "Only SPU or 50% fractional units can be partially booked" },
       });
     }
-    await transitionUnitStatus(tx, { unitId, from: [unit.status], to: status, actorId: actor.id, source: "manual", reason });
+    await transitionUnitStatus(tx, { unitId, from: [unit.status], to: status, actorId: actor.id, ip: actor.ip ?? null, source: "manual", reason });
     return { from: unit.status, to: status };
   });
 }

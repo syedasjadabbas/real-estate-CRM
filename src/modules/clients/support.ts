@@ -57,6 +57,7 @@ export async function logClientActivity(
 export async function auditClient(db: DbOrTx, actor: Actor, action: string, entityId: string, before: unknown, after: unknown) {
   await db.insert(auditLogs).values({
     actorId: actor.id,
+    ip: actor.ip ?? null,
     action,
     entity: "client",
     entityId,

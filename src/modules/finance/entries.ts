@@ -56,7 +56,7 @@ const voidSchema = z.object({ reason: z.string().trim().min(5, "Give a reason (a
 const categorySchema = z.object({ kind: z.enum(ENTRY_KINDS), name: z.string().trim().min(1, "Enter a name").max(80, "Use at most 80 characters") }).strict();
 
 async function audit(db: Database | Parameters<Parameters<Database["transaction"]>[0]>[0], actor: Actor, action: string, entityId: string, before: unknown, after: unknown) {
-  await db.insert(auditLogs).values({ actorId: actor.id, action, entity: "finance_entry", entityId, before, after });
+  await db.insert(auditLogs).values({ actorId: actor.id, ip: actor.ip ?? null, action, entity: "finance_entry", entityId, before, after });
 }
 
 // ─── Categories ──────────────────────────────────────────────────────────────
@@ -75,7 +75,7 @@ export async function addCategory(db: Database, actor: Actor, input: unknown) {
   try {
     return await db.transaction(async (tx) => {
       const [row] = await tx.insert(financeCategories).values({ kind: data.kind, name: data.name }).returning({ id: financeCategories.id });
-      await tx.insert(auditLogs).values({ actorId: actor.id, action: "finance.category_add", entity: "finance_category", entityId: row.id, before: null, after: data });
+      await tx.insert(auditLogs).values({ actorId: actor.id, ip: actor.ip ?? null, action: "finance.category_add", entity: "finance_category", entityId: row.id, before: null, after: data });
       return { categoryId: row.id };
     });
   } catch (error) {
@@ -92,7 +92,7 @@ export async function setCategoryActive(db: Database, actor: Actor, categoryId: 
     if (!row) throw notFound("Category");
     if (row.isActive === active) return { changed: false };
     await tx.update(financeCategories).set({ isActive: active }).where(eq(financeCategories.id, categoryId));
-    await tx.insert(auditLogs).values({ actorId: actor.id, action: active ? "finance.category_activate" : "finance.category_deactivate", entity: "finance_category", entityId: categoryId, before: { isActive: row.isActive }, after: { isActive: active } });
+    await tx.insert(auditLogs).values({ actorId: actor.id, ip: actor.ip ?? null, action: active ? "finance.category_activate" : "finance.category_deactivate", entity: "finance_category", entityId: categoryId, before: { isActive: row.isActive }, after: { isActive: active } });
     return { changed: true };
   });
 }

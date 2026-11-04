@@ -57,7 +57,7 @@ async function applyToProposal(tx: Tx, actor: Actor, task: { id: string; proposa
   const before = snapshot(old);
   const data = { unitId: old.unitId, trigger, before, after: snapshot(next), rowsRegenerated: !handEdited };
   await tx.insert(taskHistory).values({ taskId: task.id, actorId: actor.id, action: "price_sync", data });
-  await tx.insert(auditLogs).values({ actorId: actor.id, action: "task.price_sync", entity: "task", entityId: task.id, before, after: data });
+  await tx.insert(auditLogs).values({ actorId: actor.id, ip: actor.ip ?? null, action: "task.price_sync", entity: "task", entityId: task.id, before, after: data });
   return true;
 }
 
@@ -144,7 +144,7 @@ export async function applyProposalReconciliation(db: Database, actor: Actor) {
       const [unit] = await tx.select({ areaSqft: units.areaSqft, basePrice: units.basePrice }).from(units).where(eq(units.id, task.proposal.unitId!));
       if (unit && (await applyToProposal(tx, actor, { id: task.id, proposal: task.proposal }, unit, settings, "reconciliation"))) updated++;
     }
-    await tx.insert(auditLogs).values({ actorId: actor.id, action: "task.price_reconciliation", entity: "task", entityId: null, before: null, after: { updated, ...report.summary } });
+    await tx.insert(auditLogs).values({ actorId: actor.id, ip: actor.ip ?? null, action: "task.price_reconciliation", entity: "task", entityId: null, before: null, after: { updated, ...report.summary } });
     return { updated, ...report.summary };
   });
 }

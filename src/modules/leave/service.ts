@@ -88,7 +88,7 @@ export async function updateLeaveSettings(db: Database, actor: Actor, input: unk
           .insert(appSettings)
           .values({ key: KEYS[k], value: String(value), updatedById: actor.id })
           .onConflictDoUpdate({ target: appSettings.key, set: { value: String(value), updatedById: actor.id, updatedAt: new Date() } });
-      await tx.insert(auditLogs).values({ actorId: actor.id, action: "app.setting", entity: "app_setting", entityId: KEYS[k], before: { value: before[k] }, after: { value } });
+      await tx.insert(auditLogs).values({ actorId: actor.id, ip: actor.ip ?? null, action: "app.setting", entity: "app_setting", entityId: KEYS[k], before: { value: before[k] }, after: { value } });
     }
     return { changed: changed as string[] };
   });
@@ -142,7 +142,7 @@ const decisionSchema = z.object({ approve: z.boolean(), comment: z.string().trim
 const reasonSchema = z.object({ reason: z.string().trim().min(1, "Give a reason").max(500, "Use at most 500 characters") }).strict();
 
 async function audit(tx: Tx, actor: Actor, action: string, id: string, after: Record<string, unknown>) {
-  await tx.insert(auditLogs).values({ actorId: actor.id, action, entity: "leave_request", entityId: id, before: null, after });
+  await tx.insert(auditLogs).values({ actorId: actor.id, ip: actor.ip ?? null, action, entity: "leave_request", entityId: id, before: null, after });
 }
 
 /**

@@ -47,7 +47,7 @@ export async function updateProposalSettings(db: Database, actor: Actor, input: 
           .values({ key, value: after, updatedById: actor.id })
           .onConflictDoUpdate({ target: appSettings.key, set: { value: after, updatedById: actor.id, updatedAt: new Date() } });
       }
-      await tx.insert(auditLogs).values({ actorId: actor.id, action: "app.setting", entity: "app_setting", entityId: key, before: { value: before }, after: { value: after } });
+      await tx.insert(auditLogs).values({ actorId: actor.id, ip: actor.ip ?? null, action: "app.setting", entity: "app_setting", entityId: key, before: { value: before }, after: { value: after } });
       changed.push(name);
     }
     return { changed };

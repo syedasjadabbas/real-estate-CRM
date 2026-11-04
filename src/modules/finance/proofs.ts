@@ -80,6 +80,7 @@ export async function uploadPaymentProof(db: Database, actor: Actor, paymentId: 
       });
       await tx.insert(auditLogs).values({
         actorId: actor.id,
+        ip: actor.ip ?? null,
         action: "payment.proof_upload",
         entity: "payment",
         entityId: payment.id,

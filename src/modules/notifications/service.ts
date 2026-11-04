@@ -117,6 +117,7 @@ export async function updateReminderMinutes(db: Database, actor: Actor, input: u
         .onConflictDoUpdate({ target: appSettings.key, set: { value: String(minutes), updatedById: actor.id, updatedAt: new Date() } });
     await tx.insert(auditLogs).values({
       actorId: actor.id,
+      ip: actor.ip ?? null,
       action: "app.setting",
       entity: "app_setting",
       entityId: REMINDER_SETTING_KEY,

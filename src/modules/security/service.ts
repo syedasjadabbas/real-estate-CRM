@@ -77,7 +77,7 @@ export async function updateRetentionSettings(db: Database, actor: Actor, input:
         .insert(appSettings)
         .values({ key, value: after, updatedById: actor.id })
         .onConflictDoUpdate({ target: appSettings.key, set: { value: after, updatedById: actor.id, updatedAt: new Date() } });
-      await tx.insert(auditLogs).values({ actorId: actor.id, action: "app.setting", entity: "app_setting", entityId: key, before: { value: before }, after: { value: after } });
+      await tx.insert(auditLogs).values({ actorId: actor.id, ip: actor.ip ?? null, action: "app.setting", entity: "app_setting", entityId: key, before: { value: before }, after: { value: after } });
       changed.push(key === RETENTION_MONTHS_KEY ? "retentionMonths" : "cleanupEnabled");
     }
     return { changed };

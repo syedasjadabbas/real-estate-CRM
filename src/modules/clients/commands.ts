@@ -226,6 +226,7 @@ export async function addClientNote(db: Database, actor: Actor, clientId: string
     const now = new Date();
     await logClientActivity(tx, { clientId, actorId: actor.id, type: "note", body });
     await tx.update(clients).set({ lastActivityAt: now, updatedAt: now }).where(eq(clients.id, clientId));
+    await auditClient(tx, actor, "client.note", clientId, null, { body });
   });
 }
 
@@ -237,10 +238,12 @@ export async function scheduleClientFollowUp(db: Database, actor: Actor, clientI
   }
   return db.transaction(async (tx) => {
     const { client } = await loadAccessibleClient(tx, actor, clientId, true);
+    const assigneeId = client.ownerId ?? actor.id;
     const [followUp] = await tx
       .insert(clientFollowUps)
-      .values({ clientId, assigneeId: client.ownerId ?? actor.id, dueAt, note: note ?? null, createdById: actor.id })
+      .values({ clientId, assigneeId, dueAt, note: note ?? null, createdById: actor.id })
       .returning({ id: clientFollowUps.id });
+    await auditClient(tx, actor, "client.follow_up", clientId, null, { followUpId: followUp.id, dueAt: dueAt.toISOString(), assigneeId, note: note ?? null, status: "pending" });
     await tx.update(clients).set({ lastActivityAt: now, updatedAt: now }).where(eq(clients.id, clientId));
     await refreshClientNextFollowUp(tx, clientId);
     await logClientActivity(tx, {
@@ -275,6 +278,7 @@ export async function completeClientFollowUp(db: Database, actor: Actor, followU
       type: "follow_up_done",
       data: { followUpId, dueAt: followUp.dueAt.toISOString() },
     });
+    await auditClient(tx, actor, "client.follow_up_done", followUp.clientId, { followUpId, status: followUp.status }, { followUpId, status: "done", dueAt: followUp.dueAt.toISOString(), doneAt: now.toISOString() });
   });
 }
 

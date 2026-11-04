@@ -18,7 +18,7 @@ const isId = (v: string) => /^[0-9a-f-]{36}$/i.test(v);
 const formatPkr = (n: number) => `PKR ${new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(n)}`;
 
 async function audit(db: DbOrTx, actor: Actor, action: string, entity: string, entityId: string, before: unknown, after: unknown) {
-  await db.insert(auditLogs).values({ actorId: actor.id, action, entity, entityId, before: before ?? null, after: after ?? null });
+  await db.insert(auditLogs).values({ actorId: actor.id, ip: actor.ip ?? null, action, entity, entityId, before: before ?? null, after: after ?? null });
 }
 
 /**

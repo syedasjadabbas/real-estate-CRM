@@ -1416,3 +1416,98 @@ Requested as "F-4"; in the §17 findings table this is **F-6** (F-4 there is the
 - **No second person, no approval.** With the same role at both steps and only one person in that role (for example a single HR user), staff requests can't complete; they stay pending, visibly. That's the intended consequence of "two different people", but the C-4 decision should name roles with at least two people, or two different roles.
 - **The step 1 approver can't reject step 2 either.** That follows "two different people decide the two steps". If the client wants the first approver to be able to withdraw their approval, that's a new rule (not added).
 - **Deleted approvers.** A decision whose approver account is later deleted keeps `actor_id` null, so the index can't compare it. Users are deactivated, not deleted, in the app, so this is theoretical.
+
+## 22. F-4 fixed: audit-log gaps, IP capture and the audit-log viewer (4 Nov 2026)
+
+**Scope, checked against the requirements before starting:**
+- **FR-008:** "All create, update and delete actions on business records are audit-logged … who, what, when, and before / after for key fields."
+- **SECURITY_AND_PRIVACY §3:** append-only `audit_logs` with IP; "Admins can view audit logs. Nobody can edit or delete them through the app."
+- **USER_ROLES_AND_PERMISSIONS:** "Audit log": Super Admin **F**, Admin **R**, every other role none.
+- **SECURITY_AND_PRIVACY §1 and `DEPLOYMENT_PROXY.md`:** the client IP is taken only from a trusted proxy.
+- **Ambiguities:** none. The viewer's access and the IP source are both already defined, so nothing waited on a decision.
+
+**Architecture (unchanged).** Every command writes its own `audit_logs` row inside its transaction, either through a module helper (`audit`, `auditClient`, `record`, `writeAudit`, …) or inline. No separate logging system was added. Sign-in history stays a separate table, and its retention job and the C2 switch (automatic deletion off) are untouched.
+
+**What lacked an audit row (found by a sweep of every exported write function in `src/modules`):**
+
+| Action | Command | Audit row now |
+|---|---|---|
+| Lead note | `addNote` | `lead.note`: `latestComment` before / after |
+| Lead follow-up scheduled | `scheduleFollowUp` | `lead.follow_up`: follow-up id, due time, assignee, note, status pending |
+| Lead follow-up done | `completeFollowUp` | `lead.follow_up_done`: status pending → done, due time, done time |
+| Lead review | `addReview` | `lead.review`: review id, text |
+| Favourite / unfavourite | `setFavorite` | `lead.favorite` / `lead.unfavorite`: favourite false ↔ true. Only when the flag actually changes, and now in one transaction |
+| Client note | `addClientNote` | `client.note`: text |
+| Client follow-up scheduled / done | `scheduleClientFollowUp`, `completeClientFollowUp` | `client.follow_up`, `client.follow_up_done`, as for leads |
+
+- **Already audited, so left alone:** meetings and tasks, through their `record()` helper.
+- **Not business records, so left alone:**
+  - notification read flags and `notify` (system messages);
+  - the timeline helpers (`logActivity`, `logClientActivity`).
+- **Failed actions write nothing.** Each new row is written in the same transaction, after the permission, scope and validation checks, so a refused or failed action rolls back with no row.
+
+**IP capture:**
+- **Source.** `getCurrentUser` attaches the request's verified IP to the actor (`Actor.ip`). It uses the same resolver as sign-in logging (`requestMeta` → `resolveClientIp`): the address is trusted only from the header a configured proxy overwrites, and in development only the loopback address.
+- **Writing.** All 33 audit writes now store `ip: actor.ip ?? null`; `transitionUnitStatus` and `reserveAvailableUnit` take it from their callers.
+- **No IP:** when the request can't be trusted (production without `TRUST_PROXY`), or outside a request (jobs, scripts, tests), the IP stays empty. Nothing is invented.
+- **Existing rows** (99 in development, none with an IP) are unchanged. There is no schema change, as the `ip` column already existed.
+
+**Audit-log viewer:**
+- **Where.** **Settings → Audit log** (`/dashboard/settings/audit-log`), reached from the Security settings tabs (header shield icon). Also `GET /api/v1/audit-logs`, which offers no other method.
+- **Who.** Super Admin and Admin (`canViewAuditLog`). Every other role gets "Access denied" on the page and 403 from the API.
+- **Search:**
+  - action, record type and record id;
+  - user name and IP;
+  - before and after values.
+- **Filters:** user, record type, action, and a from / to date in Pakistan time.
+- **Sorting:** time, user, action or record, in both directions (newest first by default).
+- **Paging:** 50 per page, the same pagination as the other lists.
+- **Each entry shows:**
+  - the time;
+  - the user and their role ("System" when the account is gone);
+  - the action;
+  - the record, linked for leads and clients;
+  - before and after under "View changes";
+  - the IP, or "—".
+- **Read-only.** No edit or delete exists anywhere: a test checks that no code updates or deletes audit rows and that the API exposes only GET.
+- **Secrets.** On display, values under password, token, token hash, secret, API key, cookie and authorisation keys show as "[hidden]". No command stores such values today; development data was checked, and the only near match, `tokenAmount`, is a booking amount and stays visible. Passwords, sessions and file contents are not written to audit rows; account audit rows record `sessionsEnded`, never a password.
+- **Accessibility fix found by the browser tests.** The filter controls first took their names from a wrapping label, so each name included every option's text. With `user.*` actions in the log, "User" matched three controls. Each control now has its own name.
+
+**Tests:**
+- `tests/integration/audit.test.ts`, 15 tests:
+  - **The new events:** each one, with actor, record, time, IP and before / after values. Favourite repeats write nothing.
+  - **Failed actions write no row:** another team's lead (404), invalid input, a role without permission, a past follow-up time, completing a follow-up twice, a closed lead, and a hidden client.
+  - **IP handling:**
+    - a verified IP is stored;
+    - an untrusted request and a non-request action store none;
+    - a browser-sent `X-Forwarded-For` gives no IP in development or production, and only the proxy-appended hop counts when `TRUST_PROXY` is on;
+    - a source scan checks that every audit write passes the IP.
+  - **The viewer:**
+    - roles: Super Admin and Admin allowed; Manager, Agent, HR and Accountant refused;
+    - filtering and sorting: by user, type, action, Pakistan date and search (text, user, IP), in all sort orders, and junk parameters fall back to defaults;
+    - paging: 50 per page (60 rows → 50 + 10, an out-of-range page clamps);
+    - secret hiding, read-only enforcement, and older rows without an IP.
+- `e2e/audit-log.spec.ts`, desktop and mobile:
+  - **Event to viewer:** an agent adds a note on the lead page. The Admin opens the log from Security settings, finds it by search, opens the record link and the changes, and sees "—" for the IP (no trusted proxy).
+  - **Filters and sorting:** user + action, then sorting by time, which keeps the filters. No sideways scroll at phone width.
+  - **Refused roles:** Manager, Agent, HR and Accountant get "Access denied" and a 403 from the API.
+  - **Super Admin:** the API returns data, and POST / PUT / PATCH / DELETE return 405.
+  - **Repeats:** 3 runs in a row, 12 / 12.
+
+**Verification:**
+
+| Check | Result |
+|---|---|
+| Typecheck, lint | Pass |
+| `audit.test.ts` | 15 / 15 |
+| Vitest full | **47 files, 472 / 472** (no stall this run) |
+| Schema drift | Clean (24 migrations, none new) |
+| Build | 103 / 103 pages (the new page and API route) |
+| Playwright full | **81 / 81**. The first full run failed the new spec on both projects: the label problem above, which only shows with `user.*` actions in the log. Fixed in the component; the spec then passed alone and in the full run |
+
+**Remaining risks:**
+- **IP is empty until a proxy is set up.** In production, IPs appear only once the reverse proxy and `TRUST_PROXY` are configured (H-items, `DEPLOYMENT_PROXY.md`). Until then every new row's IP is empty, by design.
+- **Viewer speed.** Search reads the before / after JSON as text, which is fine at today's volume. At millions of rows it would need an index or a narrower search.
+- **The audit log grows forever.** It is never pruned (SECURITY_AND_PRIVACY: "Audit logs are never deleted"); no retention rule was invented.
+- **Doc claims still not met (separate findings, not changed here).** SECURITY_AND_PRIVACY §3 lists "logins" (they are in sign-in history, not the audit log) and "permission denials (sampled)", which no code writes.
+- **Admin access includes Super Admin activity.** Admins see every audit row, including Super Admin actions; the matrix gives Admin read access to the whole log. If the client wants Admins limited, that's a new decision.

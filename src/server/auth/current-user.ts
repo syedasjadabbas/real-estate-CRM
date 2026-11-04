@@ -10,11 +10,15 @@ import type { Actor } from "./types";
 
 export const SESSION_COOKIE = "mz_session";
 
-/** Reads the session cookie once per request. Must be called inside a <Suspense> boundary. */
+/**
+ * Reads the session cookie once per request. Must be called inside a <Suspense> boundary.
+ * The actor carries this request's verified client IP for audit rows (null when untrusted).
+ */
 export const getCurrentUser = cache(async (): Promise<Actor | null> => {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) return null;
-  return findActorByToken(getDb(), token);
+  const actor = await findActorByToken(getDb(), token);
+  return actor ? { ...actor, ip: (await requestMeta()).ip } : null;
 });
 
 /** For pages: sends unauthenticated visitors to /login. */

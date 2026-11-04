@@ -19,7 +19,7 @@ type RowData = { label: string; description: string | null; progress: string | n
 
 async function record(tx: DbOrTx, actor: Actor, taskId: string, action: string, data: Record<string, unknown>, before: unknown = null) {
   await tx.insert(taskHistory).values({ taskId, actorId: actor.id, action, data });
-  await tx.insert(auditLogs).values({ actorId: actor.id, action: `task.${action}`, entity: "task", entityId: taskId, before, after: data });
+  await tx.insert(auditLogs).values({ actorId: actor.id, ip: actor.ip ?? null, action: `task.${action}`, entity: "task", entityId: taskId, before, after: data });
 }
 
 async function checkAssignee(tx: DbOrTx, actor: Actor, assigneeId: string, members: string[]) {

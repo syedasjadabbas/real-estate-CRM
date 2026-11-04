@@ -13,7 +13,7 @@ const UNIQUE = "holidays_date_scope_region_uq";
 const duplicateMessage = (scope: HolidayScope) => (scope === "regional" ? "This region already has a holiday on this date" : "A company-wide holiday already exists on this date");
 
 async function audit(tx: DbOrTx, actor: Actor, action: string, entityId: string, before: unknown, after: unknown) {
-  await tx.insert(auditLogs).values({ actorId: actor.id, action: `holiday.${action}`, entity: "holiday", entityId, before: before ?? null, after: after ?? null });
+  await tx.insert(auditLogs).values({ actorId: actor.id, ip: actor.ip ?? null, action: `holiday.${action}`, entity: "holiday", entityId, before: before ?? null, after: after ?? null });
 }
 
 /** Friendly duplicate check; the unique index is the final guard against races. */

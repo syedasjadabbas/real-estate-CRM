@@ -70,6 +70,7 @@ export async function audit(
 ) {
   await db.insert(auditLogs).values({
     actorId: actor.id,
+    ip: actor.ip ?? null,
     action,
     entity: "lead",
     entityId,

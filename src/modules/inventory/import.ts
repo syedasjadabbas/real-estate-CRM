@@ -140,7 +140,7 @@ export async function importUnits(db: Database, actor: Actor, input: { projectId
       }
       const failed = results.filter((r) => !r.ok).length;
       if (!input.apply || failed > 0) throw new Rollback();
-      await tx.insert(auditLogs).values({ actorId: actor.id, action: "unit.import", entity: "project", entityId: input.projectId, before: null, after: { created: results.length } });
+      await tx.insert(auditLogs).values({ actorId: actor.id, ip: actor.ip ?? null, action: "unit.import", entity: "project", entityId: input.projectId, before: null, after: { created: results.length } });
     });
   } catch (error) {
     if (!(error instanceof Rollback)) throw error;

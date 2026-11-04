@@ -129,6 +129,6 @@ export async function exportReport(db: Database, actor: Actor, input: Record<str
     filename = `outstanding-by-${by}-${today}.csv`;
     summary = { asOf: today, totals: r.totals };
   }
-  await db.insert(auditLogs).values({ actorId: actor.id, action: "finance.report_export", entity: "finance_report", entityId: kind, after: summary });
+  await db.insert(auditLogs).values({ actorId: actor.id, ip: actor.ip ?? null, action: "finance.report_export", entity: "finance_report", entityId: kind, after: summary });
   return { body, filename };
 }

@@ -24,10 +24,10 @@ The CRM holds customer phone numbers, emails, budgets, call recordings, booking 
 
 ## 3. Audit logging
 
-- Append-only `audit_logs`: actor, action, entity, before / after diff of key fields, IP (column present, not written yet), timestamp.
+- Append-only `audit_logs`: actor, action, entity, before / after diff of key fields, IP, timestamp. The IP is the verified client IP of the request (trusted proxy only, as for sign-ins); it is empty when untrusted or outside a web request (jobs), never taken from a browser header (since 4 Nov 2026, F-4).
 - Audit logs and sign-in logs are separate tables. Sign-in log retention never deletes audit logs.
 - Covers: lead stage, owner and lost changes, booking stage changes, unit status changes, payments and reversals, user and role changes, settings changes, exports, logins, and permission denials (sampled).
-- Admins can view audit logs. Nobody can edit or delete them through the app.
+- Admins can view audit logs: **Settings → Audit log** (`/dashboard/settings/audit-log`, `GET /api/v1/audit-logs`), Super Admin and Admin only, read-only. Values under secret-looking keys (password, token, secret, API key) are hidden on display. Nobody can edit or delete them through the app.
 
 ## 4. Data isolation
 

@@ -6,6 +6,7 @@ import { PageHeader, PageStack } from "@/components/shell/page-header";
 import { StatusTag } from "@/components/ui/badge";
 import { RestrictedState } from "@/components/ui/empty-state";
 import { MiniStat } from "@/components/ui/stat";
+import { SettingsTabs } from "@/features/audit/components/audit-controls";
 import { RetentionForm } from "@/features/security/components/retention-form";
 import { PanelCard } from "@/features/leads/components/detail-panels";
 import { formatDateTime } from "@/features/leads/format";
@@ -49,6 +50,7 @@ export default async function SecuritySettingsPage() {
         description="Sign-in history retention and how client IP addresses are recorded. Super admins and admins only; every change is audited."
         icon={ShieldCheck}
       />
+      <SettingsTabs active="security" />
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <MiniStat label="Retention" value={`${formatInt(status.retentionMonths)} months`} caption={status.isDefault ? "Proposed default" : "Set by an admin"} />
         <MiniStat label="Automatic deletion" value={status.cleanupEnabled ? "On" : "Off"} caption={status.cleanupEnabled ? "Runs with the daily job" : "Nothing is deleted"} />

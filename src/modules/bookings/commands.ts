@@ -17,7 +17,7 @@ import { advanceSchema, cancelSchema, createBookingSchema, updateBookingSchema }
 const fieldError = (field: string, message: string) => new AppError("VALIDATION_FAILED", "Check the highlighted fields.", { fields: { [field]: message } });
 
 async function auditBooking(db: DbOrTx, actor: Actor, action: string, entityId: string, before: unknown, after: unknown) {
-  await db.insert(auditLogs).values({ actorId: actor.id, action, entity: "booking", entityId, before: before ?? null, after: after ?? null });
+  await db.insert(auditLogs).values({ actorId: actor.id, ip: actor.ip ?? null, action, entity: "booking", entityId, before: before ?? null, after: after ?? null });
 }
 
 /** Moves the lead to `to` with history and audit, as the Leads module records stage changes. */
@@ -40,7 +40,7 @@ async function setLeadStage(tx: Tx, actor: Actor, leadId: string, to: "booking_i
     type: "stage_change",
     data: { from: lead.stage, to, fromLabel: STAGE_LABELS[lead.stage], toLabel: STAGE_LABELS[to], reason },
   });
-  await tx.insert(auditLogs).values({ actorId: actor.id, action: "lead.stage", entity: "lead", entityId: leadId, before: { stage: lead.stage }, after: { stage: to, reason } });
+  await tx.insert(auditLogs).values({ actorId: actor.id, ip: actor.ip ?? null, action: "lead.stage", entity: "lead", entityId: leadId, before: { stage: lead.stage }, after: { stage: to, reason } });
   return lead;
 }
 
@@ -89,7 +89,7 @@ export async function createBooking(db: Database, actor: Actor, input: unknown) 
     const totalSale = Math.round(unit.areaSqft * data.ratePerSqft * 100) / 100;
     if (data.tokenAmount > totalSale) throw fieldError("tokenAmount", "The token can't exceed the total sale");
 
-    await reserveAvailableUnit(tx, unit.id, actor.id, `Booking for lead ${lead.code}`);
+    await reserveAvailableUnit(tx, unit.id, actor.id, `Booking for lead ${lead.code}`, actor.ip ?? null);
     const values = {
       projectId: data.projectId,
       unitId: unit.id,
@@ -139,7 +139,7 @@ export async function advanceBooking(db: Database, actor: Actor, bookingId: stri
 
     let clientId = booking.clientId;
     if (toStage === "confirmed") {
-      await transitionUnitStatus(tx, { unitId: booking.unitId, from: ["reserved"], to: "booked", actorId: actor.id, source: "booking", reason: "Booking confirmed" });
+      await transitionUnitStatus(tx, { unitId: booking.unitId, from: ["reserved"], to: "booked", actorId: actor.id, ip: actor.ip ?? null, source: "booking", reason: "Booking confirmed" });
       const lead = await setLeadStage(tx, actor, booking.leadId, "booked", "Booking confirmed");
       clientId = (await ensureClientForLead(tx, actor, lead, booking.id)).clientId;
       await writeStage(tx, booking.id, booking.stage, toStage, { confirmedAt: new Date(), clientId });
@@ -172,7 +172,7 @@ export async function cancelBooking(db: Database, actor: Actor, bookingId: strin
       );
     }
     await writeStage(tx, booking.id, booking.stage, "cancelled", { cancelledAt: new Date(), cancelledReason: reason });
-    await transitionUnitStatus(tx, { unitId: booking.unitId, from: ["reserved"], to: "available", actorId: actor.id, source: "booking", reason: `Booking cancelled: ${reason}` });
+    await transitionUnitStatus(tx, { unitId: booking.unitId, from: ["reserved"], to: "available", actorId: actor.id, ip: actor.ip ?? null, source: "booking", reason: `Booking cancelled: ${reason}` });
     await tx.insert(bookingStageHistory).values({ bookingId: booking.id, fromStage: booking.stage, toStage: "cancelled", actorId: actor.id, note: reason });
     await auditBooking(tx, actor, "booking.cancel", booking.id, { stage: booking.stage }, { stage: "cancelled", reason });
     return { from: booking.stage };

@@ -95,6 +95,7 @@ export async function setTarget(db: Database, actor: Actor, input: unknown) {
     }
     await tx.insert(auditLogs).values({
       actorId: actor.id,
+      ip: actor.ip ?? null,
       action: clear ? "target.clear" : before ? "target.update" : "target.create",
       entity: "target",
       entityId: `${data.userId}:${data.period}:${start}`,

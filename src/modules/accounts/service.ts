@@ -28,7 +28,7 @@ async function endSessions(tx: Tx, userId: string) {
 }
 
 async function writeAudit(tx: Tx, actor: Actor, action: string, userId: string, before: Record<string, unknown> | null, after: Record<string, unknown> | null) {
-  await tx.insert(auditLogs).values({ actorId: actor.id, action, entity: "user", entityId: userId, before, after });
+  await tx.insert(auditLogs).values({ actorId: actor.id, ip: actor.ip ?? null, action, entity: "user", entityId: userId, before, after });
 }
 
 /** The last active Super Admin can't be demoted or deactivated (nobody could manage accounts afterwards). */
@@ -70,7 +70,7 @@ export async function createAccount(db: Database, actor: Actor, input: unknown) 
           .where(and(eq(employeeProfiles.id, data.employeeRecordId), sql`${employeeProfiles.userId} is null`))
           .returning({ id: employeeProfiles.id });
         if (!linked) throw fieldError("employeeRecordId", "This HR record is no longer available to link");
-        await tx.insert(auditLogs).values({ actorId: actor.id, action: "employee.record_link", entity: "employee_profile", entityId: user.id, before: { recordId: linked.id }, after: { userId: user.id } });
+        await tx.insert(auditLogs).values({ actorId: actor.id, ip: actor.ip ?? null, action: "employee.record_link", entity: "employee_profile", entityId: user.id, before: { recordId: linked.id }, after: { userId: user.id } });
       }
       return { id: user.id };
     });
@@ -195,6 +195,7 @@ export async function reassignOwnedLeads(db: Database, actor: Actor, fromUserId:
     if (moved > 0) {
       await db.insert(auditLogs).values({
         actorId: actor.id,
+        ip: actor.ip ?? null,
         action: "user.leads_shift",
         entity: "user",
         entityId: fromUserId,

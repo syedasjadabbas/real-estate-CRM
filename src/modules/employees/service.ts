@@ -191,6 +191,7 @@ export async function saveEmployeeProfile(db: Database, actor: Actor, userId: st
       .onConflictDoUpdate({ target: employeeProfiles.userId, set: { ...next, updatedById: actor.id, updatedAt: now } });
     await tx.insert(auditLogs).values({
       actorId: actor.id,
+      ip: actor.ip ?? null,
       action: current ? "employee.profile_update" : "employee.profile_create",
       entity: "employee_profile",
       entityId: userId,
@@ -234,6 +235,7 @@ export async function createEmployeeRecord(db: Database, actor: Actor, input: un
       .returning({ id: employeeProfiles.id });
     await tx.insert(auditLogs).values({
       actorId: actor.id,
+      ip: actor.ip ?? null,
       action: "employee.record_create",
       entity: "employee_profile",
       entityId: row.id,
@@ -267,6 +269,7 @@ export async function saveEmployeeRecord(db: Database, actor: Actor, profileId: 
       .where(eq(employeeProfiles.id, profileId));
     await tx.insert(auditLogs).values({
       actorId: actor.id,
+      ip: actor.ip ?? null,
       action: "employee.record_update",
       entity: "employee_profile",
       entityId: profileId,

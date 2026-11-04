@@ -27,7 +27,7 @@ async function assertNameFree(db: DbOrTx, name: string, exceptId?: string) {
 }
 
 async function auditProject(db: DbOrTx, actor: Actor, action: string, entityId: string, before: unknown, after: unknown) {
-  await db.insert(auditLogs).values({ actorId: actor.id, action, entity: "project", entityId, before: before ?? null, after: after ?? null });
+  await db.insert(auditLogs).values({ actorId: actor.id, ip: actor.ip ?? null, action, entity: "project", entityId, before: before ?? null, after: after ?? null });
 }
 
 /** FR-060 create (super admin / admin). */

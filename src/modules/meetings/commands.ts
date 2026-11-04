@@ -12,7 +12,7 @@ import { cancelSchema, completeSchema, createMeetingSchema, updateMeetingSchema 
 
 async function record(tx: DbOrTx, actor: Actor, meetingId: string, action: string, data: Record<string, unknown>, before: unknown = null) {
   await tx.insert(meetingHistory).values({ meetingId, actorId: actor.id, action, data });
-  await tx.insert(auditLogs).values({ actorId: actor.id, action: `meeting.${action}`, entity: "meeting", entityId: meetingId, before, after: data });
+  await tx.insert(auditLogs).values({ actorId: actor.id, ip: actor.ip ?? null, action: `meeting.${action}`, entity: "meeting", entityId: meetingId, before, after: data });
 }
 
 /** Loads a meeting the actor may see; 404 otherwise (no existence leak). */
@@ -63,7 +63,7 @@ async function moveLeadForward(tx: Tx, actor: Actor, lead: typeof leads.$inferSe
     type: "stage_change",
     data: { from: lead.stage, to, fromLabel: STAGE_LABELS[lead.stage], toLabel: STAGE_LABELS[to], reason },
   });
-  await tx.insert(auditLogs).values({ actorId: actor.id, action: "lead.stage", entity: "lead", entityId: lead.id, before: { stage: lead.stage }, after: { stage: to, reason } });
+  await tx.insert(auditLogs).values({ actorId: actor.id, ip: actor.ip ?? null, action: "lead.stage", entity: "lead", entityId: lead.id, before: { stage: lead.stage }, after: { stage: to, reason } });
   return true;
 }
 

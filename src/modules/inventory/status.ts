@@ -19,6 +19,8 @@ export async function transitionUnitStatus(
     from: readonly UnitStatus[];
     to: UnitStatus;
     actorId: string | null;
+    /** Verified client IP for the audit row (Actor.ip). */
+    ip?: string | null;
     source: StatusSource;
     reason?: string | null;
     /** Restrict to whole units (share-level booking waits for Q-B1). */
@@ -49,6 +51,7 @@ export async function transitionUnitStatus(
   }
   await db.insert(auditLogs).values({
     actorId: params.actorId,
+    ip: params.ip ?? null,
     action: "unit.status",
     entity: "unit",
     entityId: params.unitId,
@@ -58,9 +61,9 @@ export async function transitionUnitStatus(
 }
 
 /** For Bookings: claim an Available whole unit (FR-071 "creating a booking sets the unit to Reserved"). */
-export async function reserveAvailableUnit(db: DbOrTx, unitId: string, actorId: string, reason: string) {
+export async function reserveAvailableUnit(db: DbOrTx, unitId: string, actorId: string, reason: string, ip: string | null = null) {
   try {
-    await transitionUnitStatus(db, { unitId, from: ["available"], to: "reserved", actorId, source: "booking", reason, wholeOnly: true });
+    await transitionUnitStatus(db, { unitId, from: ["available"], to: "reserved", actorId, ip, source: "booking", reason, wholeOnly: true });
   } catch (error) {
     // Reword the generic transition message for the booking context; keep the code and details.
     if (error instanceof AppError && error.code === "CONFLICT") {

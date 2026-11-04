@@ -386,6 +386,7 @@ export async function addNote(db: Database, actor: Actor, leadId: string, input:
       .update(leads)
       .set({ latestComment: body, ...touchValues(lead, now) })
       .where(eq(leads.id, leadId));
+    await audit(tx, actor, "lead.note", leadId, { latestComment: lead.latestComment }, { latestComment: body });
   });
 }
 
@@ -400,10 +401,12 @@ export async function scheduleFollowUp(db: Database, actor: Actor, leadId: strin
     if (lead.stage === "lost_lead" || lead.stage === "booked") {
       throw new AppError("BUSINESS_RULE", "Follow-ups cannot be scheduled on closed leads.");
     }
+    const assigneeId = lead.ownerId ?? actor.id;
     const [followUp] = await tx
       .insert(followUps)
-      .values({ leadId, assigneeId: lead.ownerId ?? actor.id, dueAt, note: note ?? null, createdById: actor.id })
+      .values({ leadId, assigneeId, dueAt, note: note ?? null, createdById: actor.id })
       .returning({ id: followUps.id });
+    await audit(tx, actor, "lead.follow_up", leadId, null, { followUpId: followUp.id, dueAt: dueAt.toISOString(), assigneeId, note: note ?? null, status: "pending" });
     await tx.update(leads).set(touchValues(lead, now)).where(eq(leads.id, leadId));
     await refreshNextFollowUp(tx, leadId);
     await logActivity(tx, {
@@ -438,17 +441,20 @@ export async function completeFollowUp(db: Database, actor: Actor, followUpId: s
       type: "follow_up_done",
       data: { followUpId, dueAt: followUp.dueAt.toISOString() },
     });
+    await audit(tx, actor, "lead.follow_up_done", lead.id, { followUpId, status: followUp.status }, { followUpId, status: "done", dueAt: followUp.dueAt.toISOString(), doneAt: now.toISOString() });
   });
 }
 
+/** A person's own favourite flag. Audited only when it actually changes (a repeat is a no-op). */
 export async function setFavorite(db: Database, actor: Actor, leadId: string, favorite: boolean) {
   assertCan(actor, "view");
-  await loadAccessibleLead(db, actor, leadId);
-  if (favorite) {
-    await db.insert(leadFavorites).values({ userId: actor.id, leadId }).onConflictDoNothing();
-  } else {
-    await db.delete(leadFavorites).where(and(eq(leadFavorites.userId, actor.id), eq(leadFavorites.leadId, leadId)));
-  }
+  return db.transaction(async (tx) => {
+    await loadAccessibleLead(tx, actor, leadId);
+    const changed = favorite
+      ? await tx.insert(leadFavorites).values({ userId: actor.id, leadId }).onConflictDoNothing().returning({ leadId: leadFavorites.leadId })
+      : await tx.delete(leadFavorites).where(and(eq(leadFavorites.userId, actor.id), eq(leadFavorites.leadId, leadId))).returning({ leadId: leadFavorites.leadId });
+    if (changed.length) await audit(tx, actor, favorite ? "lead.favorite" : "lead.unfavorite", leadId, { favorite: !favorite }, { favorite });
+  });
 }
 
 export async function addReview(db: Database, actor: Actor, leadId: string, input: unknown) {
@@ -456,8 +462,9 @@ export async function addReview(db: Database, actor: Actor, leadId: string, inpu
   const { body } = parse(reviewSchema, input);
   return db.transaction(async (tx) => {
     await loadAccessibleLead(tx, actor, leadId);
-    await tx.insert(leadReviews).values({ leadId, reviewerId: actor.id, body });
+    const [review] = await tx.insert(leadReviews).values({ leadId, reviewerId: actor.id, body }).returning({ id: leadReviews.id });
     await logActivity(tx, { leadId, actorId: actor.id, type: "review", body });
+    await audit(tx, actor, "lead.review", leadId, null, { reviewId: review.id, body });
   });
 }
 

@@ -10,7 +10,7 @@ import { assertCanManageTeams, canOperateTeam } from "./policy";
 import { createTeamSchema, dailyReportSchema, dateParam, membersSchema, rosterSchema, updateTeamSchema } from "./validation";
 
 async function audit(tx: DbOrTx, actor: Actor, action: string, entity: string, entityId: string, before: unknown, after: unknown) {
-  await tx.insert(auditLogs).values({ actorId: actor.id, action, entity, entityId, before: before ?? null, after: after ?? null });
+  await tx.insert(auditLogs).values({ actorId: actor.id, ip: actor.ip ?? null, action, entity, entityId, before: before ?? null, after: after ?? null });
 }
 
 export async function loadTeam(tx: DbOrTx, teamId: string, forUpdate = false) {
