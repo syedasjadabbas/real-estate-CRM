@@ -141,7 +141,7 @@ function sortRows(rows: AgentMetrics[], sort: PerformanceSort, dir: "asc" | "des
     if (x === null && y !== null) return 1;
     if (y === null && x !== null) return -1;
     const c = typeof x === "string" ? x.localeCompare(String(y)) : Number(x) - Number(y);
-    return c !== 0 ? c * sign : a.name.localeCompare(b.name);
+    return c !== 0 ? c * sign : a.name.localeCompare(b.name) || a.userId.localeCompare(b.userId);
   });
 }
 

@@ -6,16 +6,27 @@ import { buttonClasses } from "@/components/ui/button";
 import { EmptyState, RestrictedState } from "@/components/ui/empty-state";
 import { MiniStat } from "@/components/ui/stat";
 import { Pagination } from "@/features/leads/components/pagination";
+import { SortLinks, type SortLinkColumn } from "@/features/leads/components/sort-links";
 import { flattenParams } from "@/features/leads/url";
 import { ProjectCard } from "@/features/projects/components/project-card";
 import { ProjectsToolbar } from "@/features/projects/components/projects-toolbar";
 import { formatInt } from "@/lib/format";
+import type { ProjectSort } from "@/modules/projects/constants";
 import { canDoProject } from "@/modules/projects/policy";
 import { listProjects } from "@/modules/projects/queries";
 import { requirePageUser } from "@/server/auth/current-user";
 import { getDb } from "@/server/db";
 
 export const metadata: Metadata = { title: "Projects" };
+
+const SORT_COLUMNS: SortLinkColumn<ProjectSort>[] = [
+  { key: "name", label: "Name" },
+  { key: "type", label: "Type" },
+  { key: "status", label: "Status" },
+  { key: "developer", label: "Developer" },
+  { key: "city", label: "City" },
+  { key: "units", label: "Units tracked", firstDir: "desc" },
+];
 
 export default async function ProjectsPage({ searchParams }: PageProps<"/dashboard/projects">) {
   const actor = await requirePageUser();
@@ -46,6 +57,7 @@ export default async function ProjectsPage({ searchParams }: PageProps<"/dashboa
         }
       />
       <ProjectsToolbar params={params} total={result.total} />
+      <SortLinks path="/dashboard/projects" params={params} name="Sort projects" columns={SORT_COLUMNS} sort={result.query.sort} dir={result.query.dir} />
       {result.rows.length === 0 ? (
         <EmptyState className="bg-white">{filtered ? "No projects match these filters." : "No projects yet."}</EmptyState>
       ) : (

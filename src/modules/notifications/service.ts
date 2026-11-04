@@ -17,7 +17,7 @@ import { parseTask } from "@/modules/tasks/support";
 export type NotificationType = typeof notifications.$inferInsert.type;
 export type NewNotification = { userId: string; type: NotificationType; title: string; body?: string | null; link?: string | null; dedupeKey: string };
 
-export const NOTIFICATION_PAGE_SIZE = 20;
+export const NOTIFICATION_PAGE_SIZE = 50;
 export const BELL_LIMIT = 10;
 export const REMINDER_SETTING_KEY = "notifications.follow_up_reminder_minutes";
 export const MIN_REMINDER_MINUTES = 1;

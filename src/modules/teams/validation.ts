@@ -1,5 +1,15 @@
 import { z } from "zod";
 
+/** Teams list (FR-005). With no sort it keeps its default order (active first, then name). */
+export const TEAM_PAGE_SIZE = 50;
+export const TEAM_SORT_COLUMNS = ["name", "manager", "members", "status"] as const;
+export type TeamSort = (typeof TEAM_SORT_COLUMNS)[number];
+export const teamListQuerySchema = z.object({
+  sort: z.enum(TEAM_SORT_COLUMNS).optional().catch(undefined),
+  dir: z.enum(["asc", "desc"]).catch("asc"),
+  page: z.coerce.number().int().min(1).max(10_000).catch(1),
+});
+
 export const ROSTER_STATUSES = ["in_office", "on_site", "on_leave", "leads_off"] as const;
 export type RosterStatus = (typeof ROSTER_STATUSES)[number];
 export const ROSTER_STATUS_LABELS: Record<RosterStatus, string> = {

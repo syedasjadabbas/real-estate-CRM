@@ -43,6 +43,6 @@ describe("projects validation", () => {
   });
 
   it("falls back to defaults for invalid list params", () => {
-    expect(projectListQuerySchema.parse({ type: "tower", status: "x", page: "0" })).toEqual({ q: undefined, type: undefined, status: undefined, page: 1 });
+    expect(projectListQuerySchema.parse({ type: "tower", status: "x", page: "0" })).toEqual({ q: undefined, type: undefined, status: undefined, sort: undefined, dir: "asc", page: 1 });
   });
 });

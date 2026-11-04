@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { PROJECT_STATUSES, PROJECT_TYPES } from "./constants";
+import { PROJECT_SORTS, PROJECT_STATUSES, PROJECT_TYPES } from "./constants";
 
 const optionalText = (max: number) =>
   z
@@ -35,6 +35,8 @@ export const projectListQuerySchema = z.object({
   q: z.string().trim().max(100).optional().catch(undefined),
   type: z.enum(PROJECT_TYPES).optional().catch(undefined),
   status: z.enum(PROJECT_STATUSES).optional().catch(undefined),
+  sort: z.enum(PROJECT_SORTS).optional().catch(undefined),
+  dir: z.enum(["asc", "desc"]).catch("asc"),
   page: z.coerce.number().int().min(1).max(10_000).catch(1),
 });
 export type ProjectListQuery = z.output<typeof projectListQuerySchema>;

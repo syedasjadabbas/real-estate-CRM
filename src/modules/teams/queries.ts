@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, lte, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { Database } from "@/server/db";
 import { auditLogs, dailyReportLines, dailyReports, rosterEntries, teamMembers, teams, users } from "@/server/db/schema";
@@ -9,27 +9,31 @@ import { parseTask as parse } from "@/modules/tasks/support";
 import { loadTeam } from "./commands";
 import { addDays, dailyReportEditable, monthDays, rosterEditable } from "./dates";
 import { canManageTeams, canOperateTeam, canViewOwnRoster, canViewTeam, canViewTeams, seesAllTeams } from "./policy";
-import { ROSTER_STATUSES, dateParam, monthParam, reportRangeSchema, type RosterStatus } from "./validation";
+import { ROSTER_STATUSES, TEAM_PAGE_SIZE, dateParam, monthParam, reportRangeSchema, teamListQuerySchema, type RosterStatus, type TeamSort } from "./validation";
 
 const manager = alias(users, "manager");
 const submitter = alias(users, "submitter");
 
-/** Teams the actor may see: all (admins, HR) or the ones they manage (managers). */
+const visibleWhere = (actor: Actor) => (seesAllTeams(actor) ? undefined : actor.managedTeamIds.length ? inArray(teams.id, actor.managedTeamIds) : sql`false`);
+const memberCount = sql<number>`(select count(*)::int from ${teamMembers} where ${teamMembers.teamId} = ${teams.id})`;
+const teamSelection = {
+  id: teams.id,
+  name: teams.name,
+  isActive: teams.isActive,
+  weekendDays: teams.weekendDays,
+  region: teams.region,
+  managerId: teams.managerId,
+  managerName: manager.name,
+  members: memberCount,
+  updatedAt: teams.updatedAt,
+};
+
+/** Every team the actor may see: all (admins, HR) or the ones they manage (managers). For selectors and tiles. */
 export async function visibleTeams(db: Database, actor: Actor) {
   if (!canViewTeams(actor)) throw forbidden();
-  const where = seesAllTeams(actor) ? undefined : actor.managedTeamIds.length ? inArray(teams.id, actor.managedTeamIds) : sql`false`;
+  const where = visibleWhere(actor);
   const rows = await db
-    .select({
-      id: teams.id,
-      name: teams.name,
-      isActive: teams.isActive,
-      weekendDays: teams.weekendDays,
-      region: teams.region,
-      managerId: teams.managerId,
-      managerName: manager.name,
-      members: sql<number>`(select count(*)::int from ${teamMembers} where ${teamMembers.teamId} = ${teams.id})`,
-      updatedAt: teams.updatedAt,
-    })
+    .select(teamSelection)
     .from(teams)
     .leftJoin(manager, eq(manager.id, teams.managerId))
     .where(where)
@@ -37,6 +41,45 @@ export async function visibleTeams(db: Database, actor: Actor) {
   return rows;
 }
 export type TeamRow = Awaited<ReturnType<typeof visibleTeams>>[number];
+
+/** The only expressions a sort can reach: `sort` is validated against this list's keys. */
+const TEAM_SORTS: Record<TeamSort, SQL> = {
+  name: sql`lower(${teams.name})`,
+  manager: sql`lower(${manager.name})`,
+  members: memberCount,
+  status: sql`case when ${teams.isActive} then 0 else 1 end`,
+};
+
+/** Teams tab list (FR-005): the same teams as `visibleTeams`, sorted and paged in the database. */
+export async function listTeams(db: Database, actor: Actor, rawQuery: unknown = {}) {
+  if (!canViewTeams(actor)) throw forbidden();
+  const query = teamListQuerySchema.parse(rawQuery ?? {});
+  const where = visibleWhere(actor);
+  const [{ total }] = await db.select({ total: count() }).from(teams).where(where);
+  const pageCount = Math.max(1, Math.ceil(total / TEAM_PAGE_SIZE));
+  const page = Math.min(query.page, pageCount);
+  // Name, then id, settle ties, so equal values keep their order from page to page.
+  const byName = [asc(sql`lower(${teams.name})`), asc(teams.id)];
+  const order = query.sort
+    ? [query.dir === "asc" ? sql`${TEAM_SORTS[query.sort]} asc nulls last` : sql`${TEAM_SORTS[query.sort]} desc nulls last`, ...byName]
+    : [desc(teams.isActive), ...byName];
+  const rows = await db
+    .select(teamSelection)
+    .from(teams)
+    .leftJoin(manager, eq(manager.id, teams.managerId))
+    .where(where)
+    .orderBy(...order)
+    .limit(TEAM_PAGE_SIZE)
+    .offset((page - 1) * TEAM_PAGE_SIZE);
+  return { query: { ...query, page }, total, page, pageCount, rows };
+}
+
+/** The team id from a URL when it exists and the actor may see it (it may be on another page of the list). */
+export async function findVisibleTeamId(db: Database, actor: Actor, teamId: string | undefined) {
+  if (!teamId || !/^[0-9a-f-]{36}$/i.test(teamId)) return null;
+  const [row] = await db.select({ id: teams.id }).from(teams).where(and(eq(teams.id, teamId), visibleWhere(actor))).limit(1);
+  return row?.id ?? null;
+}
 
 /** Observed tiles: Teams "In directory", Active "Assignable", Inactive "Hidden from assignment", Members "Across all teams". */
 export async function teamTiles(db: Database, actor: Actor) {

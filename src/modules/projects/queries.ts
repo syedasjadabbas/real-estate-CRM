@@ -8,7 +8,7 @@ import { unitCounts } from "@/modules/inventory/queries";
 import { clientScopeFilter } from "@/modules/clients/support";
 import { canDo } from "@/modules/leads/policy";
 import { scopeFilter, teamMemberIds } from "@/modules/leads/support";
-import { PROJECT_PAGE_SIZE } from "./constants";
+import { PROJECT_PAGE_SIZE, type ProjectSort } from "./constants";
 import { canDoProject, seesInactiveInSelector } from "./policy";
 import { projectListQuerySchema } from "./validation";
 
@@ -26,6 +26,16 @@ const cardSelection = {
   developer: projects.developer,
   city: projects.city,
   updatedAt: projects.updatedAt,
+};
+
+/** The only expressions a sort can reach: `sort` is validated against this list's keys. */
+const SORTS: Record<ProjectSort, SQL> = {
+  name: sql`lower(${projects.name})`,
+  type: sql`${projects.type}::text`,
+  status: sql`${projects.status}::text`,
+  developer: sql`lower(${projects.developer})`,
+  city: sql`lower(${projects.city})`,
+  units: sql`(select count(*) from ${units} where ${units.projectId} = ${projects.id})`,
 };
 
 export type ProjectCard = Awaited<ReturnType<typeof listProjects>>["rows"][number];
@@ -51,11 +61,16 @@ export async function listProjects(db: Database, actor: Actor, rawQuery: unknown
   ]);
   const pageCount = Math.max(1, Math.ceil(total / PROJECT_PAGE_SIZE));
   const page = Math.min(query.page, pageCount);
+  // Name, then id, settle ties, so equal values keep their order from page to page.
+  const byName = [asc(sql`lower(${projects.name})`), asc(projects.id)];
+  const order = query.sort
+    ? [query.dir === "asc" ? sql`${SORTS[query.sort]} asc nulls last` : sql`${SORTS[query.sort]} desc nulls last`, ...byName]
+    : [asc(projects.status), ...byName];
   const rows = await db
     .select(cardSelection)
     .from(projects)
     .where(where)
-    .orderBy(asc(projects.status), asc(sql`lower(${projects.name})`))
+    .orderBy(...order)
     .limit(PROJECT_PAGE_SIZE)
     .offset((page - 1) * PROJECT_PAGE_SIZE);
 

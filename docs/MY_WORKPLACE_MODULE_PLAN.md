@@ -105,7 +105,7 @@ The reference was captured as an agent, so the page is open to every role.
 | Piece | Detail |
 |---|---|
 | `src/modules/holidays/service.ts` | Add `upcomingHolidays(db, actor, { limit })`: any authenticated actor; date ≥ `businessToday()`; ordered by date, then scope (company first), then name. Returns `{ today, rows, next }`. Reuses the `holidays` table. |
-| `src/modules/workplace/service.ts` | `listMySignins(db, actor, input)`: filters on `user_id = actor.id`; optional `event` filter; 25 per page, newest first; returns rows (`event`, `at`, `ip`, `userAgent`) and the 30-day sign-in count. `getMyWorkplace(db, actor)` combines both for the page. |
+| `src/modules/workplace/service.ts` | `listMySignins(db, actor, input)`: filters on `user_id = actor.id`; optional `event` filter; 50 per page, newest first; returns rows (`event`, `at`, `ip`, `userAgent`) and the 30-day sign-in count. `getMyWorkplace(db, actor)` combines both for the page. |
 | `src/modules/workplace/validation.ts` | Query schema: `event` (`sign_in` / `sign_out`, otherwise ignored) and `page` (lenient, as in the other list queries). |
 | `src/modules/workplace/user-agent.ts` | A small, conservative browser / OS label with an "Unknown browser" fallback. |
 | API | `GET /api/v1/me/workplace` (as named in `API_DESIGN.md`): `{ holidays, signins, leave: { status: "pending_client_decision" } }`. Rejects a `userId` / `user` parameter with 400 rather than ignoring it. |
@@ -198,7 +198,7 @@ The existing "My workplace" item stays as it is, visible to every role. No chang
 | File | Change |
 |---|---|
 | `src/modules/holidays/service.ts` | Added `upcomingHolidays(db, { limit, today })` and `daysBetween`. Returns id, date, name, scope, region, days away; never editor fields. Ordered date, then company before regional, then name. `listHolidays` and its role check are unchanged. |
-| `src/modules/workplace/service.ts` | `listMySignins` (always `user_id = actor.id`, event filter, 25 per page, newest first, 30-day count) and `getMyWorkplace` (holidays + sign-ins + `leave: { status: "pending_client_decision" }`). Any `userId`, `user_id`, `user`, `employeeId` or `agentId` parameter is rejected with 400 VALIDATION_FAILED. |
+| `src/modules/workplace/service.ts` | `listMySignins` (always `user_id = actor.id`, event filter, 50 per page, newest first, 30-day count) and `getMyWorkplace` (holidays + sign-ins + `leave: { status: "pending_client_decision" }`). Any `userId`, `user_id`, `user`, `employeeId` or `agentId` parameter is rejected with 400 VALIDATION_FAILED. |
 | `src/modules/workplace/validation.ts` | Lenient `event` / `page` query, page size 25, 30-day window, event labels. |
 | `src/modules/workplace/user-agent.ts` | `browserLabel`: Edge, Opera, Samsung Internet, Firefox, Chrome, Safari; iOS, Android, Windows, ChromeOS, macOS, Linux; otherwise "Unknown browser". |
 | `src/app/api/v1/me/workplace/route.ts` | `GET ?event&page` for any signed-in role (401 when signed out). |

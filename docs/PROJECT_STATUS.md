@@ -1511,3 +1511,77 @@ Requested as "F-4"; in the §17 findings table this is **F-6** (F-4 there is the
 - **The audit log grows forever.** It is never pruned (SECURITY_AND_PRIVACY: "Audit logs are never deleted"); no retention rule was invented.
 - **Doc claims still not met (separate findings, not changed here).** SECURITY_AND_PRIVACY §3 lists "logins" (they are in sign-in history, not the audit log) and "permission denials (sampled)", which no code writes.
 - **Admin access includes Super Admin activity.** Admins see every audit row, including Super Admin actions; the matrix gives Admin read access to the whole log. If the client wants Admins limited, that's a new decision.
+
+## 23. F-5 fixed: list page sizes, and sorting on Projects and Teams (4 Nov 2026)
+
+**Requirement.** FR-005: "List pages support search, a filter panel, column sorting and pagination (50 / page)." §17 F-5 named meetings, tasks, performance and sign-in log (25), notifications (20), projects (24), and Projects and Teams without sorting.
+
+**Audit of every paged list:**
+
+| List | Before | Now | Sortable columns |
+|---|---|---|---|
+| Meetings | 25 | **50** | Unchanged |
+| Tasks | 25 | **50** | Unchanged |
+| Performance | 25 | **50** | Unchanged; ties now also settle on the agent id |
+| CRM sign-in history (My Workplace) | 25 | **50** | None (newest first, unchanged) |
+| Notifications | 20 | **50** | None (newest first, unchanged) |
+| Projects | 24 | **50** | **New:** Name, Type, Status, Developer, City, Units tracked |
+| Teams | No paging, no sorting | **50** | **New:** Name, Manager, Members, Status |
+| Leads, Clients, Bookings, Inventory, Payments, Finance entries, Employees, Leave, Audit log | 50 | 50 | Unchanged |
+
+**Teams needed paging as well as sorting.** It loaded every team, so "50 per page" and server-side sorting needed a new query. `listTeams` serves the Teams tab; `visibleTeams` still returns every team for the selectors and tiles, which need the full list. A team selected in the URL is now checked by `findVisibleTeamId`, so it stays open whichever page the list is on; hidden, unknown and malformed ids are still ignored.
+
+**How sorting works:**
+- **Allowlist.** `sort` is validated against a fixed list (`PROJECT_SORTS`, `TEAM_SORT_COLUMNS`), and each key maps to a fixed SQL expression. User input never reaches the SQL text. An invalid `sort` falls back to the default order, an invalid `dir` to ascending, and an invalid `page` to 1.
+- **In the database.** Sorting, `limit` and `offset` all run in SQL, including the units and members counts (subqueries).
+- **Deterministic.** Ties settle on the name and then the id, so records don't move between pages. Blank developer, city or manager values sort last in both directions. The default orders also gained the id tie-break.
+- **Defaults unchanged.** With no `sort`, Projects stay active first, then by name, and Teams the same.
+- **Sort controls.** Both lists are cards, not tables, so they use a row of sort links (`SortLinks`) rather than column headers. Only fields the card shows can be sorted. Text sorts ascending on first click, counts descending. A new sort returns to page 1 and keeps the search and filters (and the selected team).
+- **Counts** come from the filtered set; the Projects tiles stay company-wide as before.
+- **API.** `GET /api/v1/projects` and `GET /api/v1/teams` take the same `sort`, `dir` and `page`. **Changed:** `GET /api/v1/teams` now returns one page of `teams` (plus `total`, `page` and `pageCount`), not every team. Nothing in the app reads that route for the full list.
+
+**Knock-on effects:**
+- The lead page's meetings panel reuses the meetings list, so it now shows up to 50 instead of 25.
+- The notification bell still shows 10, but each poll now fetches up to 50 rows.
+
+**Tests:**
+- `tests/integration/list-pagination.test.ts`, 14 tests:
+  - **Projects:**
+    - exactly 50 per page, the last page, and an out-of-range page;
+    - search + type filter + status filter + sort with paging, and filtered counts;
+    - every column in both directions, blanks last;
+    - equal values across pages (120 rows);
+    - the default order, and invalid values including an SQL-like string;
+    - role access.
+  - **Teams:**
+    - the same page, column, tie and invalid-value checks;
+    - selectors and tiles still see every team;
+    - Admin and HR see all, a manager their own, and agents and accountants are refused;
+    - the selected team across pages.
+  - **Notifications:** 50 per page, with the unread filter.
+  - **Performance:** 50 per page, with same-named agents stable across pages and every row still in the CSV data.
+- **Updated for the new size:** the paging tests in `meetings.test.ts`, `tasks.test.ts` and `workplace.test.ts` (now 50 plus a remainder), and `projects-rules.test.ts` (the new `dir` default).
+- `e2e/projects-teams-lists.spec.ts`, 3 tests (the first two also on mobile):
+  - **Projects:** 50 cards, then 5 on page 2; sorting keeps the search and resets the page; the sort survives paging; an unknown sort is ignored.
+  - **Teams:** 50 rows, sort both ways, open a team on page 2 without losing the page or sort, sort by members.
+  - **Roles:** a manager sees only their teams; an agent gets no list.
+  - Seeded rows are inactive and removed afterwards, from the test database only.
+
+**Verification:**
+
+| Check | Result |
+|---|---|
+| Typecheck, lint | Pass |
+| `list-pagination.test.ts` | 14 / 14 |
+| Vitest full | **48 files, 486 / 486**. The run before it had 1 failure, `projects-rules.test.ts`, which hadn't been updated for the new `dir` default; fixed |
+| Schema drift | Clean (24 migrations, none new) |
+| Build | 103 / 103 pages |
+| Playwright full | **86 / 86** |
+
+**Remaining risks:**
+- **One slow Vitest run.** The failing run took 651 s, against about 290 s for the next. Nothing timed out, and no cause was found. It may be related to the stall in §21; it was not investigated further.
+- **Performance sorts in memory.** It computes every agent's figures anyway for the totals, charts and CSV, so sorting and paging happen after that. This is bounded by the number of agents, not by records, and wasn't changed.
+- **Teams tiles and selectors load every team.** Fine at realistic team counts, and needed for selectors.
+- **Offset paging.** A record added or changed between two page loads can still shift rows, as on every list.
+- **Lists with no paging, outside F-5:** Holidays and the daily report list were not in the finding and were not changed.
+- **Sign-in history and notifications have no column sorting.** F-5 didn't list them, so they stay newest first. FR-005 taken literally would cover them; that needs a decision.

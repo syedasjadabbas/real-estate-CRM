@@ -217,17 +217,17 @@ describe.skipIf(!hasTestDb)("Tasks module (PostgreSQL integration)", () => {
   });
 
   it("searches, filters, sorts and paginates", async () => {
-    for (let i = 0; i < 27; i++) await general(f.actors.agent1, { title: `Task ${String(i).padStart(2, "0")}` });
+    for (let i = 0; i < 52; i++) await general(f.actors.agent1, { title: `Task ${String(i).padStart(2, "0")}` });
     await proposal(f.actors.agent1, {}, { title: "Zeta proposal" });
     const first = await listTasks(db, f.actors.agent1, { sort: "title", dir: "asc" });
-    expect(first.total).toBe(28);
-    expect(first.rows).toHaveLength(25);
+    expect(first.total).toBe(53);
+    expect(first.rows).toHaveLength(50);
     expect(first.rows[0].title).toBe("Task 00");
-    expect((await listTasks(db, f.actors.agent1, { sort: "title", dir: "asc", page: "2" })).rows.map((r) => r.title)).toEqual(["Task 25", "Task 26", "Zeta proposal"]);
+    expect((await listTasks(db, f.actors.agent1, { sort: "title", dir: "asc", page: "2" })).rows.map((r) => r.title)).toEqual(["Task 50", "Task 51", "Zeta proposal"]);
     expect((await listTasks(db, f.actors.agent1, { q: "zeta" })).total).toBe(1);
     expect((await listTasks(db, f.actors.agent1, { type: "proposal" })).total).toBe(1);
     expect((await listTasks(db, f.actors.agent1, { status: "done" })).total).toBe(0);
-    expect((await listTasks(db, f.actors.agent1, { assignee: "me" })).total).toBe(28);
+    expect((await listTasks(db, f.actors.agent1, { assignee: "me" })).total).toBe(53);
     expect((await listTasks(db, f.actors.agent1, { q: "100%_" })).total).toBe(0);
   });
 

@@ -13,7 +13,7 @@ The reference could not be re-opened in this milestone (browser extension not co
 | Inactive projects visible on the Projects page to an agent | OBSERVED (the agent saw INACTIVE cards) |
 | Detail page | NOT OBSERVED (Access denied). Built in the Lead/Client detail layout; marked ASSUMED |
 | Fields: name, type, developer / company, city, address, status, description | FR-060 + DATA_MODEL §3 |
-| Search fields (name, developer, city), type and status filters, 24 cards per page | ASSUMED (reference had 4 projects) |
+| Search fields (name, developer, city), type and status filters, 50 cards per page (FR-005), sort links | Set by FR-005 (F-5) | |
 | Linked records: leads and clients counted within the viewer's own scope | ASSUMED presentation of documented links (leads belong to a project; clients link through leads) |
 
 ## 2. Decisions confirmed by the user (29 Oct 2026)

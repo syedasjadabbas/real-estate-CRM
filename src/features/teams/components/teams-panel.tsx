@@ -8,10 +8,13 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Field, Input } from "@/components/ui/input";
 import { PanelCard } from "@/features/leads/components/detail-panels";
 import { selectClass } from "@/features/leads/components/lead-fields";
+import { Pagination } from "@/features/leads/components/pagination";
+import { SortLinks, type SortLinkColumn } from "@/features/leads/components/sort-links";
 import { formatDateTime } from "@/features/leads/format";
 import { cn } from "@/lib/cn";
 import { ROLE_LABELS } from "@/server/auth/types";
-import type { TeamRow } from "@/modules/teams/queries";
+import type { listTeams } from "@/modules/teams/queries";
+import type { TeamSort } from "@/modules/teams/validation";
 import { createTeamAction, setTeamMembersAction, updateTeamAction } from "../actions";
 
 type Person = { id: string; name: string; role: string };
@@ -176,28 +179,41 @@ function MembersEditor({ teamId, members, candidates }: { teamId: string; member
   );
 }
 
+const SORT_COLUMNS: SortLinkColumn<TeamSort>[] = [
+  { key: "name", label: "Name" },
+  { key: "manager", label: "Manager" },
+  { key: "members", label: "Members", firstDir: "desc" },
+  { key: "status", label: "Status" },
+];
+
 /** Teams tab: team list (select a team) and its members; admins create / edit teams and membership. */
 export function TeamsPanel({
-  teams,
+  list,
   detail,
   canManage,
   managers,
   candidates,
   params,
 }: {
-  teams: TeamRow[];
+  list: Awaited<ReturnType<typeof listTeams>>;
   detail: Detail | null;
   canManage: boolean;
   managers: Person[];
   candidates: Person[];
   params: Record<string, string>;
 }) {
+  const teams = list.rows;
   const href = (id: string) => `/dashboard/teams?${new URLSearchParams({ ...params, tab: "teams", team: id }).toString()}`;
   return (
     <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
       <div className="min-w-0 space-y-6">
         <PanelCard title="Teams">
           <p className="-mt-1 mb-3 text-[11px] text-zinc-500">Select a team to manage members.</p>
+          {teams.length > 0 ? (
+            <div className="mb-3">
+              <SortLinks path="/dashboard/teams" params={params} name="Sort teams" columns={SORT_COLUMNS} sort={list.query.sort} dir={list.query.dir} />
+            </div>
+          ) : null}
           {teams.length === 0 ? (
             <EmptyState size="sm">No teams found.</EmptyState>
           ) : (
@@ -227,6 +243,11 @@ export function TeamsPanel({
               })}
             </ul>
           )}
+          {list.total > 0 ? (
+            <div className="mt-3">
+              <Pagination page={list.page} pageCount={list.pageCount} total={list.total} params={params} />
+            </div>
+          ) : null}
         </PanelCard>
         {canManage ? (
           <PanelCard title="New team">

@@ -17,7 +17,7 @@ import { cn } from "@/lib/cn";
 import { formatInt } from "@/lib/format";
 import { businessToday } from "@/modules/bookings/today";
 import { canManageTeams, canViewOwnRoster, canViewTeam, canViewTeams } from "@/modules/teams/policy";
-import { getDailyReport, getRosterDay, getRosterMonth, listDailyReports, myRoster, teamDetail, teamFormOptions, teamTiles, visibleTeams } from "@/modules/teams/queries";
+import { findVisibleTeamId, getDailyReport, getRosterDay, getRosterMonth, listDailyReports, listTeams, myRoster, teamDetail, teamFormOptions, teamTiles, visibleTeams } from "@/modules/teams/queries";
 import { requirePageUser } from "@/server/auth/current-user";
 import type { Actor } from "@/server/auth/types";
 import { getDb } from "@/server/db";
@@ -59,8 +59,7 @@ function TabBar({ active, params }: { active: Tab; params: Record<string, string
 
 async function TeamsTab({ actor, params }: { actor: Actor; params: Record<string, string> }) {
   const db = getDb();
-  const teams = await visibleTeams(db, actor);
-  const selected = teams.find((t) => t.id === params.team)?.id ?? null;
+  const [list, selected] = await Promise.all([listTeams(db, actor, params), findVisibleTeamId(db, actor, params.team)]);
   const [detail, options] = await Promise.all([
     selected ? teamDetail(db, actor, selected) : Promise.resolve(null),
     canManageTeams(actor) ? teamFormOptions(db, actor) : Promise.resolve({ managers: [], candidates: [] }),
@@ -68,7 +67,7 @@ async function TeamsTab({ actor, params }: { actor: Actor; params: Record<string
   return (
     <TeamsPanel
       key={selected ?? "none"}
-      teams={teams}
+      list={list}
       detail={detail ? { team: detail.team, members: detail.members, history: detail.history } : null}
       canManage={canManageTeams(actor)}
       managers={options.managers}

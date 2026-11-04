@@ -20,7 +20,7 @@ export const COMPLETE_MOVES_FROM: LeadStage[] = [...SCHEDULE_MOVES_FROM, "meetin
 export const MEETING_SORT_COLUMNS = ["title", "startsAt", "organizer", "lead", "status", "updatedAt"] as const;
 export type MeetingSortColumn = (typeof MEETING_SORT_COLUMNS)[number];
 
-export const MEETING_PAGE_SIZE = 25;
+export const MEETING_PAGE_SIZE = 50;
 
 /** Whether a meeting step would move the lead from `stage` (shown on the form before saving). */
 export function wouldMoveLead(step: "schedule" | "complete", stage: LeadStage) {

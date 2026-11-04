@@ -156,21 +156,21 @@ describe.skipIf(!hasTestDb)("Meetings module (PostgreSQL integration)", () => {
 
   it("lists with search, status / organizer / overdue filters, sort and pagination; lead panel and To-dos", async () => {
     const leadId = await leadOf(f.actors.agent1);
-    for (let i = 0; i < 26; i++) await schedule(f.actors.agent1, leadId, { title: `Call ${String(i).padStart(2, "0")}`, moveLead: false });
+    for (let i = 0; i < 51; i++) await schedule(f.actors.agent1, leadId, { title: `Call ${String(i).padStart(2, "0")}`, moveLead: false });
     const { meetingId: late } = await schedule(f.actors.agent1, leadId, { title: "Zeta overdue", startsAt: inHours(-2), moveLead: false });
     const p1 = await listMeetings(db, f.actors.agent1, { sort: "title", dir: "asc" });
-    expect(p1.total).toBe(27);
-    expect(p1.rows).toHaveLength(25);
+    expect(p1.total).toBe(52);
+    expect(p1.rows).toHaveLength(50);
     expect(p1.rows[0].title).toBe("Call 00");
-    expect((await listMeetings(db, f.actors.agent1, { sort: "title", dir: "asc", page: "2" })).rows.map((r) => r.title)).toEqual(["Call 25", "Zeta overdue"]);
+    expect((await listMeetings(db, f.actors.agent1, { sort: "title", dir: "asc", page: "2" })).rows.map((r) => r.title)).toEqual(["Call 50", "Zeta overdue"]);
     expect((await listMeetings(db, f.actors.agent1, { q: "zeta" })).total).toBe(1);
     expect((await listMeetings(db, f.actors.agent1, { overdue: "1" })).rows.map((r) => r.id)).toEqual([late]);
-    expect((await listMeetings(db, f.actors.agent1, { organizer: "me", status: "scheduled" })).total).toBe(27);
+    expect((await listMeetings(db, f.actors.agent1, { organizer: "me", status: "scheduled" })).total).toBe(52);
     expect((await listMeetings(db, f.actors.agent1, { status: "completed" })).total).toBe(0);
     expect((await overdueMeetings(db, f.actors.agent1)).rows.map((r) => r.id)).toEqual([late]);
     await completeMeeting(db, f.actors.agent1, late, { moveLead: false });
     expect((await overdueMeetings(db, f.actors.agent1)).count).toBe(0);
-    expect((await meetingsForLead(db, f.actors.agent1, leadId)).length).toBe(25);
+    expect((await meetingsForLead(db, f.actors.agent1, leadId)).length).toBe(50);
   });
 
   it("admin sees all and can pick any organizer; form options follow scope", async () => {

@@ -9,7 +9,7 @@ export const MAX_RANGE_DAYS = 366;
 export const PERFORMANCE_SORTS = ["agent", "open", "booked", "lost", "winPct", "fuDue", "fuDone", "fuPct", "meetings", "signIns", "signOuts"] as const;
 export type PerformanceSort = (typeof PERFORMANCE_SORTS)[number];
 
-export const PERFORMANCE_PAGE_SIZE = 25;
+export const PERFORMANCE_PAGE_SIZE = 50;
 
 export const performanceQuerySchema = z.object({
   from: z.iso.date().optional().catch(undefined),

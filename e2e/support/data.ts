@@ -1,11 +1,11 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, like } from "drizzle-orm";
 import { createBooking } from "@/modules/bookings/commands";
 import { createUnit } from "@/modules/inventory/commands";
 import { createLead, scheduleFollowUp } from "@/modules/leads/commands";
 import { getLeaveSettings, updateLeaveSettings } from "@/modules/leave/service";
 import { createTeam, setTeamMembers } from "@/modules/teams/commands";
 import { loadActor } from "@/server/auth/session-store";
-import { auditLogs, bookingPayments, bookings, leads, leaveDecisions, units, users } from "@/server/db/schema";
+import { auditLogs, bookingPayments, bookings, leads, leaveDecisions, projects, teams, units, users } from "@/server/db/schema";
 import { connectTestDb } from "../../tests/support/db";
 import { testDatabaseUrl } from "./guard";
 import { seed, uniquePhone, type Role } from "./seed";
@@ -124,4 +124,26 @@ export function leaveApprovals(requestId: string) {
   return withDb(async (db) =>
     db.select({ step: leaveDecisions.step, actorId: leaveDecisions.actorId, approved: leaveDecisions.approved }).from(leaveDecisions).where(and(eq(leaveDecisions.requestId, requestId), eq(leaveDecisions.kind, "approval"))).orderBy(asc(leaveDecisions.step)),
   );
+}
+
+/** `count` inactive projects named `<prefix> 000…` (inactive: kept out of the project selector for other tests). */
+export function seedProjects(prefix: string, count: number) {
+  return withDb(async (db) => {
+    await db.insert(projects).values(Array.from({ length: count }, (_, i) => ({ name: `${prefix} ${String(i).padStart(3, "0")}`, status: "inactive" as const })));
+  });
+}
+
+/** `count` inactive teams named `<prefix> 000…`. */
+export function seedTeams(prefix: string, count: number) {
+  return withDb(async (db) => {
+    await db.insert(teams).values(Array.from({ length: count }, (_, i) => ({ name: `${prefix} ${String(i).padStart(3, "0")}`, isActive: false })));
+  });
+}
+
+/** Removes what `seedProjects` / `seedTeams` added to the test database, so later specs see the usual lists. */
+export function removeSeededLists(prefix: string) {
+  return withDb(async (db) => {
+    await db.delete(projects).where(like(projects.name, `${prefix} %`));
+    await db.delete(teams).where(like(teams.name, `${prefix} %`));
+  });
 }

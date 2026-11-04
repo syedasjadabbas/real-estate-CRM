@@ -74,18 +74,18 @@ describe.skipIf(!hasTestDb)("My Workplace (PostgreSQL integration)", () => {
 
     it("lists newest first with the event filter, pagination and stored values as recorded", async () => {
       const now = Date.now();
-      for (let n = 0; n < 30; n++) await log(f.actors.agent1.id, new Date(now - n * 60_000), n % 2 ? "sign_out" : "sign_in");
+      for (let n = 0; n < 55; n++) await log(f.actors.agent1.id, new Date(now - n * 60_000), n % 2 ? "sign_out" : "sign_in");
       await db.insert(signinLogs).values({ userId: f.actors.agent1.id, at: new Date(now - DAY), event: "sign_in", ip: null, userAgent: null });
       const first = await listMySignins(db, f.actors.agent1);
-      expect(first).toMatchObject({ total: 31, pageCount: 2, page: 1 });
-      expect(first.rows).toHaveLength(25);
+      expect(first).toMatchObject({ total: 56, pageCount: 2, page: 1 });
+      expect(first.rows).toHaveLength(50);
       expect(first.rows[0]).toMatchObject({ event: "sign_in", ip: "203.0.113.7", browser: "Chrome · Windows" });
       expect(first.rows.map((r) => r.at.getTime())).toEqual([...first.rows.map((r) => r.at.getTime())].sort((a, b) => b - a));
       const second = await listMySignins(db, f.actors.agent1, { page: "2" });
       expect(second.rows).toHaveLength(6);
       expect(second.rows.at(-1)).toMatchObject({ ip: null, userAgent: null, browser: "Unknown browser" });
-      expect((await listMySignins(db, f.actors.agent1, { event: "sign_out" })).total).toBe(15);
-      expect((await listMySignins(db, f.actors.agent1, { event: "sign_in" })).total).toBe(16);
+      expect((await listMySignins(db, f.actors.agent1, { event: "sign_out" })).total).toBe(27);
+      expect((await listMySignins(db, f.actors.agent1, { event: "sign_in" })).total).toBe(29);
       expect((await listMySignins(db, f.actors.agent1, { page: "99" })).page).toBe(2);
       // Rows carry only what was stored: no durations, sessions or locations.
       expect(Object.keys(first.rows[0]).sort()).toEqual(["at", "browser", "event", "id", "ip", "userAgent"]);

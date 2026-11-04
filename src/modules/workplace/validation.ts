@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const SIGNIN_PAGE_SIZE = 25;
+export const SIGNIN_PAGE_SIZE = 50;
 export const SIGNIN_COUNT_DAYS = 30;
 export const SIGNIN_EVENTS = ["sign_in", "sign_out"] as const;
 export type SigninEvent = (typeof SIGNIN_EVENTS)[number];

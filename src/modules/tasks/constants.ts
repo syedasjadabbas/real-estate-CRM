@@ -28,7 +28,7 @@ export const hasPlan = (type: TaskType) => PLAN_TYPES.includes(type);
 export const TASK_SORT_COLUMNS = ["title", "type", "status", "dueAt", "assignee", "updatedAt"] as const;
 export type TaskSortColumn = (typeof TASK_SORT_COLUMNS)[number];
 
-export const TASK_PAGE_SIZE = 25;
+export const TASK_PAGE_SIZE = 50;
 
 /** Upper bound on installment rows a plan can hold (keeps prints and payloads bounded). */
 export const MAX_INSTALLMENTS = 360;

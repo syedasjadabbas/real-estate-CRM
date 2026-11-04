@@ -1,9 +1,12 @@
 import { createTeam } from "@/modules/teams/commands";
-import { teamTiles, visibleTeams } from "@/modules/teams/queries";
-import { apiRoute, readJson } from "@/server/http";
+import { listTeams, teamTiles } from "@/modules/teams/queries";
+import { apiRoute, queryObject, readJson } from "@/server/http";
 
-/** GET teams the actor may see (admins / HR: all; managers: their own) with the observed tiles. */
-export const GET = apiRoute(async ({ db, actor }) => ({ teams: await visibleTeams(db, actor), tiles: await teamTiles(db, actor) }));
+/** GET ?sort=&dir=&page= — teams the actor may see (admins / HR: all; managers: their own), 50 per page, with the observed tiles. */
+export const GET = apiRoute(async ({ req, db, actor }) => {
+  const { rows, ...list } = await listTeams(db, actor, queryObject(req));
+  return { ...list, teams: rows, tiles: await teamTiles(db, actor) };
+});
 
 /** POST { name, managerId?, isActive? } — admins. */
 export const POST = apiRoute(async ({ req, db, actor }) => createTeam(db, actor, await readJson(req)), 201);

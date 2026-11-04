@@ -78,7 +78,7 @@ Status: **implemented and verified 29 Oct 2026** (§9–§13).
 - **Header:** the module header and a "Schedule meeting" button.
 - **Tiles:** Total meetings, Active filters, On this page.
 - **Toolbar:** search (title, lead name, lead code), a Filters drawer (Status, Organizer, "Overdue only") and Clear.
-- **Table:** sortable columns and pagination (25 per page). An Overdue chip appears on Scheduled meetings that are past their start time.
+- **Table:** sortable columns and pagination (50 per page, FR-005). An Overdue chip appears on Scheduled meetings that are past their start time.
 
 **Create** (`/dashboard/meetings/new?lead=…`):
 - **Fields:** title*, starts at* (Pakistan time), ends at, location, organizer* (defaults to the user), lead*, notes.
