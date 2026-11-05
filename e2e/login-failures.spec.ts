@@ -1,6 +1,6 @@
 import { test } from "@playwright/test";
 import { inactiveUserWithPassword } from "./support/data";
-import { E2E_PASSWORD, expect, login, unique } from "./support/seed";
+import { E2E_PASSWORD, expect, login, seed, unique } from "./support/seed";
 
 /** F-10: the real sign-in form and API give an inactive account away by nothing. */
 
@@ -18,6 +18,14 @@ test("the form says the same for an inactive account as for a wrong password @mo
     await expect(page.getByText("inactive", { exact: false })).toHaveCount(0);
     await expect(page).toHaveURL(/\/login/);
   }
+});
+
+test("API sign-in accepts its own origin and refuses another", async ({ request, baseURL }) => {
+  const data = { email: seed().users.agent1.email, password: E2E_PASSWORD };
+  const own = await request.post("/api/v1/auth/login", { data, headers: { origin: baseURL! } });
+  expect(own.status()).toBe(200);
+  const other = await request.post("/api/v1/auth/login", { data, headers: { origin: "https://evil.example" } });
+  expect(other.status()).toBe(403);
 });
 
 test("the API answers all failures with the same status and body, and active accounts still sign in", async ({ page, request }) => {

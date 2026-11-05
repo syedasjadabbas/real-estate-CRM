@@ -72,6 +72,17 @@ test("the app cannot be framed by another page", async ({ page }) => {
   await expect(page.frameLocator("#f").getByLabel("Email")).toHaveCount(0);
 });
 
+test("the city screen and forms raise no CSP violations @mobile", async ({ page }) => {
+  const violations = await watchViolations(page);
+  await selectTestProject(page.context());
+  await login(page, "superAdmin");
+  for (const url of ["/dashboard/settings/cities", "/dashboard/leads/new", "/dashboard/clients/new"]) {
+    await page.goto(url);
+    await expect(page.getByRole("heading").first()).toBeVisible();
+    expect(await violations(), url).toEqual([]);
+  }
+});
+
 test("signed-in pages and a recording upload raise no CSP violations @mobile", async ({ page }) => {
   const violations = await watchViolations(page);
   const name = unique("E2E CSP");

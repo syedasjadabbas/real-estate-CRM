@@ -107,7 +107,7 @@ Indexes: (`project_id`, `status`), (`project_id`, `floor`).
 ## 4. Leads
 
 ### lead_sources (REF) / cities (NEW) / lost_reasons (REF-I)
-Admin-managed lookup tables: `name` unique, `is_active`.
+Admin-managed lookup tables: `name` unique, `is_active`. City names are unique in any letter case (`cities_name_lower_uq`). Cities are deactivated, never deleted.
 
 ### leads (REF)
 | Column | Type | Notes |
@@ -120,6 +120,7 @@ Admin-managed lookup tables: `name` unique, `is_active`.
 | country_code, phone_raw | text | as entered |
 | email | citext | |
 | city_id | FK cities | NEW (replaces free text) |
+| city_other | text | A city typed under "Other" (FR-042); `city_id` is then null. Same column on `clients` |
 | gender | text | REF |
 | stage | enum(10 stages) | REF |
 | stage_changed_at | timestamptz | for "in stage" |

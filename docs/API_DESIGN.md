@@ -123,6 +123,8 @@ Validation uses shared Zod schemas on client and server. Writes accept an `Idemp
 ### Settings and admin
 `GET/PUT /settings`, `GET/POST/PATCH /users`, `GET/POST/PATCH /lookups/{sources|cities|lost-reasons|finance-categories}`, `GET /audit-logs`
 
+Cities (FR-042, built): `GET/POST /lookups/cities`, `PATCH /lookups/cities/:id` `{ name?, isActive? }`, for Super Admins and Admins. There is no delete. On leads and clients, `cityId` is a list city's id or `"other"`; with `"other"`, `cityOther` carries the typed name.
+
 ### Accounts & Finance (additional module)
 | Method | Path |
 |---|---|

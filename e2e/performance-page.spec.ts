@@ -23,6 +23,16 @@ for (const role of ["superAdmin", "admin", "manager", "agent1"] satisfies Role[]
   });
 }
 
+test("the KPI table shows average first touch, and it sorts", async ({ page }) => {
+  await login(page, "manager");
+  await page.goto("/dashboard/performance");
+  const header = page.getByRole("columnheader", { name: /Avg first touch/ });
+  await expect(header).toBeVisible();
+  await header.getByRole("link").click();
+  await page.waitForURL(/sort=avgFirstTouchMs/);
+  await expect(page.getByRole("columnheader", { name: /Avg first touch/ })).toHaveAttribute("aria-sort", /ascending|descending/);
+});
+
 for (const role of ["hr", "accountant"] satisfies Role[]) {
   test(`${role} gets no Performance page or footnote`, async ({ page }) => {
     await login(page, role);

@@ -2,10 +2,11 @@ import { and, eq, isNull, ne } from "drizzle-orm";
 import type { Database } from "@/server/db";
 import { bookings, clientFollowUps, clients, leads, users } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
+import { resolveCity } from "@/modules/cities/resolve";
 import { AppError, forbidden, notFound } from "@/server/errors";
 import { normalizePhone } from "@/modules/leads/phone";
 import { canAssignTo } from "@/modules/leads/policy";
-import { isUniqueViolation, loadAccessibleLead, type Tx } from "@/modules/leads/support";
+import { isUniqueViolation, loadAccessibleLead, logActivity, type Tx } from "@/modules/leads/support";
 import { assignSchema, followUpSchema, noteSchema } from "@/modules/leads/validation";
 import { assertCanClient, canAccessClient } from "./policy";
 import {
@@ -19,6 +20,14 @@ import {
 import { convertLeadSchema, createClientSchema, updateClientSchema } from "./validation";
 
 const PHONE_TAKEN = "A client with this phone number already exists.";
+
+/**
+ * FR-025: every way a lead gets its client also goes on the lead's own timeline. It holds no
+ * client name, because the booking paths link clients the lead's viewers may not have access to.
+ */
+function logClientLink(tx: Tx, actor: Actor, leadId: string, clientId: string, mode: "converted" | "linked" | "booking_linked" | "booking_created") {
+  return logActivity(tx, { leadId, actorId: actor.id, type: "client_linked", data: { clientId, mode } });
+}
 
 function phoneOrThrow(countryCode: string, number: string) {
   const phone = normalizePhone(countryCode, number);
@@ -75,13 +84,14 @@ export async function createClient(db: Database, actor: Actor, input: unknown) {
     if (existing) throw duplicateError(existing);
     if (data.ownerId) await assertOwner(tx, actor, data.ownerId, members);
 
+    const city = await resolveCity(tx, data);
     const values = {
       name: data.name,
       phoneCountryCode: phone.countryCode,
       phoneNumber: phone.national,
       phoneE164: phone.e164,
       email: data.email ?? null,
-      cityId: data.cityId ?? null,
+      ...city,
       relationship: data.relationship ?? null,
       ownerId: data.ownerId ?? actor.id,
       createdById: actor.id,
@@ -132,6 +142,7 @@ export async function convertLeadToClient(db: Database, actor: Actor, input: unk
     if (existing) {
       if (!existing.visible || onExisting !== "link") throw duplicateError(existing);
       await tx.update(leads).set({ clientId: existing.client.id }).where(eq(leads.id, lead.id));
+      await logClientLink(tx, actor, lead.id, existing.client.id, "linked");
       await tx.update(clients).set({ updatedAt: now, lastActivityAt: now }).where(eq(clients.id, existing.client.id));
       await logClientActivity(tx, {
         clientId: existing.client.id,
@@ -151,6 +162,7 @@ export async function convertLeadToClient(db: Database, actor: Actor, input: unk
       phoneE164: lead.phoneE164,
       email: lead.email,
       cityId: lead.cityId,
+      cityOther: lead.cityOther,
       ownerId: lead.ownerId ?? actor.id,
       createdById: actor.id,
     };
@@ -162,6 +174,7 @@ export async function convertLeadToClient(db: Database, actor: Actor, input: unk
       throw error;
     }
     await tx.update(leads).set({ clientId: created.id }).where(eq(leads.id, lead.id));
+    await logClientLink(tx, actor, lead.id, created.id, "converted");
     await logClientActivity(tx, {
       clientId: created.id,
       actorId: actor.id,
@@ -188,7 +201,7 @@ export async function updateClient(db: Database, actor: Actor, clientId: string,
       changes.phoneE164 = phone.e164;
     }
     if ("email" in data) changes.email = data.email ?? null;
-    if ("cityId" in data) changes.cityId = data.cityId ?? null;
+    if ("cityId" in data) Object.assign(changes, await resolveCity(tx, data, client));
     if ("relationship" in data) changes.relationship = data.relationship ?? null;
 
     const changed = Object.keys(changes).filter(
@@ -298,7 +311,7 @@ export async function completeClientFollowUp(db: Database, actor: Actor, followU
   });
 }
 
-type BookedLead = { id: string; code: string; name: string; phoneCountryCode: string; phoneNumber: string; phoneE164: string; email: string | null; cityId: string | null; ownerId: string | null; clientId: string | null };
+type BookedLead = { id: string; code: string; name: string; phoneCountryCode: string; phoneNumber: string; phoneE164: string; email: string | null; cityId: string | null; cityOther: string | null; ownerId: string | null; clientId: string | null };
 
 /**
  * The client this lead already belongs to, or null. Uses the lead's client, else the client with the
@@ -315,6 +328,7 @@ export async function linkExistingClient(tx: Tx, actor: Actor, lead: BookedLead,
   const [existing] = await tx.select({ id: clients.id }).from(clients).where(eq(clients.phoneE164, lead.phoneE164)).limit(1).for("update");
   if (!existing) return null;
   await tx.update(leads).set({ clientId: existing.id }).where(eq(leads.id, lead.id));
+  await logClientLink(tx, actor, lead.id, existing.id, "booking_linked");
   await tx.update(clients).set({ updatedAt: now, lastActivityAt: now }).where(eq(clients.id, existing.id));
   await logClientActivity(tx, { clientId: existing.id, actorId: actor.id, type: "lead_linked", data: { leadId: lead.id, leadCode: lead.code, bookingId } });
   await auditClient(tx, actor, "client.link_lead", existing.id, null, { leadId: lead.id, bookingId });
@@ -336,11 +350,13 @@ export async function ensureClientForLead(tx: Tx, actor: Actor, lead: BookedLead
     phoneE164: lead.phoneE164,
     email: lead.email,
     cityId: lead.cityId,
+    cityOther: lead.cityOther,
     ownerId: lead.ownerId ?? actor.id,
     createdById: actor.id,
   };
   const [created] = await tx.insert(clients).values(values).returning({ id: clients.id });
   await tx.update(leads).set({ clientId: created.id }).where(eq(leads.id, lead.id));
+  await logClientLink(tx, actor, lead.id, created.id, "booking_created");
   await logClientActivity(tx, { clientId: created.id, actorId: actor.id, type: "created", data: { mode: "booking", leadId: lead.id, leadCode: lead.code, bookingId } });
   await auditClient(tx, actor, "client.create_from_booking", created.id, null, { ...values, leadId: lead.id, bookingId });
   await linkLeadBookings(tx, lead.id, created.id);

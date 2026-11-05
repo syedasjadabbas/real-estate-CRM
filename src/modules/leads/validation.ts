@@ -1,3 +1,5 @@
+import { OTHER_CITY } from "@/modules/cities/constants";
+import { cityChoiceSchema, cityOtherSchema } from "@/modules/cities/validation";
 import { z } from "zod";
 import {
   FOLLOW_UP_WINDOWS,
@@ -36,7 +38,8 @@ export const leadFieldsSchema = z.object({
     .optional()
     .transform((v) => (v ? v : undefined))
     .pipe(z.email("Enter a valid email").optional()),
-  cityId: optionalUuid,
+  cityId: cityChoiceSchema,
+  cityOther: cityOtherSchema,
   gender: optionalText(30),
   sourceId: z.uuid("Source is required"),
   budgetRangeId: optionalUuid,
@@ -87,6 +90,13 @@ const csvIds = z
   .transform((v) => (v === undefined ? [] : (Array.isArray(v) ? v : v.split(",")).filter(Boolean)))
   .pipe(z.array(z.uuid()));
 
+/** City filter: list ids, plus "other" for typed cities. */
+const cityFilter = z
+  .union([z.string(), z.array(z.string())])
+  .optional()
+  .transform((v) => (v === undefined ? [] : (Array.isArray(v) ? v : v.split(",")).filter(Boolean)))
+  .pipe(z.array(z.union([z.uuid(), z.literal(OTHER_CITY)])));
+
 const dateParam = z
   .string()
   .optional()
@@ -98,7 +108,7 @@ export const leadListQuerySchema = z.object({
   q: z.string().trim().max(100).optional().catch(undefined),
   stage: csv(LEAD_STAGES).catch([]),
   source: csvIds.catch([]),
-  city: csvIds.catch([]),
+  city: cityFilter.catch([]),
   /** Lost reason ids (dashboard "Lost leads by reason" click-through). */
   lostReason: csvIds.catch([]),
   priority: csv(PRIORITIES).catch([]),
@@ -110,7 +120,8 @@ export const leadListQuerySchema = z.object({
   createdFrom: z.iso.datetime().optional().catch(undefined),
   createdTo: z.iso.datetime().optional().catch(undefined),
   team: z.uuid().optional().catch(undefined),
-  sort: z.enum(SORTABLE_COLUMNS).catch("createdAt"),
+  /** Empty unless a sort was chosen: the Regenerated view has its own order until then (FR-005). */
+  sort: z.enum(SORTABLE_COLUMNS).optional().catch(undefined),
   dir: z.enum(["asc", "desc"]).catch("desc"),
   page: z.coerce.number().int().min(1).max(10_000).catch(1),
 });

@@ -1,0 +1,1 @@
+ALTER TYPE "public"."lead_activity_type" ADD VALUE 'client_linked';

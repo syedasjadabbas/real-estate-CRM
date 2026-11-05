@@ -23,7 +23,7 @@ export default async function InventoryPage({ searchParams }: PageProps<"/dashbo
   const db = getDb();
   const [{ activeProjectId }, projects] = await Promise.all([getProjectScope(), inventoryProjects(db)]);
   const result = await listUnits(db, actor, params, activeProjectId);
-  const filtered = Boolean(params.q || params.status || params.saleModel || params.nature);
+  const filtered = Boolean(params.q || params.status || params.saleModel || params.nature || params.floor || params.block || params.category || params.type || params.premium || params.area);
   const scopeName = result.projectId ? (projects.find((p) => p.id === result.projectId)?.name ?? "this project") : "all projects";
 
   return (
@@ -49,7 +49,7 @@ export default async function InventoryPage({ searchParams }: PageProps<"/dashbo
           ) : null
         }
       />
-      <InventoryToolbar params={params} total={result.total} projects={projects} projectId={result.projectId} natures={result.natures} />
+      <InventoryToolbar params={params} total={result.total} projects={projects} projectId={result.projectId} natures={result.natures} dimensions={result.dimensionFilters} />
       <UnitsTable
         rows={result.rows}
         offset={(result.page - 1) * result.pageSize}

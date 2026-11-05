@@ -90,6 +90,7 @@ export async function LeadsListView({
         ) : null}
         <LeadsToolbar params={params} total={result.total} lookups={lookups} />
         <LeadsTable
+          defaultSort={view === "regenerated" ? null : "createdAt"}
           rows={result.rows}
           pathname={pathname}
           params={params}

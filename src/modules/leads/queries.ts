@@ -1,3 +1,4 @@
+import { OTHER_CITY } from "@/modules/cities/constants";
 import { and, asc, count, desc, eq, gt, gte, ilike, inArray, isNotNull, isNull, lt, lte, or, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { Database } from "@/server/db";
@@ -53,7 +54,11 @@ function filterConditions(query: LeadListQuery, now: Date): SQL[] {
   if (search) out.push(search);
   if (query.stage.length) out.push(inArray(leads.stage, query.stage));
   if (query.source.length) out.push(inArray(leads.sourceId, query.source));
-  if (query.city.length) out.push(inArray(leads.cityId, query.city));
+  if (query.city.length) {
+    const ids = query.city.filter((c) => c !== OTHER_CITY);
+    const city = or(ids.length ? inArray(leads.cityId, ids) : undefined, query.city.includes(OTHER_CITY) ? isNotNull(leads.cityOther) : undefined);
+    if (city) out.push(city);
+  }
   if (query.lostReason.length) out.push(inArray(leads.lostReasonId, query.lostReason));
   if (query.priority.length) out.push(inArray(leads.priority, query.priority));
   if (query.followUp) {
@@ -105,10 +110,13 @@ function viewConditions(query: LeadListQuery): SQL[] {
   }
 }
 
+/** The list city's name, or the name typed under "Other". */
+const cityLabel = sql<string | null>`coalesce(${cities.name}, ${leads.cityOther})`;
+
 const sortColumns = {
   name: leads.name,
   phone: leads.phoneE164,
-  city: cities.name,
+  city: cityLabel,
   owner: owner.name,
   createdAt: leads.createdAt,
   stage: leads.stage,
@@ -116,6 +124,19 @@ const sortColumns = {
   budget: budgetRanges.sortOrder,
   project: projects.name,
   priority: leads.priority,
+  code: leads.code,
+  // Longest in stage last when ascending, matching the duration shown.
+  inStage: sql`now() - ${leads.stageChangedAt}`,
+  modified: leads.updatedAt,
+  firstTouch: sql`${leads.firstTouchAt} - ${leads.createdAt}`,
+  next: leads.nextFollowUpAt,
+  inbound: sql`${leads.inboundChannel}::text`,
+  // Size is free text ("1,200 sq ft"), so it sorts by its number; text with no number goes last.
+  size: sql`substring(replace(${leads.desiredSize}, ',', '') from '[0-9]+(?:\.[0-9]+)?')::numeric`,
+  gender: sql`lower(${leads.gender})`,
+  comment: sql`lower(${leads.latestComment})`,
+  lostReason: lostReasons.name,
+  externalId: leads.externalId,
 } as const;
 
 const listSelection = {
@@ -135,13 +156,16 @@ const listSelection = {
   desiredSize: leads.desiredSize,
   latestComment: leads.latestComment,
   inboundChannel: leads.inboundChannel,
+  gender: leads.gender,
+  externalId: leads.externalId,
+  lostReasonName: lostReasons.name,
   isRegenerated: leads.isRegenerated,
   regeneratedAt: leads.regeneratedAt,
   lastActivityAt: leads.lastActivityAt,
   duplicateOfId: leads.duplicateOfId,
   ownerId: leads.ownerId,
   ownerName: owner.name,
-  cityName: cities.name,
+  cityName: cityLabel.as("city_name"),
   sourceName: leadSources.name,
   budgetName: budgetRanges.name,
   projectName: projects.name,
@@ -158,10 +182,11 @@ export async function listLeads(db: Database, actor: Actor, projectId: string, r
   const { condition: inTeam, teamName } = await teamFilter(db, actor, query.team);
   const where = and(...baseConditions(actor, members, projectId), ...filterConditions(query, now), ...viewConditions(query), inTeam);
 
+  const sortColumn = sortColumns[query.sort ?? "createdAt"];
   const orderBy =
-    query.view === "regenerated"
+    query.view === "regenerated" && !query.sort
       ? [desc(sql`${leads.lastActivityAt} < ${leads.regeneratedAt}`), desc(leads.regeneratedAt)]
-      : [query.dir === "asc" ? sql`${sortColumns[query.sort]} asc nulls last` : sql`${sortColumns[query.sort]} desc nulls last`, desc(leads.createdAt)];
+      : [query.dir === "asc" ? sql`${sortColumn} asc nulls last` : sql`${sortColumn} desc nulls last`, desc(leads.createdAt)];
 
   const from = () =>
     db
@@ -169,6 +194,7 @@ export async function listLeads(db: Database, actor: Actor, projectId: string, r
       .from(leads)
       .leftJoin(owner, eq(owner.id, leads.ownerId))
       .leftJoin(cities, eq(cities.id, leads.cityId))
+      .leftJoin(lostReasons, eq(lostReasons.id, leads.lostReasonId))
       .leftJoin(leadSources, eq(leadSources.id, leads.sourceId))
       .leftJoin(budgetRanges, eq(budgetRanges.id, leads.budgetRangeId))
       .leftJoin(projects, eq(projects.id, leads.projectId))
@@ -227,6 +253,7 @@ export async function pipelineBoard(db: Database, actor: Actor, projectId: strin
     .innerJoin(ranked, eq(ranked.id, leads.id))
     .leftJoin(owner, eq(owner.id, leads.ownerId))
     .leftJoin(cities, eq(cities.id, leads.cityId))
+      .leftJoin(lostReasons, eq(lostReasons.id, leads.lostReasonId))
     .leftJoin(leadSources, eq(leadSources.id, leads.sourceId))
     .leftJoin(budgetRanges, eq(budgetRanges.id, leads.budgetRangeId))
     .leftJoin(projects, eq(projects.id, leads.projectId))
@@ -256,6 +283,7 @@ export async function getLeadDetail(db: Database, actor: Actor, leadId: string) 
     .from(leads)
     .leftJoin(owner, eq(owner.id, leads.ownerId))
     .leftJoin(cities, eq(cities.id, leads.cityId))
+      .leftJoin(lostReasons, eq(lostReasons.id, leads.lostReasonId))
     .leftJoin(leadSources, eq(leadSources.id, leads.sourceId))
     .leftJoin(budgetRanges, eq(budgetRanges.id, leads.budgetRangeId))
     .leftJoin(projects, eq(projects.id, leads.projectId))
@@ -277,8 +305,7 @@ export async function getLeadDetail(db: Database, actor: Actor, leadId: string) 
       .from(leadActivities)
       .leftJoin(actorUser, eq(actorUser.id, leadActivities.actorId))
       .where(eq(leadActivities.leadId, leadId))
-      .orderBy(desc(leadActivities.createdAt))
-      .limit(100),
+      .orderBy(desc(leadActivities.createdAt)),
     db
       .select({
         id: followUps.id,
@@ -317,6 +344,7 @@ export async function getLeadDetail(db: Database, actor: Actor, leadId: string) 
       clientId: lead.clientId,
       projectId: lead.projectId,
       cityId: lead.cityId,
+      cityOther: lead.cityOther,
       sourceId: lead.sourceId,
       budgetRangeId: lead.budgetRangeId,
       gender: lead.gender,
@@ -570,9 +598,9 @@ export async function lostReasonMix(db: Database, actor: Actor, projectId: strin
 
 export async function leadLookups(db: Database) {
   const pick = { id: leadSources.id, name: leadSources.name };
-  const [sources, cityRows, budgets, reasons] = await Promise.all([
+  const [sources, allCities, budgets, reasons] = await Promise.all([
     db.select(pick).from(leadSources).where(eq(leadSources.isActive, true)).orderBy(asc(leadSources.sortOrder)),
-    db.select({ id: cities.id, name: cities.name }).from(cities).where(eq(cities.isActive, true)).orderBy(asc(cities.sortOrder)),
+    db.select({ id: cities.id, name: cities.name, isActive: cities.isActive }).from(cities).orderBy(asc(cities.sortOrder), asc(cities.name)),
     db
       .select({ id: budgetRanges.id, name: budgetRanges.name })
       .from(budgetRanges)
@@ -584,7 +612,19 @@ export async function leadLookups(db: Database) {
       .where(eq(lostReasons.isActive, true))
       .orderBy(asc(lostReasons.sortOrder)),
   ]);
-  return { sources, cities: cityRows, budgets, lostReasons: reasons };
+  const active = allCities.filter((c) => c.isActive).map(({ id, name }) => ({ id, name }));
+  return {
+    sources,
+    cities: active,
+    /** Deactivated cities stay filterable, because existing leads keep them. */
+    filterCities: [
+      ...active,
+      ...allCities.filter((c) => !c.isActive).map(({ id, name }) => ({ id, name: `${name} (inactive)` })),
+      { id: OTHER_CITY, name: "Other" },
+    ],
+    budgets,
+    lostReasons: reasons,
+  };
 }
 export type LeadLookups = Awaited<ReturnType<typeof leadLookups>>;
 

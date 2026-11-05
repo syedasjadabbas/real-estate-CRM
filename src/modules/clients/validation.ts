@@ -1,3 +1,4 @@
+import { cityChoiceSchema, cityOtherSchema } from "@/modules/cities/validation";
 import { z } from "zod";
 import { CLIENT_SORT_COLUMNS, RELATIONSHIPS } from "./constants";
 
@@ -28,7 +29,8 @@ export const clientFieldsSchema = z.object({
     .optional()
     .transform((v) => (v ? v : undefined))
     .pipe(z.email("Enter a valid email").optional()),
-  cityId: optionalUuid,
+  cityId: cityChoiceSchema,
+  cityOther: cityOtherSchema,
   relationship: optionalRelationship,
 });
 

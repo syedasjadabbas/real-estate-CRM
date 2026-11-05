@@ -31,6 +31,10 @@ export const DIMENSION_LABELS: Record<DimensionKey, string> = {
   premiums: "Premiums",
 };
 
+/** URL filters for one project's dimensions (FR-061). Size has no configured list: it is the unit's area. */
+export const DIMENSION_FILTERS = ["floor", "block", "category", "type", "premium"] as const;
+export const AREA_FILTER = "area";
+
 /** Unit field each dimension list constrains. */
 export const DIMENSION_FIELD = {
   floors: "floor",

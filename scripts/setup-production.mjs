@@ -86,7 +86,9 @@ try {
   if (lookups) {
     for (const [key, table] of Object.entries(LOOKUP_TABLES)) {
       let added = 0;
-      for (const [i, name] of lookups[key].entries()) {
+      // "Other" is a fixed choice on the forms (FR-042), so it never becomes a list row.
+      const names = key === "cities" ? lookups[key].filter((n) => n.trim().toLowerCase() !== "other") : lookups[key];
+      for (const [i, name] of names.entries()) {
         // Skips names already present in any letter case; never changes or removes existing rows.
         const r = await client.query(
           `INSERT INTO ${table} (name, sort_order) SELECT $1::text, $2::int WHERE NOT EXISTS (SELECT 1 FROM ${table} WHERE lower(name) = lower($1::text)) ON CONFLICT (name) DO NOTHING`,
@@ -94,7 +96,7 @@ try {
         );
         added += r.rowCount;
       }
-      console.log(`${table}: ${added} added, ${lookups[key].length - added} already present.`);
+      console.log(`${table}: ${added} added, ${names.length - added} already present.`);
     }
   }
 

@@ -30,6 +30,7 @@ export function ClientCreateForm({
     phoneNumber: "",
     email: "",
     cityId: "",
+    cityOther: "",
     relationship: "",
   });
   const [ownerId, setOwnerId] = useState(defaultOwnerId);

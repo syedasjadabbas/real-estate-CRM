@@ -44,6 +44,11 @@ function describeLead(a: TimelineActivity): { title: string; tag: string } {
       return { title: `${d.kind === "document" ? "Document" : "Call recording"} uploaded${a.body ? `: ${a.body}` : ""}`, tag: "File" };
     case "file_deleted":
       return { title: `${d.kind === "document" ? "Document" : "Call recording"} deleted${a.body ? `: ${a.body}` : ""}`, tag: "File" };
+    case "client_linked":
+      return {
+        title: d.mode === "converted" ? "Converted to a client" : d.mode === "booking_created" ? "Client created from the confirmed booking" : "Linked to an existing client",
+        tag: "Client",
+      };
     default:
       return { title: a.type, tag: "Activity" };
   }
@@ -58,7 +63,7 @@ export function Timeline({
   describe?: (a: TimelineActivity) => { title: string; tag: string };
 }) {
   return (
-    <PanelCard title={`Timeline · ${activities.length} recent`}>
+    <PanelCard title={`Timeline · ${activities.length} ${activities.length === 1 ? "entry" : "entries"}`}>
       {activities.length === 0 ? (
         <EmptyState size="sm">No activity yet.</EmptyState>
       ) : (

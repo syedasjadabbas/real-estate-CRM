@@ -33,7 +33,7 @@ describe.skipIf(!hasTestDb)("scripts/setup-production.mjs (P1, test database)", 
     ({ db, close } = connectTestDb());
     dir = await mkdtemp(path.join(tmpdir(), "mz-setup-"));
     lookups = path.join(dir, "lookups.json");
-    await writeFile(lookups, JSON.stringify({ leadSources: ["Website", "Walk in", "website"], cities: ["Islamabad"], budgetRanges: [], lostReasons: ["Not interested"] }));
+    await writeFile(lookups, JSON.stringify({ leadSources: ["Website", "Walk in", "website"], cities: ["Islamabad", "Other"], budgetRanges: [], lostReasons: ["Not interested"] }));
   });
   afterAll(async () => {
     await close();

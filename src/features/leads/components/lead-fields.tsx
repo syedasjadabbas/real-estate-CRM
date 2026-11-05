@@ -1,5 +1,6 @@
 "use client";
 
+import { cityOptions, OTHER_CITY } from "@/modules/cities/constants";
 import type { ReactNode } from "react";
 import { Field, Input } from "@/components/ui/input";
 import { PRIORITIES, PRIORITY_LABELS } from "@/modules/leads/constants";
@@ -30,6 +31,7 @@ export type LeadFormValues = {
   budgetRangeId: string;
   priority: string;
   cityId: string;
+  cityOther: string;
 };
 
 export const selectClass =
@@ -56,10 +58,12 @@ type Props = {
   disabled?: boolean;
   /** Extra controls appended to the Interest section (project, owner). */
   interestExtra?: ReactNode;
+  /** The record's saved list city, kept as an option if it has since been deactivated. */
+  currentCity?: { id: string; name: string | null } | null;
 };
 
 /** Lead fields shared by the create form and the detail page's edit form. */
-export function LeadFields({ values, onChange, errors, lookups, disabled, interestExtra }: Props) {
+export function LeadFields({ values, onChange, errors, lookups, disabled, interestExtra, currentCity }: Props) {
   const text = (key: keyof LeadFormValues, label: string, opts: { required?: boolean; type?: string; placeholder?: string; autoComplete?: string } = {}) => (
     <Field label={label} required={opts.required} error={errors[key]}>
       {(id, describedBy) => (
@@ -119,7 +123,8 @@ export function LeadFields({ values, onChange, errors, lookups, disabled, intere
         {interestExtra}
       </FormSection>
       <FormSection title="Location">
-        {select("cityId", "City", lookups.cities.map((c) => ({ value: c.id, label: c.name })), { empty: "Not specified" })}
+        {select("cityId", "City", cityOptions(lookups.cities, currentCity), { empty: "Not specified" })}
+        {values.cityId === OTHER_CITY ? text("cityOther", "City name", { required: true, placeholder: "e.g. Murree", autoComplete: "off" }) : null}
       </FormSection>
     </div>
   );

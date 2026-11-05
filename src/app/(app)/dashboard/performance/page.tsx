@@ -1,3 +1,4 @@
+import { formatDuration } from "@/features/leads/format";
 import { Download } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -39,6 +40,7 @@ const COLUMNS: { label: string; sort: PerformanceSort | null; title?: string }[]
   { label: "Meetings", sort: "meetings", title: "Completed meetings the agent organized, starting in the range." },
   { label: "CRM sign-ins", sort: "signIns", title: "CRM sign-ins logged in the range (authentication activity, not attendance)." },
   { label: "CRM sign-outs", sort: "signOuts", title: "CRM sign-outs logged in the range (authentication activity, not attendance)." },
+  { label: "Avg first touch", sort: "avgFirstTouchMs", title: "Average time from creation to first touch, for leads assigned in the range that have been touched." },
 ];
 
 const pctText = (v: number | null) => (v === null ? "—" : `${v}%`);
@@ -203,6 +205,7 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
                         {v === null ? "—" : typeof v === "number" ? formatInt(v) : v}
                       </td>
                     ))}
+                    <td className={cn("px-3 py-2.5 text-right whitespace-nowrap tabular-nums", r.avgFirstTouchMs === null && "text-zinc-400")}>{formatDuration(r.avgFirstTouchMs)}</td>
                   </tr>
                 ))}
               </tbody>

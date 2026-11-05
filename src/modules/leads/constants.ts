@@ -63,6 +63,17 @@ export const SORTABLE_COLUMNS = [
   "budget",
   "project",
   "priority",
+  "code",
+  "inStage",
+  "modified",
+  "firstTouch",
+  "next",
+  "inbound",
+  "size",
+  "gender",
+  "comment",
+  "lostReason",
+  "externalId",
 ] as const;
 export type SortColumn = (typeof SORTABLE_COLUMNS)[number];
 

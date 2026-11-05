@@ -5,12 +5,12 @@ import { authenticate, loginSchema } from "@/server/auth/login";
 import { getDb } from "@/server/db";
 import { AppError } from "@/server/errors";
 import { errorResponse, readJson } from "@/server/http";
+import { isSameOriginRequest } from "@/server/origin";
 
 /** POST /api/v1/auth/login — { email, password } → session cookie. */
 export async function POST(req: NextRequest) {
   try {
-    const origin = req.headers.get("origin");
-    if (origin && origin !== req.nextUrl.origin) {
+    if (!isSameOriginRequest(req.headers, req.nextUrl.origin)) {
       return NextResponse.json({ error: { code: "FORBIDDEN", message: "Cross-origin request blocked." } }, { status: 403 });
     }
     const body = await readJson(req);

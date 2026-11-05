@@ -99,7 +99,7 @@ Code layout (follows `SYSTEM_ARCHITECTURE.md` §4):
 | FR-035 | Lost with reason; agent request → manager approval | ✅ |
 | FR-036 | Manager reviews feed | ✅ |
 | FR-037 | Won view | ✅ |
-| FR-042 | Managed city list (no free text) | ✅ |
+| FR-042 | Managed city list, with a validated "Other" (PROJECT_STATUS §38) | ✅ |
 | FR-038 | Call recording and document uploads | ✅ **call recordings** (§10) and **documents** (§11), 31 Oct 2026 |
 | FR-039 | AI call analysis | ❌ out of scope |
 | FR-040/041 | Meta / TikTok ingestion | ❌ excluded by instruction |

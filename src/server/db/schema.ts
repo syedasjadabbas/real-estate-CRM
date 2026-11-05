@@ -65,6 +65,7 @@ export const leadActivityType = pgEnum("lead_activity_type", [
   "meeting",
   "file_uploaded",
   "file_deleted",
+  "client_linked",
 ]);
 /** DATA_MODEL.md "files". Only call recordings on leads are uploaded so far (FR-038). */
 export const fileKind = pgEnum("file_kind", ["call_recording", "document", "receipt", "other"]);
@@ -219,7 +220,7 @@ const lookupColumns = () => ({
 export const leadSources = pgTable("lead_sources", lookupColumns());
 /** Configurable payment methods (proposed defaults seeded by migration 0005; client to confirm, Q-F7). */
 export const paymentMethods = pgTable("payment_methods", lookupColumns());
-export const cities = pgTable("cities", lookupColumns());
+export const cities = pgTable("cities", lookupColumns(), (t) => [uniqueIndex("cities_name_lower_uq").on(sql`lower(${t.name})`)]);
 export const lostReasons = pgTable("lost_reasons", lookupColumns());
 export const budgetRanges = pgTable("budget_ranges", lookupColumns());
 
@@ -240,6 +241,8 @@ export const leads = pgTable(
     phoneE164: text("phone_e164").notNull(),
     email: text("email"),
     cityId: uuid("city_id").references(() => cities.id, { onDelete: "restrict" }),
+    /** A city typed under "Other" (FR-042); city_id is then null. */
+    cityOther: text("city_other"),
     gender: text("gender"),
     stage: leadStage("stage").notNull().default("new_lead"),
     stageChangedAt: timestamp("stage_changed_at", { withTimezone: true }).notNull().defaultNow(),
@@ -247,6 +250,8 @@ export const leads = pgTable(
       .notNull()
       .references(() => leadSources.id, { onDelete: "restrict" }),
     inboundChannel: inboundChannel("inbound_channel").notNull().default("manual"),
+    /** The ad platform's lead id (MODULES 2.2). Blank until an integration or import supplies it. */
+    externalId: text("external_id"),
     budgetRangeId: uuid("budget_range_id").references(() => budgetRanges.id, { onDelete: "restrict" }),
     desiredSize: text("desired_size"),
     priority: leadPriority("priority").notNull().default("none"),
@@ -1066,6 +1071,8 @@ export const clients = pgTable(
     phoneE164: text("phone_e164").notNull(),
     email: text("email"),
     cityId: uuid("city_id").references(() => cities.id, { onDelete: "restrict" }),
+    /** A city typed under "Other" (FR-042); city_id is then null. */
+    cityOther: text("city_other"),
     relationship: clientRelationship("relationship"),
     ownerId: uuid("owner_id").references(() => users.id, { onDelete: "restrict" }),
     nextFollowUpAt: timestamp("next_follow_up_at", { withTimezone: true }),

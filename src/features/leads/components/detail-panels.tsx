@@ -1,5 +1,6 @@
 "use client";
 
+import { OTHER_CITY } from "@/modules/cities/constants";
 import { Check } from "lucide-react";
 import { useState, useTransition, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
@@ -332,7 +333,8 @@ export function EditDetailsForm({ detail, lookups }: { detail: LeadDetail; looku
     sourceId: lead.sourceId,
     budgetRangeId: lead.budgetRangeId ?? "",
     priority: lead.priority,
-    cityId: lead.cityId ?? "",
+    cityId: lead.cityOther ? OTHER_CITY : (lead.cityId ?? ""),
+    cityOther: lead.cityOther ?? "",
   };
   const [values, setValues] = useState(initial);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -359,7 +361,7 @@ export function EditDetailsForm({ detail, lookups }: { detail: LeadDetail; looku
       }}
       className="space-y-4"
     >
-      <LeadFields values={values} onChange={(p) => setValues((v) => ({ ...v, ...p }))} errors={errors} lookups={lookups} disabled={pending || !detail.permissions.edit} />
+      <LeadFields values={values} onChange={(p) => setValues((v) => ({ ...v, ...p }))} errors={errors} lookups={lookups} currentCity={lead.cityId ? { id: lead.cityId, name: lead.cityName } : null} disabled={pending || !detail.permissions.edit} />
       {detail.permissions.edit ? (
         <div className="flex flex-wrap items-center justify-end gap-2">
           <Status message={msg?.text ?? null} ok={msg?.ok} />

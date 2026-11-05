@@ -52,6 +52,14 @@ export function createLeadFor(owner: Role, name: string, by: Role = "manager", e
   });
 }
 
+/** Flags a lead as a re-inquiry received `minutesAgo`, with its last activity before that, so it shows as unattended. */
+export function markRegenerated(leadId: string, minutesAgo: number) {
+  return withDb(async (db) => {
+    const regeneratedAt = new Date(Date.now() - minutesAgo * 60_000);
+    await db.update(leads).set({ isRegenerated: true, regeneratedAt, lastActivityAt: new Date(regeneratedAt.getTime() - 60_000) }).where(eq(leads.id, leadId));
+  });
+}
+
 export function leadStage(leadId: string) {
   return withDb(async (db) => (await db.select({ stage: leads.stage }).from(leads).where(eq(leads.id, leadId)))[0]?.stage);
 }

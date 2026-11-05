@@ -56,7 +56,7 @@ test("another agent can't open the client or its booking", async ({ page }) => {
   await login(page, "agent2");
   for (const url of [`/dashboard/clients/${clientId}`, `/dashboard/bookings/${bookingId}`]) {
     await page.goto(url);
-    await expect(page.getByText("This page could not be found")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Page not found" })).toBeVisible();
     await expect(page.getByText(name)).toHaveCount(0);
   }
 });

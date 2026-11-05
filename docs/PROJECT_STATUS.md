@@ -1588,10 +1588,10 @@ Requested as "F-4"; in the §17 findings table this is **F-6** (F-4 there is the
 
 ## 24. Final Completion Reconciliation (4 Nov 2026, commit 7986782)
 
-> **Current status (updated 5 Nov 2026, §37).** The summary table, finding rows and requirement matrix below are kept current. The narrative, estimates and §C – §I are the 4 Nov baseline.
-> - **Fixed since:** F-13 (§25), F-15 (§27), F-9 (§28), F-20 (§30), F-16 (§31), F-24 / FR-027 (§32), F-23 (§33), F-10 (§34), FR-010 tile links (§35), FR-021 stage history (§36), FR-004 active project (§37). F-7 was assessed as blocked by D-F1 (§26).
-> - **Counts now:** 52 implemented and verified, 21 partial, 0 not implemented, 7 blocked, 5 excluded.
-> - **Remaining agreed development:** about 4.4 developer-days.
+> **Current status (updated 6 Nov 2026, §50).** The summary table, finding rows and requirement matrix below are kept current. The narrative, estimates and §C – §I are the 4 Nov baseline.
+> - **Fixed since:** F-13 (§25), F-15 (§27), F-9 (§28), F-20 (§30), F-16 (§31), F-24 / FR-027 (§32), F-23 (§33), F-10 (§34), FR-010 tile links (§35), FR-021 stage history (§36), FR-004 active project (§37), FR-042 cities (§38), FR-025 lead timeline (§39), FR-022 lead columns (§40), Regenerated sorting (§41, FR-005 stays partial), FR-028 first touch (§42), FR-061 inventory filters (§43), V1 readiness (§45 – §50). F-7 was assessed as blocked by D-F1 (§26).
+> - **Counts now:** 57 implemented and verified, 16 partial, 0 not implemented, 7 blocked, 5 excluded.
+> - **Remaining agreed development:** about 1.25 developer-days.
 
 **Method.**
 - **Authority order:** the quotation first, then `REQUIREMENTS.md`, then the 53 questionnaire answers (received, but unsigned: S-1).
@@ -1607,8 +1607,8 @@ Requested as "F-4"; in the §17 findings table this is **F-6** (F-4 there is the
 
 | Status | Requirements now | On 4 Nov |
 |---|---|---|
-| Implemented and verified | **52** | 45 |
-| Partially implemented | **21** | 28 |
+| Implemented and verified | **57** | 45 |
+| Partially implemented | **16** | 28 |
 | Not implemented | **0** | 0 |
 | Blocked by client decision | **7** | 7 |
 | Excluded from agreed scope | **5** | 5 |
@@ -1639,12 +1639,12 @@ Requested as "F-4"; in the §17 findings table this is **F-6** (F-4 there is the
 | F-8 roster on past or multi-team leave | Open, C-14 | Unchanged |
 | F-9 Performance footnote | **Fixed (§28, §29)** | `performance/page.tsx:214` still says "the date they were added", and that recordings aren't captured |
 | F-10 sign-in message, in-memory limit | **Message fixed (§34).** Rate limit unchanged | `auth/login.ts` gave the inactive message with any password, not only the correct one as first written here. The rate limit resets on restart, which is documented as acceptable for one server |
-| F-11 export fallback, proofs | Open, agreed (export); proofs low | `finance/reports.ts:101` `.catch("collections")` |
+| F-11 export fallback, proofs | Export fixed (§49); proofs low, open | `finance/reports.ts` refuses an unknown report |
 | F-12 stale docs | Partly open | `PRODUCTION_HANDOVER_CHECKLIST.md` says 13 migrations; `REMAINING_CLIENT_CLARIFICATIONS.md` lists built items as unbuilt |
 | **F-13 (new, high)** open bookings not linked to the client | **Fixed (§25)** | `bookings.client_id` is set only on confirmation (`bookings/commands.ts:145`). A repeat buyer's open booking, token and payments are missing from Investments, Payment history and the project filter. FR-051, FR-052, FR-204 |
 | **F-14 (new, medium)** overdue understated | Open, needs C-27 | Net paid includes the undated down payment, but "due to date" excludes it (`finance/views.ts:192`). A buyer who paid only the down payment shows 0 overdue with installments past due. Documented in §15.2, but the figure misleads |
 | **F-15 (new, medium)** manager rotation crosses teams | **Fixed (§27)** | `rotateOwner` ignores the actor (`leads/commands.ts:77,210`). A manager's Auto-assign can give a lead to an agent outside their team, and they then can't open it |
-| **F-16 (new, medium)** missing list sorting | **Fixed for the four lists (§31);** Regenerated headers open | Inventory, Payments, Finance entries and Outstanding have no column sorting; Outstanding has no paging; the Regenerated view's sort headers do nothing (`leads/queries.ts:145`) |
+| **F-16 (new, medium)** missing list sorting | **Fixed for the four lists (§31);** Regenerated headers fixed (§41) | Inventory, Payments, Finance entries and Outstanding have no column sorting; Outstanding has no paging; the Regenerated view's sort headers do nothing (`leads/queries.ts:145`) |
 | **F-17 (new)** Sold is unreachable | Open, Q-B4 | `inventory/commands.ts:151–156` blocks any override on a unit with a non-cancelled booking, and Confirmed is final, so a confirmed unit stays Booked |
 | **F-18 (new)** income report excludes collections | Open, new decision D-F2 | `finance/entries.ts:321` reads income entries only, so booking collections aren't income unless re-entered, risking double-recording |
 | **F-19 (new, control gap)** discount cap | Open, needs Q36 | Mismatched rows save with a warning, as the client asked (Q39), so an agent can stay within the cap and enter lower rows. Not a bug against the answers; Q36 (only Super Admin edits) would largely close it |
@@ -1680,7 +1680,7 @@ FR-005 reads: "List pages support search, a filter panel, column sorting and pag
 | FR-002 | Sign-in / out logged with time and IP | IV | Logged, shown in Workplace, counted in Performance. Expired sessions log no sign-out | `session-store.ts:26,88` | workplace, performance | T | — | Yes |
 | FR-003 | Access-denied card, API 403 | IV | Restricted state and `forbidden()` | `components/ui/empty-state.tsx:28`, `server/errors.ts` | auth.spec | T | — | Yes |
 | FR-004 | Project selector, remembered per user and device | IV | Scoping real. One cookie per user on each browser, read only inside that user's session; invalid choices fall back | `modules/projects/queries.ts` `activeProjectFor`, `server/project-scope.ts`, §37 | active-project (integration, e2e) | T | — | Yes |
-| FR-005 | Search, filters, sorting, 50 / page | PI | 50 everywhere paged; main lists complete, including Inventory and Finance (F-16). Regenerated headers do nothing; Targets, Reviews and Shared phones unpaged | `*/constants.ts`, §31 | list-sorting, list-pagination, list-controls, projects-teams-lists | T | Regenerated headers; D-L1 | Yes |
+| FR-005 | Search, filters, sorting, 50 / page | PI | 50 everywhere paged; main lists complete, including Inventory, Finance (F-16) and Regenerated sorting (§41). Targets, Reviews and Shared phones unpaged; four lists wait on D-L1 | `*/constants.ts`, §31, §41 | list-sorting, list-pagination, list-controls, projects-teams-lists, regenerated-sort | T | D-L1 | Yes |
 | FR-006 | Notifications, unread count, pop-up | IV | Bell, count, pop-up. Window is an admin setting, unset by default; created on poll | `notifications/service.ts:53,64` | notifications, leads-notifications | T | Set the window at handover. More events are N2–N6 | Yes |
 | FR-007 | Responsive at 375 px | IV | Collapsing shell | `components/shell/app-shell.tsx` | responsive.spec (7 pages) | T | — | Yes |
 | FR-008 | Audit log of all changes | IV | All exported writes audited | §22, `audit/service.ts` | audit.test, audit-log.spec | T | — | Yes |
@@ -1692,15 +1692,15 @@ FR-005 reads: "List pages support search, a filter panel, column sorting and pag
 | FR-014 | Aging × meetings matrix | EX | Placeholder card | `queries.ts:227` | — | – | Priority L; also needs M-Q1–5 | No |
 | FR-015 | Recent leads, top projects | IV | Latest 20; name links to lead | `dashboard/queries.ts:142` | dashboard.test | T | — | Yes |
 | FR-016 | Lost by reason and team | IV | Clickable reasons | `dashboard/queries.ts:180` | dashboard | T | — | Yes |
-| FR-020 | Create lead | IV | All fields, unique code. A forged id gives a 500 rather than a field error | `leads/commands.ts:236` | leads | T | Tidy with F-9 batch | Yes |
+| FR-020 | Create lead | IV | All fields, unique code. Forged city, source and budget ids are field errors (§38, §49) | `leads/commands.ts:236` | leads | T | Tidy with F-9 batch | Yes |
 | FR-021 | Ten stages, timeline from → to | IV | Every path that changes a stage records from → to, including an approved lost request | `leads/commands.ts` `decideLostRequest`, §36 | lead-stage-history, lost-approval-history, leads, bookings | T | — | Yes |
-| FR-022 | Leads table, all columns sortable | PI | About half the columns sort; Inbound channel, Gender, External ID, Lost reason not shown | `leads/constants.ts:55`, `leads-table.tsx` | leads, list-controls | T | Add sorts and missing columns | Yes |
+| FR-022 | Leads table, all columns sortable | IV | All MODULES §2.2 columns present and every data column sorts. External ID stays blank in V1: no integration supplies it | `leads/constants.ts`, `leads/queries.ts`, `leads-table.tsx`, §40 | lead-columns (integration, e2e), leads, list-controls | T | — | Yes |
 | FR-023 | Kanban with counts | IV | Move with permission; 25 cards per stage, no "load more" | `kanban-board.tsx` | pipeline.spec | T | — | Yes |
 | FR-024 | Pipeline filters | IV | AND-combined | `leads/queries.ts:49` | leads, list-controls | T* | More filter tests | Yes |
-| FR-025 | Lead detail, everything in timeline | PI | Complete except client conversion / link; capped at 100 | `leads/queries.ts:250` | leads, recordings | T | Log the link; show all | Yes |
+| FR-025 | Lead detail, everything in timeline | IV | Every lead write reaches the timeline, including all four client link paths. Full history, newest first, no cap | `clients/commands.ts` `logClientLink`, `leads/queries.ts`, §39 | lead-client-timeline (integration, e2e), leads, recordings | T | — | Yes |
 | FR-026 | Follow-ups, %, overdue | IV | Schedule, done, metric | `leads/commands.ts:393,423` | leads, performance, todos | T | — | Yes |
 | FR-027 | To-dos, count = list | IV | All buckets page 50 at a time, so every counted item can be reached | `leads/queries.ts` `leadTodos`, §32 | todos-paging (integration, e2e), leads, todos-lost-leads | T | — | Yes |
-| FR-028 | First touch, used in reports | PI | Captured and shown; not used in Performance | `leads/support.ts:109` | leads, recordings | T | Add to reports | Yes |
+| FR-028 | First touch, used in reports | IV | Captured and shown on the lead; average per agent in the Performance table and CSV | `leads/support.ts:109`, `performance/service.ts`, §42 | performance-first-touch, performance, leads, recordings | T | — | Yes |
 | FR-029 | Rotation of an assignable team | IV | Admins rotate all active teams; managers their own (F-15). Admin pointer restart after leave remains (§27) | `leads/commands.ts` `rotateOwner`, §27 | lead-assignment, lead-auto-assign, leave | T | — | Yes |
 | FR-030 | Manual reassign | IV | Logged | `leads/commands.ts:350` | leads | T | — | Yes |
 | FR-031 | Duplicate detection | IV | Same project; reject or flag | `leads/commands.ts:114` | leads, workflows, lead-phone-edit | T | — | Yes |
@@ -1714,13 +1714,13 @@ FR-005 reads: "List pages support search, a filter panel, column sorting and pag
 | FR-039 | AI call analysis | EX | None | — | — | – | Separate quote | No |
 | FR-040 | Meta lead ads | EX | None (enum value only) | `schema.ts:51` | — | – | Separate quote | No |
 | FR-041 | TikTok lead ads | EX | None | — | — | – | Separate quote | No |
-| FR-042 | City from managed list, "Other" | PI | Select only, so numbers are impossible. No "Other", no city admin screen | `leads/validation.ts:37` | None for city | T* | Add both | Yes |
+| FR-042 | City from managed list, "Other" | IV | Managed list with an Admin screen; "Other" takes a validated typed name, so numbers and phone numbers are refused. Cities deactivate, never delete | `modules/cities/*`, `settings/cities`, §38 | cities (integration, e2e), security-headers | T | — | Yes |
 | FR-043 | Lead CSV import | EX | None | `EXTERNAL_INTEGRATIONS.md` §10 | — | – | Quoted separately; needs Q-P5 | No |
 | FR-050 | Client from confirmed booking | IV | Automatic, or manual by admin | `bookings/commands.ts:141` | bookings, clients | T | — | Yes |
 | FR-051 | Clients list and filter | IV | List, latest investment and filter include open bookings (F-13) | `clients/queries.ts:56`, §25 | clients, clients-investments, client-bookings | T | — | Yes |
 | FR-052 | Client detail incl. contracts | IV | Bookings, payments, and documents on the client and its leads (F-13, F-20) | `documents/service.ts`, §25, §30 | client-bookings, client-documents | T | — | Yes |
 | FR-060 | Projects CRUD | IV | Inactive hidden from agents' selector | `projects/commands.ts:34` | projects | T | — | Yes |
-| FR-061 | Per-project dimensions as fields / filters | PI | Fields constrained; no per-dimension list filters | `inventory-toolbar.tsx:69` | inventory | T | Add filters | Yes |
+| FR-061 | Per-project dimensions as fields / filters | IV | Fields constrained; Inventory filters by floor, block, category, type, premium and size for the project shown | `inventory/queries.ts`, `inventory-toolbar.tsx`, §43 | inventory-dimension-filters (integration, e2e), inventory | T | — | Yes |
 | FR-062 | Project cards | IV | Units, type, link via detail | `project-card.tsx` | projects-teams-lists | T | — | Yes |
 | FR-070 | Unit fields | IV | All stored | `inventory/commands.ts:47` | inventory | T | — | Yes |
 | FR-071 | Unit statuses from bookings | PI | Reserved and Booked driven; Sold unreachable (F-17) | `inventory/status.ts:64` | inventory, bookings | T | Q-B4 | Yes* |
@@ -1766,9 +1766,9 @@ FR-005 reads: "List pages support search, a filter panel, column sorting and pag
 
 | ID | Status | Note |
 |---|---|---|
-| NFR-01 10 users | Partially implemented | No concurrency or load test |
-| NFR-02 < 1.5 s at 10k leads | Partially implemented | Never measured |
-| NFR-03 Availability, backups | Blocked by client infrastructure | Script exists; no server |
+| NFR-01 10 users | Verified on a development laptop | 10 users at once, no errors, no lost writes, no cross-user data (§45). Rerun on the client's server |
+| NFR-02 < 1.5 s at 10k leads | Verified on a development laptop | Every measured list under 1.5 s at p95 (§45). Rerun on the client's server |
+| NFR-03 Availability, backups | Blocked by client infrastructure | Backup and restore ran successfully locally (§47); no server or schedule |
 | NFR-04 Security | Partially implemented | Code controls in place; live checks never run |
 | NFR-05 Browsers | Partially implemented | Chrome only; Edge, Safari and phones untested |
 | NFR-06 Localization | Implemented and verified | English, PKR, Pakistan time, UTC stored |
@@ -2702,3 +2702,442 @@ Both suites were slower than the fastest recent runs (Vitest 435 s, Playwright 8
 **Remaining agreed development:** about 4.4 developer-days. **Baseline:** Vitest 587 / 587, Playwright 138 / 138, build 103 / 103, 25 migrations.
 
 **Next eligible requirement: FR-042** (a city "Other" option and a city admin screen), then FR-022, FR-025, FR-028, FR-061 and the Regenerated headers.
+
+## 38. FR-042 fixed: city "Other" and city administration (5 Nov 2026)
+
+**Requirement.** FR-042: "City chosen from a managed list (with "Other"), validated." Acceptance: "Numbers and phone numbers are not accepted as a city." In the agreement.
+
+**Before.** City was a select only, so a number could not be entered, but there was no "Other", no admin screen and no way to change the list. A forged city id gave a 500, an inactive city could be saved, and an edit form could not show a deactivated city.
+
+**Design decisions:**
+- **"Other" is a fixed choice, not a list row,** so nobody can rename or deactivate it. The typed name goes in a new nullable `city_other` column on leads and clients.
+- **Cities are deactivated, never deleted.** The foreign keys already refuse to delete a city in use, and there is no delete in the screen or API.
+- **Access:** Super Admins and Admins. UI spec S-22, the data model and the FR-042 request say administrators; the permission matrix said Admin "users only", so a City list row was added there.
+
+**What changed:**
+- **Name rule (`cityNameSchema`):** letters of any script with spaces and `. ' ’ -`, 2 to 60 characters. Digits of every script fail, so numbers and phone numbers are refused. It applies to typed cities and to list names. "Other" itself is refused as a name.
+- **`resolveCity`:** one rule for lead and client create and edit. An unknown id is a field error. An inactive city can't be newly chosen, but a record keeps the one it has. A typed name matching an active list city uses that city.
+- **Settings → Cities:** add, rename, deactivate, reactivate, with lead and client counts per city. Every change is audited (`city.add`, `city.rename`, `city.activate`, `city.deactivate`).
+- **API:** `GET/POST /lookups/cities`, `PATCH /lookups/cities/:id`, as already listed in API_DESIGN.
+- **Duplicates:** refused in any letter case by a new unique index, so two simultaneous saves can't both succeed.
+- **Forms:** lead and client create and edit offer "Other", which reveals a City name field. A record's deactivated city stays selectable, labelled "(inactive)".
+- **Lists:** typed cities show and sort with list cities. The City filter gains "Other" and keeps deactivated cities, so existing leads stay findable.
+- **Conversion:** converting a lead, or confirming a booking, carries a typed city to the client.
+- **Production setup:** an "Other" entry in the lookups file is skipped.
+
+**Checked and unchanged:** reports have no city breakdown, and lead search has never covered city, so neither needed changes. A project's own `city` is a separate free-text field, out of scope.
+
+**Migration:** `0025_city_other`, additive: two nullable columns and one unique index. Applied to the development and test databases. 26 migrations, no drift. No existing rows changed; all 13 development cities pass the name rule and none clash.
+
+**Found and fixed during verification:**
+- **Stale typed name.** Switching from "Other" to "Not specified" saved the leftover text. Only choosing "Other" now reads it.
+- **Regression from this work.** Client components imported the validation file, which put Zod in the browser, and its `new Function` probe raised a CSP `script-src eval` report on the lead page. Caught by `security-headers.spec.ts`. Browser code now imports a Zod-free `cities/constants.ts`, and the check also covers the city screen and the create forms.
+
+**Files changed:**
+- New: `src/modules/cities/` (`constants`, `validation`, `policy`, `resolve`, `service`), `src/features/cities/`, `settings/cities` page, `api/v1/lookups/cities` routes, `drizzle/0025_city_other.sql`
+- `src/server/db/schema.ts`, lead and client `commands`, `queries`, `validation`, their form components, `filter-drawer.tsx`, `audit-controls.tsx`, `scripts/setup-production.mjs`
+- Docs: DATA_MODEL, API_DESIGN, USER_ROLES_AND_PERMISSIONS, LEADS_MODULE_PLAN
+
+**Tests:**
+- `cities.test.ts`, 54 tests: the name rule, permissions for all roles, list management, duplicates and simultaneous adds, renames, deactivation, audit rows, bad ids, the database refusing a delete, lead and client create and edit, filters, sorting and conversion.
+- **Checked to be meaningful:** 9 deliberate breaks (digits allowed, permission removed, inactive accepted, inactive not kept, forged id, stale text, conversion, Other filter, inactive filter) each failed at least one test.
+- `cities.spec.ts`, 5 scenarios (7 runs with mobile): the screen, lead and client forms, a lead keeping a deactivated city through an edit, role refusals and API validation.
+- `security-headers.spec.ts`: new check on the city pages, desktop and mobile. `setup-production.test.ts` covers skipping "Other".
+
+**Verification:**
+
+| Check | Result |
+|---|---|
+| Typecheck, lint | Pass |
+| Vitest full | **58 files, 641 / 641** |
+| Schema drift | Clean, 26 migrations |
+| Build | 105 / 105 pages |
+| Playwright full | **147 / 147** |
+
+**Not a first-run pass.** Three Playwright runs were needed. The first was stopped after the machine slept during a test (19:16 to 20:35). The second had 2 failures, the CSP regression above. The third passed. It reports 55.6 minutes, of which about 44 was another sleep, so about 12 minutes of testing.
+
+**Remaining risks:**
+- **Client dependency.** The city list itself is unconfirmed (H-8, Q-L6). The screen means the client can now set it without a developer.
+- **A rename applies everywhere,** because records point at the city. The screen says so, and the audit log keeps the old name.
+- **A typed name matching an inactive city stays typed,** and is not linked if that city is reactivated.
+- **Typed cities are not merged** when a matching city is added later, and they have no per-name filter: the filter shows them together as "Other".
+- **No reordering.** New cities go last; list order is otherwise as seeded.
+- **Forged source or budget ids** still give a 500 (FR-020); only city was in scope.
+- **Other pages load Zod in the browser.** Accounts, employees, holidays and roster components import validation files that use Zod, so they probably raise the same CSP report. It is caught, so the pages should still work. Not confirmed by a test, and not changed.
+
+**Completion counts (recounted from the §24 matrix rows):** **53 implemented and verified, 20 partial, 0 not implemented, 7 blocked, 5 excluded** (85).
+
+**Remaining agreed development:** about 3.65 developer-days. **Baseline:** Vitest 641 / 641, Playwright 147 / 147, build 105 / 105, 26 migrations.
+
+**Next eligible requirement: FR-025.** Linking a lead to a client never reaches the lead's timeline, so that history is lost permanently, and the timeline stops at 100 entries.
+
+## 39. FR-025 fixed: client links reach the lead's timeline, and the cap is gone (5 Nov 2026)
+
+**Why this one.** Candidates checked: FR-005, FR-011, FR-022, FR-025, FR-028, FR-061. FR-025 came first because it is the only one that loses data: a link that isn't logged can't be recovered later. FR-011 is not eligible: stale, no-meeting and recent leads ignore the range by plan, FR-013 defines stale as 14+ days, and changing that needs the client.
+
+**Requirement.** FR-025 acceptance: "All interactions appear in the timeline, newest first."
+
+**Gap confirmed in the code.** Every `update(leads)` was checked against its timeline entry. Only the client paths had none. Four paths link a lead to a client, and all four wrote to the client's timeline only. The lead timeline also stopped at 100 entries.
+
+**What changed:**
+- **New timeline type `client_linked`,** written in the same transaction on all four paths: converted, linked to an existing client, linked by a booking, and client created by a confirmed booking.
+- **No client name in the entry.** The booking paths link clients the lead's viewers may not have access to, so the entry holds only the client id and how it was linked.
+- **No cap.** The lead timeline shows every entry, and its title now gives the full count ("Timeline · 12 entries").
+- **Client timeline cap removed too,** because the two share one component and its title would otherwise be wrong.
+
+**Unchanged:** first touch, last activity, who may convert or link, and the client's own timeline entries. **Migration:** `0026_lead_client_linked` adds one enum value. 27 migrations, no drift.
+
+**Existing data.** The development database has 2 leads linked before this change, with no entry. They were left as they are, and the lead page's Client panel still shows the link. No production data exists.
+
+**Files changed:** `src/modules/clients/commands.ts`, `src/modules/clients/queries.ts`, `src/modules/leads/queries.ts`, `src/features/leads/components/timeline.tsx`, `src/server/db/schema.ts`, `drizzle/0026_lead_client_linked.sql`, `tests/integration/lead-client-timeline.test.ts` and `e2e/lead-client-timeline.spec.ts` (both new).
+
+**Tests:**
+- `lead-client-timeline.test.ts`, 11 tests: all four paths and who is recorded; one entry only when already linked; refused conversions record nothing; no client name in the entry; first touch and last activity untouched; the client timeline unchanged; 131 entries shown newest first; a client timeline past 100.
+- **Checked to be meaningful:** 6 deliberate breaks (each of the four entries removed, each cap restored) each failed at least one test.
+- `lead-client-timeline.spec.ts`: a manager converts through the lead page and the timeline shows it, on desktop and mobile.
+
+**Verification (first full run, no failures):**
+
+| Check | Result |
+|---|---|
+| Typecheck, lint | Pass |
+| Vitest full | **59 files, 652 / 652** in 529 s |
+| Schema drift | Clean, 27 migrations |
+| Build | 105 / 105 pages |
+| Playwright full | **149 / 149 in 10.9 min** |
+
+**Remaining risks:**
+- **Very long timelines** now render in full. At up to 10 users this is small, but a lead with thousands of entries would load slowly. Paging can be added if that happens.
+- **Same-time entries.** A booking confirmation writes the stage move and the link in one transaction, so they share a time and their order can vary.
+- **Links made before this release** have no entry.
+
+**Completion counts (recounted from the §24 matrix rows):** **54 implemented and verified, 19 partial, 0 not implemented, 7 blocked, 5 excluded** (85).
+
+**Remaining agreed development:** about 3.5 developer-days. **Baseline:** Vitest 652 / 652, Playwright 149 / 149, build 105 / 105, 27 migrations.
+
+**Next eligible requirement: FR-022** (remaining sorts and missing columns), then FR-005, FR-028 and FR-061.
+
+## 40. FR-022 fixed: every lead column present and sortable (6 Nov 2026)
+
+**Requirement.** FR-022: "Leads table with the reference columns, sortable." Acceptance: "All columns listed in MODULES §2.2 are present."
+
+**Gap confirmed.** Inbound channel, Gender, External ID, Lost reason and the Duplicate flag were not shown, and Code, In stage, Modified, First touch, Next follow-up, Size and Comment did not sort.
+
+**What changed:**
+- **New columns:** Inbound, Gender, Lost reason, External ID. A Duplicate tag sits beside the existing Regenerated tag.
+- **New sorts:** all of the above plus Code, In stage, Modified, First touch and Next follow-up. Sorts use the existing allowlist with fixed SQL, and blanks go last in both directions.
+- **In stage** sorts by the duration shown, and **First touch** by time from creation to first touch, not by date.
+- **Size** is free text, so it sorts by its number ("1,200 sq ft" after "674 sq ft"). Text with no number goes last.
+- **Gender and Comment** ignore letter case.
+
+**External ID.** Confirmed by the project owner on 5 Nov: keep a nullable column because MODULES §2.2 lists it and FR-022 requires the listed columns; "—" when empty is acceptable for V1. Nothing writes to it, and no integration was added. It stays blank unless an agreed integration or import supplies it.
+
+**Unchanged:** the favourite and follow-up action columns don't sort, because they hold controls, not data. The Regenerated view's sorting is FR-005, §41. **Migration:** `0027_lead_external_id`, one nullable column. 28 migrations, no drift. No data changed.
+
+**Files changed:** `src/modules/leads/constants.ts`, `src/modules/leads/queries.ts`, `src/features/leads/components/leads-table.tsx`, `src/server/db/schema.ts`, `drizzle/0027_lead_external_id.sql`, `tests/integration/lead-columns.test.ts` and `e2e/lead-columns.spec.ts` (both new), `e2e/cities.spec.ts` (selector scoped).
+
+**Tests:**
+- `lead-columns.test.ts`, 19 tests: each new sort in both directions with blanks last, lost reason, numeric size, unknown sorts falling back, the new row fields, the detail page, record scope, and letter case.
+- **Checked to be meaningful:** 8 deliberate breaks each failed at least one test: size as text, In stage reversed, First touch by date, blanks first, lost reason and External ID not selected, and case-sensitive Gender and Comment.
+- **A gap found by that check, then closed.** Case-sensitive Gender first survived with 0 failures, because this database's collation already orders "female" before "Male". The new test uses values differing only in case, which must tie and fall back to newest first in both directions. It works on any collation, and it now fails when `lower()` is removed.
+- `lead-columns.spec.ts`: the new columns show, and each new sort works through its header, on desktop and mobile.
+
+**Verification:**
+
+| Check | Result |
+|---|---|
+| Typecheck, lint | Pass |
+| Vitest full | **60 files, 671 / 671** in 262 s |
+| Schema drift | Clean, 28 migrations |
+| Build | 105 / 105 pages |
+| Playwright full | **151 / 151 in 7.5 min** |
+
+**Not a first-run pass.** The first run was stopped: the machine slept from 22:41 to 23:51, and two notification tests showed about 69-minute durations. They passed in the next run. That next run had 150 passing and 1 failing, in `cities.spec.ts`: after the redirect the router briefly keeps the old form mounted but hidden, so "City" matched two selects. The page snapshot showed users see one. This was a timing race in the FR-042 test, whose client case had been scoped but not its lead case. It was scoped and the whole suite rerun.
+
+**Remaining risks:**
+- **External ID is blank throughout V1,** so it adds a column with no data.
+- **The table is wider.** It now has 23 columns and scrolls sideways, more so on phones.
+- **Size is free text,** so a value like "3 bed" sorts as 3.
+
+**Completion counts (recounted from the §24 matrix rows):** **55 implemented and verified, 18 partial, 0 not implemented, 7 blocked, 5 excluded** (85).
+
+**Remaining agreed development:** about 3 developer-days. **Baseline:** Vitest 671 / 671, Playwright 151 / 151, build 105 / 105, 28 migrations.
+
+**Next:** FR-005's Regenerated sorting, then FR-028 and FR-061.
+
+## 41. FR-005: Regenerated view sorting fixed; the requirement stays partial (6 Nov 2026)
+
+**Requirement.** FR-005: list pages support search, a filter panel, column sorting and pagination.
+
+**Root cause.** The Regenerated view always used its own order, so its headers changed the URL and nothing else. The Created header also showed as the active sort when it wasn't.
+
+**What changed:**
+- **`sort` is now empty unless one is chosen.** With none, Regenerated keeps its order, unattended re-inquiries first and newest first. A chosen sort replaces that order. An unknown sort keeps the view's own order.
+- **`LeadsTable` takes `defaultSort`,** so no column claims the sort on Regenerated until one is chosen. Other lists still default to newest created.
+
+**Unchanged:** which leads the view shows, its filters, and record scope. **Migration:** none. No data changed.
+
+**Why FR-005 stays partial.** D-L1 is unanswered: whether Holidays, Daily reports, Sign-in history and Notifications need full list controls. Targets, Reviews and Shared phones are also unpaged. No decision was assumed for any of them.
+
+**Files changed:** `src/modules/leads/validation.ts`, `src/modules/leads/queries.ts`, `src/features/leads/components/leads-table.tsx`, `src/features/leads/components/list-view.tsx`, `e2e/support/data.ts`, `tests/integration/regenerated-sort.test.ts` and `e2e/regenerated-sort.spec.ts` (both new).
+
+**Tests:**
+- `regenerated-sort.test.ts`, 7 tests: the view's own order, a chosen sort both ways, Created when chosen, unknown sort, direction alone, filters and scope, and other lists' default.
+- **Checked to be meaningful:** 3 deliberate breaks each failed at least one test, including restoring the original bug.
+- `regenerated-sort.spec.ts`: headers reorder the list, and no column claims the sort first, on desktop and mobile.
+
+**Verification (relevant tests; the full run follows FR-061):**
+
+| Check | Result |
+|---|---|
+| Typecheck, lint | Pass |
+| Regenerated, lead column and lead tests | 55 / 55 |
+| Build | 105 / 105 pages |
+| Regenerated, lead column and list control specs | 9 / 9 |
+
+**Completion counts (recounted from the §24 matrix rows):** unchanged: **55 implemented and verified, 18 partial, 0 not implemented, 7 blocked, 5 excluded** (85).
+
+**Remaining agreed development:** about 3 developer-days. The Regenerated fix was inside the F-16 task already counted, so the estimate does not change.
+
+## 42. FR-028 fixed: first touch in the Performance report (6 Nov 2026)
+
+**Requirement.** FR-028 acceptance: "Shown on the lead and used in reports." §24.C lists this as agreed work with no client decision, and the §24 row names Performance as the gap.
+
+**What changed:**
+- **Avg first touch,** a new last column in the Performance table, sortable. It is the mean time from creation to first touch for the leads counted for that agent in the range.
+- **CSV:** a new last column, "Avg first touch (min)", in whole minutes. No existing column moved.
+- **Blank stays blank.** An agent with no touched leads shows "—" and sorts last in both directions, so they can't rank as the fastest.
+
+**Choices made, for the client to see.** The requirement names no statistic, so the plain average was used. Untouched leads are left out because they have no duration, so an agent who leaves leads untouched is not penalised by this figure. FR-150's column list doesn't include this measure; it is added to meet FR-028.
+
+**Unchanged:** how first touch is captured, who sees the report, and every other KPI. **Migration:** none.
+
+**Files changed:** `src/modules/performance/service.ts`, `src/modules/performance/range.ts`, `src/app/(app)/dashboard/performance/page.tsx`, `tests/integration/performance.test.ts` (new field and CSV column), `e2e/performance-page.spec.ts`, `tests/integration/performance-first-touch.test.ts` (new).
+
+**Tests:** 8 new tests: the average, untouched leads, the date range, blank not zero, per agent, sorting, the CSV, and report scope. **Checked to be meaningful:** 4 deliberate breaks each failed at least one test, including counting untouched leads as instant.
+
+## 43. FR-061 fixed: inventory filters by project dimension (6 Nov 2026)
+
+**Requirement.** FR-061 acceptance: "Dimensions appear as unit fields / filters for that project." The fields already existed; the filters did not.
+
+**What changed:**
+- **Six filters on Inventory:** floor, block, category, type, premium and size. They combine with the existing filters, and a dimension with no values is left out.
+- **Options:** the project's configured list in its order, then any other values its units hold, so units entered before configuration stay findable. Letter-case duplicates are removed.
+- **Size** has no configured list, because it is the unit's area, so it offers the areas in use.
+- **For one project only.** Filters appear when a single project is shown, not across all projects. Changing project or pressing Clear resets them.
+
+**Unchanged:** dimension configuration, unit validation, and access. **Migration:** none.
+
+**Files changed:** `src/modules/inventory/constants.ts`, `validation.ts`, `queries.ts`, `src/features/inventory/components/inventory-toolbar.tsx`, `src/app/(app)/dashboard/inventory/page.tsx`, `tests/integration/inventory-dimension-filters.test.ts` and `e2e/inventory-dimension-filters.spec.ts` (both new).
+
+**Tests:** 16 new tests. **Checked to be meaningful:** 9 deliberate breaks each failed at least one test. One first showed 0 failures because the break itself was harmless: a made-up project id returns no values, the same as the correct result. Redone with a real project, it failed as it should.
+
+## 44. Full regression for §41 – §43 (6 Nov 2026)
+
+| Check | Result |
+|---|---|
+| Typecheck, lint | Pass |
+| Vitest full | **63 files, 702 / 702** in 268 s |
+| Schema drift | Clean, 28 migrations |
+| Build | 105 / 105 pages |
+| Playwright full | **156 / 156 in 9.5 min** |
+
+**Not a first-run pass.** Three Playwright runs were needed, with no sleep in any of them.
+- **Run 1:** 1 Vitest and 2 Playwright failures. `leads-rules.test.ts` still expected the old sort default, missed because only integration tests had been run for FR-005; an invalid sort is still rejected, and the default is now applied in the query. The new inventory spec used an ambiguous selector.
+- **Run 2:** Vitest 702 / 702. The same spec failed again, because the wrapping label's text includes every option, so an exact match can't work.
+- **Run 3:** the selector targets the select by its "All projects" option. All passed. Only tests changed between runs, so the build stands.
+
+**Remaining risks:**
+- **Average first touch can flatter an agent,** because untouched leads are left out. "Awaiting first touch" on the dashboard shows those.
+- **A stale filter in a URL** can name a value no longer offered: the list shows no units, and Clear resets it.
+- **Size filter options grow** with the number of different areas in a project.
+
+**Client dependencies still open:** D-L1, and the decisions behind the partial rows (C-15, C-19, C-21, C-25, C-27, D-F1, D-F2, D-H1, Q-B1, Q-B3, Q-B4, Q36).
+
+**Completion counts (recounted from the §24 matrix rows):** **57 implemented and verified, 16 partial, 0 not implemented, 7 blocked, 5 excluded** (85).
+
+**Remaining agreed development:** about 2.5 developer-days, of which 2 is the missing tests and NFR-01 / NFR-02 checks. **Baseline:** Vitest 702 / 702, Playwright 156 / 156, build 105 / 105, 28 migrations.
+
+**Next eligible work:** F-11 (finance export falling back to "collections" for an unknown report), overdue shown on the booking (FR-203, part still waits on C-27), forged source or budget ids giving a 500, then the NFR-01 / NFR-02 checks.
+
+## 45. NFR results and evidence (6 Nov 2026)
+
+**Original criteria (REQUIREMENTS.md):** NFR-01 "Up to 10 concurrent named users". NFR-02 "List pages < 1.5 s at 10k leads".
+
+**Result: both met on a development laptop. Neither is proven on the production server,** which does not exist yet.
+
+**Test environment:**
+- Windows 11 laptop, Intel i5-8365U, 8 logical processors, 16 GB RAM, running on battery.
+- Production build (`next start`), PostgreSQL 18, and the load generator and browser all on this one machine. No network between them.
+- The test database only: 10,000 leads, 50,000 timeline entries, 5,000 follow-ups, 2,000 clients and 2,000 units, all synthetic. 10 users across all six roles.
+
+**Method:** `scripts/perf/nfr-load.mjs`, kept so this can be rerun on the real server.
+- **Server time:** full response including streamed content, signed in as Super Admin (the widest scope). 3 warm-up requests, then 15 samples per page.
+- **Browser time:** real Chrome, from navigation until the first data row is visible. 2 warm-up loads, then 5 samples.
+- **Concurrency:** all 10 users at once for 60 s, reading lists and writing notes, with no pauses and then with 3 s between actions.
+- **Pass mark:** p95 under 1,500 ms.
+
+**NFR-02: list pages, final code (milliseconds):**
+
+| Page | Server p50 | Server p95 |
+|---|---|---|
+| Leads, default | 182 | 220 |
+| Leads, last page | 232 | 270 |
+| Leads, sorted by city | 240 | 283 |
+| Leads, sorted by size (computed) | 275 | 316 |
+| Leads, search | 221 | 256 |
+| Leads, filtered | 149 | 186 |
+| Leads, lost | 115 | 155 |
+| Pipeline board | 158 | 171 |
+| Clients | 49 | 69 |
+| Inventory | 79 | 111 |
+| Bookings | 38 | 58 |
+| Tasks | 40 | 55 |
+| Performance | 414 | 470 |
+| Dashboard | 101 | 151 |
+
+| Real Chrome, until rows are visible | p50 | p95 |
+|---|---|---|
+| Leads | 576 | 722 |
+| Leads, sorted by size | 612 | 974 |
+| Clients | 588 | 637 |
+| Inventory | 636 | 782 |
+
+**NFR-01: 10 users at once:**
+
+| Check | No pauses (worst case) | 3 s between actions |
+|---|---|---|
+| Read requests | 970 | 174 |
+| p50 / p95 / slowest | 617 / 815 / 1,187 ms | 239 / 581 / 696 ms |
+| Notes written | 88 | 15 |
+| Server errors | 0 | 0 |
+
+- **No lost writes:** 103 notes reported, 103 stored.
+- **No cross-user data:** 4 agents read at the same moment for 20 rounds; each saw exactly their own leads, 0 mismatches.
+
+**Variation.** An earlier run of the same test had slower figures: 1,237 ms p95 and a slowest request of 1,970 ms with no pauses. So under worst-case load a single request can exceed 1.5 s on this machine. Those users never pause, which real people don't do.
+
+**Limitations:**
+- One laptop, not the 2 vCPU / 4 GB server proposed. A smaller server could be slower; having no load generator on it helps.
+- No real network, TLS or Caddy in the path.
+- Browser time covers four lists, signed in as Super Admin. Bookings has few rows because the synthetic data has no bookings.
+- 60 s runs, not hours. Memory growth over time is not measured.
+- Form dropdowns were not measured at 10k (§50).
+
+**To close:** run the same script on the client's server at handover.
+
+## 46. Critical V1 workflows (6 Nov 2026)
+
+**Key finding.** Six core workflows had only ever been run through service calls in test setup, never through their real pages: booking creation, booking confirmation, recording a payment, meetings, the task list and lead reassignment. `e2e/v1-critical-path.spec.ts` now runs them through the forms a person uses. All passed; the only failures on the way were in the test itself.
+
+| Workflow | Result | Evidence |
+|---|---|---|
+| Login, logout, role permissions | Pass | `auth`, `login-failures`, `active-project`, role checks in most specs |
+| Project selection and isolation | Pass | `active-project`; §45 concurrency check |
+| Lead create, assign, stages, history | Pass | `leads-notifications`, `pipeline`, `lost-approval-history`, `lead-client-timeline`, `v1-critical-path` |
+| Follow-ups, tasks, meetings | Pass | `todos-paging`, `todos-lost-leads`, `questionnaire-screens`, `v1-critical-path` |
+| Client conversion, documents | Pass | `lead-client-timeline`, `client-documents`, `client-bookings` |
+| Booking create, confirm, cancel | Pass | `v1-critical-path`, `booking-lead-stage` |
+| Inventory, unit availability | Pass | `v1-critical-path`: Reserved, and no longer offered; `inventory-import`, `inventory-dimension-filters` |
+| Payments, reversals, entries, outstanding | Pass | `v1-critical-path`, `finance`, `finance-entries`, `outstanding-agents`, `payment-proofs` |
+| Dashboard figures, CSV exports | Pass | `dashboard`, `dashboard-links`, `finance`, `performance-page` |
+
+**Limits:** Chrome only, on desktop and a phone-sized window. Figures that wait on client decisions (§50) are correct to their current rules, not to rules still undecided.
+
+## 47. Production readiness (6 Nov 2026)
+
+| Area | Result | Evidence and limits |
+|---|---|---|
+| Secrets in git | Pass | No env or credential file in any commit; only `.env.example` placeholders |
+| Environment variables | Pass, with a gap | All 8 used by the app are named in `.env.example`. `BACKUP_DIR` and `BACKUP_REMOTE` are only in `RESTORE.md` |
+| Dependencies | Pass | `npm audit --omit=dev`: 0 vulnerabilities |
+| Migrations | Pass locally | 28, no drift, on development and test. Not run on a production server |
+| Backup | Pass locally | `backup.sh` ran on a real database. A corrupted copy was refused by its checksum |
+| Restore | Pass locally | Development backup restored into the disposable test database: all 6 row counts match. `restore-check` reported OK |
+| File storage | Pass, with limits | Outside `public/`, path checks, and upload rules tested in `files`. Production folder and ownership unverified |
+| Session security | Pass | HTTP-only, same-site, secure in production; sign-in rate limited |
+| Security headers | Pass | `security-headers` spec, including CSP on the new pages |
+| Error handling | Fixed | There were no error pages. Added `error.tsx`, `global-error.tsx` and `not-found.tsx`; they show no error details |
+| Logging | Basic | Errors go to the server log. No log rotation or error alerts; to be set up on the server |
+
+**Backup limits:**
+- Development holds 0 uploaded files, so the check that each stored file is in the archive had nothing to check.
+- The local database role can't create databases, so the temporary-database path was not run. The `RESTORE_CHECK_DATABASE` path was.
+- `rsync` is not installed here, so the off-server copy did not run.
+- File permissions on the backup could not be checked on Windows.
+- The nightly schedule does not exist yet.
+
+**Not verifiable until a server exists:** TLS, Caddy and the real client IP, production `FILE_STORAGE_DIR` permissions, the backup timer, and the live checks in `PRODUCTION_HANDOVER_CHECKLIST.md` §8.
+
+**Defect found and fixed.** `/api/v1/auth/login` still had the origin check replaced everywhere else on 31 Oct (`DEPLOYMENT_PROXY.md` §10). Behind Caddy, an API sign-in sending an `Origin` header would get a 403. The login page uses a server action, so normal sign-in was not affected. It now uses the shared check, and another origin is still refused.
+
+## 48. Presentation readiness (6 Nov 2026)
+
+- **`docs/V1_PRESENTATION_RUNBOOK.md`:** a 13-step walkthrough of about 20 minutes, the accounts, what not to demonstrate, and what to do if something goes wrong.
+- **`scripts/ops/presentation-preflight.mjs`:** a read-only check of what the walkthrough needs.
+- **Safe data:** it uses the local development database and records created on the day. Nothing touches production, and no demo database was created.
+
+**Action needed before presenting.** The preflight reports **0 available whole units** in development, and the booking form offers only whole units, so the booking step would have nothing to choose. Add at least two through Inventory → Add unit with sale model Whole. This was left to the project owner because it changes their data.
+
+All accounts the walkthrough needs have entries in `.dev-credentials`.
+
+## 49. Small fixes (6 Nov 2026)
+
+- **F-11 fixed.** An unknown report name exported Collections without warning; it is now refused. No report name still gives the default, so existing links work.
+- **Forged source and budget ids fixed.** They are now field errors, not a 500, on create and edit. Existence only: no inactive rule was added, because these lists have no admin screen.
+- **Overdue on bookings not done, deliberately.** The overdue figure is understated (F-14) and depends on C-27, so showing it would put a number known to be wrong in front of the client.
+
+**Tests:** `invalid-references.test.ts`, 5 tests. The forged-id tests failed before the fix; both F-11 breaks were caught. API checks are in `v1-critical-path.spec.ts`.
+
+## 50. V1 readiness status (6 Nov 2026)
+
+**Final verification:**
+
+| Check | Result |
+|---|---|
+| Typecheck, lint | Pass |
+| Vitest full | **64 files, 707 / 707** |
+| Schema drift | Clean, 28 migrations |
+| Build | 105 / 105 pages |
+| Playwright full | **162 / 162 in 11.3 min** |
+| Load test | Pass (§45) |
+
+**Not a first-run pass.** Vitest passed despite a sleep during its run (02:01 to 02:08), so its time is not meaningful. Playwright took three full runs. One failed because `client-bookings` expected the old default 404 wording; one failed on a timing race in the new critical-path test, confirmed from the page snapshot, fixed, then passed 5 of 5 repeats. Only tests changed between runs.
+
+**A harness mistake, fixed.** The first load-test version also cleared `payment_methods` in the test database, which the suites need. Its 5 rows were restored from the migrations' values, and the harness now leaves that table alone. Development data was not affected.
+
+**V1 readiness checklist:**
+
+| Item | Status |
+|---|---|
+| Core sale works through the real pages | Ready |
+| Roles and project isolation | Ready |
+| NFR-01, NFR-02 | Met on a laptop; rerun on the server |
+| Error pages | Ready |
+| Backup and restore | Work locally; schedule and off-server copy need a server |
+| Presentation runbook | Ready |
+| Whole units in development | **Action needed** |
+| Laptop on mains, lid open | **Action needed** |
+| Rehearsal | **Not done** |
+| Production deployment | Waits on the client (H-1 to H-5) |
+
+**Critical issues:** no open code defects. Two actions stand between now and a working presentation: add whole units, and keep the laptop on mains. It read as on battery at 02:50 and slept four times during runs.
+
+**Non-critical issues:**
+- **Form dropdowns at scale.** The meeting and task forms list only the first 1,000 leads by name, and the booking form lists all eligible leads. Fine at demo size, poor at 10k. Meetings can still start from the lead's page.
+- **Other pages load Zod in the browser** (§38): probably a CSP report on accounts, employees, holidays and roster. Not confirmed; those pages should still work.
+- **Size filter and stale filter links** (§44), and a blank External ID column (§40).
+- **No log rotation or error alerts** yet.
+- **The error page itself** is not exercised by a test, because no safe way to force a page failure exists. The 404 page is tested.
+- **Payment proofs** can't be removed or replaced (F-11, low).
+- **Browsers:** NFR-05 is still Chrome only. Edge, Safari and real phones are untested.
+
+**Client dependencies:**
+- **Infrastructure:** server, SSH, domain, database choice, off-server backup destination (H-1 to H-5), CDN answer (H-11), who maintains the server (H-12).
+- **Setup data:** first Super Admin (H-6), users (H-7), lookup lists (H-8), who enters projects and units (H-9), company details for proposals (H-10).
+- **Signed questionnaire:** S-1, which also unblocks Q31, Q36, Q45, Q50 and Q52.
+- **Decisions behind the 16 partial rows:** D-L1 (FR-005), C-15 (FR-009, FR-122), FR-011's deviation, Q-B1, Q-B3, Q-B4 (bookings), C-19 (calls), C-21 (receipts), C-25, C-27 (proposals, overdue), D-F1, D-F2 (finance), D-H1 (directory) and staff leave approvers.
+
+**Completion counts (recounted from the §24 matrix rows):** **57 implemented and verified, 16 partial, 0 not implemented, 7 blocked, 5 excluded** (85). Unchanged, because this round was verification.
+
+**Remaining agreed development:** about 1.25 developer-days: about 1 for the remaining §G tests and 0.25 for overdue on bookings, which waits on C-27. **Baseline:** Vitest 707 / 707, Playwright 162 / 162, build 105 / 105, 28 migrations.

@@ -109,6 +109,7 @@ describe.skipIf(!hasTestDb)("Performance (PostgreSQL integration)", () => {
       meetings: 2,
       signIns: 2,
       signOuts: 1,
+      avgFirstTouchMs: null,
     });
     expect(row(report, f.actors.agent2.id)).toMatchObject({ leads: 1, booked: 1, winPct: 100, fuPct: null });
     expect(report.summary).toMatchObject({ agents: 3, open: 2, booked: 2, lost: 2, winPct: 50, fuDue: 3, fuDone: 2, fuPct: 67, meetings: 2, signIns: 2 });
@@ -168,8 +169,8 @@ describe.skipIf(!hasTestDb)("Performance (PostgreSQL integration)", () => {
     expect(asc.rows.at(-1)?.name).toBe("Agent Outside");
     expect((await performanceReport(db, f.actors.superAdmin, {}, NOW)).range).toEqual({ from: "2026-09-29", to: "2026-10-29" });
     const csv = performanceCsv(byWin).split("\n");
-    expect(csv[0]).toBe("Agent,From,To,Open leads,Booked,Lost,Win %,Calls,Call min,F/U due,F/U done,F/U %,Meetings,CRM sign-ins,CRM sign-outs");
-    expect(csv[1]).toBe("Agent B,2026-10-01,2026-10-29,0,1,0,100,,,0,0,,0,0,0");
+    expect(csv[0]).toBe("Agent,From,To,Open leads,Booked,Lost,Win %,Calls,Call min,F/U due,F/U done,F/U %,Meetings,CRM sign-ins,CRM sign-outs,Avg first touch (min)");
+    expect(csv[1]).toBe("Agent B,2026-10-01,2026-10-29,0,1,0,100,,,0,0,,0,0,0,");
     expect(byWin.page).toBe(1);
     expect(byWin.pageCount).toBe(1);
   });

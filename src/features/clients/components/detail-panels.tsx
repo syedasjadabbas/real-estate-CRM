@@ -1,5 +1,6 @@
 "use client";
 
+import { OTHER_CITY } from "@/modules/cities/constants";
 import { Check } from "lucide-react";
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
@@ -36,7 +37,8 @@ export function EditClientForm({ detail, cities }: { detail: ClientDetail; citie
     phoneCountryCode: client.phoneCountryCode,
     phoneNumber: client.phoneNumber,
     email: client.email ?? "",
-    cityId: client.cityId ?? "",
+    cityId: client.cityOther ? OTHER_CITY : (client.cityId ?? ""),
+    cityOther: client.cityOther ?? "",
     relationship: client.relationship ?? "",
   };
   const [values, setValues] = useState(initial);
@@ -69,6 +71,7 @@ export function EditClientForm({ detail, cities }: { detail: ClientDetail; citie
         onChange={(p) => setValues((v) => ({ ...v, ...p }))}
         errors={errors}
         cities={cities}
+        currentCity={client.cityId ? { id: client.cityId, name: client.cityName } : null}
         disabled={pending || !detail.permissions.edit}
       />
       {detail.permissions.edit ? (

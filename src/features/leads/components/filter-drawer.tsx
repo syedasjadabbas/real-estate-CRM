@@ -137,7 +137,7 @@ export function LeadFilterDrawer({
         />
         <ChipGroup
           label="City"
-          options={lookups.cities.map((c) => ({ value: c.id, label: c.name }))}
+          options={lookups.filterCities.map((c) => ({ value: c.id, label: c.name }))}
           selected={split(params.city)}
           onChange={(v) => set("city", v)}
         />

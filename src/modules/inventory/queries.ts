@@ -1,3 +1,4 @@
+import { AREA_FILTER, DIMENSION_FIELD, DIMENSION_KEYS, DIMENSION_LABELS } from "./constants";
 import { and, asc, count, desc, eq, ilike, isNotNull, or, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { Database } from "@/server/db";
@@ -66,7 +67,33 @@ const SORTS: Record<UnitSortColumn, SQL> = {
 export type UnitRow = Awaited<ReturnType<typeof listUnits>>["rows"][number];
 
 /**
- * FR-073 list: search, project, status, nature, sale model. `defaultProjectId` is the header
+ * FR-061: one filter per dimension of a single project. Options are the project's configured list,
+ * then any other values its units hold, so units entered before configuration stay findable.
+ * Size has no configured list, so it offers the areas in use. Dimensions with no values are left out.
+ */
+async function projectDimensionFilters(db: Database, projectId: string) {
+  const [[project], areas, ...used] = await Promise.all([
+    db.select({ dimensionConfig: projects.dimensionConfig }).from(projects).where(eq(projects.id, projectId)),
+    db.selectDistinct({ area: units.areaSqft }).from(units).where(eq(units.projectId, projectId)).orderBy(asc(units.areaSqft)),
+    ...DIMENSION_KEYS.map((key) => {
+      const column = units[DIMENSION_FIELD[key]];
+      return db.selectDistinct({ value: column }).from(units).where(and(eq(units.projectId, projectId), isNotNull(column))).orderBy(asc(column));
+    }),
+  ]);
+  const filters = DIMENSION_KEYS.map((key, i) => {
+    const seen = new Set<string>();
+    const options = [...(project?.dimensionConfig[key] ?? []), ...used[i].map((r) => r.value as string)].filter((v) => {
+      const folded = v.toLowerCase();
+      return !seen.has(folded) && seen.add(folded);
+    });
+    return { param: DIMENSION_FIELD[key] as string, label: DIMENSION_LABELS[key], options: options.map((v) => ({ value: v, label: v })) };
+  });
+  const size = { param: AREA_FILTER as string, label: "Sizes", options: areas.map((r) => ({ value: String(r.area), label: `${r.area.toLocaleString("en-US")} sq ft` })) };
+  return [...filters, size].filter((f) => f.options.length > 0);
+}
+
+/**
+ * FR-073 list: search, project, status, nature, sale model, and FR-061 dimensions. `defaultProjectId` is the header
  * project, used when the URL names none (ASSUMED: the reference scopes lists by the header project
  * and also offers a Project filter); `project=all` lists every project.
  */
@@ -80,9 +107,15 @@ export async function listUnits(db: Database, actor: Actor, rawQuery: unknown, d
     query.status ? eq(units.status, query.status) : undefined,
     query.saleModel ? eq(units.saleModel, query.saleModel) : undefined,
     query.nature ? sql`lower(${units.nature}) = lower(${query.nature})` : undefined,
+    ...DIMENSION_KEYS.map((key) => {
+      const field = DIMENSION_FIELD[key];
+      const value = query[field];
+      return value ? sql`lower(${units[field]}) = lower(${value})` : undefined;
+    }),
+    query.area ? eq(units.areaSqft, query.area) : undefined,
   );
 
-  const [[{ total }], natures, byStatus] = await Promise.all([
+  const [[{ total }], natures, byStatus, dimensionFilters] = await Promise.all([
     db.select({ total: count() }).from(units).where(where),
     db
       .selectDistinct({ nature: units.nature })
@@ -94,6 +127,7 @@ export async function listUnits(db: Database, actor: Actor, rawQuery: unknown, d
       .from(units)
       .where(projectId ? eq(units.projectId, projectId) : undefined)
       .groupBy(units.status),
+    projectId ? projectDimensionFilters(db, projectId) : [],
   ]);
   const pageCount = Math.max(1, Math.ceil(total / UNIT_PAGE_SIZE));
   const page = Math.min(query.page, pageCount);
@@ -117,6 +151,7 @@ export async function listUnits(db: Database, actor: Actor, rawQuery: unknown, d
     pageCount,
     pageSize: UNIT_PAGE_SIZE,
     natures: natures.map((n) => n.nature as string),
+    dimensionFilters,
     statusCounts: Object.fromEntries(byStatus.map((s) => [s.status, s.n])) as Partial<Record<(typeof units.$inferSelect)["status"], number>>,
     rows,
   };

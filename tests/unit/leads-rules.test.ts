@@ -125,7 +125,7 @@ describe("validation", () => {
     const q = leadListQuerySchema.parse({ view: "bogus", page: "-4", sort: "drop table", stage: "contacted,nope" });
     expect(q.view).toBe("all");
     expect(q.page).toBe(1);
-    expect(q.sort).toBe("createdAt");
+    expect(q.sort).toBeUndefined(); // the query applies the default, so the Regenerated view can tell none was chosen
     expect(q.stage).toEqual([]);
   });
 

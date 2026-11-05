@@ -52,6 +52,8 @@ export type AgentMetrics = {
   meetings: number;
   signIns: number;
   signOuts: number;
+  /** FR-028: mean time from creation to first touch, over the leads counted here that have one. Null if none do. */
+  avgFirstTouchMs: number | null;
 };
 
 const n = (v: unknown) => Number(v ?? 0);
@@ -76,6 +78,7 @@ async function agentMetrics(db: Database, agents: { id: string; name: string }[]
         total: sql<number>`count(*)::int`,
         booked: sql<number>`count(*) filter (where ${leads.stage} = 'booked')::int`,
         lost: sql<number>`count(*) filter (where ${leads.stage} = 'lost_lead')::int`,
+        avgFirstTouchMs: sql<string | null>`avg(extract(epoch from (${leads.firstTouchAt} - ${leads.createdAt})) * 1000)`,
       })
       .from(leads)
       .where(and(inArray(leads.ownerId, ids), isNull(leads.deletedAt), sql`${assignedAt} >= ${window.start}`, sql`${assignedAt} < ${window.end}`))
@@ -127,6 +130,7 @@ async function agentMetrics(db: Database, agents: { id: string; name: string }[]
       meetings: n(meetingRows.find((r) => r.userId === a.id)?.done),
       signIns: n(s?.ins),
       signOuts: n(s?.outs),
+      avgFirstTouchMs: l?.avgFirstTouchMs == null ? null : Math.round(Number(l.avgFirstTouchMs)),
     };
   });
 }
@@ -137,7 +141,7 @@ function sortRows(rows: AgentMetrics[], sort: PerformanceSort, dir: "asc" | "des
   return [...rows].sort((a, b) => {
     const x = a[key as keyof AgentMetrics];
     const y = b[key as keyof AgentMetrics];
-    // Missing percentages (no decided leads / no follow-ups due) sort last either way.
+    // Missing values (no decided leads, no follow-ups due, no touched leads) sort last either way.
     if (x === null && y !== null) return 1;
     if (y === null && x !== null) return -1;
     const c = typeof x === "string" ? x.localeCompare(String(y)) : Number(x) - Number(y);
@@ -208,9 +212,9 @@ export function performanceCsv(report: PerformanceReport) {
     const s = v === null ? "" : String(v);
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  const header = ["Agent", "From", "To", "Open leads", "Booked", "Lost", "Win %", "Calls", "Call min", "F/U due", "F/U done", "F/U %", "Meetings", "CRM sign-ins", "CRM sign-outs"];
+  const header = ["Agent", "From", "To", "Open leads", "Booked", "Lost", "Win %", "Calls", "Call min", "F/U due", "F/U done", "F/U %", "Meetings", "CRM sign-ins", "CRM sign-outs", "Avg first touch (min)"];
   const lines = report.allRows.map((r) =>
-    [r.name, report.range.from, report.range.to, r.open, r.booked, r.lost, r.winPct, "", "", r.fuDue, r.fuDone, r.fuPct, r.meetings, r.signIns, r.signOuts].map(esc).join(","),
+    [r.name, report.range.from, report.range.to, r.open, r.booked, r.lost, r.winPct, "", "", r.fuDue, r.fuDone, r.fuPct, r.meetings, r.signIns, r.signOuts, r.avgFirstTouchMs === null ? null : Math.round(r.avgFirstTouchMs / 60_000)].map(esc).join(","),
   );
   return [header.join(","), ...lines].join("\n") + "\n";
 }

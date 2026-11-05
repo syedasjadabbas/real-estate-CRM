@@ -1,13 +1,16 @@
 import { leadLink, notify, teamManagersOf } from "@/modules/notifications/service";
 import { and, asc, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { businessToday } from "@/modules/bookings/today";
+import { resolveCity } from "@/modules/cities/resolve";
 import type { Database } from "@/server/db";
 import {
   approvals,
+  budgetRanges,
   followUps,
   leadActivities,
   leadFavorites,
   leadReviews,
+  leadSources,
   leads,
   lostReasons,
   projects,
@@ -37,6 +40,12 @@ import {
   updateLeadSchema,
 } from "./validation";
 import type { z } from "zod";
+
+/** A forged or removed list id is a field error, not a foreign key failure. */
+async function assertListValue(tx: Tx, table: typeof leadSources | typeof budgetRanges, id: string, field: "sourceId" | "budgetRangeId") {
+  const [row] = await tx.select({ id: table.id }).from(table).where(eq(table.id, id));
+  if (!row) throw new AppError("VALIDATION_FAILED", "Check the highlighted fields.", { fields: { [field]: "Choose a value from the list" } });
+}
 
 function parse<S extends z.ZodType>(schema: S, input: unknown): z.output<S> {
   const result = schema.safeParse(input);
@@ -243,6 +252,9 @@ export async function createLead(db: Database, actor: Actor, input: unknown): Pr
       if (!ownerId && actor.role === "manager") ownerId = actor.id;
     }
 
+    await assertListValue(tx, leadSources, data.sourceId, "sourceId");
+    if (data.budgetRangeId) await assertListValue(tx, budgetRanges, data.budgetRangeId, "budgetRangeId");
+    const city = await resolveCity(tx, data);
     const values = {
       projectId: data.projectId,
       ownerId,
@@ -251,7 +263,7 @@ export async function createLead(db: Database, actor: Actor, input: unknown): Pr
       phoneNumber: phone.national,
       phoneE164: phone.e164,
       email: data.email ?? null,
-      cityId: data.cityId ?? null,
+      ...city,
       gender: data.gender ?? null,
       sourceId: data.sourceId,
       budgetRangeId: data.budgetRangeId ?? null,
@@ -330,10 +342,16 @@ export async function updateLead(db: Database, actor: Actor, leadId: string, inp
       changes.phoneE164 = phone.e164;
     }
     if ("email" in data) changes.email = data.email ?? null;
-    if ("cityId" in data) changes.cityId = data.cityId ?? null;
+    if ("cityId" in data) Object.assign(changes, await resolveCity(tx, data, lead));
     if ("gender" in data) changes.gender = data.gender ?? null;
-    if (data.sourceId !== undefined) changes.sourceId = data.sourceId;
-    if ("budgetRangeId" in data) changes.budgetRangeId = data.budgetRangeId ?? null;
+    if (data.sourceId !== undefined) {
+      await assertListValue(tx, leadSources, data.sourceId, "sourceId");
+      changes.sourceId = data.sourceId;
+    }
+    if ("budgetRangeId" in data) {
+      if (data.budgetRangeId) await assertListValue(tx, budgetRanges, data.budgetRangeId, "budgetRangeId");
+      changes.budgetRangeId = data.budgetRangeId ?? null;
+    }
     if ("desiredSize" in data) changes.desiredSize = data.desiredSize ?? null;
     if (data.priority !== undefined) changes.priority = data.priority;
 

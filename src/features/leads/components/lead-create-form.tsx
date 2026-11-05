@@ -40,6 +40,7 @@ export function LeadCreateForm({
     budgetRangeId: "",
     priority: "none",
     cityId: "",
+    cityOther: "",
   });
   const [projectId, setProjectId] = useState(defaultProjectId);
   const [ownerId, setOwnerId] = useState("");

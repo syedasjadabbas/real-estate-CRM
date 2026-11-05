@@ -39,7 +39,7 @@ const listSelection = {
   phoneNumber: clients.phoneNumber,
   email: clients.email,
   relationship: clients.relationship,
-  cityName: cities.name,
+  cityName: sql<string | null>`coalesce(${cities.name}, ${clients.cityOther})`.as("city_name"),
   ownerId: clients.ownerId,
   ownerName: owner.name,
   nextFollowUpAt: clients.nextFollowUpAt,
@@ -131,8 +131,7 @@ export async function getClientDetail(db: Database, actor: Actor, clientId: stri
       .from(clientActivities)
       .leftJoin(actorUser, eq(actorUser.id, clientActivities.actorId))
       .where(eq(clientActivities.clientId, clientId))
-      .orderBy(desc(clientActivities.createdAt))
-      .limit(100),
+      .orderBy(desc(clientActivities.createdAt)),
     db
       .select({
         id: clientFollowUps.id,
@@ -156,6 +155,7 @@ export async function getClientDetail(db: Database, actor: Actor, clientId: stri
       phone: formatPhone(row.phoneCountryCode, row.phoneNumber),
       phoneE164: client.phoneE164,
       cityId: client.cityId,
+      cityOther: client.cityOther,
       lastActivityAt: client.lastActivityAt,
     },
     linkedLeads: visibleLeads,

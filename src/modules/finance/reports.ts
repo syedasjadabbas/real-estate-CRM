@@ -4,7 +4,7 @@ import { incomeExpenseByMonth } from "./entries";
 import type { Database } from "@/server/db";
 import { auditLogs, bookingPayments, bookings, projects } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
-import { forbidden } from "@/server/errors";
+import { AppError, forbidden } from "@/server/errors";
 import { businessToday } from "@/modules/bookings/today";
 import { toPaisa } from "./ledger";
 import { canDoFinance } from "./policy";
@@ -100,7 +100,10 @@ const csv = (header: string[], lines: (string | number | null)[][]) => [header.j
 
 /** CSV for a report (FR-205), audited as `finance.report_export` with the totals exported. */
 export async function exportReport(db: Database, actor: Actor, input: Record<string, unknown>) {
-  const kind = z.enum(REPORT_KINDS).catch("collections").parse(input.report);
+  // A name we don't know is refused: quietly exporting another report would hand over the wrong figures (F-11).
+  const report = z.enum(REPORT_KINDS).default("collections").safeParse(input.report);
+  if (!report.success) throw new AppError("VALIDATION_FAILED", "Unknown report.", { fields: { report: "Choose a report from the list" } });
+  const kind = report.data;
   let body: string;
   let filename: string;
   let summary: Record<string, unknown>;
