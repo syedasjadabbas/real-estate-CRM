@@ -26,6 +26,7 @@ export const dashboardQuerySchema = z.object({
 });
 export type DashboardQuery = z.output<typeof dashboardQuerySchema>;
 
+const ROLLING_RANGES: RangeKey[] = ["24h", "7d", "30d", "6m"];
 export const STALE_DAYS = 14;
 export const MEETING_WINDOW_DAYS = 30;
 const DAY = 86_400_000;
@@ -228,6 +229,11 @@ export async function dashboardData(db: Database, actor: Actor, projectId: strin
     leadSources: sources,
     inboundChannels: channels.map((c) => ({ id: c.channel, label: INBOUND_LABELS[c.channel], count: c.count })),
     lost: lostBreakdown(lostReasonRows, lostTeamRows, start, end),
+    listParams: {
+      // Rolling ranges start mid-day, so whole days would list more leads than the tile counts.
+      ...(ROLLING_RANGES.includes(range) ? { createdFrom: start.toISOString(), createdTo: end.toISOString() } : { from: businessDay(start), to: businessDay(new Date(end.getTime() - 1)) }),
+      ...(team ? { team } : {}),
+    },
     recentLeads: recent.map((r) => ({
       id: r.id,
       name: r.name,

@@ -220,3 +220,10 @@ export function inactiveUserWithPassword(email: string) {
     return email;
   });
 }
+
+/** Backdates a lead's creation, for checks around a dashboard window. */
+export function setLeadCreatedHoursAgo(leadId: string, hours: number) {
+  return withDb(async (db) => {
+    await db.update(leads).set({ createdAt: new Date(Date.now() - hours * 3_600_000) }).where(eq(leads.id, leadId));
+  });
+}

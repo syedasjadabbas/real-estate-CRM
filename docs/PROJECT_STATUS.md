@@ -1588,10 +1588,10 @@ Requested as "F-4"; in the §17 findings table this is **F-6** (F-4 there is the
 
 ## 24. Final Completion Reconciliation (4 Nov 2026, commit 7986782)
 
-> **Current status (updated 5 Nov 2026, §34).** The summary table, finding rows and requirement matrix below are kept current. The narrative, estimates and §C – §I are the 4 Nov baseline.
-> - **Fixed since:** F-13 (§25), F-15 (§27), F-9 (§28), F-20 (§30), F-16 (§31), F-24 / FR-027 (§32), F-23 (§33), F-10 (§34). F-7 was assessed as blocked by D-F1 (§26).
-> - **Counts now:** 49 implemented and verified, 24 partial, 0 not implemented, 7 blocked, 5 excluded.
-> - **Remaining agreed development:** about 5.3 developer-days.
+> **Current status (updated 5 Nov 2026, §35).** The summary table, finding rows and requirement matrix below are kept current. The narrative, estimates and §C – §I are the 4 Nov baseline.
+> - **Fixed since:** F-13 (§25), F-15 (§27), F-9 (§28), F-20 (§30), F-16 (§31), F-24 / FR-027 (§32), F-23 (§33), F-10 (§34), FR-010 tile links (§35). F-7 was assessed as blocked by D-F1 (§26).
+> - **Counts now:** 50 implemented and verified, 23 partial, 0 not implemented, 7 blocked, 5 excluded.
+> - **Remaining agreed development:** about 4.8 developer-days.
 
 **Method.**
 - **Authority order:** the quotation first, then `REQUIREMENTS.md`, then the 53 questionnaire answers (received, but unsigned: S-1).
@@ -1607,8 +1607,8 @@ Requested as "F-4"; in the §17 findings table this is **F-6** (F-4 there is the
 
 | Status | Requirements now | On 4 Nov |
 |---|---|---|
-| Implemented and verified | **49** | 45 |
-| Partially implemented | **24** | 28 |
+| Implemented and verified | **50** | 45 |
+| Partially implemented | **23** | 28 |
 | Not implemented | **0** | 0 |
 | Blocked by client decision | **7** | 7 |
 | Excluded from agreed scope | **5** | 5 |
@@ -1685,7 +1685,7 @@ FR-005 reads: "List pages support search, a filter panel, column sorting and pag
 | FR-007 | Responsive at 375 px | IV | Collapsing shell | `components/shell/app-shell.tsx` | responsive.spec (7 pages) | T | — | Yes |
 | FR-008 | Audit log of all changes | IV | All exported writes audited | §22, `audit/service.ts` | audit.test, audit-log.spec | T | — | Yes |
 | FR-009 | App settings incl. rotation | PI | Cap, price and ROI work; no lead-rotation setting exists | `tasks/settings.ts:15`, `leads/commands.ts:77` | tasks | T | Define with C-15 what rotation settings mean, then build | Yes* |
-| FR-010 | KPI tiles match lists | PI | Tiles correct; custom range matches. Rolling-range and team links can differ. "Regenerated" counts leads created in range | `dashboard/queries.ts:34,129` | dashboard, list-controls | T* | Pass exact range and team to the list | Yes |
+| FR-010 | KPI tiles match lists | IV | Tiles open the same leads they count, for every range and the team filter; Open pipeline links. Formulas unchanged and still to be confirmed by the client | `dashboard/queries.ts` `listParams`, `leads/queries.ts` `teamFilter`, §35 | dashboard-links (integration, e2e), dashboard, list-controls | T | — | Yes |
 | FR-011 | Date chips recalc all widgets | PI | Chips and team filter work. Stale, no-meeting, meetings-done and recent ignore the range (planned deviation) | `dashboard/queries.ts`, `DASHBOARD_PLAN.md:47–50` | dashboard | T | Client accepts the deviation, or scope the widgets | Yes |
 | FR-012 | Source and channel breakdown | IV | Counts and % | `dashboard/queries.ts:134` | dashboard.test | T | — | Yes |
 | FR-013 | Pipeline health | IV | Stale ≥14 d, no meeting, meetings done | `dashboard/queries.ts:159` | dashboard.test | T | — | Yes |
@@ -2509,3 +2509,71 @@ Both suites were slower than the fastest recent runs (Vitest 435 s, Playwright 8
 **Completion counts, unchanged:** 49 implemented and verified, 24 partial, 0 not implemented, 7 blocked, 5 excluded. They were recounted from the §24 matrix rows, which were brought up to date in this round. FR-001 and FR-002 were already met; NFR-04 stays partial until live checks run.
 
 **Remaining agreed development:** about 5.3 developer-days. **Baseline:** Vitest 563 / 563, Playwright 124 / 124, build 103 / 103, 25 migrations.
+
+## 35. FR-010 fixed: dashboard tiles open the leads they count (5 Nov 2026)
+
+**Requirement.** FR-010: "Numbers match the leads list for the same scope and range." In the agreement, under Dashboard → "Sales overview" and "Lead & pipeline statistics".
+
+**What was wrong, tile by tile:**
+
+| Tile | Before | Now |
+|---|---|---|
+| Total leads | Whole days only, no team | Same leads as the tile |
+| Open pipeline | **No link** | Links to those leads (all but Booked and Lost) |
+| Won / Lost | Whole days only, no team | Same leads as the Won figure |
+| Regenerated | Whole days only, no team | Same range and team. **Formula unchanged** |
+| Lost by reason | Whole days only, no team | Same range and team |
+| Conversion rate | No link | Unchanged: it's a percentage, with no list to open |
+
+**Root cause.** Links carried only whole dates, and the leads list had no team filter. Rolling ranges (24h, 7d, 30d, 6m) start mid-day, so the list also showed leads from before the window, and a selected team was dropped.
+
+**What changed:**
+- **Dashboard.** `dashboardData` returns `listParams`, the query behind its figures. Rolling ranges pass the exact start and end; month to date and custom keep their day dates, which already matched.
+- **Leads list.** New `createdFrom`, `createdTo` and `team` filters, validated, in the database. Bad values are ignored.
+- **Team permission.** Checked on the server, as the dashboard does: Admins and Super Admins any team, managers their own, agents none. An unauthorised team is ignored, and lead scope always still applies.
+- **Visible state.** The list shows "Opened from the dashboard: …" when these filters apply, and Clear removes them, so it is never silently narrowed.
+
+**Unchanged:** every KPI formula, including Regenerated; project scope; role access. **Migration:** none; still 25, no drift. No data changed.
+
+**Client dependency, reported rather than changed.** All dashboard formulas are marked "to be confirmed by the client" (DASHBOARD_PLAN §3). Regenerated still counts leads *created* in the range and flagged as re-inquiries, not re-inquiries that happened in the range. Its link now matches that number, whichever definition the client confirms later. §24.C item 8 listed a "regenerated count" change; that was not done, as instructed.
+
+**Won / Lost** is one tile with two numbers and links to Won. Lost is reached from the Lost by reason panel; a second link on the tile would be a design change.
+
+**Files changed:**
+- `modules/dashboard/queries.ts`; `features/dashboard/types.ts`
+- `features/dashboard/components/executive-essentials.tsx`, `lost-leads.tsx`, `dashboard-view.tsx`
+- `modules/leads/queries.ts`, `modules/leads/validation.ts`
+- `features/leads/url.ts`, `features/leads/components/list-view.tsx`
+- `tests/integration/dashboard-links.test.ts` and `e2e/dashboard-links.spec.ts` (both new); `e2e/support/data.ts`
+
+**Tests:**
+- `dashboard-links.test.ts`, 6 tests:
+  - **Parity:** every tile's number equals its list, for all six ranges, with leads on both sides of each window edge and another project's lead excluded.
+  - **Destination and filter state:** exact window for rolling ranges, dates for the others.
+  - **Team:** carried through for every range and tile.
+  - **Permissions:** manager, agent, an unauthorised team, HR and accountant.
+  - **Empty results:** an empty range and an empty team give zero on both sides.
+  - **Unchanged:** formulas, and invalid parameters ignored.
+- **Checked to be meaningful:** with the old links restored, 4 failed.
+- `dashboard-links.spec.ts`: a 24h tile leaving out a lead from just before the window, the note and Clear, on desktop and mobile; on desktop, the team reaching the list, Open pipeline, Won and Regenerated keeping the range, and a manager unable to widen a list.
+
+**Verification (first full run, no failures):**
+
+| Check | Result |
+|---|---|
+| Typecheck, lint | Pass |
+| Dashboard and lead tests | 44 / 44 |
+| Vitest full | **55 files, 569 / 569** in 338 s |
+| Schema drift | Clean, 25 migrations |
+| Build | 103 / 103 pages |
+| Playwright full | **128 / 128 in 9.8 min** |
+
+**Remaining risks:**
+- **A rolling link is a snapshot.** It keeps the exact window from when the dashboard loaded, so a bookmarked link doesn't roll forward, and a lead added since isn't in it. That's what keeps the numbers equal.
+- **Team means current membership.** A lead counts for a team by its owner's team today, on both sides, so moving an agent moves their leads.
+- **An inactive team** can still be typed into the URL by an Admin; the dashboard only offers active ones. It filters correctly and exposes nothing an Admin can't see.
+- **FR-011 stays partial:** Stale, No meeting, Meetings done and Recent leads ignore the range by plan. The client should accept that or ask for a change.
+
+**Completion counts (recounted from the §24 matrix rows):** FR-010 moves to Implemented and verified. **50 implemented and verified, 23 partial, 0 not implemented, 7 blocked, 5 excluded** (85).
+
+**Remaining agreed development:** about 4.8 developer-days. **Baseline:** Vitest 569 / 569, Playwright 128 / 128, build 103 / 103, 25 migrations.

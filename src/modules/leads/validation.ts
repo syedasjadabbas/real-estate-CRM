@@ -106,6 +106,10 @@ export const leadListQuerySchema = z.object({
   dateField: z.enum(["created", "updated"]).catch("created"),
   from: dateParam.catch(undefined),
   to: dateParam.catch(undefined),
+  /** Exact window and team from a dashboard tile (FR-010): rolling ranges start mid-day. */
+  createdFrom: z.iso.datetime().optional().catch(undefined),
+  createdTo: z.iso.datetime().optional().catch(undefined),
+  team: z.uuid().optional().catch(undefined),
   sort: z.enum(SORTABLE_COLUMNS).catch("createdAt"),
   dir: z.enum(["asc", "desc"]).catch("desc"),
   page: z.coerce.number().int().min(1).max(10_000).catch(1),

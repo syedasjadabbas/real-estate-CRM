@@ -11,8 +11,12 @@ import { ProgressBar, StackedBar } from "@/components/ui/progress";
 import { SegmentedControl } from "@/components/ui/segmented";
 import { KpiCard } from "@/components/ui/stat";
 import { formatCompact, formatInt, formatPct, formatTime, NO_VALUE } from "@/lib/format";
+import { LEAD_STAGES } from "@/modules/leads/constants";
 import type { DashboardData, DashboardFilters, RangeKey } from "../types";
 import { rangeOptions } from "./range-options";
+
+/** Stages the Open pipeline tile counts: everything but Booked and Lost. */
+const OPEN_STAGES = LEAD_STAGES.filter((s) => s !== "booked" && s !== "lost_lead").join(",");
 
 function SplitLegend({ open, won, lost }: { open: number | null; won: number | null; lost: number | null }) {
   const items = [
@@ -71,9 +75,12 @@ export function ExecutiveEssentials({ data, filters = { range: "mtd" } }: { data
     go({ range: value, team: filters.team });
   };
   const maxProject = Math.max(1, ...data.topProjects.map((p) => p.count));
-  // KPI tiles open the matching list for the same days (leads created in the range; MODULES_AND_FEATURES §1).
-  const days = data.lost ? `?${new URLSearchParams({ from: data.lost.from, to: data.lost.to })}` : "";
-  const listHref = (path: string) => (data.isSample ? undefined : `${path}${days}`);
+  // KPI tiles open the matching list: the same leads, window and team (MODULES_AND_FEATURES §1, FR-010).
+  const listHref = (path: string, extra: Record<string, string> = {}) => {
+    if (data.isSample) return undefined;
+    const query = new URLSearchParams({ ...data.listParams, ...extra }).toString();
+    return query ? `${path}?${query}` : path;
+  };
 
   return (
     <section aria-labelledby="exec-title">
@@ -112,6 +119,8 @@ export function ExecutiveEssentials({ data, filters = { range: "mtd" } }: { data
             tone="amber"
             category="In progress"
             label="Open pipeline"
+            href={listHref("/dashboard/leads", { stage: OPEN_STAGES })}
+            linkLabel="Open the leads still in progress for these days"
             value={<span className="text-amber-800">{formatCompact(kpis?.openPipeline)}</span>}
             caption={`${formatPct(kpis?.openPipelinePct)} still active`}
           />

@@ -14,6 +14,7 @@ import {
   lostReasons,
   projects,
   teamMembers,
+  teams,
   users,
 } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
@@ -69,7 +70,22 @@ function filterConditions(query: LeadListQuery, now: Date): SQL[] {
   const dateCol = query.dateField === "updated" ? leads.updatedAt : leads.createdAt;
   if (query.from) out.push(sql`${dayExpr(dateCol)} >= ${query.from}::date`);
   if (query.to) out.push(sql`${dayExpr(dateCol)} <= ${query.to}::date`);
+  if (query.createdFrom) out.push(gte(leads.createdAt, new Date(query.createdFrom)));
+  if (query.createdTo) out.push(lt(leads.createdAt, new Date(query.createdTo)));
   return out;
+}
+
+/**
+ * The dashboard's team filter on a list: leads owned by the team's members. Like the dashboard, a
+ * team the actor can't filter by is ignored; lead scope still applies on top either way.
+ */
+async function teamFilter(db: Database, actor: Actor, teamId: string | undefined) {
+  const scope = leadScope(actor.role);
+  if (!teamId || (scope !== "all" && !(scope === "team" && actor.managedTeamIds.includes(teamId)))) return { condition: undefined, teamName: null };
+  const [team] = await db.select({ name: teams.name }).from(teams).where(eq(teams.id, teamId)).limit(1);
+  if (!team) return { condition: undefined, teamName: null };
+  const owners = (await db.select({ id: teamMembers.userId }).from(teamMembers).where(eq(teamMembers.teamId, teamId))).map((r) => r.id);
+  return { condition: owners.length ? inArray(leads.ownerId, owners) : sql`false`, teamName: team.name };
 }
 
 function viewConditions(query: LeadListQuery): SQL[] {
@@ -139,7 +155,8 @@ export async function listLeads(db: Database, actor: Actor, projectId: string, r
   if (!canDo(actor, "view")) throw forbidden();
   const query = leadListQuerySchema.parse(rawQuery ?? {});
   const members = await teamMemberIds(db, actor);
-  const where = and(...baseConditions(actor, members, projectId), ...filterConditions(query, now), ...viewConditions(query));
+  const { condition: inTeam, teamName } = await teamFilter(db, actor, query.team);
+  const where = and(...baseConditions(actor, members, projectId), ...filterConditions(query, now), ...viewConditions(query), inTeam);
 
   const orderBy =
     query.view === "regenerated"
@@ -175,6 +192,7 @@ export async function listLeads(db: Database, actor: Actor, projectId: string, r
   return {
     generatedAt: now.getTime(),
     query: { ...query, page },
+    teamName,
     total,
     page,
     pageCount,

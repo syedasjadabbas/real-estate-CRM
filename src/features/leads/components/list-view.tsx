@@ -9,6 +9,7 @@ import { canDo, leadScope } from "@/modules/leads/policy";
 import { leadLookups, listLeads } from "@/modules/leads/queries";
 import type { Actor } from "@/server/auth/types";
 import { leadsContext } from "../context";
+import { formatDateTime } from "../format";
 import { flattenParams, type SearchParams } from "../url";
 import { LeadsTable } from "./leads-table";
 import { LeadsToolbar } from "./leads-toolbar";
@@ -81,6 +82,12 @@ export async function LeadsListView({
         />
         <ScopeNotice actor={actor} />
         {before}
+        {result.teamName || result.query.createdFrom || result.query.createdTo ? (
+          <p role="note" className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-900">
+            Opened from the dashboard: {result.teamName ? `${result.teamName} · ` : ""}
+            {result.query.createdFrom ? `created ${formatDateTime(result.query.createdFrom)} to ${formatDateTime(result.query.createdTo)}` : "the selected days"}. Clear the filters to see all leads.
+          </p>
+        ) : null}
         <LeadsToolbar params={params} total={result.total} lookups={lookups} />
         <LeadsTable
           rows={result.rows}

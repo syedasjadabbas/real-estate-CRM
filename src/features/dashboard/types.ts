@@ -87,6 +87,8 @@ export type DashboardData = {
   inboundChannels: NamedCount[];
   recentLeads: RecentLead[];
   lost: LostBreakdown | null;
+  /** Query that opens the leads behind these figures: same window and team (FR-010). */
+  listParams?: Record<string, string>;
 };
 
 export const emptyDashboardData: DashboardData = {

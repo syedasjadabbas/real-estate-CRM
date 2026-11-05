@@ -11,11 +11,11 @@ import type { LostBreakdown } from "../types";
  * FR-016: lost leads (created in the selected range and now Lost) by reason and by team. A reason
  * opens the Lost list filtered to it for the same days; a team expands to its agents.
  */
-export function LostLeads({ data }: { data: LostBreakdown | null }) {
+export function LostLeads({ data, listParams }: { data: LostBreakdown | null; listParams?: Record<string, string> }) {
   const maxReason = Math.max(1, ...(data?.byReason.map((r) => r.count) ?? [1]));
   const maxTeam = Math.max(1, ...(data?.byTeam.map((t) => t.count) ?? [1]));
   const reasonHref = (id: string) => {
-    const p = new URLSearchParams({ from: data!.from, to: data!.to, lostReason: id });
+    const p = new URLSearchParams({ ...(listParams ?? { from: data!.from, to: data!.to }), lostReason: id });
     return `/dashboard/leads/lost?${p.toString()}`;
   };
 

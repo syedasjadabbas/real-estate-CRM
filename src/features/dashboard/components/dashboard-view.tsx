@@ -32,7 +32,7 @@ export function DashboardView({ data, user, filters }: { data: DashboardData; us
           emptyMessage="No inbound channels recorded yet."
         />
       </div>
-      <LostLeads data={data.snapshotAt ? data.lost : null} />
+      <LostLeads data={data.snapshotAt ? data.lost : null} listParams={data.listParams} />
       <RecentLeads leads={data.recentLeads} />
     </div>
   );
