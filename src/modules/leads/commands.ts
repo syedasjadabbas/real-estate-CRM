@@ -587,11 +587,19 @@ export async function decideLostRequest(db: Database, actor: Actor, approvalId: 
       .set({ status: approve ? "approved" : "rejected", decidedById: actor.id, decidedAt: now, decisionComment: comment ?? null })
       .where(eq(approvals.id, approvalId));
 
-    if (approve && lead.stage !== "lost_lead" && lead.stage !== "booked") {
+    const moved = approve && lead.stage !== "lost_lead" && lead.stage !== "booked";
+    if (moved) {
       await tx
         .update(leads)
         .set({ stage: "lost_lead", stageChangedAt: now, lostReasonId: request.lostReasonId, updatedAt: now })
         .where(eq(leads.id, lead.id));
+      const [reason] = await tx.select({ name: lostReasons.name }).from(lostReasons).where(eq(lostReasons.id, request.lostReasonId!)).limit(1);
+      await logActivity(tx, {
+        leadId: lead.id,
+        actorId: actor.id,
+        type: "stage_change",
+        data: { from: lead.stage, to: "lost_lead", fromLabel: STAGE_LABELS[lead.stage], toLabel: STAGE_LABELS.lost_lead, reason: reason?.name ?? null },
+      });
     }
     await logActivity(tx, {
       leadId: lead.id,
@@ -600,7 +608,7 @@ export async function decideLostRequest(db: Database, actor: Actor, approvalId: 
       body: comment ?? null,
       data: { approved: approve, from: lead.stage },
     });
-    await audit(tx, actor, approve ? "lead.lost_approved" : "lead.lost_rejected", lead.id, { stage: lead.stage }, { approvalId });
+    await audit(tx, actor, approve ? "lead.lost_approved" : "lead.lost_rejected", lead.id, { stage: lead.stage }, { approvalId, stage: moved ? "lost_lead" : lead.stage });
     if (!approve) {
       await notify(
         tx,

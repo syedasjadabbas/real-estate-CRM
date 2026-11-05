@@ -1588,10 +1588,10 @@ Requested as "F-4"; in the §17 findings table this is **F-6** (F-4 there is the
 
 ## 24. Final Completion Reconciliation (4 Nov 2026, commit 7986782)
 
-> **Current status (updated 5 Nov 2026, §35).** The summary table, finding rows and requirement matrix below are kept current. The narrative, estimates and §C – §I are the 4 Nov baseline.
-> - **Fixed since:** F-13 (§25), F-15 (§27), F-9 (§28), F-20 (§30), F-16 (§31), F-24 / FR-027 (§32), F-23 (§33), F-10 (§34), FR-010 tile links (§35). F-7 was assessed as blocked by D-F1 (§26).
-> - **Counts now:** 50 implemented and verified, 23 partial, 0 not implemented, 7 blocked, 5 excluded.
-> - **Remaining agreed development:** about 4.8 developer-days.
+> **Current status (updated 5 Nov 2026, §36).** The summary table, finding rows and requirement matrix below are kept current. The narrative, estimates and §C – §I are the 4 Nov baseline.
+> - **Fixed since:** F-13 (§25), F-15 (§27), F-9 (§28), F-20 (§30), F-16 (§31), F-24 / FR-027 (§32), F-23 (§33), F-10 (§34), FR-010 tile links (§35), FR-021 stage history (§36). F-7 was assessed as blocked by D-F1 (§26).
+> - **Counts now:** 51 implemented and verified, 22 partial, 0 not implemented, 7 blocked, 5 excluded.
+> - **Remaining agreed development:** about 4.7 developer-days.
 
 **Method.**
 - **Authority order:** the quotation first, then `REQUIREMENTS.md`, then the 53 questionnaire answers (received, but unsigned: S-1).
@@ -1607,8 +1607,8 @@ Requested as "F-4"; in the §17 findings table this is **F-6** (F-4 there is the
 
 | Status | Requirements now | On 4 Nov |
 |---|---|---|
-| Implemented and verified | **50** | 45 |
-| Partially implemented | **23** | 28 |
+| Implemented and verified | **51** | 45 |
+| Partially implemented | **22** | 28 |
 | Not implemented | **0** | 0 |
 | Blocked by client decision | **7** | 7 |
 | Excluded from agreed scope | **5** | 5 |
@@ -1693,7 +1693,7 @@ FR-005 reads: "List pages support search, a filter panel, column sorting and pag
 | FR-015 | Recent leads, top projects | IV | Latest 20; name links to lead | `dashboard/queries.ts:142` | dashboard.test | T | — | Yes |
 | FR-016 | Lost by reason and team | IV | Clickable reasons | `dashboard/queries.ts:180` | dashboard | T | — | Yes |
 | FR-020 | Create lead | IV | All fields, unique code. A forged id gives a 500 rather than a field error | `leads/commands.ts:236` | leads | T | Tidy with F-9 batch | Yes |
-| FR-021 | Ten stages, timeline from → to | PI | Stages work; an approved lost request logs no from → to line | `leads/commands.ts:339,567` | leads, bookings | T | Add the line | Yes |
+| FR-021 | Ten stages, timeline from → to | IV | Every path that changes a stage records from → to, including an approved lost request | `leads/commands.ts` `decideLostRequest`, §36 | lead-stage-history, lost-approval-history, leads, bookings | T | — | Yes |
 | FR-022 | Leads table, all columns sortable | PI | About half the columns sort; Inbound channel, Gender, External ID, Lost reason not shown | `leads/constants.ts:55`, `leads-table.tsx` | leads, list-controls | T | Add sorts and missing columns | Yes |
 | FR-023 | Kanban with counts | IV | Move with permission; 25 cards per stage, no "load more" | `kanban-board.tsx` | pipeline.spec | T | — | Yes |
 | FR-024 | Pipeline filters | IV | AND-combined | `leads/queries.ts:49` | leads, list-controls | T* | More filter tests | Yes |
@@ -2577,3 +2577,58 @@ Both suites were slower than the fastest recent runs (Vitest 435 s, Playwright 8
 **Completion counts (recounted from the §24 matrix rows):** FR-010 moves to Implemented and verified. **50 implemented and verified, 23 partial, 0 not implemented, 7 blocked, 5 excluded** (85).
 
 **Remaining agreed development:** about 4.8 developer-days. **Baseline:** Vitest 569 / 569, Playwright 128 / 128, build 103 / 103, 25 migrations.
+
+## 36. FR-021 fixed: an approved lost request records its stage move (5 Nov 2026)
+
+**Why this one.** The unblocked partial requirements were FR-004, FR-005, FR-021, FR-022, FR-025, FR-028, FR-042 and FR-061. FR-021 came first because it is the only one that loses data: every approved lost request in production would leave a permanent gap in the lead's history, which no later fix could fill. It is a must-have requirement under Leads → "Lead status / stages" and "Lead history", with no client decision involved.
+
+**Requirement.** FR-021: "A stage change is recorded in the timeline as 'from → to'."
+
+**Root cause.** A lead's stage changes in five places. Four recorded a `stage_change` entry: manual change, direct Lost, bookings, meetings. `decideLostRequest` changed the stage but recorded only "Lost request approved", and its audit row didn't show the new stage.
+
+**What changed (`leads/commands.ts`):**
+- An approval that moves the lead now records a `stage_change` entry with from, to and the lost reason, the same shape as a direct Lost, inside the same transaction.
+- The "Lost request approved" entry stays: one records the decision, the other the move.
+- The `lead.lost_approved` and `lead.lost_rejected` audit rows now show the stage after the decision.
+- Approving a lead that is already Lost or Booked moves nothing and records no move.
+
+**Unchanged:** who may decide, the open-booking rule, the stage rules and notifications. **Migration:** none; still 25, no drift.
+
+**Existing data.** The development database has 1 older approved request without a move entry. It was left as it is: no data changed, and its "Lost request approved" entry still shows what happened. No production data exists.
+
+**Files changed:** `src/modules/leads/commands.ts`, `tests/integration/lead-stage-history.test.ts` and `e2e/lost-approval-history.spec.ts` (both new).
+
+**Tests:**
+- `lead-stage-history.test.ts`, 8 tests:
+  - an approved request's entry equals a direct Lost's;
+  - the decision entry and comment stay, and the entries are the manager's;
+  - the audit row's before and after;
+  - a rejection records no move;
+  - an already Lost or Booked lead records no move;
+  - refused decisions record nothing (open booking, repeat decision, wrong role);
+  - two simultaneous approvals record one move;
+  - manual, meeting and booking moves still record from → to.
+- **Checked to be meaningful:** with the entry removed, 3 failed.
+- `lost-approval-history.spec.ts`: a manager approves through the lead page and the timeline shows "New Lead → Lost Lead" with the reason, on desktop and mobile; on desktop, a rejection shows no move.
+
+**Verification (first full run, no failures):**
+
+| Check | Result |
+|---|---|
+| Typecheck, lint | Pass |
+| Stage history, lead and workflow tests | 40 / 40 |
+| Vitest full | **56 files, 577 / 577** in 350 s |
+| Schema drift | Clean, 25 migrations |
+| Build | 103 / 103 pages |
+| Playwright full | **131 / 131 in 10.5 min** |
+
+**Remaining risks:**
+- **Two entries for one approval.** The timeline shows both the decision and the move, by design. They share a time, so their order can vary.
+- **`lastActivityAt`.** An approval still updates `updatedAt` only, unlike a direct Lost. Existing behaviour; it would change what counts as activity, so it was left.
+- **Suite speed.** Runs stay at about 10 minutes, up from 6–8. Still no failures or timeouts, and the cause is unknown.
+
+**Completion counts (recounted from the §24 matrix rows):** **51 implemented and verified, 22 partial, 0 not implemented, 7 blocked, 5 excluded** (85).
+
+**Remaining agreed development:** about 4.7 developer-days. **Baseline:** Vitest 577 / 577, Playwright 131 / 131, build 103 / 103, 25 migrations.
+
+**Next eligible requirement: FR-004.** The active project is one browser cookie, not remembered per user or cleared at sign-out, so the next person on a shared device inherits it. It is a must-have with clear acceptance criteria and no client decision. FR-042, FR-022, FR-025, FR-028, FR-061 and the Regenerated headers follow.
