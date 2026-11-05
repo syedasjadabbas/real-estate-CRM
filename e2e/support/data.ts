@@ -211,3 +211,12 @@ export function removeFollowUpsFor(leadId: string) {
     await db.delete(followUps).where(eq(followUps.leadId, leadId));
   });
 }
+
+/** An inactive account whose password is the seeded test password. */
+export function inactiveUserWithPassword(email: string) {
+  return withDb(async (db) => {
+    const [source] = await db.select({ passwordHash: users.passwordHash }).from(users).where(eq(users.id, seed().users.agent1.id));
+    await db.insert(users).values({ name: "Inactive Tester", email, role: "agent", status: "inactive", passwordHash: source.passwordHash });
+    return email;
+  });
+}

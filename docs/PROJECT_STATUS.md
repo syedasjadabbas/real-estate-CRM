@@ -1588,10 +1588,10 @@ Requested as "F-4"; in the §17 findings table this is **F-6** (F-4 there is the
 
 ## 24. Final Completion Reconciliation (4 Nov 2026, commit 7986782)
 
-> **Current status (updated 5 Nov 2026, §33).** This section is the 4 Nov baseline; its matrix and estimates are as written then, except the finding rows below, which now show their outcome.
-> - **Fixed since:** F-13 (§25), F-15 (§27), F-9 (§28), F-20 (§30), F-16 (§31), F-24 / FR-027 (§32), F-23 (§33). F-7 was assessed as blocked by D-F1 (§26).
+> **Current status (updated 5 Nov 2026, §34).** The summary table, finding rows and requirement matrix below are kept current. The narrative, estimates and §C – §I are the 4 Nov baseline.
+> - **Fixed since:** F-13 (§25), F-15 (§27), F-9 (§28), F-20 (§30), F-16 (§31), F-24 / FR-027 (§32), F-23 (§33), F-10 (§34). F-7 was assessed as blocked by D-F1 (§26).
 > - **Counts now:** 49 implemented and verified, 24 partial, 0 not implemented, 7 blocked, 5 excluded.
-> - **Remaining agreed development:** about 5.4 developer-days.
+> - **Remaining agreed development:** about 5.3 developer-days.
 
 **Method.**
 - **Authority order:** the quotation first, then `REQUIREMENTS.md`, then the 53 questionnaire answers (received, but unsigned: S-1).
@@ -1605,14 +1605,14 @@ Requested as "F-4"; in the §17 findings table this is **F-6** (F-4 there is the
 
 ### A. Executive Summary
 
-| Status | Requirements |
-|---|---|
-| Implemented and verified | **45** |
-| Partially implemented | **28** |
-| Not implemented | **0** |
-| Blocked by client decision | **7** |
-| Excluded from agreed scope | **5** |
-| **Total** | **85** |
+| Status | Requirements now | On 4 Nov |
+|---|---|---|
+| Implemented and verified | **49** | 45 |
+| Partially implemented | **24** | 28 |
+| Not implemented | **0** | 0 |
+| Blocked by client decision | **7** | 7 |
+| Excluded from agreed scope | **5** | 5 |
+| **Total** | **85** | 85 |
 
 - **Actual state.** The CRM is a substantial working system: all 14 quoted modules exist and the core sales, booking, payment, proposal, HR and finance flows work end to end. It is **not finished**. Of the 80 requirements in scope, 45 are fully met. No blended percentage is given, because it would hide how different the gaps are.
 - **The quotation lines most at risk:**
@@ -1638,7 +1638,7 @@ Requested as "F-4"; in the §17 findings table this is **F-6** (F-4 there is the
 | F-7 reversal date | Open, client decision D-F1 | `finance/commands.ts:165` copies the original date |
 | F-8 roster on past or multi-team leave | Open, C-14 | Unchanged |
 | F-9 Performance footnote | **Fixed (§28, §29)** | `performance/page.tsx:214` still says "the date they were added", and that recordings aren't captured |
-| F-10 sign-in message, in-memory limit | Open, agreed | `auth/login.ts:43` reveals an inactive account after a correct password; the rate limit resets on restart |
+| F-10 sign-in message, in-memory limit | **Message fixed (§34).** Rate limit unchanged | `auth/login.ts` gave the inactive message with any password, not only the correct one as first written here. The rate limit resets on restart, which is documented as acceptable for one server |
 | F-11 export fallback, proofs | Open, agreed (export); proofs low | `finance/reports.ts:101` `.catch("collections")` |
 | F-12 stale docs | Partly open | `PRODUCTION_HANDOVER_CHECKLIST.md` says 13 migrations; `REMAINING_CLIENT_CLARIFICATIONS.md` lists built items as unbuilt |
 | **F-13 (new, high)** open bookings not linked to the client | **Fixed (§25)** | `bookings.client_id` is set only on confirmation (`bookings/commands.ts:145`). A repeat buyer's open booking, token and payments are missing from Investments, Payment history and the project filter. FR-051, FR-052, FR-204 |
@@ -1680,7 +1680,7 @@ FR-005 reads: "List pages support search, a filter panel, column sorting and pag
 | FR-002 | Sign-in / out logged with time and IP | IV | Logged, shown in Workplace, counted in Performance. Expired sessions log no sign-out | `session-store.ts:26,88` | workplace, performance | T | — | Yes |
 | FR-003 | Access-denied card, API 403 | IV | Restricted state and `forbidden()` | `components/ui/empty-state.tsx:28`, `server/errors.ts` | auth.spec | T | — | Yes |
 | FR-004 | Project selector, remembered per user and device | PI | Scoping real. One browser cookie, not per user, not cleared at logout | `server/project-scope.ts:16` | Cookie seeded in e2e only | T* | Remember per user; add a switching test | Yes |
-| FR-005 | Search, filters, sorting, 50 / page | PI | 50 everywhere paged; main lists complete | `*/constants.ts`, `list-pagination.test` | list-controls, projects-teams-lists | T | F-16; D-L1 | Yes |
+| FR-005 | Search, filters, sorting, 50 / page | PI | 50 everywhere paged; main lists complete, including Inventory and Finance (F-16). Regenerated headers do nothing; Targets, Reviews and Shared phones unpaged | `*/constants.ts`, §31 | list-sorting, list-pagination, list-controls, projects-teams-lists | T | Regenerated headers; D-L1 | Yes |
 | FR-006 | Notifications, unread count, pop-up | IV | Bell, count, pop-up. Window is an admin setting, unset by default; created on poll | `notifications/service.ts:53,64` | notifications, leads-notifications | T | Set the window at handover. More events are N2–N6 | Yes |
 | FR-007 | Responsive at 375 px | IV | Collapsing shell | `components/shell/app-shell.tsx` | responsive.spec (7 pages) | T | — | Yes |
 | FR-008 | Audit log of all changes | IV | All exported writes audited | §22, `audit/service.ts` | audit.test, audit-log.spec | T | — | Yes |
@@ -1699,9 +1699,9 @@ FR-005 reads: "List pages support search, a filter panel, column sorting and pag
 | FR-024 | Pipeline filters | IV | AND-combined | `leads/queries.ts:49` | leads, list-controls | T* | More filter tests | Yes |
 | FR-025 | Lead detail, everything in timeline | PI | Complete except client conversion / link; capped at 100 | `leads/queries.ts:250` | leads, recordings | T | Log the link; show all | Yes |
 | FR-026 | Follow-ups, %, overdue | IV | Schedule, done, metric | `leads/commands.ts:393,423` | leads, performance, todos | T | — | Yes |
-| FR-027 | To-dos, count = list | PI | All buckets. Lists stop at 200; tasks and meetings ignore the project | `leads/queries.ts:423–505` | leads, todos-lost-leads | T* | Page the lists; scope the two buckets; parity tests | Yes |
+| FR-027 | To-dos, count = list | IV | All buckets page 50 at a time, so every counted item can be reached | `leads/queries.ts` `leadTodos`, §32 | todos-paging (integration, e2e), leads, todos-lost-leads | T | — | Yes |
 | FR-028 | First touch, used in reports | PI | Captured and shown; not used in Performance | `leads/support.ts:109` | leads, recordings | T | Add to reports | Yes |
-| FR-029 | Rotation of an assignable team | PI | Works for admins, skips leave. F-15; pointer restart skews evenness | `leads/commands.ts:77` | leads, leave | T* | Fix F-15; add a manager test | Yes |
+| FR-029 | Rotation of an assignable team | IV | Admins rotate all active teams; managers their own (F-15). Admin pointer restart after leave remains (§27) | `leads/commands.ts` `rotateOwner`, §27 | lead-assignment, lead-auto-assign, leave | T | — | Yes |
 | FR-030 | Manual reassign | IV | Logged | `leads/commands.ts:350` | leads | T | — | Yes |
 | FR-031 | Duplicate detection | IV | Same project; reject or flag | `leads/commands.ts:114` | leads, workflows, lead-phone-edit | T | — | Yes |
 | FR-032 | Shared-phone view, merge | BC | View only; no merge (F-22) | `leads/queries.ts:449` | Empty case only | T* | Merge rules 1–6, then 1.5 d | No (merge not listed) |
@@ -1717,8 +1717,8 @@ FR-005 reads: "List pages support search, a filter panel, column sorting and pag
 | FR-042 | City from managed list, "Other" | PI | Select only, so numbers are impossible. No "Other", no city admin screen | `leads/validation.ts:37` | None for city | T* | Add both | Yes |
 | FR-043 | Lead CSV import | EX | None | `EXTERNAL_INTEGRATIONS.md` §10 | — | – | Quoted separately; needs Q-P5 | No |
 | FR-050 | Client from confirmed booking | IV | Automatic, or manual by admin | `bookings/commands.ts:141` | bookings, clients | T | — | Yes |
-| FR-051 | Clients list and filter | PI | List works; open bookings not counted (F-13) | `clients/queries.ts:56` | clients | T | Fix F-13 | Yes |
-| FR-052 | Client detail incl. contracts | PI | No contracts or documents; misses open bookings (F-13, F-20) | `app/.../clients/[id]/page.tsx` | No page-list test | T* | F-13, F-20 | Yes |
+| FR-051 | Clients list and filter | IV | List, latest investment and filter include open bookings (F-13) | `clients/queries.ts:56`, §25 | clients, clients-investments, client-bookings | T | — | Yes |
+| FR-052 | Client detail incl. contracts | IV | Bookings, payments, and documents on the client and its leads (F-13, F-20) | `documents/service.ts`, §25, §30 | client-bookings, client-documents | T | — | Yes |
 | FR-060 | Projects CRUD | IV | Inactive hidden from agents' selector | `projects/commands.ts:34` | projects | T | — | Yes |
 | FR-061 | Per-project dimensions as fields / filters | PI | Fields constrained; no per-dimension list filters | `inventory-toolbar.tsx:69` | inventory | T | Add filters | Yes |
 | FR-062 | Project cards | IV | Units, type, link via detail | `project-card.tsx` | projects-teams-lists | T | — | Yes |
@@ -1758,7 +1758,7 @@ FR-005 reads: "List pages support search, a filter panel, column sorting and pag
 | FR-201 | Expense records | IV | Same, with payee | `finance/entries.ts:50` | finance-entries | T | — | Yes |
 | FR-202 | Booking payments | IV | Paid and milestone computed from the ledger | `finance/commands.ts:30` | finance, workflows | T | — | Yes |
 | FR-203 | Outstanding, overdue vs schedule | PI | Balance right; overdue understated (F-14); Finance page only | `finance/views.ts:133,192` | finance | T | C-27; show on booking | Yes* |
-| FR-204 | Payment history with receipt numbers | PI | Per booking done; per client misses open bookings (F-13); format waits on C-21 | `finance/queries.ts:20,82` | finance | T | F-13; C-21 | Yes* |
+| FR-204 | Payment history with receipt numbers | PI | Per booking and per client done (F-13); format waits on C-21 | `finance/queries.ts:20,82` | finance, client-bookings | T | C-21 | Yes* |
 | FR-205 | Reports, CSV | PI | All four and CSV. F-7 and F-18 affect figures (F-23 fixed, §33) | `finance/reports.ts:39`, `entries.ts:321` | finance-reports, finance-entries | T | D-F1, D-F2 | Yes* |
 | FR-206 | No hard delete; reversals | IV | Database-level immutability | `drizzle/0005`, `finance/commands.ts:135` | finance, workflows | T | — | Yes |
 
@@ -1769,7 +1769,7 @@ FR-005 reads: "List pages support search, a filter panel, column sorting and pag
 | NFR-01 10 users | Partially implemented | No concurrency or load test |
 | NFR-02 < 1.5 s at 10k leads | Partially implemented | Never measured |
 | NFR-03 Availability, backups | Blocked by client infrastructure | Script exists; no server |
-| NFR-04 Security | Partially implemented | Code controls in place; live checks never run; F-10 open |
+| NFR-04 Security | Partially implemented | Code controls in place; live checks never run |
 | NFR-05 Browsers | Partially implemented | Chrome only; Edge, Safari and phones untested |
 | NFR-06 Localization | Implemented and verified | English, PKR, Pakistan time, UTC stored |
 | NFR-07 Ownership | Blocked (commercial) | Source handover follows final payment |
@@ -1863,7 +1863,7 @@ Nothing has been deployed. Classification is from the code and scripts.
 | Migration execution | Ready | `scripts/db-migrate.mjs`, 24 additive migrations, no drift |
 | Seed protection | Partially ready | `db-seed.mjs` refuses only on `NODE_ENV=production`, so it could still seed a production database from a shell without that setting |
 | Environment validation | Partially ready | `DATABASE_URL` is checked at first use only. No start-up validation. Invalid proxy settings are handled |
-| Authentication and authorization | Ready | Server-side checks, tested per role. F-10 small; rate limit is per process (fine for one instance) |
+| Authentication and authorization | Ready | Server-side checks, tested per role. Rate limit is per process (fine for one instance) |
 | Trusted proxy and IP | Blocked by client infrastructure | Code ready and tested; needs the real proxy, then the live spoof check |
 | HTTPS and security headers | Partially ready | Headers and CSP set (`next.config.ts`, security-headers.spec). CSP allows inline scripts by design. TLS depends on the server |
 | Persistent file storage | Blocked by client infrastructure | Code ready. A missing `FILE_STORAGE_DIR` only warns in production, and should fail |
@@ -2448,3 +2448,64 @@ Both suites were slower than the fastest recent runs (Vitest 435 s, Playwright 8
 **Completion counts, unchanged:** 49 implemented and verified, 24 partial, 0 not implemented, 7 blocked, 5 excluded. FR-205 stays partial on D-F1 and D-F2.
 
 **Remaining agreed development:** about 5.4 developer-days. **Baseline:** Vitest 556 / 556, Playwright 121 / 121, build 103 / 103, 25 migrations.
+
+## 34. F-10 fixed: sign-in no longer reveals an inactive account (5 Nov 2026)
+
+**The disclosure, confirmed.** `authenticate` answered "This account is inactive." for an inactive account **with any password**. §24 had said this needed the correct password; that was wrong, and §17 was right. Anyone typing an email could learn that the account exists and is inactive.
+
+**What differed between failures:**
+
+| Channel | Before | Now |
+|---|---|---|
+| Message | **Different** | Same: "Incorrect email or password." |
+| HTTP status, error code, response shape | Same (401, `UNAUTHENTICATED`) | Same |
+| Password check | Same: every path runs one, including a dummy check for unknown emails | Same |
+| Rate limit | Same: every failure counts | Same |
+
+**What changed:** one line in `server/auth/login.ts`, and its comment. Active sign-in, sessions, rate limiting, deactivation and reactivation are unchanged. No migration; still 25, no drift. No data changed.
+
+**A correct password on an inactive account** still fails and still counts towards the rate limit, as before.
+
+**Files changed:**
+- `server/auth/login.ts`
+- `tests/integration/login-failures.test.ts` and `e2e/login-failures.spec.ts` (both new)
+- `tests/integration/accounts.test.ts` and `e2e/accounts.spec.ts` (old message updated)
+- `e2e/support/data.ts`
+- `docs/VERSION_1_EXECUTION_PLAN.md` (the E3 acceptance line quoted the old message; it was our own note, not a client requirement)
+
+**Tests:**
+- `login-failures.test.ts`, 7 tests:
+  - an active account signs in with a working session and a sign-in log entry;
+  - a wrong password, an unknown email, and an inactive account with a wrong or correct password fail identically in code, message, status, fields and details;
+  - failures open no session and log no sign-in;
+  - rate limiting is the same for all three, including a correct password on an inactive account;
+  - the limit is per email and address, and success clears failures;
+  - deactivation, reactivation and field validation are unchanged.
+- **Checked to be meaningful:** with the old message restored, 2 failed.
+- `login-failures.spec.ts`: the real form on desktop and mobile; on desktop, the API's status and body identical for all failures, no session cookie, and an active account still signing in.
+
+**Verification:**
+
+| Check | Result |
+|---|---|
+| Typecheck, lint | Pass |
+| Login, accounts and security tests | 30 / 30 |
+| Vitest full | **54 files, 563 / 563** |
+| Schema drift | Clean, 25 migrations |
+| Build | 103 / 103 pages |
+| Playwright full | **124 / 124 in 10.2 min** (final run) |
+
+**The earlier full Playwright run** was 123 passed, 1 failed: `accounts.spec.ts` still expected the old message, which this change removes. My search for it had been cut off before that file. It's now updated.
+
+**Suite speed.** Runs took 10–11 minutes against 6–8 recently, and Vitest 461 s against about 200, with no timeouts. The machine was idle when checked afterwards (16%), and the cause is not known. The suites have been getting slower as tests are added, but this is more than the added tests explain.
+
+**Remaining risks:**
+- **Deactivated staff aren't told why.** They now see "Incorrect email or password", and may try again or ask for a reset. Someone should tell them directly. That's the deliberate trade-off of this fix.
+- **Exact timing was not measured.** All paths run one password check, but no timing test exists.
+- **The rate limit is in memory:** it resets on restart and is per process. This was documented as fine for one server, and is unchanged.
+- **Rate-limit response:** after five failures any email gets "Too many failed attempts", whether or not it exists, so it reveals nothing.
+- **Other routes:** Admin screens still show account status to Admins, which is intended.
+
+**Completion counts, unchanged:** 49 implemented and verified, 24 partial, 0 not implemented, 7 blocked, 5 excluded. They were recounted from the §24 matrix rows, which were brought up to date in this round. FR-001 and FR-002 were already met; NFR-04 stays partial until live checks run.
+
+**Remaining agreed development:** about 5.3 developer-days. **Baseline:** Vitest 563 / 563, Playwright 124 / 124, build 103 / 103, 25 migrations.

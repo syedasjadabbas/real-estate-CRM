@@ -15,7 +15,10 @@ export const loginSchema = z.object({
 
 const INVALID = "Incorrect email or password.";
 
-/** Verifies credentials and opens a session. Same error for unknown email and wrong password. */
+/**
+ * Verifies credentials and opens a session. Every failure looks the same, so sign-in never reveals
+ * whether an account exists or is inactive: same error, and a password check in every case.
+ */
 export async function authenticate(db: Database, input: unknown, meta: RequestMeta = {}) {
   const parsed = loginSchema.safeParse(input);
   if (!parsed.success) {
@@ -40,7 +43,7 @@ export async function authenticate(db: Database, input: unknown, meta: RequestMe
   }
   if (!(await verifyPassword(user.passwordHash, password)) || user.status !== "active") {
     recordFailure(key);
-    throw new AppError("UNAUTHENTICATED", user.status !== "active" ? "This account is inactive." : INVALID);
+    throw new AppError("UNAUTHENTICATED", INVALID);
   }
 
   clearFailures(key);

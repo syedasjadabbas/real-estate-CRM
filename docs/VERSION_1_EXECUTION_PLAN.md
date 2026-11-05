@@ -118,7 +118,7 @@ Data migration from SaleStorm is also deferred (Q-P5). Details, credentials and 
 | **Authentication** | **Unchanged.** Deactivation sets `users.status = inactive`. Sign-in already refuses inactive accounts (`login.ts`), and session lookup only loads active users (`session-store.ts`), so access ends immediately. |
 | **Audit** | Create, role change, password reset, deactivate and reactivate are each audited. |
 | **Database** | **No migration** (existing `users` columns; who and when come from the audit log). |
-| **Acceptance** | Admin creates an agent, and the agent signs in. Admin deactivates them: the open session stops working and sign-in shows "This account is inactive." Reactivation restores sign-in. An Admin can't touch a Super Admin. The last Super Admin is protected. Other roles are refused. Existing users, roles and passwords are unchanged. |
+| **Acceptance** | Admin creates an agent, and the agent signs in. Admin deactivates them: the open session stops working and sign-in fails with the generic "Incorrect email or password." (F-10) Reactivation restores sign-in. An Admin can't touch a Super Admin. The last Super Admin is protected. Other roles are refused. Existing users, roles and passwords are unchanged. |
 | **Tests** | Unit: guard table. Integration: the full lifecycle, every safeguard, duplicate email, audit rows. Playwright (desktop and mobile): create, sign in, deactivate, signed out; refusal for other roles. |
 | **Estimate** | **16 h** |
 

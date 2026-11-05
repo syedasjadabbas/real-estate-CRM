@@ -40,7 +40,7 @@ test("an admin creates a user who can sign in, then deactivates them and their s
   await user.getByLabel("Email").fill(email);
   await user.getByLabel("Password").fill(password);
   await user.getByRole("button", { name: "Sign in" }).click();
-  await expect(user.getByText("This account is inactive.")).toBeVisible();
+  await expect(user.getByText("Incorrect email or password.")).toBeVisible();
 
   await admin.getByRole("button", { name: "Reactivate account" }).click();
   await expect(admin.getByRole("status").filter({ hasText: "Account reactivated." })).toBeVisible();
