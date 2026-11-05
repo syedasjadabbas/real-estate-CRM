@@ -227,3 +227,18 @@ export function setLeadCreatedHoursAgo(leadId: string, hours: number) {
     await db.update(leads).set({ createdAt: new Date(Date.now() - hours * 3_600_000) }).where(eq(leads.id, leadId));
   });
 }
+
+/** A new active project. It sorts after the seeded ones, so it never becomes anyone's default. */
+export function createInactiveableProject() {
+  return withDb(async (db) => {
+    const name = `Zz Temp ${randomUUID().slice(0, 8)}`;
+    const [row] = await db.insert(projects).values({ name }).returning({ id: projects.id });
+    return { id: row.id, name };
+  });
+}
+
+export function setProjectStatus(projectId: string, status: "active" | "inactive") {
+  return withDb(async (db) => {
+    await db.update(projects).set({ status }).where(eq(projects.id, projectId));
+  });
+}

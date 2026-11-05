@@ -32,10 +32,10 @@ export async function login(page: Page, role: Role) {
   return user;
 }
 
-/** Makes the seeded Test Project the active project (the header selector stores it in this cookie). */
+/** Makes the seeded Test Project the active project for every seeded user (the header selector stores it per user). */
 export async function selectTestProject(context: BrowserContext) {
   const { hostname } = new URL(E2E_BASE_URL);
-  await context.addCookies([{ name: "mz_project", value: seed().projectId, domain: hostname, path: "/" }]);
+  await context.addCookies(Object.values(seed().users).map((u) => ({ name: `mz_project_${u.id}`, value: seed().projectId, domain: hostname, path: "/" })));
 }
 
 /** A unique, recognisable name so tests never depend on each other's records. */

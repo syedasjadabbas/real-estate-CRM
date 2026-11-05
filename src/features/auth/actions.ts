@@ -10,12 +10,12 @@ import {
   setSessionCookie,
 } from "@/server/auth/current-user";
 import { fieldErrors } from "@/modules/leads/validation";
-import { selectableProjects } from "@/modules/projects/queries";
+import { projectCookieName, selectableProjects } from "@/modules/projects/queries";
 import { authenticate, loginSchema } from "@/server/auth/login";
 import { revokeSession } from "@/server/auth/session-store";
 import { getDb } from "@/server/db";
 import { toActionError, type ActionResult } from "@/server/errors";
-import { PROJECT_COOKIE } from "@/server/project-scope";
+import { SHARED_PROJECT_COOKIE } from "@/server/project-scope";
 
 export type LoginState = { error?: string; fields?: Record<string, string>; email?: string } | undefined;
 
@@ -41,6 +41,7 @@ export async function logoutAction() {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (token) await revokeSession(getDb(), token, await requestMeta());
   await clearSessionCookie();
+  (await cookies()).delete(SHARED_PROJECT_COOKIE);
   redirect("/login");
 }
 
@@ -51,7 +52,7 @@ export async function setActiveProjectAction(projectId: string): Promise<ActionR
     if (!projects.some((p) => p.id === projectId)) {
       return { ok: false, code: "VALIDATION_FAILED", message: "That project is not available." };
     }
-    (await cookies()).set(PROJECT_COOKIE, projectId, {
+    (await cookies()).set(projectCookieName(actor.id), projectId, {
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",

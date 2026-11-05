@@ -1,19 +1,15 @@
 import "server-only";
 import { cookies } from "next/headers";
 import { cache } from "react";
-import { selectableProjects } from "@/modules/projects/queries";
+import { activeProjectFor } from "@/modules/projects/queries";
 import { getCurrentUser } from "@/server/auth/current-user";
 import { getDb } from "@/server/db";
 
-export const PROJECT_COOKIE = "mz_project";
+/** The old cookie shared by everyone on a browser. Never read; removed at sign-out. */
+export const SHARED_PROJECT_COOKIE = "mz_project";
 
-/**
- * Projects offered in the header (admins also get inactive ones) plus the selected one
- * (cookie, falling back to the first). Callers have already resolved the session.
- */
+/** Projects offered in the header (admins also get inactive ones) plus this person's selected one. Callers have already resolved the session. */
 export const getProjectScope = cache(async () => {
-  const projects = await selectableProjects(getDb(), await getCurrentUser());
-  const chosen = (await cookies()).get(PROJECT_COOKIE)?.value;
-  const active = projects.find((p) => p.id === chosen) ?? projects[0] ?? null;
-  return { projects, activeProjectId: active?.id ?? null };
+  const jar = await cookies();
+  return activeProjectFor(getDb(), await getCurrentUser(), (name) => jar.get(name)?.value);
 });

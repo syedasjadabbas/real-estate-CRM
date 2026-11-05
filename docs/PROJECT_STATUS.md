@@ -1588,10 +1588,10 @@ Requested as "F-4"; in the §17 findings table this is **F-6** (F-4 there is the
 
 ## 24. Final Completion Reconciliation (4 Nov 2026, commit 7986782)
 
-> **Current status (updated 5 Nov 2026, §36).** The summary table, finding rows and requirement matrix below are kept current. The narrative, estimates and §C – §I are the 4 Nov baseline.
-> - **Fixed since:** F-13 (§25), F-15 (§27), F-9 (§28), F-20 (§30), F-16 (§31), F-24 / FR-027 (§32), F-23 (§33), F-10 (§34), FR-010 tile links (§35), FR-021 stage history (§36). F-7 was assessed as blocked by D-F1 (§26).
-> - **Counts now:** 51 implemented and verified, 22 partial, 0 not implemented, 7 blocked, 5 excluded.
-> - **Remaining agreed development:** about 4.7 developer-days.
+> **Current status (updated 5 Nov 2026, §37).** The summary table, finding rows and requirement matrix below are kept current. The narrative, estimates and §C – §I are the 4 Nov baseline.
+> - **Fixed since:** F-13 (§25), F-15 (§27), F-9 (§28), F-20 (§30), F-16 (§31), F-24 / FR-027 (§32), F-23 (§33), F-10 (§34), FR-010 tile links (§35), FR-021 stage history (§36), FR-004 active project (§37). F-7 was assessed as blocked by D-F1 (§26).
+> - **Counts now:** 52 implemented and verified, 21 partial, 0 not implemented, 7 blocked, 5 excluded.
+> - **Remaining agreed development:** about 4.4 developer-days.
 
 **Method.**
 - **Authority order:** the quotation first, then `REQUIREMENTS.md`, then the 53 questionnaire answers (received, but unsigned: S-1).
@@ -1607,8 +1607,8 @@ Requested as "F-4"; in the §17 findings table this is **F-6** (F-4 there is the
 
 | Status | Requirements now | On 4 Nov |
 |---|---|---|
-| Implemented and verified | **51** | 45 |
-| Partially implemented | **22** | 28 |
+| Implemented and verified | **52** | 45 |
+| Partially implemented | **21** | 28 |
 | Not implemented | **0** | 0 |
 | Blocked by client decision | **7** | 7 |
 | Excluded from agreed scope | **5** | 5 |
@@ -1679,7 +1679,7 @@ FR-005 reads: "List pages support search, a filter panel, column sorting and pag
 | FR-001 | Email + password sign-in, sessions | IV | Argon2 login, sessions, logout | `server/auth/login.ts:19`, `session-store.ts` | auth.spec, security.test | T | — | Yes |
 | FR-002 | Sign-in / out logged with time and IP | IV | Logged, shown in Workplace, counted in Performance. Expired sessions log no sign-out | `session-store.ts:26,88` | workplace, performance | T | — | Yes |
 | FR-003 | Access-denied card, API 403 | IV | Restricted state and `forbidden()` | `components/ui/empty-state.tsx:28`, `server/errors.ts` | auth.spec | T | — | Yes |
-| FR-004 | Project selector, remembered per user and device | PI | Scoping real. One browser cookie, not per user, not cleared at logout | `server/project-scope.ts:16` | Cookie seeded in e2e only | T* | Remember per user; add a switching test | Yes |
+| FR-004 | Project selector, remembered per user and device | IV | Scoping real. One cookie per user on each browser, read only inside that user's session; invalid choices fall back | `modules/projects/queries.ts` `activeProjectFor`, `server/project-scope.ts`, §37 | active-project (integration, e2e) | T | — | Yes |
 | FR-005 | Search, filters, sorting, 50 / page | PI | 50 everywhere paged; main lists complete, including Inventory and Finance (F-16). Regenerated headers do nothing; Targets, Reviews and Shared phones unpaged | `*/constants.ts`, §31 | list-sorting, list-pagination, list-controls, projects-teams-lists | T | Regenerated headers; D-L1 | Yes |
 | FR-006 | Notifications, unread count, pop-up | IV | Bell, count, pop-up. Window is an admin setting, unset by default; created on poll | `notifications/service.ts:53,64` | notifications, leads-notifications | T | Set the window at handover. More events are N2–N6 | Yes |
 | FR-007 | Responsive at 375 px | IV | Collapsing shell | `components/shell/app-shell.tsx` | responsive.spec (7 pages) | T | — | Yes |
@@ -2632,3 +2632,73 @@ Both suites were slower than the fastest recent runs (Vitest 435 s, Playwright 8
 **Remaining agreed development:** about 4.7 developer-days. **Baseline:** Vitest 577 / 577, Playwright 131 / 131, build 103 / 103, 25 migrations.
 
 **Next eligible requirement: FR-004.** The active project is one browser cookie, not remembered per user or cleared at sign-out, so the next person on a shared device inherits it. It is a must-have with clear acceptance criteria and no client decision. FR-042, FR-022, FR-025, FR-028, FR-061 and the Regenerated headers follow.
+
+## 37. FR-004 fixed: the active project is per user and device (5 Nov 2026)
+
+**Requirement.** FR-004: "Changing the project updates lists; the choice is remembered per user and device." In the agreement.
+
+**How it worked.**
+- **Stored:** in one browser cookie, `mz_project`, shared by everyone using that browser.
+- **Restored:** on every request, by reading that cookie, whoever was signed in.
+- **Cleared:** never, not even at sign-out, so the next person inherited the project.
+- **Validated:** already on each read: a value not in the user's selectable projects fell back to the first one.
+
+**Design decision.** "Per user and device" fits a cookie named per user. A database column would be per user only, so switching on a phone would also change the laptop. That needs no migration and no new access rule.
+
+**What changed:**
+- **`projectCookieName(userId)`:** each person has their own cookie, `mz_project_<user id>`, still HTTP-only, same-site, secure in production, for a year.
+- **`activeProjectFor`:** the one place that picks the active project. It reads only the signed-in person's cookie; signed-out visitors read none. Every page and API already went through it.
+- **Sign-out:** a person's cookie stays so it can be restored, but it is read only inside their own session, so nobody else can use it. The old shared cookie is removed, and it is never read.
+- **Fallback, unchanged:** an inactive, removed, tampered or no-longer-allowed value falls back to the first project they can select. A saved choice applies again if the project is reactivated.
+
+**Unchanged:** which projects each role can select, project switching, and dashboards. **Migration:** none; still 25, no drift. No data changed. After this release, each person starts from the default once, because the old cookie is ignored.
+
+**Requirement 5 read together with requirement 6.** "Clear on sign-out" and "restore on sign-in" conflict if taken literally, so the context is *invalidated* for everyone else rather than deleted. Deleting it would mean no choice could be restored on that device, which FR-004 requires.
+
+**Files changed:**
+- `src/modules/projects/queries.ts`, `src/server/project-scope.ts`, `src/features/auth/actions.ts`
+- `tests/integration/active-project.test.ts` and `e2e/active-project.spec.ts` (both new)
+- `e2e/support/seed.ts` (`selectTestProject` sets each seeded user's cookie), `e2e/support/data.ts`
+
+**Tests:**
+- `active-project.test.ts`, 10 tests with a simulated shared browser:
+  - the default with nothing saved;
+  - two people on one browser, and one returning;
+  - one person on two devices;
+  - the old cookie and signed-out visitors;
+  - switching only changing that person's choice;
+  - an inactive project, for agents and Admins, and reactivation;
+  - a role change removing access;
+  - unknown, tampered and no-project cases;
+  - access rules unchanged.
+- **Checked to be meaningful:** with a shared cookie restored, 4 failed.
+- `active-project.spec.ts`, through the real selector and sign-in:
+  - a shared browser: sign out, the next person gets the default, the first person's project returns (desktop and mobile);
+  - lists and the API following the project;
+  - two people signed in at once;
+  - a second tab;
+  - a saved project going inactive;
+  - the old cookie ignored and removed.
+
+**Verification (first full run, no failures):**
+
+| Check | Result |
+|---|---|
+| Typecheck, lint | Pass |
+| Active project and project tests | 17 / 17 |
+| Vitest full | **57 files, 587 / 587** in 289 s |
+| Schema drift | Clean, 25 migrations |
+| Build | 103 / 103 pages |
+| Playwright full | **138 / 138 in 8.9 min** |
+
+**Remaining risks:**
+- **Open tabs.** A tab already open keeps showing the old project until it reloads or navigates. Its next request uses the new one, which is existing behaviour.
+- **Cookies stay on shared devices.** Each person who signs in leaves one small cookie holding their user id and project id. It reveals no data and has no effect without their session, and it expires after a year. At up to 10 users this is small.
+- **New device or cleared cookies** start from the default. That follows "per device".
+- **The default is the first project alphabetically,** as before.
+
+**Completion counts (recounted from the §24 matrix rows):** **52 implemented and verified, 21 partial, 0 not implemented, 7 blocked, 5 excluded** (85).
+
+**Remaining agreed development:** about 4.4 developer-days. **Baseline:** Vitest 587 / 587, Playwright 138 / 138, build 103 / 103, 25 migrations.
+
+**Next eligible requirement: FR-042** (a city "Other" option and a city admin screen), then FR-022, FR-025, FR-028, FR-061 and the Regenerated headers.

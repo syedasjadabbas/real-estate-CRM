@@ -126,6 +126,21 @@ export type ProjectDetail = Awaited<ReturnType<typeof getProjectDetail>>;
  * Projects offered in the header selector. Admins also see inactive ones (labelled);
  * everyone else sees active projects only (FR-060 acceptance criterion).
  */
+/** The browser cookie holding one person's chosen project: FR-004 remembers it per user and device. */
+export const projectCookieName = (userId: string) => `mz_project_${userId}`;
+
+/**
+ * The projects offered to this person and the active one. Only their own saved choice is read, so
+ * nobody inherits another person's project on a shared browser. A choice they can no longer select
+ * (inactive, removed) falls back to the first project they can.
+ */
+export async function activeProjectFor(db: Database, actor: Pick<Actor, "id" | "role"> | null, readCookie: (name: string) => string | undefined) {
+  const projects = await selectableProjects(db, actor);
+  const chosen = actor ? readCookie(projectCookieName(actor.id)) : undefined;
+  const active = projects.find((p) => p.id === chosen) ?? projects[0] ?? null;
+  return { projects, activeProjectId: active?.id ?? null };
+}
+
 export async function selectableProjects(db: Database, actor: Pick<Actor, "role"> | null) {
   const includeInactive = actor ? seesInactiveInSelector(actor) : false;
   const rows = await db
