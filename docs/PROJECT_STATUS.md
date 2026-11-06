@@ -1588,8 +1588,8 @@ Requested as "F-4"; in the §17 findings table this is **F-6** (F-4 there is the
 
 ## 24. Final Completion Reconciliation (4 Nov 2026, commit 7986782)
 
-> **Current status (updated 6 Nov 2026, §50).** The summary table, finding rows and requirement matrix below are kept current. The narrative, estimates and §C – §I are the 4 Nov baseline.
-> - **Fixed since:** F-13 (§25), F-15 (§27), F-9 (§28), F-20 (§30), F-16 (§31), F-24 / FR-027 (§32), F-23 (§33), F-10 (§34), FR-010 tile links (§35), FR-021 stage history (§36), FR-004 active project (§37), FR-042 cities (§38), FR-025 lead timeline (§39), FR-022 lead columns (§40), Regenerated sorting (§41, FR-005 stays partial), FR-028 first touch (§42), FR-061 inventory filters (§43), V1 readiness (§45 – §50). F-7 was assessed as blocked by D-F1 (§26).
+> **Current status (updated 6 Nov 2026, §51).** The summary table, finding rows and requirement matrix below are kept current. The narrative, estimates and §C – §I are the 4 Nov baseline.
+> - **Fixed since:** F-13 (§25), F-15 (§27), F-9 (§28), F-20 (§30), F-16 (§31), F-24 / FR-027 (§32), F-23 (§33), F-10 (§34), FR-010 tile links (§35), FR-021 stage history (§36), FR-004 active project (§37), FR-042 cities (§38), FR-025 lead timeline (§39), FR-022 lead columns (§40), Regenerated sorting (§41, FR-005 stays partial), FR-028 first touch (§42), FR-061 inventory filters (§43), V1 readiness (§45 – §50), final audit (§51). F-7 was assessed as blocked by D-F1 (§26).
 > - **Counts now:** 57 implemented and verified, 16 partial, 0 not implemented, 7 blocked, 5 excluded.
 > - **Remaining agreed development:** about 1.25 developer-days.
 
@@ -3141,3 +3141,146 @@ All accounts the walkthrough needs have entries in `.dev-credentials`.
 **Completion counts (recounted from the §24 matrix rows):** **57 implemented and verified, 16 partial, 0 not implemented, 7 blocked, 5 excluded** (85). Unchanged, because this round was verification.
 
 **Remaining agreed development:** about 1.25 developer-days: about 1 for the remaining §G tests and 0.25 for overdue on bookings, which waits on C-27. **Baseline:** Vitest 707 / 707, Playwright 162 / 162, build 105 / 105, 28 migrations.
+
+## 51. Final V1 readiness audit (6 Nov 2026)
+
+**Recommendation: GO for the client presentation, with the conditions in part 8. NO-GO for production handover** until the items in part 7 are resolved.
+
+**Sources read:** the quotation (14 modules, 69 feature lines), `CLIENT_ANSWERS_RECONCILIATION.md`, `CHANGE_REQUESTS.md`, `REQUIREMENTS.md` and this file. The root `_Updated` PDF and the `quotation/` PDF are byte-identical. Questionnaire answers were not treated as approved scope.
+
+**Three facts about the baseline:**
+- **Signature.** The approval fields are blank in every copy in this repository, so a signature could not be verified. Keep the signed copy with the project records.
+- **Date.** The quotation says "Version 1 presentation 10 November 2026". The working deadline is Saturday 7 November.
+- **Payment.** The second PKR 87,500 falls due "upon completion of Version 1". Two quoted lines are not built (part 2), so what counts as completion should be agreed.
+
+### 1. Quoted V1 features verified
+
+| Module (quoted lines) | Result | How it was verified |
+|---|---|---|
+| Dashboard (6) | Verified | `dashboard`, `dashboard-links`, rehearsal |
+| Leads (7) | Verified | `v1-critical-path`, `pipeline`, `lead-client-timeline`, rehearsal |
+| Clients (5) | Verified | `client-bookings`, `client-documents`, `v1-audit-journeys` |
+| Projects (4) | Verified | `v1-audit-journeys` (created through the form), `projects-teams-lists` |
+| Inventory (5) | 4 verified, 1 partial | Sold status: part 2 |
+| Bookings (6) | 3 verified, 2 partial, 1 not built | Part 2 |
+| Tasks (5) | 4 verified, 1 partial | Print works; the layout is not final (part 2) |
+| Meetings (4) | Verified | `v1-critical-path`, rehearsal |
+| Targets (3) | 2 verified, 1 partial | Saved through the page; calls achievement empty (part 2) |
+| Teams (5) | 4 verified, 1 partial | Daily report saved and reloaded; roster rule (part 2) |
+| HR (4) | 3 verified, 1 partial | `leave`, `leave-two-step`, `accounts`; approvers (part 2) |
+| My Workplace (3) | Verified | `leave`, `auth`, `responsive` |
+| Performance (6) | 3 verified, 2 partial, 1 not built | `performance-page`, `performance-first-touch`; part 2 |
+| Accounts & Finance (6) | 4 verified, 2 partial | `finance`, `finance-entries`, `payment-proofs`, rehearsal; part 2 |
+
+**Call button and recordings:** not a quoted line of their own. The `tel:` link, upload and playback are covered by `files`.
+
+**Rehearsal.** All 13 runbook steps passed through real pages, signed in through the form as Super Admin, Manager, Agent and Accountant. VERIFY-A102 was booked and confirmed: total PKR 13,490,000, Receipt 5 for PKR 500,000, outstanding PKR 12,990,000.
+
+**New coverage.** `v1-audit-journeys.spec.ts` drives project creation, unit creation, targets, daily reports, client notes and proposal printing through their pages, with reloads to prove persistence.
+
+### 2. Incomplete or defective quoted features
+
+No new code defect was found in this audit. These quoted lines are incomplete. Each waits on the client unless stated.
+
+| Quoted line | State | Impact | Blocks presentation? | Blocks handover? |
+|---|---|---|---|---|
+| Bookings · Receipts & sales order | Payment receipts exist in Finance. The printable provisional receipt and sales order are **not built**; the tabs show a placeholder (Q-B5, C-21) | A quoted document is missing | No, if not demonstrated and disclosed | **Yes** |
+| Performance · Attendance | **Not built** (C-16, CR-1) | A quoted line is missing, and its scope is a commercial decision | No, if disclosed | **Yes**, until decided |
+| Inventory · Unit status (sold) | Available and reserved work. Confirmed units show Booked; Sold can't be reached (Q-B4) | A quoted status never appears | No | Yes |
+| Performance · Calls & follow-ups | Follow-ups work; calls show "—" (C-19) | Half the line has no data | No | Yes |
+| Performance charts | Two call charts are placeholders (C-19) | Empty charts | No | With C-19 |
+| Targets · Calls targets | Set and saved; achievement stays empty (C-19) | Calls can't be tracked | No | With C-19 |
+| Bookings · Token & unit hold | Manual hold date; no automatic release (Q-B2) | Holds must be released by hand | No | Agree the rule |
+| Bookings · Booking status | Paid or confirmed bookings can't be cancelled (Q-B3, CR-3) | Needs a manual route | No | Agree the rule |
+| Tasks · Proposal printing | Works; final layout waits on Q36, C-25, C-27 | Layout may change | No | Yes |
+| Teams · Duty roster | Works; Leads off doesn't affect rotation (C-15) | Rule missing | No | Agree the rule |
+| HR · Leave approvals | **Staff leave can't be approved until approvers are set** | A setup step for the client | No | Yes, as setup |
+| Finance · Outstanding | Balance right; overdue understated (F-14, C-27) | Don't rely on overdue figures | No | Yes |
+| Finance · Financial reports | Work; F-7 and F-18 affect some figures (D-F1, D-F2) | Definitions undecided | No | Yes |
+
+**Non-critical findings, none blocking either milestone:**
+- **Form dropdowns at scale:** poor at 10k leads (§50).
+- **Dev server only:** a hydration warning on Manager pages, cause not identified. The production build showed no console errors across 35 pages.
+- **Other pages load Zod in the browser** (§38), unconfirmed.
+- **The error page** is not exercised by a test.
+- **Browsers:** NFR-05 is still Chrome only.
+- **Payment proofs:** can't be removed or replaced (F-11, low).
+
+### 3. Client decisions still pending
+
+- **Must be decided before handover:** S-1 (signed questionnaire), Q-B5 and C-21 (receipt and sales order), C-16 and CR-1 (attendance), Q-B4 (Sold).
+- **Rules for existing features:** C-15 (rotation), C-19 (calls), C-25 and C-27 (proposals, overdue), Q-B1, Q-B2, Q-B3 (bookings), D-F1, D-F2 (finance), D-H1 (directory), D-L1 (list controls), staff leave approvers, the FR-011 deviation, Merge rules 1–6.
+- **Access removals kept as they are until S-1:** Q31, Q36, Q45, Q50, Q52.
+
+### 4. Client infrastructure and data still required
+
+- **Infrastructure:** server, SSH, domain, database choice, off-server backup destination (H-1 to H-5), CDN answer (H-11), who maintains it (H-12).
+- **Data:** first Super Admin (H-6), users (H-7), lookup lists including cities (H-8), who enters projects and units (H-9), company details for proposals (H-10).
+
+### 5. Out-of-scope requests
+
+Not in the quotation; each needs a separate quote: CR-2 (floor map on proposals), CR-3 (refunds with deductions), Meta and TikTok lead ads, AI call analysis, lead CSV import, the aging matrix, and a full attendance module if CR-1 goes that way. Payment gateways, bank integrations, tax and automated commissions are excluded by the quotation.
+
+### 6. Test results
+
+| Check | Result |
+|---|---|
+| TypeScript | Pass, exit 0 |
+| Lint | Pass, exit 0 |
+| Vitest (unit and integration) | **64 files, 707 / 707** |
+| Playwright | **169 / 169 in 22.1 min**, first run of the final code |
+| Production build | 105 / 105 pages |
+| Migrations and schema | 28 migrations, no drift |
+| Production build on development data | 35 pages across 4 roles, 0 console or server errors |
+| Integrity checks on development data | 9 of 9 clean, before and after the rehearsal |
+
+**Timing.** Playwright took about twice its usual time, and the laptop read as on battery. Nothing failed, and there was no sleep.
+
+**Data integrity and security:**
+- **Signed-out access:** all API routes, found from the file system, refused with 401. Only sign-in and sign-out are open.
+- **Sensitive data:** no password hash or session token in API responses, and none in the audit log. All passwords are hashed.
+- **Bookings and units:** no mismatches, no unit with two live bookings, and every confirmed booking has a client.
+- **Data isolation:** §45, 0 mismatches. Finance rules are covered by `finance`, `finance-reports` and `finance-entries`.
+- **Production data:** none exists, so none could be inspected. `db-seed` refuses production and `setup-production` adds only reviewed lists and one Super Admin.
+
+**A wrong conclusion, corrected.** During the rehearsal the Confirm booking click timed out, and it first looked like a screen freeze on the dev server. The page snapshot showed otherwise: the booking confirmed and the page updated, and only the test tool's click was left waiting. Users see no freeze. The same timeout occurred 3 of 3 times against the dev server and never on the production build; the exact mechanism was not established.
+
+### 7. Production deployment blockers
+
+| Blocker | Owner |
+|---|---|
+| No server, domain or backup destination (H-1 to H-5) | Client |
+| Signed questionnaire (S-1) | Client |
+| Receipt and sales order templates (Q-B5, C-21), then about 2 days | Client, then Zeploy |
+| Attendance decision (C-16, CR-1) | Client and Zeploy |
+| Users, lookup lists and first Super Admin (H-6 to H-8) | Client |
+| Rerun the load test, run the live security checks, set up backups and logs on the server | Zeploy, once the server exists |
+
+### 8. Presentation readiness
+
+**Conditions for GO:**
+1. Run from the **production build**, not the dev server (`V1_PRESENTATION_RUNBOOK.md`). The dev server shows developer badges.
+2. Keep the laptop on mains with the lid open. It read as on battery at the end of this audit.
+3. Book **VERIFY-B202** only. It is the one unit left, confirmed Available, Whole and offered in the dropdown.
+4. Tell the client up front that receipts and sales order printing, and attendance, are not built.
+
+**Presentation data:**
+- VERIFY-A102 is now Booked, as the rehearsal intended. VERIFY-B202 is untouched.
+- Rehearsal records remain, because nothing is deleted: Rehearsal Buyer as a lead and client, a booking, Receipt 5, a meeting and a task. Dashboard and finance figures include them. The next receipt number will be 6.
+- The rehearsal changed one existing record, VERIFY-A102. No other existing unit, booking, payment, lead or client changed.
+- The preflight now reports `NEED` for whole units (1 of 2). That is expected: the live run needs one.
+- Other development records are named VERIFY or Demo, which may look like test data on screen.
+
+**Demonstration flow, about 20 minutes:** dashboard → add a lead with City Other → reassign → meeting → task → book VERIFY-B202 → Token pending → post the payment → stages → Confirm → lead timeline → agent's restricted view → finance report CSV → Cities and Audit log.
+
+### 9. Recommended next actions
+
+1. **Before presenting:** plug in, start the production build, and sign in once with each account.
+2. **At the presentation:** disclose the two unbuilt lines, and ask for Q-B5, C-21, C-16 and S-1.
+3. **Confirm the date** (7 or 10 November) and what counts as "completion of Version 1" for the second payment.
+4. **After the presentation:** build the receipt and sales order once the templates arrive, and resolve the attendance decision.
+5. **When a server exists:** deploy, run `scripts/perf/nfr-load.mjs`, and complete `PRODUCTION_HANDOVER_CHECKLIST.md`.
+
+**Completion counts (recounted from the §24 matrix rows):** **57 implemented and verified, 16 partial, 0 not implemented, 7 blocked, 5 excluded** (85). **Remaining agreed development:** about 1.25 developer-days, plus about 2 days for receipts and the sales order once the client provides the templates. **Baseline:** Vitest 707 / 707, Playwright 169 / 169, build 105 / 105, 28 migrations.
+
+**Not committed:** `e2e/v1-audit-journeys.spec.ts`, `docs/V1_PRESENTATION_RUNBOOK.md` and this section.
