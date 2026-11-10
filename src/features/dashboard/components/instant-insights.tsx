@@ -108,11 +108,19 @@ export function InstantInsights({ data }: { data: DashboardData }) {
       </Card>
 
       <div className="grid grid-cols-2 gap-3.5 md:grid-cols-4">
-        <MiniStat label="Teams" value={formatInt(insights?.teams)} caption={`Avg score ${insights ? insights.avgScore : NO_VALUE}`} />
+        <MiniStat
+          label="Teams"
+          value={formatInt(data.teamSummary?.teams)}
+          caption={
+            data.teamSummary?.avgScore == null
+              ? `Avg score ${NO_VALUE}`
+              : `Avg score ${data.teamSummary.avgScore}${data.teamSummary.provisional ? " · provisional" : ""}`
+          }
+        />
         <MiniStat
           label="Meetings 30D"
           value={formatInt(insights?.meetings30d)}
-          caption={insights ? `30d ${insights.meetings30d} · 6mo ${insights.meetings6m}` : "No meetings yet"}
+          caption={insights ? `30d ${insights.meetings30d} · 6mo ${insights.meetings6m}` : NO_VALUE}
         />
         <MiniStat label="Team meetings" value={formatInt(insights?.teamMeetings)} caption="MTD period" />
         <MiniStat label="Bookings" value={formatInt(insights?.bookings)} caption="Across top teams" />

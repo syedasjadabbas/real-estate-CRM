@@ -311,13 +311,30 @@ export async function teamScores(db: Db, actor: Actor, now = new Date()) {
     actor.role === "super_admin" || actor.role === "admin" ? true : actor.role === "manager" ? r.managerId === actor.id : teamRows.some((m) => m.teamId === r.teamId && m.userId === actor.id),
   );
   const scores = await agentScores(db, [...new Set(visible.map((r) => r.userId))], now);
-  const byTeam = new Map<string, { id: string; label: string; members: number[] }>();
+  const byTeam = new Map<string, { id: string; label: string; members: number[]; provisional: boolean }>();
   for (const r of visible) {
-    const t = byTeam.get(r.teamId) ?? { id: r.teamId, label: r.teamName, members: [] };
-    t.members.push(scores.get(r.userId)!.score);
+    const t = byTeam.get(r.teamId) ?? { id: r.teamId, label: r.teamName, members: [], provisional: false };
+    const s = scores.get(r.userId)!;
+    t.members.push(s.score);
+    // Any agent still on the neutral starting score makes the team figure provisional too.
+    t.provisional ||= s.provisional;
     byTeam.set(r.teamId, t);
   }
   return [...byTeam.values()]
-    .map((t) => ({ id: t.id, label: t.label, count: Math.round(t.members.reduce((a, b) => a + b, 0) / t.members.length) }))
+    .map((t) => ({ id: t.id, label: t.label, count: Math.round(t.members.reduce((a, b) => a + b, 0) / t.members.length), provisional: t.provisional }))
     .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+}
+
+/**
+ * The dashboard's Teams tile: how many teams in the actor's view have a score, and the plain
+ * average of those team scores (each team counts once, as in "Team performance scores").
+ * Null average when no team has an active agent, so nothing is shown rather than a made-up 0.
+ */
+export function teamScoreSummary(rows: { count: number; provisional: boolean }[]) {
+  if (rows.length === 0) return { teams: 0, avgScore: null, provisional: false };
+  return {
+    teams: rows.length,
+    avgScore: Math.round(rows.reduce((sum, t) => sum + t.count, 0) / rows.length),
+    provisional: rows.some((t) => t.provisional),
+  };
 }

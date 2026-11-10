@@ -91,7 +91,7 @@ export function Sidebar({
 
   const groups = useMemo(() => {
     const q = query.trim().toLowerCase();
-    // Items with a role list (Finance) are shown only to those roles; the reference items to everyone.
+    // Items with a role list are shown only to those roles (the lists mirror the pages' own checks).
     const visible = navigation
       .map((group) => ({ ...group, items: group.items.filter((item) => !item.roles || (user ? item.roles.includes(user.role) : false)) }))
       .filter((group) => group.items.length > 0);

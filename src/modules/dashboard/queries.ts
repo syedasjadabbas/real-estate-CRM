@@ -4,7 +4,7 @@ import type { Database } from "@/server/db";
 import { leadSources, leads, meetings, projects, teamMembers, teams, users } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
 import { INBOUND_LABELS } from "@/modules/leads/constants";
-import { teamScores } from "@/modules/leads/assignment";
+import { teamScoreSummary, teamScores } from "@/modules/leads/assignment";
 import { leadScope } from "@/modules/leads/policy";
 import { scopeFilter, teamMemberIds } from "@/modules/leads/support";
 import type { DashboardData, LostBreakdown, LostTeam, RangeKey } from "@/features/dashboard/types";
@@ -176,6 +176,7 @@ export async function dashboardData(db: Database, actor: Actor, projectId: strin
 
   const total = k.total;
   const openCount = total - k.won - k.lost;
+  const scoredTeams = await teamScores(db, actor, now);
   const data: DashboardData = {
     isSample: false,
     snapshotAt: now.toISOString(),
@@ -199,7 +200,8 @@ export async function dashboardData(db: Database, actor: Actor, projectId: strin
     topProjects: top,
     insights: null,
     insightsUpdatedAt: null,
-    teamScores: await teamScores(db, actor, now),
+    teamScores: scoredTeams,
+    teamSummary: teamScoreSummary(scoredTeams),
     teamOutput: [],
     meetingMix: [],
     targets: null,

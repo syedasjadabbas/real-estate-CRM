@@ -18,6 +18,22 @@ describe("normalizePhone", () => {
     expect(normalizePhone(cc, number)?.e164).toBe(e164);
   });
 
+  it("gives one number for every way a Pakistani mobile is typed", () => {
+    const forms = ["0300-1234567", "0300 1234567", "300 1234567", "+92 300 1234567", "+92 0300 1234567", "0092 300 1234567", "92 300 1234567", "92-300-1234567", "923001234567", "92 0300 1234567"];
+    for (const form of forms) expect(normalizePhone("+92", form), form).toEqual({ countryCode: "+92", national: "3001234567", e164: "+923001234567" });
+  });
+
+  it("only drops a bare 92 from the mobile shape, never from landlines or other countries", () => {
+    // Kohat landline (area code 922): the leading 92 is part of the national number.
+    expect(normalizePhone("+92", "0922 512345")?.e164).toBe("+92922512345");
+    expect(normalizePhone("+92", "922 512345")?.e164).toBe("+92922512345");
+    // Too long or too short to be "92 + mobile": left as typed, not guessed.
+    expect(normalizePhone("+92", "92 300 12345678")?.e164).toBe("+929230012345678");
+    expect(normalizePhone("+92", "92 300 123456")?.e164).toBe("+9292300123456");
+    // Another country code is untouched.
+    expect(normalizePhone("+966", "92 300 1234567")?.e164).toBe("+966923001234567");
+  });
+
   it("rejects numbers that are too short or have a bad country code", () => {
     expect(normalizePhone("+92", "12345")).toBeNull();
     expect(normalizePhone("+0", "3001234567")).toBeNull();

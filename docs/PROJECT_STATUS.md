@@ -1,6 +1,6 @@
 # Project status and completion checklist
 
-> **Latest: §53 (10 Nov 2026).** Sprint verified: Vitest 814 / 814, Playwright 179 / 179, build 114 / 114 pages, no drift. Requirements: 60 implemented, 14 partial, 7 blocked, 4 excluded. Not committed or deployed. §1 – §23 are the 31 Oct baseline.
+> **Latest: §54 (10 Nov 2026).** Pre-presentation cleanup on top of §53: phone numbers typed "92 300…" now match, the Teams tile shows a real average score, and HR and accountants no longer see menu links they can't open. Requirements unchanged at 60 implemented, 14 partial, 7 blocked, 4 excluded. The §53 sprint is committed as 3819bbf; §54 is not committed, and nothing is deployed. §1 – §23 are the 31 Oct baseline.
 
 Updated **31 Oct 2026 (final read-only audit, §9)**. Everything below was checked against the code and by running the checks named here.
 - Rounds 1–4 are committed and pushed as `e956033` on `main`.
@@ -1680,7 +1680,7 @@ FR-005 reads: "List pages support search, a filter panel, column sorting and pag
 |---|---|---|---|---|---|---|---|---|
 | FR-001 | Email + password sign-in, sessions | IV | Argon2 login, sessions, logout | `server/auth/login.ts:19`, `session-store.ts` | auth.spec, security.test | T | — | Yes |
 | FR-002 | Sign-in / out logged with time and IP | IV | Logged, shown in Workplace, counted in Performance. Expired sessions log no sign-out | `session-store.ts:26,88` | workplace, performance | T | — | Yes |
-| FR-003 | Access-denied card, API 403 | IV | Restricted state and `forbidden()` | `components/ui/empty-state.tsx:28`, `server/errors.ts` | auth.spec | T | — | Yes |
+| FR-003 | Access-denied card, API 403 | IV | Restricted state and `forbidden()`. The sidebar hides modules a role can't open, matched to the page checks by a test (§54) | `components/ui/empty-state.tsx:28`, `server/errors.ts` | auth.spec | T | — | Yes |
 | FR-004 | Project selector, remembered per user and device | IV | Scoping real. One cookie per user on each browser, read only inside that user's session; invalid choices fall back | `modules/projects/queries.ts` `activeProjectFor`, `server/project-scope.ts`, §37 | active-project (integration, e2e) | T | — | Yes |
 | FR-005 | Search, filters, sorting, 50 / page | PI | 50 everywhere paged; main lists complete, including Inventory, Finance (F-16) and Regenerated sorting (§41). Targets, Reviews and Shared phones unpaged; four lists wait on D-L1 | `*/constants.ts`, §31, §41 | list-sorting, list-pagination, list-controls, projects-teams-lists, regenerated-sort | T | D-L1 | Yes |
 | FR-006 | Notifications, unread count, pop-up | IV | Bell, count, pop-up. Window is an admin setting, unset by default; created on poll | `notifications/service.ts:53,64` | notifications, leads-notifications | T | Set the window at handover. More events are N2–N6 | Yes |
@@ -1705,7 +1705,7 @@ FR-005 reads: "List pages support search, a filter panel, column sorting and pag
 | FR-028 | First touch, used in reports | IV | Captured and shown on the lead; average per agent in the Performance table and CSV | `leads/support.ts:109`, `performance/service.ts`, §42 | performance-first-touch, performance, leads, recordings | T | — | Yes |
 | FR-029 | Rotation of an assignable team | IV | **Replaced by scored assignment (§52):** workload 40, performance 30, conversion 20, availability 10; neutral 50% until there is enough history; leave, roster On leave / Leads off, team weekend and full load excluded. Owner order: manual choice, returning customer's original agent, creating agent, score, then the manager. Every decision and its breakdown is stored in `lead_assignments`. Managers stay within their teams (F-15). No team-to-project link exists, so every active team is eligible for every project | `leads/assignment-score.ts`, `leads/assignment.ts`, `leads/commands.ts` | assignment-score, ownership-assignment, lead-assignment, lead-auto-assign, leave | T | Team-to-project link if the client wants it | Yes |
 | FR-030 | Manual reassign | IV | Logged, and recorded in `lead_assignments` with the previous owner. Unassigned leads are claimed atomically: the first claim wins, the loser gets 409 (§52) | `leads/commands.ts` `assignLead`, `leads/claims.ts` | leads, ownership-assignment, sprint-ownership-imports.spec | T | — | Yes |
-| FR-031 | Duplicate detection | IV | Same project; reject or flag. Matches **all five numbers** of a lead or client (primary and four extra), normalised, under per-number locks (§52) | `contacts/phones.ts`, `leads/commands.ts` | leads, workflows, lead-phone-edit, ownership-assignment | T | — | Yes |
+| FR-031 | Duplicate detection | IV | Same project; reject or flag. Matches **all five numbers** of a lead or client (primary and four extra), normalised, under per-number locks (§52). "0300…", "+92 300…", "0092 300…" and "92 300…" are one number (§54) | `contacts/phones.ts`, `leads/commands.ts` | leads, workflows, lead-phone-edit, ownership-assignment | T | — | Yes |
 | FR-032 | Shared-phone view, merge | BC | View only; no merge (F-22) | `leads/queries.ts:449` | Empty case only | T* | Merge rules 1–6, then 1.5 d | No (merge not listed) |
 | FR-033 | Regenerated leads | IV | Marked, listed, unworked first | `leads/commands.ts:174` | leads, workflows | T | — | Yes |
 | FR-034 | Favourites | IV | Per-user | `leads/commands.ts` | leads, audit | T | — | Yes |
@@ -3409,6 +3409,8 @@ Records left by the check (nothing was deleted):
 - **Test database:** it now holds the restore-check copy of development; the test suites reset it on their next run.
 
 ### 57-lead test import (development database only)
+
+> Checked again against the original file on 11 Nov 2026: see §55.
 - **Source:** `cs_1794205363119_1_xjsykg.xlsx` (Downloads). The original is unchanged (10,887 bytes, 16:24); only a copy was read. It has 57 rows, two columns (name, phone) and no header row.
 - **Workflow used:** the real one. `submitImport` (by an Admin) put every row through validation and duplicate checks. A Super Admin approved with `decideImportBatch`, which creates each row through normal lead creation and scored assignment. It was rehearsed twice with rollback before the real run. A guard refused any database other than the local development one.
 - **Result:** 55 of 57 rows imported.
@@ -3429,7 +3431,7 @@ Records left by the check (nothing was deleted):
   - Source **"Cold data"**: the file names no source, and the workflow requires one.
   - Project **Demo Project**: the only active project in development.
   - Each lead carries a note naming the file.
-- **Defect noticed, not changed:** a number typed as "92 300 1234567" without + is stored as +92 92 300…, so it won't match the same customer typed as 0300…. The import handled it by correcting row 26. The app's normaliser should treat a leading 92 followed by a 10-digit national number as the country code. That is a small fix to decide on before live imports.
+- **Defect noticed:** a number typed as "92 300 1234567" without + was stored as +92 92 300…, so it didn't match the same customer typed as 0300…. The import handled it by correcting row 26. **Fixed in §54.**
 
 ### Role-by-role review (production build, all six roles, 26 pages each)
 - **No error pages and no console or page errors for any role.** Every restricted page shows the standard Access denied card. Access matches `USER_ROLES_AND_PERMISSIONS.md`:
@@ -3440,9 +3442,9 @@ Records left by the check (nothing was deleted):
   - **HR:** Teams, Tasks, HR, Workplace and Notifications; no leads, clients, projects, inventory, bookings or finance.
   - **Accountant:** Clients, Projects, Inventory, Bookings, Finance, Tasks, HR and Workplace; no leads, meetings, targets, teams or performance.
 - **Empty states** are present on every list that can be empty.
-- **UI point for the demo.** The sidebar shows the reference CRM's items to every role, so **HR sees Leads, New leads, Clients, Projects, Inventory and Bookings, and the Accountant sees Leads and New leads, which all open Access denied.** This is the existing design (§24, FR-003) and was not changed. Hiding them per role is about a quarter-day; it needs the client's OK.
+- **UI point for the demo.** The sidebar showed the reference CRM's items to every role, so HR and the Accountant saw links that open Access denied. **Fixed in §54.**
 - **Data points:**
-  - The dashboard's "Avg score" tile on the Teams card is still "—".
+  - The dashboard's "Avg score" tile on the Teams card was "—". **Fixed in §54.**
   - Project eligibility for assignment is all-teams, because no team-to-project link exists.
 
 ### Blockers and what the client must provide
@@ -3459,3 +3461,112 @@ Records left by the check (nothing was deleted):
 - **57-lead import:** correct numbers for rows 46 and 47; confirmation of source, project and the "Lhr" → Lahore reading.
 - **Assignment:** whether assignment should be limited by project (needs a team-to-project link).
 - **Earlier open decisions:** the confirmed lookup lists and users (H-6 to H-8); the open decisions in §24 (7 blocked requirements).
+
+## 54. Pre-presentation cleanup (10 Nov 2026)
+
+**State: done and verified locally. Not committed, pushed or deployed.** The 55 imported test leads, the original spreadsheet, the assignment weights and the ownership rules were not touched. No VoIP work.
+
+### Changes
+1. **Phone numbers.** "92 300 1234567" (the country code typed without "+") was stored as +92 92 300…, so it didn't match the same customer entered as "0300…". `normalizePhone` now drops a bare leading 92, but only for the mobile shape (92 + 3xxxxxxxxx, or 92 + 03xxxxxxxxx). Every form now gives +923001234567: "0300-1234567", "300 1234567", "+92 300…", "+92 0300…", "0092 300…", "92 300…" and "92-0300…".
+   - **Limited on purpose:** Kohat landlines start with 922, so a bare 92 isn't dropped from other numbers.
+   - **Unchanged:** numbers with another country code, and lengths that aren't a mobile.
+   - **No existing record needed correcting:** development has no "+9292…" number in leads, lead phones, clients or client phones.
+   - **Where it applies:** leads, extra numbers, clients, imports and employee phones all use this one function.
+2. **Teams "Avg score" tile.** The tile was "—" because the insights row was never computed. It now shows the number of teams with a score in the viewer's scope, and the average of their scores. These are the same team scores as the "Team performance scores" panel: the average of each team's active agents' assignment scores. It adds "provisional" while any agent has too little history, and shows "Avg score —" when there is nothing to average. The Meetings tile caption "No meetings yet" claimed something the page never checked; it now shows "—". The other insight tiles stay "—" (`DASHBOARD_PLAN.md` §4).
+3. **Sidebar per role.**
+   - **HR** no longer sees Leads, New leads, Clients, Projects, Inventory or Bookings.
+   - **The Accountant** no longer sees Leads or New leads.
+   - **Permissions unchanged:** every page and API still checks access.
+   - **A new unit test checks the menu against the page checks** for all six roles and twelve modules.
+
+### Tests
+- **New:**
+  - `leads-rules`: every way of typing a mobile gives one number; the bare-92 rule leaves landlines and other countries alone.
+  - `ownership-assignment`: "0300…", "+92 300…", "92 300…" and "92-0300…" are the same customer, as a primary or an extra number, in both directions.
+  - `dashboard`: Teams tile figures for an admin and a manager, and "—" with no active agents.
+  - `navigation-roles`: the menu equals the page permissions for every role.
+- **Results:** recorded in the final report of this round.
+
+### Partial and blocked requirements: review
+Nothing below was built. Each row waits on the client decision named, except where marked **decision-free**. Quotation column as in §24 (Yes* = in the quotation, but the rule must come from the client).
+
+| FR | What is missing | What the client must decide | Quotation | After the decision |
+|---|---|---|---|---|
+| FR-005 | Paging on four small lists (holidays, daily reports, sign-ins, notifications) | D-L1: do those four lists need sorting and paging? | Yes | about 0.5 d |
+| FR-005 | Targets, Reviews and Shared phones lists are unpaged | **Decision-free**, not built in this cleanup | Yes | about 0.5 d |
+| FR-011 | Stale, no-meeting, meetings-done widgets ignore the date chips | Accept the deviation, or say how those widgets should use a range | Yes | 0.5 – 1 d |
+| FR-032 | Merging leads that share a phone | Merge rules 1–6 (which record survives, what moves) | No (merge not quoted) | 1.5 d, change request |
+| FR-071 | A unit never reaches Sold | Q-B4: when does a unit move Reserved → Booked → Sold? | Yes* | small |
+| FR-072 | SPU and 50% share bookings | Q-B1: share sizing, pricing, several shares per buyer, when Sold | Yes* | 2 – 3 d |
+| FR-080 | Booking a partly available unit | Q-B1 | Yes* | with FR-072 |
+| FR-081 | Holds never expire | Q-B2: token amount → hold days; automatic release | Yes* | 1 d |
+| FR-082 | Payment gates per stage; cancelling a paid booking | Q-B3 (mandatory stages, who moves them, what gates them); refunds are CR-3 | Yes*; refunds a change request | depends on answers |
+| FR-084 | Provisional receipt and sales order | Q-B5 (templates, logos, fields) and C-21 (receipt code format) | Yes* | 2 d |
+| FR-091 | Proposal print layout and editing rules | Q36 / C-25 (who may edit before printing), C-27, C-28 (floor prices, ROI) | Yes* | depends on answers |
+| FR-111, FR-150, FR-151, FR-152 | Call counts, call minutes and call quality are empty | C-19: does each uploaded recording count as a call? A VoIP provider could also supply call logs, but no provider is chosen | Yes* | 1 – 2 d after C-19 |
+| FR-140 | Managers can read the employee directory | D-H1: should managers see it? | Yes | small |
+| FR-142 | Staff leave can't be approved | C-4 (first and second approver), C-5, C-10, C-13 | Yes* | small after C-4 |
+| FR-143 | Attendance | C-16 (how attendance is captured, hours, lateness) and CR-1 (commercial: the quotation lists one line; the answers describe a 6 – 9 d module) | Yes* (extent is CR-1) | 6 – 9 d |
+| FR-153 | Critical flag | C-17: critical agent or lead, and the thresholds | Yes* | small |
+| FR-203 | Overdue understated; not shown on the booking | C-27 (first installment month, down-payment due date). Showing the balance on the booking page is **decision-free**, not built | Yes* | 0.5 d |
+| FR-204 | Receipt number format | C-21 | Yes* | small |
+| FR-205 | Report figures | D-F1 (reversal date in collections) and D-F2 (are booking collections income?) | Yes* | small |
+
+## 55. Import history: 57-lead spreadsheet compared with the imported leads (11 Nov 2026)
+
+**Read-only check.** Nothing was imported again and no record changed; production wasn't touched. This repository is public, so this section names rows only, with no customer names, phone numbers or lead codes. Row numbers are the spreadsheet's own (Excel rows 1–57).
+
+### Source file
+- **File:** `cs_1794205363119_1_xjsykg.xlsx`, kept by the owner in Downloads. 10,887 bytes, last saved 10 Nov 2026 16:24, unchanged since.
+- **SHA-256:** `F087EFAB8F6A23E256AC0F85A205E956A66FA8505DE129B11B2C944BA788C44F`. This is identical to the copy the import read on 10 Nov.
+- **Layout:** one sheet, 57 rows, two columns (name, phone), no header row. No other columns are used. All 57 names are distinct.
+
+### How the check was made
+- **Fresh parse:** the original was unpacked again and parsed independently of the import scripts.
+- **Separate expected number:** each row's expected number came from a separately written rule. A leading 0 that Excel dropped is restored, and `03…` and `92 3…` both become `+923…`; anything else is not a Pakistani mobile.
+- **Comparison:** every row was matched by that number against the development database (`mz_crm`), read-only. The match covered the import batch rows and the leads created from them: name, number, stage, city, source, project, client link, extra numbers, deletion and edits.
+
+### Results
+
+| Check | Result |
+|---|---|
+| Import batches in development | 1 (approved, 55 rows) |
+| Rows that match their lead exactly | **55** |
+| Rows rejected before import | **2** (rows 46 and 47) |
+| Rows missing (valid but not imported) | **0** |
+| Records wrongly normalised or different from the file | **0** |
+| Imported leads not traced to a spreadsheet row | **0** |
+| Order | Import row *n* = sheet row *n* for rows 1–45, and *n* + 2 for rows 48–57 |
+
+- **Every imported lead:**
+  - its name is exactly as written in the file (none had stray spaces);
+  - one valid `+92 3…` mobile, with the 55 numbers all different and no number shared with any other lead in development;
+  - still New Lead, not deleted, not edited since the import, not linked to a client, and no extra numbers;
+  - source "Cold data", project "Demo Project".
+- **City:** Lahore for the 13 names ending in "Lhr", none for the rest.
+
+### Rejected rows
+
+| Row | Number in the file | Reason | In development? |
+|---|---|---|---|
+| 46 | 10 digits starting 6 (Excel stored it as a number) | Not a Pakistani mobile. Probably a North American number without its country code; not assumed | No, in any form |
+| 47 | 10 digits starting 8 (Excel stored it as a number) | Same | No, in any form |
+
+**To import them:** the correct numbers with their country code are needed.
+
+### How the stored numbers were derived
+
+| Form in the file | Rows | Stored as |
+|---|---|---|
+| `0300-1234567` | 40 | `+92300…` |
+| Saved by Excel as a number, leading 0 lost | 13 (42–45, 48–57) | 0 restored, then `+923…` |
+| Trailing full stop | 1 (row 21) | Full stop removed |
+| `92 3xx …` without + | 1 (row 26) | `+923…` (since §54 the app also does this itself) |
+
+Name notes (kept exactly as written): 13 names end in "Lhr" (rows 1–6, 15, 20, 22, 26, 31, 32, 42); row 39 is a one-word name; row 49 holds two names separated by "/".
+
+### Still to confirm with the client
+- **Source "Cold data":** the file has no source column, and the workflow requires one.
+- **Project "Demo Project":** the only active project in development.
+- **"Lhr" read as the city Lahore.**
+- **Rows 46 and 47:** the correct numbers.

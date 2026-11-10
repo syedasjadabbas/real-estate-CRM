@@ -51,6 +51,19 @@ describe.skipIf(!hasTestDb)("Sprint P1–P2: phones, customers, ownership, claim
   const history = (id: string) => db.select().from(leadAssignments).where(eq(leadAssignments.leadId, id));
 
   describe("five phone numbers", () => {
+    it("treats 0300…, +92 300… and 92 300… as the same customer, as a primary or an extra number", async () => {
+      const first = await lead(f.actors.agent1, { phoneNumber: "0300 7654321" });
+      expect((await row(first.leadId)).phoneE164).toBe("+923007654321");
+      for (const typed of ["92 300 7654321", "+92 300 7654321", "92-0300-7654321"]) {
+        expect((await failure(createLead(db, f.actors.agent1, leadInput(f, { phoneNumber: typed })))).code, typed).toBe("CONFLICT");
+        expect((await failure(createLead(db, f.actors.agent1, leadInput(f, { phoneNumber: phone(), phones: [{ countryCode: "+92", number: typed }] })))).code, `extra ${typed}`).toBe("CONFLICT");
+      }
+      // A lead stored with a bare 92 is found from the national form, too.
+      const second = await lead(f.actors.agent1, { phoneNumber: "92 321 5550001" });
+      expect((await row(second.leadId)).phoneE164).toBe("+923215550001");
+      expect((await failure(createLead(db, f.actors.agent1, leadInput(f, { phoneNumber: "0321-5550001" })))).code).toBe("CONFLICT");
+    });
+
     it("stores up to four extra numbers, normalised, with only the first required", async () => {
       const r = await lead(f.actors.agent1, { phones: [{ countryCode: "+92", number: "0321 1112223" }, { countryCode: "+44", number: "7700 900123" }, { countryCode: "+92", number: "" }] });
       const stored = await db.select().from(leadPhones).where(eq(leadPhones.leadId, r.leadId));

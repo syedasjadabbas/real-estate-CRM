@@ -104,3 +104,9 @@ Legend: **F** full · **T** own team · **O** own records · **R** read-only · 
 ## 3. Questions to confirm
 
 See `ASSUMPTIONS_AND_OPEN_QUESTIONS.md`: Q-R1 to Q-R6.
+
+## Sidebar per role (10 Nov 2026)
+The sidebar shows only the modules a role can open. Each item's role list (`src/config/navigation.ts`) matches the page's own check, and `tests/unit/navigation-roles.test.ts` keeps them equal. **No permission changed:** pages and APIs still check access, and an address typed by hand still shows Access denied.
+- **HR:** Dashboard, My workplace, HR, Teams, Tasks. Leads, New leads, Clients, Projects, Inventory and Bookings are hidden.
+- **Accountant:** Dashboard, Clients, Projects, Inventory, My workplace, HR, Bookings, Finance, Tasks. Leads and New leads are hidden.
+- **Other roles:** unchanged.

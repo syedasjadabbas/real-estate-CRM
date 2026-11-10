@@ -22,6 +22,8 @@ export type ExecutiveKpis = {
 
 export type NamedCount = { id: string; label: string; count: number };
 
+export type TeamScoreSummary = { teams: number; avgScore: number | null; provisional: boolean };
+
 /** FR-016: lost leads per team, with the owners (agents) inside it. */
 export type LostTeam = { id: string; label: string; count: number; agents: NamedCount[] };
 export type LostBreakdown = { byTeam: LostTeam[] };
@@ -70,6 +72,8 @@ export type DashboardData = {
   insights: InsightTotals | null;
   insightsUpdatedAt: string | null;
   teamScores: NamedCount[];
+  /** Teams tile: scored teams in view and their average score (null when none). */
+  teamSummary: TeamScoreSummary | null;
   teamOutput: { id: string; label: string; meetings: number; bookings: number }[];
   meetingMix: MeetingFormat[];
   targets: TargetPeriods | null;
@@ -91,6 +95,7 @@ export const emptyDashboardData: DashboardData = {
   insights: null,
   insightsUpdatedAt: null,
   teamScores: [],
+  teamSummary: null,
   teamOutput: [],
   meetingMix: [],
   targets: null,

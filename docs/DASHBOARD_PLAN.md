@@ -55,7 +55,9 @@ KPIs, lead sources, inbound channels and top projects count **leads created in t
 | Widget | Why |
 |---|---|
 | Aging vs meetings matrix (FR-014, low priority) | The age and meeting buckets and the "engaged pipeline" exclusion rule aren't defined well enough to count. |
-| Instant insights: team score, average score, team output, meeting mix, targets | "Score" and meeting "format" are not defined in any document (`MEETINGS_MODULE_PLAN.md` §M). The targets view belongs to the Targets module. |
+| Instant insights: team output, meeting mix, targets, and the Meetings / Team meetings / Bookings tiles | Meeting "format" is not defined in any document (`MEETINGS_MODULE_PLAN.md` §M). The targets view belongs to the Targets module. These tiles show "—", never a guessed number. |
+
+**Team score and average score (10 Nov 2026).** These are now defined. A team's score is the average of its active agents' assignment scores (`leads/assignment.ts` `teamScores`, the score My Teams shows). The Teams tile shows how many teams in the viewer's scope have a score, and the plain average of those team scores, marked "provisional" while any agent is still on the neutral starting score. With no scored team it shows "Avg score —", not 0. Like the Team performance panel, it ignores the date chips and team filter: the score is the agent's current standing.
 
 ## 5. Tests
 

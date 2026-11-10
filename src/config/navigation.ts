@@ -21,9 +21,18 @@ export type NavItem = {
   icon: LucideIcon;
   /** One-line page description, taken from the reference module headers. */
   description: string;
-  /** Roles that see the item; omitted = everyone (all reference items). */
+  /**
+   * Roles that see the item; omitted = everyone. Each list matches the page's own permission check
+   * (tests/unit/navigation-roles.test.ts), so a role is never sent to an "Access denied" page from
+   * the menu. Hiding a link changes nothing on the server: the pages and APIs still check access.
+   */
   roles?: string[];
 };
+
+/** Roles with any lead access (leads/policy.ts: HR and accountants have none). */
+const LEAD_ROLES = ["super_admin", "admin", "manager", "agent"];
+/** Roles that may view clients, projects, inventory and bookings (HR may not). */
+const SALES_RECORD_ROLES = ["super_admin", "admin", "manager", "agent", "accountant"];
 
 export type NavGroup = {
   label: string;
@@ -54,18 +63,21 @@ export const navigation: NavGroup[] = [
         href: "/dashboard/leads",
         icon: Database,
         description: "Pipeline, assignments, inbound channels, and lead history — per active project.",
+        roles: LEAD_ROLES,
       },
       {
         label: "New leads",
         href: "/dashboard/leads?stage=new_lead",
         icon: UserPlus,
         description: "Leads still in the New Lead stage, in the leads list.",
+        roles: LEAD_ROLES,
       },
       {
         label: "Clients",
         href: "/dashboard/clients",
         icon: Users,
         description: "Long-term profiles, investments, contracts, and payment history.",
+        roles: SALES_RECORD_ROLES,
       },
     ],
   },
@@ -78,6 +90,7 @@ export const navigation: NavGroup[] = [
         icon: Building,
         description:
           "Building, farmhouse, and society portfolios. Define inventory dimensions and units per project.",
+        roles: SALES_RECORD_ROLES,
       },
       {
         label: "Inventory",
@@ -85,6 +98,7 @@ export const navigation: NavGroup[] = [
         icon: Grid3x3,
         description:
           "Browse units and project inventory. Open a unit for full dimensions and details.",
+        roles: SALES_RECORD_ROLES,
       },
     ],
   },
@@ -128,6 +142,7 @@ export const navigation: NavGroup[] = [
         icon: BookText,
         description:
           "Lead → negotiation → forms & payments → confirmed. Units stay aligned with inventory.",
+        roles: SALES_RECORD_ROLES,
       },
       {
         label: "Finance",

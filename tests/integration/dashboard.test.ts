@@ -96,6 +96,20 @@ describe.skipIf(!hasTestDb)("Dashboard analytics (PostgreSQL integration)", () =
     }
   });
 
+  it("Teams tile: the number of scored teams and the average of their scores, provisional on little history", async () => {
+    const all = (await get(admin)).data!;
+    expect(all.teamScores.length).toBeGreaterThan(0);
+    const mean = Math.round(all.teamScores.reduce((sum, t) => sum + t.count, 0) / all.teamScores.length);
+    expect(all.teamSummary).toEqual({ teams: all.teamScores.length, avgScore: mean, provisional: true });
+    // A manager's tile covers only the teams they manage, matching their Team performance panel.
+    const mine = (await get(f.actors.manager)).data!;
+    expect(mine.teamScores.map((t) => t.label)).toEqual(["Team 1"]);
+    expect(mine.teamSummary).toMatchObject({ teams: 1, avgScore: mine.teamScores[0].count });
+    // No active agents: nothing to average, so no number is shown (not a made-up 0).
+    await db.update(users).set({ status: "inactive" }).where(eq(users.role, "agent"));
+    expect((await get(admin)).data!.teamSummary).toEqual({ teams: 0, avgScore: null, provisional: false });
+  });
+
   it("limits agents to their own leads and managers to their teams; HR and accountants see none", async () => {
     expect((await get(f.actors.agent1)).data!.kpis!.totalLeads).toBe(4);
     expect((await get(f.actors.agent1)).data!.teams).toEqual([]);
