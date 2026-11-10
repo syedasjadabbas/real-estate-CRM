@@ -8,7 +8,6 @@ Code:
 - `src/modules/dashboard/queries.ts` (`dashboardData`, `rangeBounds`)
 - `src/app/(app)/dashboard/page.tsx`
 - `executive-essentials.tsx`: range and team controls now change the URL
-- `recent-leads.tsx`: rows link to the lead
 - `dashboard-hero.tsx`: data status
 
 ## 1. Scope
@@ -47,7 +46,6 @@ KPIs, lead sources, inbound channels and top projects count **leads created in t
 | Stale pipeline | Open leads in the project with no update for 14+ days (FR-013 acceptance). Not limited to the window. |
 | No meeting (window) | Open leads with no non-cancelled meeting in the last 30 days |
 | Meetings done | Completed meetings in the last 30 days on leads in scope |
-| Recent leads | Latest 20 leads in the project, whatever the range. A click opens the lead. |
 | Top projects | Top 5 projects by leads created in the window, across the projects in scope |
 | Active projects | Projects with status "active" |
 | Lead sources / Inbound channels | Leads in the window grouped by source / channel |
@@ -73,21 +71,14 @@ KPIs, lead sources, inbound channels and top projects count **leads created in t
 
 A bug found while testing was fixed in the "no meeting" subquery: Drizzle leaves columns unqualified in single-table queries, so the lead id is now written out in full.
 
-## 6. Lost leads by reason and by team (FR-016), 31 Oct 2026
+## 6. Lost leads by team (FR-016), 31 Oct 2026
 
-- **Which leads:** those **created in the selected range and now Lost**, in the same scope, project and team filter as the KPI tiles. The reason totals add up to the "Lost" figure on the Won / Lost tile (covered by a test).
-- **By reason:**
-  - Grouped by the recorded lost reason; leads with no reason appear as "No reason recorded". That row is **not** a link, because the Lost list cannot filter for a missing reason. This was found in browser QA: the link had opened every lost lead.
-  - A click opens the Lost list (`/dashboard/leads/lost?lostReason=…&from=…&to=…`) for the same reason and days. The Lost list gained a `lostReason` filter for this, and it is included in "Clear filters".
-  - The Lost list filters by whole days, so a rolling 24h / 7d / 30d range opens the matching calendar days.
+- **Which leads:** those **created in the selected range and now Lost**, in the same scope, project and team filter as the KPI tiles.
 - **By team:**
   - Grouped by the **lead owner's** active teams, and each team expands to its agents.
   - Owners in several teams are counted under each team; owners in no team, and unassigned leads, appear under "No team".
-- **Tests:** `tests/integration/dashboard.test.ts` (now 9):
-  - the totals reconcile with the Lost tile;
-  - the click-through total equals the filtered Lost list;
-  - agent scope;
-  - the "No team" bucket.
+- **Removed at the client's request (10 Nov 2026):** the "Lost leads by reason" card and the "Recent leads" table (FR-015 recent leads part) are no longer on the dashboard, and their queries are gone. The Lost list keeps its own `?lostReason=` filter. "New leads" is in the sidebar's Clients & Leads group and in the leads tab bar, opening `/dashboard/leads?stage=new_lead`.
+- **Tests:** `tests/integration/dashboard.test.ts`: the by-team grouping, agent scope and the "No team" bucket.
 
 **Open questions:**
 - D1: should an owner in several teams count once (under which team?) rather than under each?

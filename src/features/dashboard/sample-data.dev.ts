@@ -74,13 +74,5 @@ export const dashboardSampleData: DashboardData = {
     { id: "c2", label: "Meta", count: 799 },
     { id: "c3", label: "Tiktok", count: 191 },
   ],
-  recentLeads: [
-    { id: "l1", name: "Sample Lead One", status: "Contact Attempted", inbound: "Manual", owner: "Sample Agent", createdAt: "2026-10-28T05:55:00Z" },
-    { id: "l2", name: "Sample Lead Two", status: "New Lead", inbound: "Tiktok", owner: "Sample Agent", createdAt: "2026-10-28T05:31:00Z" },
-    { id: "l3", name: "Sample Lead Three", status: "Contacted", inbound: "Meta", owner: "Sample Agent", createdAt: "2026-10-28T05:06:00Z" },
-    { id: "l4", name: "Sample Lead Four", status: "Lost Lead", inbound: "Meta", owner: "Sample Agent", createdAt: "2026-10-28T05:01:00Z" },
-    { id: "l5", name: "Sample Lead Five", status: "Qualified Lead", inbound: "Meta", owner: "Sample Agent", createdAt: "2026-10-27T13:01:00Z" },
-    { id: "l6", name: "Sample Lead Six", status: "Future Opportunity", inbound: "Tiktok", owner: "Sample Agent", createdAt: "2026-10-27T11:46:00Z" },
-  ],
   lost: null,
 };

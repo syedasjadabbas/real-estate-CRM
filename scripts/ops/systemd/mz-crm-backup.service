@@ -1,0 +1,34 @@
+# Nightly CRM backup with retention (scripts/ops/RESTORE.md, "Scheduled backups").
+# Install as root on the server (nothing here is installed automatically):
+#   cp scripts/ops/systemd/mz-crm-backup*.service scripts/ops/systemd/mz-crm-backup.timer /etc/systemd/system/
+#   systemctl daemon-reload && systemctl enable --now mz-crm-backup.timer
+# Adjust User, Group, WorkingDirectory and EnvironmentFile if the app lives elsewhere.
+[Unit]
+Description=MZ CRM backup (database + uploaded files) with retention
+Wants=network-online.target
+After=network-online.target postgresql.service
+# Writes a high-priority journal entry when a backup fails (see mz-crm-backup-failed.service).
+OnFailure=mz-crm-backup-failed.service
+
+[Service]
+Type=oneshot
+User=mzcrm
+Group=mzcrm
+WorkingDirectory=/srv/mz-crm
+# Plain KEY=value lines: NODE_ENV, DATABASE_URL, FILE_STORAGE_DIR, BACKUP_DIR and optionally
+# BACKUP_REMOTE, BACKUP_KEEP_DAILY, BACKUP_KEEP_MONTHLY. Mode 600, owned by the app user.
+EnvironmentFile=/srv/mz-crm/.env
+ExecStart=/usr/bin/node scripts/ops/backup-run.mjs --trigger schedule
+# Backups are private: new files are readable by the app user only.
+UMask=0077
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+# A dump of a large database can take a while; a stuck run is stopped (and recorded as interrupted
+# by the next run) rather than blocking the next night.
+TimeoutStartSec=4h
+# Hardening: the job only needs the app folder (read), BACKUP_DIR (write) and FILE_STORAGE_DIR (read).
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true

@@ -19,6 +19,7 @@ import { businessToday } from "@/modules/bookings/today";
 import { canManageTeams, canViewOwnRoster, canViewTeam, canViewTeams } from "@/modules/teams/policy";
 import { findVisibleTeamId, getDailyReport, getRosterDay, getRosterMonth, listDailyReports, listTeams, myRoster, teamDetail, teamFormOptions, teamTiles, visibleTeams } from "@/modules/teams/queries";
 import { requirePageUser } from "@/server/auth/current-user";
+import { agentScores } from "@/modules/leads/assignment";
 import type { Actor } from "@/server/auth/types";
 import { getDb } from "@/server/db";
 
@@ -64,7 +65,10 @@ async function TeamsTab({ actor, params }: { actor: Actor; params: Record<string
     selected ? teamDetail(db, actor, selected) : Promise.resolve(null),
     canManageTeams(actor) ? teamFormOptions(db, actor) : Promise.resolve({ managers: [], candidates: [] }),
   ]);
+  const scoreRows = detail ? detail.members.filter((m) => m.role === "agent" && m.status === "active") : [];
+  const scores = await agentScores(db, scoreRows.map((m) => m.id));
   return (
+    <>
     <TeamsPanel
       key={selected ?? "none"}
       list={list}
@@ -74,6 +78,43 @@ async function TeamsTab({ actor, params }: { actor: Actor; params: Record<string
       candidates={options.candidates}
       params={params}
     />
+    {detail && scoreRows.length ? (
+      <PanelCard title={`Agent scores · ${detail.team.name}`}>
+        <p className="mb-3 text-[11px] text-zinc-500">
+          Score = performance (follow-ups done, first touch within a day) and conversion (booked ÷ decided), weighted as in Settings → Assignment. A
+          new or quiet agent starts at 50 and is marked provisional until there is enough history.
+        </p>
+        <table className="w-full text-left text-xs" aria-label="Agent scores">
+          <thead className="text-[10px] font-black tracking-[0.05em] text-zinc-600 uppercase">
+            <tr>
+              <th scope="col" className="py-2 pr-3">Agent</th>
+              <th scope="col" className="py-2 pr-3 text-right">Score</th>
+              <th scope="col" className="py-2 pr-3 text-right">Performance</th>
+              <th scope="col" className="py-2 pr-3 text-right">Conversion</th>
+              <th scope="col" className="py-2 text-right">Open leads</th>
+            </tr>
+          </thead>
+          <tbody>
+            {scoreRows.map((m) => {
+              const s = scores.get(m.id)!;
+              return (
+                <tr key={m.id} className="border-t border-zinc-100">
+                  <td className="py-2 pr-3 font-semibold">
+                    {m.name}
+                    {s.provisional ? <span className="ml-2 text-[10px] font-bold text-zinc-500">Provisional</span> : null}
+                  </td>
+                  <td className="py-2 pr-3 text-right font-black tabular-nums">{s.score}</td>
+                  <td className="py-2 pr-3 text-right tabular-nums">{s.performance}</td>
+                  <td className="py-2 pr-3 text-right tabular-nums">{s.conversion}</td>
+                  <td className="py-2 text-right tabular-nums">{formatInt(s.openLeads)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </PanelCard>
+    ) : null}
+    </>
   );
 }
 
@@ -196,7 +237,7 @@ async function RosterTab({ actor, params }: { actor: Actor; params: Record<strin
       ) : monthGrid ? (
         <RosterMonthGrid days={monthGrid.days} rows={monthGrid.rows} weekendDays={monthGrid.team.weekendDays} />
       ) : null}
-      <p className="mt-4 text-[11px] text-zinc-500">Duty is recorded only; it does not change lead rotation yet (pending client confirmation).</p>
+      <p className="mt-4 text-[11px] text-zinc-500">Agents marked On leave or Leads off for a day get no new leads that day from automatic assignment.</p>
     </PanelCard>
   );
 }

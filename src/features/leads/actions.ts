@@ -16,6 +16,7 @@ import {
   type CreateLeadOutcome,
 } from "@/modules/leads/commands";
 import { completeNextFollowUp } from "@/modules/leads/follow-ups";
+import { claimLead } from "@/modules/leads/claims";
 import { requireActor } from "@/server/auth/current-user";
 import { getDb } from "@/server/db";
 import { toActionError, type ActionResult } from "@/server/errors";
@@ -81,4 +82,9 @@ export async function decideLostAction(approvalId: string, approve: boolean, com
 
 export async function addReviewAction(leadId: string, body: string) {
   return run((db, actor) => addReview(db, actor, leadId, { body }));
+}
+
+/** Claim an unassigned lead; the first successful claim wins. */
+export async function claimLeadAction(leadId: string) {
+  return run((db, actor) => claimLead(db, actor, leadId));
 }

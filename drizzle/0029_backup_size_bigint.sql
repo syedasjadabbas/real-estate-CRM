@@ -1,0 +1,1 @@
+ALTER TABLE "backup_runs" ALTER COLUMN "size_bytes" SET DATA TYPE bigint;

@@ -1,5 +1,7 @@
 # Project status and completion checklist
 
+> **Latest: §53 (10 Nov 2026).** Sprint verified: Vitest 814 / 814, Playwright 179 / 179, build 114 / 114 pages, no drift. Requirements: 60 implemented, 14 partial, 7 blocked, 4 excluded. Not committed or deployed. §1 – §23 are the 31 Oct baseline.
+
 Updated **31 Oct 2026 (final read-only audit, §9)**. Everything below was checked against the code and by running the checks named here.
 - Rounds 1–4 are committed and pushed as `e956033` on `main`.
 - Nothing has been deployed.
@@ -1588,9 +1590,9 @@ Requested as "F-4"; in the §17 findings table this is **F-6** (F-4 there is the
 
 ## 24. Final Completion Reconciliation (4 Nov 2026, commit 7986782)
 
-> **Current status (updated 6 Nov 2026, §51).** The summary table, finding rows and requirement matrix below are kept current. The narrative, estimates and §C – §I are the 4 Nov baseline.
+> **Current status (updated 10 Nov 2026, §53: sprint complete and verified, uncommitted).** The summary table, finding rows and requirement matrix below are kept current. The narrative, estimates and §C – §I are the 4 Nov baseline.
 > - **Fixed since:** F-13 (§25), F-15 (§27), F-9 (§28), F-20 (§30), F-16 (§31), F-24 / FR-027 (§32), F-23 (§33), F-10 (§34), FR-010 tile links (§35), FR-021 stage history (§36), FR-004 active project (§37), FR-042 cities (§38), FR-025 lead timeline (§39), FR-022 lead columns (§40), Regenerated sorting (§41, FR-005 stays partial), FR-028 first touch (§42), FR-061 inventory filters (§43), V1 readiness (§45 – §50), final audit (§51). F-7 was assessed as blocked by D-F1 (§26).
-> - **Counts now:** 57 implemented and verified, 16 partial, 0 not implemented, 7 blocked, 5 excluded.
+> - **Counts now:** 60 implemented and verified, 14 partial, 0 not implemented, 7 blocked, 4 excluded. On 10 Nov FR-009, FR-043 and FR-122 became Implemented; FR-015, FR-016, FR-029, FR-030 and FR-031 were updated for the sprint (§52, §53).
 > - **Remaining agreed development:** about 1.25 developer-days.
 
 **Method.**
@@ -1607,11 +1609,11 @@ Requested as "F-4"; in the §17 findings table this is **F-6** (F-4 there is the
 
 | Status | Requirements now | On 4 Nov |
 |---|---|---|
-| Implemented and verified | **57** | 45 |
-| Partially implemented | **16** | 28 |
+| Implemented and verified | **60** | 45 |
+| Partially implemented | **14** | 28 |
 | Not implemented | **0** | 0 |
 | Blocked by client decision | **7** | 7 |
-| Excluded from agreed scope | **5** | 5 |
+| Excluded from agreed scope | **4** | 5 |
 | **Total** | **85** | 85 |
 
 - **Actual state.** The CRM is a substantial working system: all 14 quoted modules exist and the core sales, booking, payment, proposal, HR and finance flows work end to end. It is **not finished**. Of the 80 requirements in scope, 45 are fully met. No blended percentage is given, because it would hide how different the gaps are.
@@ -1684,14 +1686,14 @@ FR-005 reads: "List pages support search, a filter panel, column sorting and pag
 | FR-006 | Notifications, unread count, pop-up | IV | Bell, count, pop-up. Window is an admin setting, unset by default; created on poll | `notifications/service.ts:53,64` | notifications, leads-notifications | T | Set the window at handover. More events are N2–N6 | Yes |
 | FR-007 | Responsive at 375 px | IV | Collapsing shell | `components/shell/app-shell.tsx` | responsive.spec (7 pages) | T | — | Yes |
 | FR-008 | Audit log of all changes | IV | All exported writes audited | §22, `audit/service.ts` | audit.test, audit-log.spec | T | — | Yes |
-| FR-009 | App settings incl. rotation | PI | Cap, price and ROI work; no lead-rotation setting exists | `tasks/settings.ts:15`, `leads/commands.ts:77` | tasks | T | Define with C-15 what rotation settings mean, then build | Yes* |
+| FR-009 | App settings incl. rotation | IV | Cap, price and ROI work. **Settings → Assignment** (Admin, Super Admin) holds the assignment weights (40 / 30 / 20 / 10, must total 100), the minimum sample and workload limits; changes are audited (§52) | `tasks/settings.ts`, `leads/assignment.ts` `updateAssignmentSettings` | tasks, ownership-assignment, assignment-score | T | — | Yes |
 | FR-010 | KPI tiles match lists | IV | Tiles open the same leads they count, for every range and the team filter; Open pipeline links. Formulas unchanged and still to be confirmed by the client | `dashboard/queries.ts` `listParams`, `leads/queries.ts` `teamFilter`, §35 | dashboard-links (integration, e2e), dashboard, list-controls | T | — | Yes |
 | FR-011 | Date chips recalc all widgets | PI | Chips and team filter work. Stale, no-meeting, meetings-done and recent ignore the range (planned deviation) | `dashboard/queries.ts`, `DASHBOARD_PLAN.md:47–50` | dashboard | T | Client accepts the deviation, or scope the widgets | Yes |
 | FR-012 | Source and channel breakdown | IV | Counts and % | `dashboard/queries.ts:134` | dashboard.test | T | — | Yes |
 | FR-013 | Pipeline health | IV | Stale ≥14 d, no meeting, meetings done | `dashboard/queries.ts:159` | dashboard.test | T | — | Yes |
 | FR-014 | Aging × meetings matrix | EX | Placeholder card | `queries.ts:227` | — | – | Priority L; also needs M-Q1–5 | No |
-| FR-015 | Recent leads, top projects | IV | Latest 20; name links to lead | `dashboard/queries.ts:142` | dashboard.test | T | — | Yes |
-| FR-016 | Lost by reason and team | IV | Clickable reasons | `dashboard/queries.ts:180` | dashboard | T | — | Yes |
+| FR-015 | Recent leads, top projects | IV | **Amended by the client (10 Nov): the Recent leads widget is removed.** Top projects stays. New leads is reached from the Leads menu instead (§52) | `dashboard/queries.ts`, `executive-essentials.tsx`, `config/navigation.ts` | dashboard (integration, e2e) | T | — | Yes |
+| FR-016 | Lost by reason and team | IV | **Amended by the client (10 Nov): Lost by reason is removed from the dashboard.** Lost by team stays (a team expands to its agents); the Lost list keeps its reason filter (§52) | `dashboard/queries.ts`, `lost-leads.tsx` | dashboard (integration, e2e) | T | D1 (multi-team owner) | Yes |
 | FR-020 | Create lead | IV | All fields, unique code. Forged city, source and budget ids are field errors (§38, §49) | `leads/commands.ts:236` | leads | T | Tidy with F-9 batch | Yes |
 | FR-021 | Ten stages, timeline from → to | IV | Every path that changes a stage records from → to, including an approved lost request | `leads/commands.ts` `decideLostRequest`, §36 | lead-stage-history, lost-approval-history, leads, bookings | T | — | Yes |
 | FR-022 | Leads table, all columns sortable | IV | All MODULES §2.2 columns present and every data column sorts. External ID stays blank in V1: no integration supplies it | `leads/constants.ts`, `leads/queries.ts`, `leads-table.tsx`, §40 | lead-columns (integration, e2e), leads, list-controls | T | — | Yes |
@@ -1701,9 +1703,9 @@ FR-005 reads: "List pages support search, a filter panel, column sorting and pag
 | FR-026 | Follow-ups, %, overdue | IV | Schedule, done, metric | `leads/commands.ts:393,423` | leads, performance, todos | T | — | Yes |
 | FR-027 | To-dos, count = list | IV | All buckets page 50 at a time, so every counted item can be reached | `leads/queries.ts` `leadTodos`, §32 | todos-paging (integration, e2e), leads, todos-lost-leads | T | — | Yes |
 | FR-028 | First touch, used in reports | IV | Captured and shown on the lead; average per agent in the Performance table and CSV | `leads/support.ts:109`, `performance/service.ts`, §42 | performance-first-touch, performance, leads, recordings | T | — | Yes |
-| FR-029 | Rotation of an assignable team | IV | Admins rotate all active teams; managers their own (F-15). Admin pointer restart after leave remains (§27) | `leads/commands.ts` `rotateOwner`, §27 | lead-assignment, lead-auto-assign, leave | T | — | Yes |
-| FR-030 | Manual reassign | IV | Logged | `leads/commands.ts:350` | leads | T | — | Yes |
-| FR-031 | Duplicate detection | IV | Same project; reject or flag | `leads/commands.ts:114` | leads, workflows, lead-phone-edit | T | — | Yes |
+| FR-029 | Rotation of an assignable team | IV | **Replaced by scored assignment (§52):** workload 40, performance 30, conversion 20, availability 10; neutral 50% until there is enough history; leave, roster On leave / Leads off, team weekend and full load excluded. Owner order: manual choice, returning customer's original agent, creating agent, score, then the manager. Every decision and its breakdown is stored in `lead_assignments`. Managers stay within their teams (F-15). No team-to-project link exists, so every active team is eligible for every project | `leads/assignment-score.ts`, `leads/assignment.ts`, `leads/commands.ts` | assignment-score, ownership-assignment, lead-assignment, lead-auto-assign, leave | T | Team-to-project link if the client wants it | Yes |
+| FR-030 | Manual reassign | IV | Logged, and recorded in `lead_assignments` with the previous owner. Unassigned leads are claimed atomically: the first claim wins, the loser gets 409 (§52) | `leads/commands.ts` `assignLead`, `leads/claims.ts` | leads, ownership-assignment, sprint-ownership-imports.spec | T | — | Yes |
+| FR-031 | Duplicate detection | IV | Same project; reject or flag. Matches **all five numbers** of a lead or client (primary and four extra), normalised, under per-number locks (§52) | `contacts/phones.ts`, `leads/commands.ts` | leads, workflows, lead-phone-edit, ownership-assignment | T | — | Yes |
 | FR-032 | Shared-phone view, merge | BC | View only; no merge (F-22) | `leads/queries.ts:449` | Empty case only | T* | Merge rules 1–6, then 1.5 d | No (merge not listed) |
 | FR-033 | Regenerated leads | IV | Marked, listed, unworked first | `leads/commands.ts:174` | leads, workflows | T | — | Yes |
 | FR-034 | Favourites | IV | Per-user | `leads/commands.ts` | leads, audit | T | — | Yes |
@@ -1715,7 +1717,7 @@ FR-005 reads: "List pages support search, a filter panel, column sorting and pag
 | FR-040 | Meta lead ads | EX | None (enum value only) | `schema.ts:51` | — | – | Separate quote | No |
 | FR-041 | TikTok lead ads | EX | None | — | — | – | Separate quote | No |
 | FR-042 | City from managed list, "Other" | IV | Managed list with an Admin screen; "Other" takes a validated typed name, so numbers and phone numbers are refused. Cities deactivate, never delete | `modules/cities/*`, `settings/cities`, §38 | cities (integration, e2e), security-headers | T | — | Yes |
-| FR-043 | Lead CSV import | EX | None | `EXTERNAL_INTEGRATIONS.md` §10 | — | – | Quoted separately; needs Q-P5 | No |
+| FR-043 | Lead CSV import | IV | **Delivered in the 10 Nov sprint.** Import batches: every row validated and checked for duplicates on submission; nothing is created until a **Super Admin** approves; approval runs each row through normal lead creation and assignment; audited. 57-row test file imported into development (§53) | `leads/imports.ts`, `/api/v1/lead-imports`, Leads → Imports | lead-imports-reporting, sprint-ownership-imports.spec | T | — | Not listed; delivered |
 | FR-050 | Client from confirmed booking | IV | Automatic, or manual by admin | `bookings/commands.ts:141` | bookings, clients | T | — | Yes |
 | FR-051 | Clients list and filter | IV | List, latest investment and filter include open bookings (F-13) | `clients/queries.ts:56`, §25 | clients, clients-investments, client-bookings | T | — | Yes |
 | FR-052 | Client detail incl. contracts | IV | Bookings, payments, and documents on the client and its leads (F-13, F-20) | `documents/service.ts`, §25, §30 | client-bookings, client-documents | T | — | Yes |
@@ -1744,7 +1746,7 @@ FR-005 reads: "List pages support search, a filter panel, column sorting and pag
 | FR-111 | Achievement % | PI | Meetings and sq ft computed; calls always null | `targets/service.ts:29` | teams-targets | T | C-19 | Yes* |
 | FR-120 | Teams | IV | Inactive excluded from rotation | `teams/commands.ts:40` | teams-targets | T* | Rotation test | Yes |
 | FR-121 | Daily report | IV | One per team per date; typed by hand | `teams/commands.ts:128` | teams-targets | T | Browser test | Yes |
-| FR-122 | Duty roster | PI | Views work; Leads off doesn't affect rotation | `teams/commands.ts:161` | teams-targets | T | C-15 | Yes* |
+| FR-122 | Duty roster | IV | Views work. **On leave and Leads off now exclude the agent from automatic assignment** (C-15 settled by the client's 10 Nov brief, §52) | `teams/commands.ts`, `leads/assignment.ts` | teams-targets, ownership-assignment | T | — | Yes |
 | FR-130 | My Workplace | IV | Leave, holidays, sign-ins | `workplace/service.ts:25` | workplace | T | — | Yes |
 | FR-140 | Employee directory, Admin / HR only | PI | Fields done; managers can read it (matrix says R, requirement says no) | `employees/policy.ts:9` | employees | T | D-H1 | Yes |
 | FR-141 | Holidays | IV | Company and regional | `holidays/service.ts:56` | holidays, workplace | T | C-3 region rule | Yes |
@@ -3284,3 +3286,176 @@ Not in the quotation; each needs a separate quote: CR-2 (floor map on proposals)
 **Completion counts (recounted from the §24 matrix rows):** **57 implemented and verified, 16 partial, 0 not implemented, 7 blocked, 5 excluded** (85). **Remaining agreed development:** about 1.25 developer-days, plus about 2 days for receipts and the sales order once the client provides the templates. **Baseline:** Vitest 707 / 707, Playwright 169 / 169, build 105 / 105, 28 migrations.
 
 **Not committed:** `e2e/v1-audit-journeys.spec.ts`, `docs/V1_PRESENTATION_RUNBOOK.md` and this section.
+
+## 52. Sprint checkpoint: ownership, assignment, imports, backups, VoIP (10 Nov 2026)
+
+> **Superseded by §53:** the sprint is now fully verified. The "To finish" list below is done, apart from committing.
+
+**State at the checkpoint: implemented, not yet fully verified, not committed.** Work stopped at a clean checkpoint because of a usage limit. Everything is saved on disk. Nothing was committed, pushed or deployed.
+
+### Checkpoint safety
+- **Migrations:** `0028_sprint_phones_assignment_imports_backups` (additive: 4 tables for phones, assignment history, import batches and rows, plus backup runs) and `0029_backup_size_bigint` (widens one column). Both are applied to the development **and** test databases: 30 of 30 on each.
+- **No drift** (`drizzle-kit generate` reports no changes). No query was running on either database at the checkpoint.
+- **TypeScript passes.** No test, build or server process is running.
+- **Production server stopped.** The presentation server (`mz-crm-presentation`) was stopped before rebuilding, and the build folder may be mid-rebuild. Run `npm run build` before starting it again.
+- **Background agents:** all three finished (backups, VoIP, dashboard). None is running.
+
+### Requirements and their state
+
+| # | Requirement | State | Where |
+|---|---|---|---|
+| A | Five phone numbers, only the first required | Done | `lead_phones`, `client_phones`; `modules/contacts/`; "Additional numbers" on lead and client forms |
+| A | Phones are the only matching identifier, normalised | Done | Every number, primary or extra, matched across leads and clients |
+| A | Duplicates across leads and existing customers | Done | Per-number locks in sorted order; same project: reject, duplicate or regenerate as before |
+| A | History kept across inquiries; customer and lead linked | Done | A returning customer's lead joins their client, with a "lead linked" entry and audit row. Only when it goes to the original agent, so another team's client is never linked |
+| B | Returning customer goes to their original agent | Done | Original agent beats scoring; a manager's or admin's explicit choice still wins. An inactive original agent falls back to scoring |
+| B | Unassigned leads: first atomic claim wins | Done | `modules/leads/claims.ts`: one conditional update; the loser gets 409. Unassigned tab and API, with no phone numbers shown |
+| B | Ownership can't change silently | Done | Only authorised reassignment, recorded in `lead_assignments` with the previous owner, plus audit |
+| B | Access: owner, their manager, Admin, Super Admin | Done (existing rule) | Verified by tests; HR, Accountants and other agents refused |
+| C | Configurable performance-aware assignment (40 / 30 / 20 / 10) | Done | `assignment-score.ts` (pure) and `assignment.ts`; Settings → Assignment; `/api/v1/settings/assignment` |
+| C | Workload, follow-ups, login, working hours, roster, leave | Done | Excludes leave, roster On leave / Leads off, team weekend and full load; scores sign-in and working hours |
+| C | Neutral start; no misleading small samples | Done | Scores lean towards 50% until there is enough history; shown as "Provisional" |
+| C | Reason and breakdown recorded | Done | `lead_assignments.breakdown`: every candidate's parts and the exclusion reasons |
+| C | Team and project eligibility | Partly | Team scope enforced. **No team-to-project link exists** in the schema, so every active team is eligible for every project |
+| D | Agent scores in My Teams | Done | Agent scores table on the Teams tab |
+| D | Team performance from agent scores | Done | The dashboard's "Team performance scores" is now the average of its agents' scores. "Avg score" on the Teams tile is still "—" (its widget data isn't computed) |
+| D | Won / Lost: month, quarter, custom | Done | By the date won or lost (`dateField=decided`, `period`) |
+| D | Remove Lost by Reason and Recent Leads | Done | Dashboard widgets removed. The Lost list's reason filter is kept |
+| D | New Leads in the Leads menu | Done | Sidebar and the leads tab bar |
+| D | Priority leads above ordinary ones, consistently | Done | One `priorityRank` rule for the list and the board, used when no column is chosen |
+| E | Import batches; validation; duplicates; Super Admin only; audit | Done | `modules/leads/imports.ts`, Imports tab, `/api/v1/lead-imports`. Nothing is created until approval; approval runs each row through normal lead creation |
+| F | VoIP | Foundation only | Provider-neutral interface, `/api/v1/voip/status`, a Dialer that says calling isn't set up and offers the phone link, and `docs/VOIP_INTEGRATION.md`. **Blocked:** no provider chosen, no credentials. Its prices are from the web on 10 Nov and need confirming |
+| G | Backups: scheduled, files too, retention, protected restore, audit | Done locally | `scripts/ops/backup-run.mjs`, `restore.mjs` (Super Admin password, checks, pre-restore backup, dry run), systemd units, Settings → Backups. **Not run** against a real server |
+| H | Validation, permissions, transactions, audit | Done for the above | Browser checks for phone numbers; server is the authority |
+
+**Client decisions settled by this sprint:** C-15 (the roster now affects assignment), the D-L1-adjacent New Leads entry, and FR-015 / FR-016, whose dashboard widgets are removed at the client's request. **The §24 matrix rows for FR-015, FR-016 and FR-029 have not yet been updated for these changes.**
+
+### Defects found and fixed during the sprint
+- **F-15 regression (concurrency).** The new engine didn't wait for a team change in progress, so it could pick an agent being removed. It now share-locks the teams it reads, for admins too.
+- **Privacy.** Creating a lead could join it to another team's client, and the success message named another team's agent. Both fixed.
+- **Restore.** `return refuse(...)` without `await` inside `try / finally` closed the database connection before a refusal was recorded, so failed restores crashed without an audit record. Fixed in all three places.
+- **Schema.** The phone format check first generated as `'^+…'` (escaping lost); fixed before it was applied anywhere.
+- **Wording.** Pages saying leads are assigned "by rotation", and the roster note saying duty doesn't affect assignment, were corrected.
+
+### Tests executed and results
+- **Unit:** `assignment-score.test.ts` 8 / 8; backups rules 53 / 53; VoIP rules 5 / 5.
+- **Focused integration, last run after all fixes: 7 files, 108 / 108.** Files: `ownership-assignment`, `lead-imports-reporting`, `backups`, `lead-assignment`, `leads`, `clients`, `client-bookings`.
+- **Sprint Playwright spec,** `sprint-ownership-imports.spec.ts`: 6 / 6 when run alone.
+- **First consolidated run** (before the last fixes): typecheck, lint, build (114 / 114 pages) and drift passed. Vitest had 5 files failing and Playwright 6 tests failing out of 179. Every one was traced and fixed above, and the affected files then passed.
+- **Second consolidated run: stopped at the checkpoint, during Vitest.** So **the final code has no complete full-suite pass yet.**
+
+### To finish (in order)
+1. Run the consolidated verification: `npm run typecheck`, `npm run lint`, full Vitest, `drizzle-kit generate --name drift_probe`, `npm run build`, full Playwright. Fix anything it finds.
+2. Update the §24 matrix rows for FR-015, FR-016, FR-029 (assignment) and the new requirements, recount, and refresh the estimates.
+3. Start the production build again for the client (`mz-crm-presentation`) after `npm run build`.
+4. Review, then commit when the owner says so.
+
+### Remaining production requirements
+- A server for the backup timer, restore rehearsal, log rotation and alerts (H-1 to H-5, H-12).
+- A VoIP provider, credentials and the CSP changes in `docs/VOIP_INTEGRATION.md`.
+- If assignment should be limited by project, a team-to-project link (a client decision).
+- The confirmed lookup lists and users (H-6 to H-8).
+
+## 53. Sprint verified, backups to 30 daily and 12 monthly, 57-lead test import, role review (10 Nov 2026)
+
+**State: complete and verified locally. Nothing committed, pushed or deployed. Production does not exist yet.**
+
+### Changes since §52
+- **Backup retention is now 30 daily and 12 monthly copies,** the client's requirement. `BACKUP_KEEP_DAILY` (default 30) keeps the newest complete backup from each of the last 30 days. `BACKUP_KEEP_MONTHLY` (default 12; 0 = none) keeps the newest from each of the last 12 calendar months. Days and months are counted in Pakistan time, and the newest complete backup is always kept. The old `BACKUP_RETENTION_DAYS` and `BACKUP_RETENTION_COUNT` are refused, with a message naming the replacements. Files changed: `scripts/ops/backup-lib.mjs`, `backup-run.mjs`, `backup.sh` (comment), `RESTORE.md`, the systemd unit comment, `.env.example`, `src/modules/backups/rules.ts`, and both backup test files.
+- **Batch page wording:** an approved batch now reads "1 lead created", not "1 leads created".
+- **Two Playwright specs fixed after the first run; no assertion was weakened.**
+  - **`pipeline.spec.ts`:** high-priority cards left by other specs now sort first, so the new card can start below the window. The drag pressed a point outside the window and selected text, which was reproduced and measured (the handle was at y = 1109 in a 900 px window). The handle is now scrolled into view first, as a user would.
+  - **`sprint-ownership-imports.spec.ts`:** the "Approved: 1 lead created" message is replaced by the batch's decided line when the page refreshes, so the check now accepts either. It clicks Approve again only while the button is still there.
+- **Requirement matrix (§24) updated:**
+  - FR-009 (assignment settings), FR-043 (lead import) and FR-122 (roster affects assignment) are now Implemented.
+  - FR-015 and FR-016 are marked as amended by the client.
+  - FR-029, FR-030 and FR-031 describe the new assignment, claiming and five-number matching.
+  - **Counts: 60 implemented, 14 partial, 0 not implemented, 7 blocked, 4 excluded (85).** These were recounted from the rows.
+
+### Consolidated verification (final run, 21:02 – 21:19, no sleep during it)
+
+| Check | Result |
+|---|---|
+| Typecheck (`npm run typecheck`) | Pass |
+| Lint | Pass |
+| Vitest | **814 / 814**, 70 files |
+| Migrations | 30 of 30 on development and test; **no drift** |
+| Production build | Pass, **114 / 114** pages |
+| Playwright | **179 / 179** (desktop and mobile) |
+
+The first run of the day found 3 Playwright failures (176 / 179). All three are explained above. Everything else passed in both runs.
+
+### Backup and restore: what was verified (local Windows machine, scratch folders, disposable test database)
+
+| Item | Result |
+|---|---|
+| Backup of the database and files | **Pass.** `backup-run.mjs` on the development database: dump plus file archive, checksums verified, run recorded |
+| Recording (uploaded file) backup | **Pass, with synthetic files.** Development has no uploaded files yet (0 `files` rows), so a synthetic recording was placed in a scratch storage folder; it was archived and listed |
+| Retention, 30 daily and 12 monthly | **Pass.** Unit and integration tests, plus a real run that removed two old folders and kept the new backup |
+| Bad retention setting | **Pass.** The old variable stopped the backup before it started, and the failure was recorded |
+| Corrupted backup | **Pass.** A tampered copy failed its checksum |
+| restore-check | **Pass.** The development backup was restored into the disposable test database; users 11, leads 8, bookings 5, payments 8 and files 0 all match. Audit rows differ by 3, written after the backup |
+| Restore safeguards | **Pass.** A wrong database name, a wrong password and a path instead of a folder name were all refused, with nothing changed. Each refusal was recorded in `backup_runs` and audited |
+| Restore dry run | **Pass.** All 7 checks passed |
+| Real restore (`restore.mjs`) | **Partly verified.** The checks passed and the pre-restore backup was written. It then **stopped safely at extracting the file archive**, because on Windows Node passes backslash paths to GNU tar. The database was not touched (a probe row added after the backup was still there), and the failure was recorded and audited. The production target is Linux (systemd), where this doesn't apply, but **a full restore has not yet run end to end.** It needs a Linux server rehearsal |
+| Off-server copy (`BACKUP_REMOTE`, rsync) | **Not verified.** No destination exists and rsync isn't on this machine. `backup.sh` copies but never prunes remotely, so the destination needs its own 30 daily / 12 monthly rule |
+| Daily schedule | **Not run.** The systemd timer (02:00 daily) needs the server |
+| Quarterly restore test | **Procedure documented** (`RESTORE.md`: before handover, then at least every quarter). Not scheduled; needs the server |
+
+Local-only note: GNU tar under Git Bash reads `C:/…` as a remote host, so this check set `TAR_OPTIONS=--force-local`. It isn't needed on Linux, and no production script was changed for it.
+
+Records left by the check (nothing was deleted):
+- **Development database:** 3 `backup_runs` rows (one failed on the tar issue, one failed on the deliberate old-variable test, one succeeded) and their audit rows. **Settings → Backups will show these, including "2 failures in the last 7 days", and will warn once the last backup is more than 26 hours old.** That is accurate: no scheduled backups run on this laptop.
+- **Test database:** it now holds the restore-check copy of development; the test suites reset it on their next run.
+
+### 57-lead test import (development database only)
+- **Source:** `cs_1794205363119_1_xjsykg.xlsx` (Downloads). The original is unchanged (10,887 bytes, 16:24); only a copy was read. It has 57 rows, two columns (name, phone) and no header row.
+- **Workflow used:** the real one. `submitImport` (by an Admin) put every row through validation and duplicate checks. A Super Admin approved with `decideImportBatch`, which creates each row through normal lead creation and scored assignment. It was rehearsed twice with rollback before the real run. A guard refused any database other than the local development one.
+- **Result:** 55 of 57 rows imported.
+  - Batch: 55 valid, 0 duplicate, 0 invalid.
+  - 55 leads were created: all in New Lead, all valid +92 3xx mobiles, 55 distinct numbers. No duplicate phone exists across development.
+  - **No customer (client) records were created or linked.**
+  - Assigned by score to 3 active agents (21 / 17 / 17).
+  - Audited: submit, approve, created.
+  - Development now has 63 leads (was 8); clients stay at 5.
+- **Corrections, recorded per row:**
+  - Leading 0 restored on 13 numbers that Excel stored as numbers (rows 42, 44, 45, 48–57).
+  - A trailing full stop removed (row 21).
+  - "92 3xx …" written without + normalised to 03xx (row 26).
+  - City set to Lahore for 13 names ending in "Lhr" (rows 1–6, 15, 20, 22, 26, 31, 32, 42); the names were kept exactly as written.
+  - A one-word name (row 39) and a "name / name" entry (row 49) were kept as written.
+- **Rejected, need correct numbers:** rows **46** and **47**. Both are 10-digit numbers starting with 6 and 8, which aren't Pakistani mobiles. They are probably North American numbers without a country code, but that was not assumed.
+- **Assumptions to confirm:**
+  - Source **"Cold data"**: the file names no source, and the workflow requires one.
+  - Project **Demo Project**: the only active project in development.
+  - Each lead carries a note naming the file.
+- **Defect noticed, not changed:** a number typed as "92 300 1234567" without + is stored as +92 92 300…, so it won't match the same customer typed as 0300…. The import handled it by correcting row 26. The app's normaliser should treat a leading 92 followed by a 10-digit national number as the country code. That is a small fix to decide on before live imports.
+
+### Role-by-role review (production build, all six roles, 26 pages each)
+- **No error pages and no console or page errors for any role.** Every restricted page shows the standard Access denied card. Access matches `USER_ROLES_AND_PERMISSIONS.md`:
+  - **Super Admin:** everything, including Backups.
+  - **Admin:** everything except Backups.
+  - **Manager:** no settings pages.
+  - **Agent:** no Finance and no settings; can open Unassigned and Imports, submit batches and claim leads.
+  - **HR:** Teams, Tasks, HR, Workplace and Notifications; no leads, clients, projects, inventory, bookings or finance.
+  - **Accountant:** Clients, Projects, Inventory, Bookings, Finance, Tasks, HR and Workplace; no leads, meetings, targets, teams or performance.
+- **Empty states** are present on every list that can be empty.
+- **UI point for the demo.** The sidebar shows the reference CRM's items to every role, so **HR sees Leads, New leads, Clients, Projects, Inventory and Bookings, and the Accountant sees Leads and New leads, which all open Access denied.** This is the existing design (§24, FR-003) and was not changed. Hiding them per role is about a quarter-day; it needs the client's OK.
+- **Data points:**
+  - The dashboard's "Avg score" tile on the Teams card is still "—".
+  - Project eligibility for assignment is all-teams, because no team-to-project link exists.
+
+### Blockers and what the client must provide
+- **Server:** the hosting server, domain and TLS (H-1 to H-5), for deployment, the backup timer, log rotation and alerts, and a full restore rehearsal on Linux.
+- **Off-server backups:** an off-server backup destination (host or bucket), its credentials, and a lifecycle rule for 30 daily and 12 monthly copies.
+- **VoIP:** not operational. It needs:
+  - a chosen provider;
+  - an account, a number and, for Pakistan, PTA-compliant routing;
+  - the credentials named in `docs/VOIP_INTEGRATION.md` (`VOIP_PROVIDER` plus the provider's keys);
+  - the CSP change listed there;
+  - a decision on recording storage.
+
+  Prices in that document were read from the web on 10 Nov and are unconfirmed. Nothing was purchased.
+- **57-lead import:** correct numbers for rows 46 and 47; confirmation of source, project and the "Lhr" → Lahore reading.
+- **Assignment:** whether assignment should be limited by project (needs a team-to-project link).
+- **Earlier open decisions:** the confirmed lookup lists and users (H-6 to H-8); the open decisions in §24 (7 blocked requirements).

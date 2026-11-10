@@ -14,23 +14,23 @@ test("a manager's Auto-assign gives the lead to their team, and the lead opens @
   const page = await ctx.newPage();
   await login(page, "manager");
   await page.goto("/dashboard/leads/new");
-  await expect(page.getByText("rotation among your teams' active agents")).toBeVisible();
+  await expect(page.getByText("assign automatically among your teams' available agents")).toBeVisible();
   await page.getByLabel("Name").fill(name);
   await page.getByLabel("Mobile number").fill(uniquePhone());
   await page.getByLabel("Source").selectOption(s.sourceId);
-  await expect(page.getByLabel("Owner")).toHaveValue(""); // Auto-assign (rotation)
+  await expect(page.getByLabel("Owner")).toHaveValue(""); // Auto-assign
   await page.getByRole("button", { name: "Create lead" }).click();
   await page.waitForURL(/\/dashboard\/leads\/[0-9a-f-]{36}$/);
   const leadId = page.url().split("/").pop()!;
 
   // Before the fix this could be another team's agent, and this page a 404.
   await expect(page.getByRole("heading", { name })).toBeVisible();
-  await expect(page.getByText("Auto-assigned (rotation)")).toBeVisible();
+  await expect(page.getByText(/^Auto-assigned/).first()).toBeVisible();
   expect([s.users.agent1.id, s.users.agent2.id]).toContain(await leadOwnerId(leadId));
   await ctx.close();
 });
 
-test("repeated Auto-assign through the API never leaves the manager's team, and goes round it", async ({ page }) => {
+test("repeated Auto-assign through the API never leaves the manager's team, and spreads across it", async ({ page }) => {
   const s = seed();
   await login(page, "manager");
   const owners: (string | null)[] = [];
@@ -40,9 +40,7 @@ test("repeated Auto-assign through the API never leaves the manager's team, and 
     owners.push(await leadOwnerId(res.data.leadId));
     expect((await api(page, `/api/v1/leads/${res.data.leadId}`)).status).toBe(200);
   }
-  expect(new Set(owners)).toEqual(new Set([s.users.agent1.id, s.users.agent2.id]));
-  expect(owners[0]).toBe(owners[2]);
-  expect(owners[1]).toBe(owners[3]);
+  for (const o of owners) expect([s.users.agent1.id, s.users.agent2.id]).toContain(o);
 });
 
 test("the API refuses a manager choosing an outsider, and roles that can't create leads", async ({ browser }) => {

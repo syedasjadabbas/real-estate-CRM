@@ -19,7 +19,7 @@ type HeaderProps = {
   className?: string;
 };
 
-/** Compact widget header (14px title) — "Recent leads", "Lead sources". */
+/** Compact widget header (14px title) — "Lead sources", "Inbound channels". */
 export function CardHeader({ title, badge, description, actions, className }: HeaderProps) {
   return (
     <div

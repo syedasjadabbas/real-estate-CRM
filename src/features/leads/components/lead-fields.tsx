@@ -2,6 +2,8 @@
 
 import { cityOptions, OTHER_CITY } from "@/modules/cities/constants";
 import type { ReactNode } from "react";
+import { ExtraPhonesFields } from "@/features/contacts/components/extra-phones";
+import type { ExtraPhoneInput } from "@/modules/contacts/constants";
 import { Field, Input } from "@/components/ui/input";
 import { PRIORITIES, PRIORITY_LABELS } from "@/modules/leads/constants";
 import type { LeadLookups } from "@/modules/leads/queries";
@@ -32,7 +34,11 @@ export type LeadFormValues = {
   priority: string;
   cityId: string;
   cityOther: string;
+  /** Numbers 2–5. */
+  phones: ExtraPhoneInput[];
 };
+
+type TextKey = Exclude<keyof LeadFormValues, "phones">;
 
 export const selectClass =
   "h-10 w-full rounded-xl border border-zinc-200/80 bg-zinc-50/70 px-3 text-sm font-medium text-zinc-900 shadow-hairline focus:border-brand/50 focus:bg-white focus:ring-2 focus:ring-brand/15 focus:outline-none disabled:opacity-60";
@@ -64,7 +70,7 @@ type Props = {
 
 /** Lead fields shared by the create form and the detail page's edit form. */
 export function LeadFields({ values, onChange, errors, lookups, disabled, interestExtra, currentCity }: Props) {
-  const text = (key: keyof LeadFormValues, label: string, opts: { required?: boolean; type?: string; placeholder?: string; autoComplete?: string } = {}) => (
+  const text = (key: TextKey, label: string, opts: { required?: boolean; type?: string; placeholder?: string; autoComplete?: string } = {}) => (
     <Field label={label} required={opts.required} error={errors[key]}>
       {(id, describedBy) => (
         <Input
@@ -81,7 +87,7 @@ export function LeadFields({ values, onChange, errors, lookups, disabled, intere
       )}
     </Field>
   );
-  const select = (key: keyof LeadFormValues, label: string, options: { value: string; label: string }[], opts: { required?: boolean; empty?: string } = {}) => (
+  const select = (key: TextKey, label: string, options: { value: string; label: string }[], opts: { required?: boolean; empty?: string } = {}) => (
     <Field label={label} required={opts.required} error={errors[key]}>
       {(id, describedBy) => (
         <select
@@ -112,6 +118,7 @@ export function LeadFields({ values, onChange, errors, lookups, disabled, intere
         {select("phoneCountryCode", "Country code", COUNTRY_CODES, { required: true })}
         {text("phoneNumber", "Mobile number", { required: true, type: "tel", placeholder: "3001234567 or 0300 1234567" })}
       </FormSection>
+      <ExtraPhonesFields phones={values.phones} onChange={(phones) => onChange({ phones })} errors={errors} disabled={disabled} />
       <FormSection title="Profile">
         {text("gender", "Gender", { placeholder: "e.g. male, female" })}
         {text("desiredSize", "Size", { placeholder: "e.g. 674 sq ft" })}

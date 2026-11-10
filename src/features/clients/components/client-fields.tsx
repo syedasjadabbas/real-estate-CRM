@@ -4,6 +4,8 @@ import type { ReactNode } from "react";
 import { Field, Input } from "@/components/ui/input";
 import { COUNTRY_CODES, FormSection, selectClass } from "@/features/leads/components/lead-fields";
 import { cityOptions, OTHER_CITY } from "@/modules/cities/constants";
+import { ExtraPhonesFields } from "@/features/contacts/components/extra-phones";
+import type { ExtraPhoneInput } from "@/modules/contacts/constants";
 import { RELATIONSHIPS, RELATIONSHIP_LABELS } from "@/modules/clients/constants";
 
 export type ClientFormValues = {
@@ -14,7 +16,11 @@ export type ClientFormValues = {
   cityId: string;
   cityOther: string;
   relationship: string;
+  /** Numbers 2–5. */
+  phones: ExtraPhoneInput[];
 };
+
+type TextKey = Exclude<keyof ClientFormValues, "phones">;
 
 type Props = {
   values: ClientFormValues;
@@ -30,7 +36,7 @@ type Props = {
 
 /** Client fields shared by the create form and the detail page's edit form (Leads form sections). */
 export function ClientFields({ values, onChange, errors, cities, disabled, profileExtra, currentCity }: Props) {
-  const text = (key: keyof ClientFormValues, label: string, opts: { required?: boolean; type?: string; placeholder?: string } = {}) => (
+  const text = (key: TextKey, label: string, opts: { required?: boolean; type?: string; placeholder?: string } = {}) => (
     <Field label={label} required={opts.required} error={errors[key]}>
       {(id, describedBy) => (
         <Input
@@ -48,7 +54,7 @@ export function ClientFields({ values, onChange, errors, cities, disabled, profi
     </Field>
   );
   const select = (
-    key: keyof ClientFormValues,
+    key: TextKey,
     label: string,
     options: { value: string; label: string }[],
     opts: { required?: boolean; empty?: string; hint?: string } = {},
@@ -83,6 +89,7 @@ export function ClientFields({ values, onChange, errors, cities, disabled, profi
         {select("phoneCountryCode", "Country code", COUNTRY_CODES, { required: true })}
         {text("phoneNumber", "Mobile number", { required: true, type: "tel", placeholder: "3001234567 or 0300 1234567" })}
       </FormSection>
+      <ExtraPhonesFields phones={values.phones} onChange={(phones) => onChange({ phones })} errors={errors} disabled={disabled} />
       <FormSection title="Profile">
         {select(
           "relationship",

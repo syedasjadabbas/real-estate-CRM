@@ -1,5 +1,6 @@
 "use client";
 
+import { extraPhoneSlots } from "@/modules/contacts/constants";
 import { OTHER_CITY } from "@/modules/cities/constants";
 import { Check } from "lucide-react";
 import { useState, useTransition, type ReactNode } from "react";
@@ -334,6 +335,7 @@ export function EditDetailsForm({ detail, lookups }: { detail: LeadDetail; looku
     budgetRangeId: lead.budgetRangeId ?? "",
     priority: lead.priority,
     cityId: lead.cityOther ? OTHER_CITY : (lead.cityId ?? ""),
+    phones: extraPhoneSlots(lead.phones ?? []),
     cityOther: lead.cityOther ?? "",
   };
   const [values, setValues] = useState(initial);

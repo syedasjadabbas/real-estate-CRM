@@ -33,6 +33,8 @@ import { listDocuments } from "@/modules/documents/service";
 import { INBOUND_LABELS } from "@/modules/leads/constants";
 import { telHref } from "@/modules/leads/phone";
 import { listRecordings } from "@/modules/recordings/service";
+import { Dialer } from "@/features/voip/components/dialer";
+import { getVoipStatus } from "@/modules/voip/service";
 import { assignableUsers, getLeadDetail, leadLookups } from "@/modules/leads/queries";
 import { AppError } from "@/server/errors";
 
@@ -117,6 +119,8 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
             </p>
           ) : null}
         </Card>
+
+        <Dialer status={getVoipStatus(actor)} telHref={telHref(lead.phoneCountryCode, lead.phoneNumber)} leadName={lead.name} phone={lead.phone} />
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
           <div className="min-w-0 space-y-6">

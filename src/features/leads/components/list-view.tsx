@@ -1,3 +1,4 @@
+import { DecidedRange } from "./decided-range";
 import { Plus } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
@@ -81,6 +82,7 @@ export async function LeadsListView({
           }
         />
         <ScopeNotice actor={actor} />
+        {view === "won" || view === "lost" ? <DecidedRange pathname={pathname} params={params} view={view} /> : null}
         {before}
         {result.teamName || result.query.createdFrom || result.query.createdTo ? (
           <p role="note" className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-900">
@@ -90,7 +92,7 @@ export async function LeadsListView({
         ) : null}
         <LeadsToolbar params={params} total={result.total} lookups={lookups} />
         <LeadsTable
-          defaultSort={view === "regenerated" ? null : "createdAt"}
+          defaultSort={null}
           rows={result.rows}
           pathname={pathname}
           params={params}

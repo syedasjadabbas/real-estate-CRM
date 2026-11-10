@@ -87,6 +87,7 @@ describe.skipIf(!hasTestDb)("F-13: a client's open bookings and payments (FR-051
       const first = await newLead(f.actors.agent1, { phoneNumber: "03001234567" });
       const clientId = await existingClient(first);
       const second = await newLead(f.actors.agent2, { phoneNumber: "0300 1234567" }, f.otherProjectId);
+      // Assigned by hand to another agent, so it isn't joined to the client until the booking links it.
       expect(await leadClient(second)).toBeNull();
       const { bookingId } = await book(second, f.actors.superAdmin, f.otherProjectId);
       expect(await linkOf(bookingId)).toBe(clientId);

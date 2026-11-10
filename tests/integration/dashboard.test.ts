@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { dashboardData, rangeBounds } from "@/modules/dashboard/queries";
 import { createLead } from "@/modules/leads/commands";
@@ -81,7 +81,6 @@ describe.skipIf(!hasTestDb)("Dashboard analytics (PostgreSQL integration)", () =
     });
     expect(r.data!.leadSources).toEqual([expect.objectContaining({ label: "Facebook", count: 6 })]);
     expect(r.data!.inboundChannels).toEqual([{ id: "manual", label: "Manual", count: 6 }]);
-    expect(r.data!.recentLeads).toHaveLength(7); // the project's leads, not limited to the range
     expect(r.data!.topProjects.map((p) => [p.label, p.count])).toEqual([["Test Project", 6], ["Other Project", 1]]);
     expect(r.data!.teams.map((t) => t.name)).toEqual(["Team 1", "Team 2"]);
   });
@@ -149,25 +148,16 @@ describe.skipIf(!hasTestDb)("Dashboard analytics (PostgreSQL integration)", () =
     expect((await get(admin)).data!.kpis!.won).toBe(0);
   });
 
-  it("breaks lost leads down by reason and by team, adding up to the Lost tile", async () => {
-    // Give agent1's lost lead a reason; agent2's keeps none.
-    const [a1Lost] = await db.select({ id: leads.id }).from(leads).where(and(eq(leads.stage, "lost_lead"), eq(leads.ownerId, f.actors.agent1.id)));
-    await db.update(leads).set({ lostReasonId: f.lostReasonId }).where(eq(leads.id, a1Lost.id));
+  it("breaks lost leads down by team, with the owners inside each team", async () => {
     const r = await get(admin);
     const lost = r.data!.lost!;
-    expect(lost.total).toBe(r.data!.kpis!.lost);
-    expect(lost.byReason).toHaveLength(2);
-    expect(lost.byReason.find((x) => x.id === "none")).toMatchObject({ label: "No reason recorded", count: 1 });
-    expect(lost.byReason.find((x) => x.id === f.lostReasonId)?.count).toBe(1);
+    expect(lost).not.toHaveProperty("byReason");
+    expect(r.data!).not.toHaveProperty("recentLeads");
     expect(lost.byTeam).toEqual([
       { id: expect.any(String), label: "Team 1", count: 2, agents: [expect.objectContaining({ label: "Agent A", count: 1 }), expect.objectContaining({ label: "Agent B", count: 1 })] },
     ]);
-    // The reason link opens the Lost list with the same reason and days; its total matches.
-    const reason = lost.byReason.find((x) => x.id === f.lostReasonId)!;
-    const list = await listLeads(db, admin, f.projectId, { view: "lost", lostReason: reason.id, from: lost.from, to: lost.to });
-    expect(list.total).toBe(reason.count);
     // Scope applies: agent1 only sees their own lost lead.
-    expect((await get(f.actors.agent1)).data!.lost!.total).toBe(1);
+    expect((await get(f.actors.agent1)).data!.lost!.byTeam.reduce((n, t) => n + t.count, 0)).toBe(1);
     // An owner in no team is grouped under "No team".
     await lead(f.actors.outsideAgent, { stage: "lost_lead", firstTouchAt: now });
     await db.delete(teamMembers).where(eq(teamMembers.userId, f.actors.outsideAgent.id));

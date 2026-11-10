@@ -29,10 +29,3 @@ export function assertStageChange(from: LeadStage, to: LeadStage, openBooking = 
     throw new AppError("BUSINESS_RULE", OPEN_BOOKING_MESSAGE);
   }
 }
-
-/** Round-robin: the eligible user after `lastUserId`, wrapping around. */
-export function pickNextAssignee(eligibleIds: string[], lastUserId: string | null): string | null {
-  if (eligibleIds.length === 0) return null;
-  const index = lastUserId ? eligibleIds.indexOf(lastUserId) : -1;
-  return eligibleIds[(index + 1) % eligibleIds.length];
-}

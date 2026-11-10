@@ -1,5 +1,6 @@
 "use client";
 
+import { extraPhoneSlots } from "@/modules/contacts/constants";
 import { OTHER_CITY } from "@/modules/cities/constants";
 import { Check } from "lucide-react";
 import { useState, useTransition } from "react";
@@ -40,6 +41,7 @@ export function EditClientForm({ detail, cities }: { detail: ClientDetail; citie
     cityId: client.cityOther ? OTHER_CITY : (client.cityId ?? ""),
     cityOther: client.cityOther ?? "",
     relationship: client.relationship ?? "",
+    phones: extraPhoneSlots(client.phones ?? []),
   };
   const [values, setValues] = useState(initial);
   const [errors, setErrors] = useState<Record<string, string>>({});

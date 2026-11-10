@@ -3,6 +3,7 @@ import type { Database } from "@/server/db";
 import { bookings, clientFollowUps, clients, leads, users } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
 import { resolveCity } from "@/modules/cities/resolve";
+import { clientPhonesOf, clientWithAnyNumber, copyLeadPhonesToClient, leadPhonesOf, lockNumbers, normalizeExtraPhones, replaceClientPhones } from "@/modules/contacts/phones";
 import { AppError, forbidden, notFound } from "@/server/errors";
 import { normalizePhone } from "@/modules/leads/phone";
 import { canAssignTo } from "@/modules/leads/policy";
@@ -58,8 +59,9 @@ async function assertOwner(tx: Tx, actor: Actor, ownerId: string, members: strin
  * The client already holding this phone, described only as far as the actor may see it
  * (one client per person across projects; never reveals another team's client).
  */
-async function existingByPhone(tx: Tx, actor: Actor, phoneE164: string, members: string[]) {
-  const [existing] = await tx.select().from(clients).where(eq(clients.phoneE164, phoneE164)).limit(1);
+/** The client holding any of these numbers (one client per person; phone numbers identify them). */
+async function existingByPhone(tx: Tx, actor: Actor, numbers: string | string[], members: string[], exceptClientId?: string) {
+  const existing = await clientWithAnyNumber(tx, Array.isArray(numbers) ? numbers : [numbers], exceptClientId);
   if (!existing) return null;
   return { client: existing, visible: canAccessClient(actor, existing.ownerId, members) };
 }
@@ -77,10 +79,13 @@ export async function createClient(db: Database, actor: Actor, input: unknown) {
   assertCanClient(actor, "createManual");
   const data = parse(createClientSchema, input);
   const phone = phoneOrThrow(data.phoneCountryCode, data.phoneNumber);
+  const extraPhones = normalizeExtraPhones(phone.e164, data.phones);
+  const numbers = [phone.e164, ...extraPhones.map((p) => p.e164)];
 
   return db.transaction(async (tx) => {
+    await lockNumbers(tx, numbers);
     const members = await teamMemberIds(tx, actor);
-    const existing = await existingByPhone(tx, actor, phone.e164, members);
+    const existing = await existingByPhone(tx, actor, numbers, members);
     if (existing) throw duplicateError(existing);
     if (data.ownerId) await assertOwner(tx, actor, data.ownerId, members);
 
@@ -105,6 +110,7 @@ export async function createClient(db: Database, actor: Actor, input: unknown) {
     }
     await logClientActivity(tx, { clientId: created.id, actorId: actor.id, type: "created", data: { mode: "manual" } });
     await auditClient(tx, actor, "client.create", created.id, null, values);
+    await replaceClientPhones(tx, created.id, extraPhones);
     return { clientId: created.id };
   });
 }
@@ -138,7 +144,8 @@ export async function convertLeadToClient(db: Database, actor: Actor, input: unk
     if (lead.clientId) throw new AppError("BUSINESS_RULE", "This lead is already linked to a client.");
     const now = new Date();
 
-    const existing = await existingByPhone(tx, actor, lead.phoneE164, members);
+    const leadNumbers = [lead.phoneE164, ...(await leadPhonesOf(tx, lead.id)).map((p) => p.e164)];
+    const existing = await existingByPhone(tx, actor, leadNumbers, members);
     if (existing) {
       if (!existing.visible || onExisting !== "link") throw duplicateError(existing);
       await tx.update(leads).set({ clientId: existing.client.id }).where(eq(leads.id, lead.id));
@@ -181,6 +188,7 @@ export async function convertLeadToClient(db: Database, actor: Actor, input: unk
       type: "created",
       data: { mode: "lead", leadId: lead.id, leadCode: lead.code },
     });
+    await copyLeadPhonesToClient(tx, lead.id, created.id);
     const bookingIds = await linkLeadBookings(tx, lead.id, created.id);
     await auditClient(tx, actor, "client.convert", created.id, null, { ...values, leadId: lead.id, bookingIds });
     return { outcome: "created", clientId: created.id };
@@ -200,6 +208,22 @@ export async function updateClient(db: Database, actor: Actor, clientId: string,
       changes.phoneNumber = phone.national;
       changes.phoneE164 = phone.e164;
     }
+    let phonesChanged = false;
+    if (data.phones !== undefined) {
+      const primary = changes.phoneE164 ?? client.phoneE164;
+      const extra = normalizeExtraPhones(primary, data.phones);
+      const after = extra.map((p) => p.e164);
+      const before = (await clientPhonesOf(tx, clientId)).map((p) => p.e164);
+      if (JSON.stringify(after) !== JSON.stringify(before)) {
+        await lockNumbers(tx, after);
+        const other = await existingByPhone(tx, actor, after, [], clientId);
+        if (other) {
+          throw new AppError("CONFLICT", "Another client already uses one of these phone numbers.", { fields: { phones: "Another client already uses one of these numbers" } });
+        }
+        await replaceClientPhones(tx, clientId, extra);
+        phonesChanged = true;
+      }
+    }
     if ("email" in data) changes.email = data.email ?? null;
     if ("cityId" in data) Object.assign(changes, await resolveCity(tx, data, client));
     if ("relationship" in data) changes.relationship = data.relationship ?? null;
@@ -207,6 +231,7 @@ export async function updateClient(db: Database, actor: Actor, clientId: string,
     const changed = Object.keys(changes).filter(
       (key) => String(changes[key as keyof typeof changes] ?? "") !== String(client[key as keyof typeof client] ?? ""),
     );
+    if (phonesChanged) changed.push("phones");
     if (changed.length === 0) return { changed: [] as string[] };
 
     const now = new Date();
@@ -359,6 +384,7 @@ export async function ensureClientForLead(tx: Tx, actor: Actor, lead: BookedLead
   await logClientLink(tx, actor, lead.id, created.id, "booking_created");
   await logClientActivity(tx, { clientId: created.id, actorId: actor.id, type: "created", data: { mode: "booking", leadId: lead.id, leadCode: lead.code, bookingId } });
   await auditClient(tx, actor, "client.create_from_booking", created.id, null, { ...values, leadId: lead.id, bookingId });
+  await copyLeadPhonesToClient(tx, lead.id, created.id);
   await linkLeadBookings(tx, lead.id, created.id);
   return { clientId: created.id, created: true };
 }

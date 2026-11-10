@@ -8,8 +8,8 @@
 #   BACKUP_DIR        local folder for backups (outside the app folder)
 #   BACKUP_REMOTE     optional rsync destination for the off-server copy (e.g. user@host:/backups/crm)
 #
-# Nothing is ever deleted by this script. Keep 7 daily / 4 weekly / 3 monthly copies with the
-# destination's own lifecycle rules (see scripts/ops/RESTORE.md).
+# Nothing is ever deleted by this script. backup-run.mjs keeps 30 daily and 12 monthly copies in
+# BACKUP_DIR; the off-server copy needs the same rule at the destination (scripts/ops/RESTORE.md).
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 

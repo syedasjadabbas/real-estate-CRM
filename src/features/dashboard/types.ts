@@ -24,7 +24,7 @@ export type NamedCount = { id: string; label: string; count: number };
 
 /** FR-016: lost leads per team, with the owners (agents) inside it. */
 export type LostTeam = { id: string; label: string; count: number; agents: NamedCount[] };
-export type LostBreakdown = { byReason: NamedCount[]; byTeam: LostTeam[]; total: number; from: string; to: string };
+export type LostBreakdown = { byTeam: LostTeam[] };
 
 export type InsightTotals = {
   teams: number;
@@ -56,15 +56,6 @@ export type PipelineHealth = {
   rows: AgingRow[];
 };
 
-export type RecentLead = {
-  id: string;
-  name: string;
-  status: string;
-  inbound: string;
-  owner: string;
-  createdAt: string;
-};
-
 /** Range and team chosen in the URL (?range=&from=&to=&team=). */
 export type DashboardFilters = { range: RangeKey; from?: string; to?: string; team?: string };
 
@@ -85,7 +76,6 @@ export type DashboardData = {
   pipelineHealth: PipelineHealth | null;
   leadSources: NamedCount[];
   inboundChannels: NamedCount[];
-  recentLeads: RecentLead[];
   lost: LostBreakdown | null;
   /** Query that opens the leads behind these figures: same window and team (FR-010). */
   listParams?: Record<string, string>;
@@ -107,6 +97,5 @@ export const emptyDashboardData: DashboardData = {
   pipelineHealth: null,
   leadSources: [],
   inboundChannels: [],
-  recentLeads: [],
   lost: null,
 };

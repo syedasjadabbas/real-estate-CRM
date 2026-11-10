@@ -1,9 +1,10 @@
 import { and, asc, count, desc, eq, gte, inArray, isNull, lt, notInArray, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import type { Database } from "@/server/db";
-import { leadSources, leads, lostReasons, meetings, projects, teamMembers, teams, users } from "@/server/db/schema";
+import { leadSources, leads, meetings, projects, teamMembers, teams, users } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
-import { INBOUND_LABELS, STAGE_LABELS } from "@/modules/leads/constants";
+import { INBOUND_LABELS } from "@/modules/leads/constants";
+import { teamScores } from "@/modules/leads/assignment";
 import { leadScope } from "@/modules/leads/policy";
 import { scopeFilter, teamMemberIds } from "@/modules/leads/support";
 import type { DashboardData, LostBreakdown, LostTeam, RangeKey } from "@/features/dashboard/types";
@@ -72,12 +73,9 @@ async function teamOptions(db: Database, actor: Actor) {
 
 const businessDay = (d: Date) => new Date(d.getTime() + 5 * 3_600_000).toISOString().slice(0, 10);
 
-/** Groups the lost-lead rows; the dates let the widget link to the Lost list for the same days. */
+/** Groups the lost-lead rows by team, with the owners inside each team. */
 export function lostBreakdown(
-  reasons: { id: string | null; label: string | null; count: number }[],
   teamRows: { teamId: string | null; teamName: string | null; ownerId: string | null; ownerName: string | null; count: number }[],
-  start: Date,
-  end: Date,
 ): LostBreakdown {
   const byTeam = new Map<string, LostTeam>();
   for (const r of teamRows) {
@@ -90,13 +88,7 @@ export function lostBreakdown(
   const teamsSorted = [...byTeam.values()]
     .map((t) => ({ ...t, agents: t.agents.sort((a, b) => b.count - a.count || a.label.localeCompare(b.label)) }))
     .sort((a, b) => (a.id === "none" ? 1 : b.id === "none" ? -1 : b.count - a.count || a.label.localeCompare(b.label)));
-  return {
-    byReason: reasons.map((r) => ({ id: r.id ?? "none", label: r.label ?? "No reason recorded", count: r.count })),
-    byTeam: teamsSorted,
-    total: reasons.reduce((n, r) => n + r.count, 0),
-    from: businessDay(start),
-    to: businessDay(new Date(end.getTime() - 1)),
-  };
+  return { byTeam: teamsSorted };
 }
 
 export async function dashboardData(db: Database, actor: Actor, projectId: string | null, input: unknown = {}, now = new Date()) {
@@ -121,7 +113,7 @@ export async function dashboardData(db: Database, actor: Actor, projectId: strin
   const open = notInArray(leads.stage, ["booked", "lost_lead"]);
 
   const lostInRange = and(inRange, eq(leads.stage, "lost_lead"));
-  const [[k], sources, channels, recent, top, [activeProjects], [health], [meetingsDone], lostReasonRows, lostTeamRows] = await Promise.all([
+  const [[k], sources, channels, top, [activeProjects], [health], [meetingsDone], lostTeamRows] = await Promise.all([
     db
       .select({
         total: count(),
@@ -140,13 +132,6 @@ export async function dashboardData(db: Database, actor: Actor, projectId: strin
       .groupBy(leadSources.id, leadSources.name)
       .orderBy(desc(count()), asc(leadSources.name)),
     db.select({ channel: leads.inboundChannel, count: count() }).from(leads).where(inRange).groupBy(leads.inboundChannel).orderBy(desc(count())),
-    db
-      .select({ id: leads.id, name: leads.name, stage: leads.stage, inbound: leads.inboundChannel, owner: users.name, createdAt: leads.createdAt })
-      .from(leads)
-      .leftJoin(users, eq(users.id, leads.ownerId))
-      .where(inProject)
-      .orderBy(desc(leads.createdAt), desc(leads.id))
-      .limit(20),
     db
       .select({ id: projects.id, label: projects.name, count: count() })
       .from(leads)
@@ -178,13 +163,6 @@ export async function dashboardData(db: Database, actor: Actor, projectId: strin
           lt(meetings.startsAt, now),
         ),
       ),
-    db
-      .select({ id: lostReasons.id, label: lostReasons.name, count: count() })
-      .from(leads)
-      .leftJoin(lostReasons, eq(lostReasons.id, leads.lostReasonId))
-      .where(lostInRange)
-      .groupBy(lostReasons.id, lostReasons.name)
-      .orderBy(desc(count()), asc(lostReasons.name)),
     // A lead counts under every active team its owner belongs to; owners in no team appear under "No team".
     db
       .select({ teamId: teams.id, teamName: teams.name, ownerId: users.id, ownerName: users.name, count: count() })
@@ -221,27 +199,19 @@ export async function dashboardData(db: Database, actor: Actor, projectId: strin
     topProjects: top,
     insights: null,
     insightsUpdatedAt: null,
-    teamScores: [],
+    teamScores: await teamScores(db, actor, now),
     teamOutput: [],
     meetingMix: [],
     targets: null,
     pipelineHealth: { stale: health.stale, noMeeting: health.noMeeting, meetingsDone: meetingsDone.n, rows: [] },
     leadSources: sources,
     inboundChannels: channels.map((c) => ({ id: c.channel, label: INBOUND_LABELS[c.channel], count: c.count })),
-    lost: lostBreakdown(lostReasonRows, lostTeamRows, start, end),
+    lost: lostBreakdown(lostTeamRows),
     listParams: {
       // Rolling ranges start mid-day, so whole days would list more leads than the tile counts.
       ...(ROLLING_RANGES.includes(range) ? { createdFrom: start.toISOString(), createdTo: end.toISOString() } : { from: businessDay(start), to: businessDay(new Date(end.getTime() - 1)) }),
       ...(team ? { team } : {}),
     },
-    recentLeads: recent.map((r) => ({
-      id: r.id,
-      name: r.name,
-      status: STAGE_LABELS[r.stage],
-      inbound: INBOUND_LABELS[r.inbound],
-      owner: r.owner ?? "Unassigned",
-      createdAt: r.createdAt.toISOString(),
-    })),
   };
   return { ...base, query: { ...query, range, team }, data, allowed: true };
 }

@@ -117,7 +117,7 @@ describe.skipIf(!hasTestDb)("Leads module (PostgreSQL integration)", () => {
       }
     });
 
-    it("rotates unassigned leads across active team agents", async () => {
+    it("spreads unassigned leads across active team agents", async () => {
       const owners: (string | null)[] = [];
       for (let i = 0; i < 4; i += 1) {
         const r = await createLead(db, f.actors.superAdmin, leadInput(f));
@@ -127,8 +127,9 @@ describe.skipIf(!hasTestDb)("Leads module (PostgreSQL integration)", () => {
         }
       }
       const expected = [f.actors.agent1.id, f.actors.agent2.id, f.actors.outsideAgent.id];
-      // Alphabetical by name: Agent A, Agent B, Agent Outside, then wrap.
-      expect(owners).toEqual([...expected, expected[0]]);
+      // Workload counts, so the first three go to three different agents, then it starts again.
+      expect(new Set(owners.slice(0, 3))).toEqual(new Set(expected));
+      expect(expected).toContain(owners[3]);
     });
   });
 

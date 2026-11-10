@@ -1,23 +1,21 @@
 import { leadLink, notify, teamManagersOf } from "@/modules/notifications/service";
-import { and, asc, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
-import { businessToday } from "@/modules/bookings/today";
+import { and, asc, eq, sql } from "drizzle-orm";
+import { auditClient, logClientActivity } from "@/modules/clients/support";
+import { findCustomer, leadsWithAnyNumber, lockNumbers, normalizeExtraPhones, replaceLeadPhones, leadPhonesOf } from "@/modules/contacts/phones";
 import { resolveCity } from "@/modules/cities/resolve";
 import type { Database } from "@/server/db";
 import {
   approvals,
   budgetRanges,
   followUps,
-  leadActivities,
   leadFavorites,
   leadReviews,
   leadSources,
   leads,
   lostReasons,
   projects,
-  rotationState,
-  teamMembers,
   teams,
-  users,
+  users,  clients,
 } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
 import { AppError, forbidden, notFound } from "@/server/errors";
@@ -25,7 +23,8 @@ import { generateLeadCode } from "./code";
 import { STAGE_LABELS } from "./constants";
 import { normalizePhone } from "./phone";
 import { assertCan, canAccessLead, canAssignTo, canDo, leadScope } from "./policy";
-import { assertStageChange, OPEN_BOOKING_MESSAGE, pickNextAssignee } from "./rules";
+import { chooseOwner, recordAssignment } from "./assignment";
+import { assertStageChange, OPEN_BOOKING_MESSAGE } from "./rules";
 import { audit, hasOpenBooking, isUniqueViolation, loadAccessibleLead, logActivity, refreshNextFollowUp, teamMemberIds, touchValues, type Tx } from "./support";
 import {
   assignSchema,
@@ -92,90 +91,19 @@ async function assertAssignable(tx: Tx, actor: Actor, ownerId: string) {
 }
 
 /**
- * The manager's rotation continues from the last of these agents to get a rotated lead in the
- * project. The project's single pointer can't serve here: another team's rotation moves it, which
- * would send this team back to its first agent every time.
+ * Duplicate phone rule (LEADS_MODULE_PLAN.md Q1), shared by create and edit, now over every number:
+ * the earliest original lead in the same project holding any of them. `exceptLeadId` leaves out the
+ * lead being edited.
  */
-async function lastRotatedTo(tx: Tx, projectId: string, agentIds: string[]) {
-  const ownerId = sql<string>`${leadActivities.data}->>'ownerId'`;
-  const [row] = await tx
-    .select({ ownerId })
-    .from(leadActivities)
-    .innerJoin(leads, eq(leads.id, leadActivities.leadId))
-    .where(and(eq(leads.projectId, projectId), eq(leadActivities.type, "assignment"), sql`${leadActivities.data}->>'mode' = 'rotation'`, inArray(ownerId, agentIds)))
-    .orderBy(desc(leadActivities.createdAt))
-    .limit(1);
-  return row?.ownerId ?? null;
-}
-
-/**
- * Round-robin owner for a project among active agents in active teams (Q2). Agents on approved
- * leave today (Pakistan date) are skipped (questionnaire Q19). A manager's rotation stays inside the
- * active teams they run, like their manual assignment (F-15); admins rotate across all teams.
- */
-async function rotateOwner(tx: Tx, actor: Actor, projectId: string, now = new Date()): Promise<string | null> {
-  const today = businessToday(now);
-  const teamIds = leadScope(actor.role) === "team" ? (await lockManagedTeams(tx, actor)).filter((t) => t.isActive).map((t) => t.id) : null;
-  if (teamIds?.length === 0) return null;
-  const eligible = await tx
-    .selectDistinct({ id: users.id, name: users.name })
-    .from(users)
-    .innerJoin(teamMembers, eq(teamMembers.userId, users.id))
-    .innerJoin(teams, eq(teams.id, teamMembers.teamId))
-    .where(
-      and(
-        eq(users.role, "agent"),
-        eq(users.status, "active"),
-        eq(teams.isActive, true),
-        teamIds ? inArray(teams.id, teamIds) : undefined,
-        sql`not exists (select 1 from leave_requests lr where lr.user_id = ${users.id} and lr.status in ('approved', 'cancel_requested') and lr.start_date <= ${today} and lr.end_date >= ${today})`,
-      ),
-    )
-    .orderBy(asc(users.name), asc(users.id));
-  if (eligible.length === 0) return null;
-
-  await tx.insert(rotationState).values({ projectId }).onConflictDoNothing();
-  const [state] = await tx
-    .select()
-    .from(rotationState)
-    .where(eq(rotationState.projectId, projectId))
-    .for("update");
-  const eligibleIds = eligible.map((u) => u.id);
-  const next = pickNextAssignee(eligibleIds, teamIds ? await lastRotatedTo(tx, projectId, eligibleIds) : (state?.lastUserId ?? null));
-  await tx.update(rotationState).set({ lastUserId: next, updatedAt: new Date() }).where(eq(rotationState.projectId, projectId));
-  return next;
-}
-
-/**
- * Duplicate phone rule (LEADS_MODULE_PLAN.md Q1), shared by create and edit: the earliest lead in the
- * same project with the same normalized number that is not deleted and is not itself a flagged
- * duplicate. `exceptLeadId` leaves out the lead being edited.
- */
-async function findPhoneMatch(tx: Tx, projectId: string, e164: string, exceptLeadId?: string) {
-  const [existing] = await tx
-    .select()
-    .from(leads)
-    .where(
-      and(
-        eq(leads.projectId, projectId),
-        eq(leads.phoneE164, e164),
-        isNull(leads.deletedAt),
-        isNull(leads.duplicateOfId),
-        exceptLeadId ? ne(leads.id, exceptLeadId) : undefined,
-      ),
-    )
-    .orderBy(asc(leads.createdAt))
-    .limit(1);
+async function findPhoneMatch(tx: Tx, projectId: string, numbers: string[], exceptLeadId?: string) {
+  const [existing] = await leadsWithAnyNumber(tx, numbers, { projectId, exceptLeadId, originalsOnly: true });
   return existing ?? null;
 }
 
-/**
- * Serializes concurrent claims of one number in one project (create and edit) until the transaction
- * ends, so two requests can't both pass the duplicate check. A unique index can't be used: flagged
- * duplicates and shared-phone groups (FR-032) legitimately share a number.
- */
-async function lockPhone(tx: Tx, projectId: string, e164: string) {
-  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`lead-phone:${projectId}:${e164}`}, 0))`);
+/** An original owner keeps a returning customer only while they can still own leads. */
+async function isActiveOwner(tx: Tx, userId: string) {
+  const [u] = await tx.select({ role: users.role, status: users.status }).from(users).where(eq(users.id, userId)).limit(1);
+  return Boolean(u && u.status === "active" && (u.role === "agent" || u.role === "manager"));
 }
 
 const DUPLICATE_PHONE_MESSAGE = "A lead with this phone number already exists in this project.";
@@ -188,13 +116,16 @@ function duplicatePhoneError(existing: typeof leads.$inferSelect, visible: boole
 }
 
 export type CreateLeadOutcome =
-  | { outcome: "created"; leadId: string; code: string }
+  /** `visible` is false when a returning customer's lead went to their original agent outside the creator's scope. */
+  | { outcome: "created"; leadId: string; code: string; visible: boolean; ownerName: string | null }
   | { outcome: "regenerated"; leadId: string | null; code: string | null };
 
 export async function createLead(db: Database, actor: Actor, input: unknown): Promise<CreateLeadOutcome> {
   assertCan(actor, "create");
   const data = parse(createLeadSchema, input);
   const phone = phoneOrThrow(data.phoneCountryCode, data.phoneNumber);
+  const extraPhones = normalizeExtraPhones(phone.e164, data.phones);
+  const numbers = [phone.e164, ...extraPhones.map((p) => p.e164)];
 
   return db.transaction(async (tx) => {
     const [project] = await tx.select().from(projects).where(eq(projects.id, data.projectId)).limit(1);
@@ -205,8 +136,8 @@ export async function createLead(db: Database, actor: Actor, input: unknown): Pr
     const now = new Date();
 
     // Duplicate / re-inquiry handling (LEADS_MODULE_PLAN.md Q1).
-    await lockPhone(tx, data.projectId, phone.e164);
-    const existing = await findPhoneMatch(tx, data.projectId, phone.e164);
+    await lockNumbers(tx, numbers);
+    const existing = await findPhoneMatch(tx, data.projectId, numbers);
     const existingVisible = existing ? canAccessLead(actor, existing.ownerId, members) : false;
 
     if (existing && data.onDuplicate === "reject") throw duplicatePhoneError(existing, existingVisible);
@@ -238,19 +169,34 @@ export async function createLead(db: Database, actor: Actor, input: unknown): Pr
       };
     }
 
-    // Owner: agents own what they create; managers/admins may pick; otherwise rotation.
+    // Owner, in order: a manager's or admin's explicit choice; a returning customer's original agent
+    // (phone numbers are the only identifier); the agent who created it; otherwise scored assignment.
+    const customer = await findCustomer(tx, numbers);
     let ownerId: string | null;
-    let rotated = false;
-    if (actor.role === "agent") {
-      ownerId = actor.id;
-    } else if (data.ownerId) {
+    let decision: { mode: "manual" | "returning_customer" | "creator" | "scored"; reason: string; breakdown?: unknown };
+    if (data.ownerId && actor.role !== "agent") {
       await assertAssignable(tx, actor, data.ownerId);
       ownerId = data.ownerId;
+      decision = { mode: "manual", reason: `Chosen by ${actor.name}` };
+    } else if (customer?.originalOwnerId && (await isActiveOwner(tx, customer.originalOwnerId))) {
+      ownerId = customer.originalOwnerId;
+      decision = { mode: "returning_customer", reason: "Returning customer: kept with their original agent" };
+    } else if (actor.role === "agent") {
+      ownerId = actor.id;
+      decision = { mode: "creator", reason: "Created by the agent" };
     } else {
-      ownerId = await rotateOwner(tx, actor, data.projectId);
-      rotated = true;
-      if (!ownerId && actor.role === "manager") ownerId = actor.id;
+      const chosen = await chooseOwner(tx, actor, data.projectId, now);
+      ownerId = chosen.ownerId;
+      decision = { mode: "scored", reason: chosen.reason, breakdown: chosen.breakdown };
+      if (!ownerId && actor.role === "manager") {
+        ownerId = actor.id;
+        decision.reason = `${chosen.reason}; the manager keeps it`;
+      }
     }
+    const rotated = decision.mode === "scored" || decision.mode === "returning_customer";
+    // Join the customer's client only when the lead goes to their original agent. Any other owner
+    // links through conversion, which never links another team's client (F-13, clients module).
+    const joinClientId = decision.mode === "returning_customer" ? (customer?.clientId ?? null) : null;
 
     await assertListValue(tx, leadSources, data.sourceId, "sourceId");
     if (data.budgetRangeId) await assertListValue(tx, budgetRanges, data.budgetRangeId, "budgetRangeId");
@@ -270,6 +216,7 @@ export async function createLead(db: Database, actor: Actor, input: unknown): Pr
       desiredSize: data.desiredSize ?? null,
       priority: data.priority,
       duplicateOfId: existing && data.onDuplicate === "duplicate" ? existing.id : null,
+      clientId: joinClientId,
       latestComment: data.note ?? null,
       firstTouchAt: data.note ? now : null,
       lastActivityAt: now,
@@ -295,9 +242,16 @@ export async function createLead(db: Database, actor: Actor, input: unknown): Pr
       type: "created",
       data: { duplicateOf: values.duplicateOfId ? existing?.code ?? null : null },
     });
+    await replaceLeadPhones(tx, created.id, extraPhones);
+    if (joinClientId) {
+      // The customer's history shows each inquiry, as conversion and booking links do.
+      await tx.update(clients).set({ updatedAt: now, lastActivityAt: now }).where(eq(clients.id, joinClientId));
+      await logClientActivity(tx, { clientId: joinClientId, actorId: actor.id, type: "lead_linked", data: { leadId: created.id, leadCode: created.code, mode: "returning_customer" } });
+      await auditClient(tx, actor, "client.link_lead", joinClientId, null, { leadId: created.id, mode: "returning_customer" });
+    }
+    await recordAssignment(tx, { leadId: created.id, assigneeId: ownerId, mode: decision.mode, reason: decision.reason, breakdown: decision.breakdown, actorId: actor.id });
     if (rotated && ownerId) {
-      // Clock time, not the default transaction start: written under the rotation lock, so rotations sort in the order they ran (lastRotatedTo).
-      await logActivity(tx, { leadId: created.id, actorId: null, type: "assignment", data: { mode: "rotation", ownerId }, createdAt: sql`clock_timestamp()` });
+      await logActivity(tx, { leadId: created.id, actorId: null, type: "assignment", data: { mode: decision.mode, ownerId, reason: decision.reason }, createdAt: sql`clock_timestamp()` });
     }
     if (data.note) {
       await logActivity(tx, { leadId: created.id, actorId: actor.id, type: "note", body: data.note });
@@ -306,11 +260,14 @@ export async function createLead(db: Database, actor: Actor, input: unknown): Pr
     if (ownerId) {
       await notify(
         tx,
-        [{ userId: ownerId, type: "lead_assigned", title: `Lead assigned to you · ${data.name}`, body: rotated ? `Lead ${created.code} · auto-assigned (rotation)` : `Lead ${created.code} · assigned by ${actor.name}`, link: leadLink(created.id), dedupeKey: `lead_assigned:${created.id}:created` }],
+        [{ userId: ownerId, type: "lead_assigned", title: `Lead assigned to you · ${data.name}`, body: rotated ? `Lead ${created.code} · ${decision.mode === "returning_customer" ? "returning customer" : "auto-assigned"}` : `Lead ${created.code} · assigned by ${actor.name}`, link: leadLink(created.id), dedupeKey: `lead_assigned:${created.id}:created` }],
         actor.id,
       );
     }
-    return { outcome: "created", leadId: created.id, code: created.code };
+    const visible = canAccessLead(actor, ownerId, members);
+    // The original agent is named only when the creator could see them anyway (their own scope).
+    const [owner] = ownerId && visible ? await tx.select({ name: users.name }).from(users).where(eq(users.id, ownerId)) : [];
+    return { outcome: "created", leadId: created.id, code: created.code, visible, ownerName: owner?.name ?? null };
   });
 }
 
@@ -319,13 +276,16 @@ export async function updateLead(db: Database, actor: Actor, leadId: string, inp
   const data = parse(updateLeadSchema, input);
   const phoneOf = (lead: typeof leads.$inferSelect) => phoneOrThrow(data.phoneCountryCode ?? lead.phoneCountryCode, data.phoneNumber ?? lead.phoneNumber);
   const phoneEdited = data.phoneNumber !== undefined || data.phoneCountryCode !== undefined;
+  const phonesEdited = data.phones !== undefined;
   return db.transaction(async (tx) => {
     // F-3: a changed number is checked like a new lead's. The number lock is taken before the lead's
     // row lock (the order createLead uses when it regenerates an existing lead), so they can't deadlock.
-    if (phoneEdited) {
+    let extraPhones: ReturnType<typeof normalizeExtraPhones> | null = null;
+    if (phoneEdited || phonesEdited) {
       const { lead: current } = await loadAccessibleLead(tx, actor, leadId);
-      const target = phoneOf(current);
-      if (target.e164 !== current.phoneE164) await lockPhone(tx, current.projectId, target.e164);
+      const target = phoneEdited ? phoneOf(current) : { e164: current.phoneE164 };
+      extraPhones = phonesEdited ? normalizeExtraPhones(target.e164, data.phones) : null;
+      await lockNumbers(tx, [target.e164, ...(extraPhones ?? []).map((p) => p.e164)]);
     }
     const { lead, members } = await loadAccessibleLead(tx, actor, leadId, true);
     const changes: Partial<typeof leads.$inferInsert> = {};
@@ -333,8 +293,7 @@ export async function updateLead(db: Database, actor: Actor, leadId: string, inp
     if (phoneEdited) {
       const phone = phoneOf(lead);
       if (phone.e164 !== lead.phoneE164) {
-        await lockPhone(tx, lead.projectId, phone.e164); // no-op if already held; covers a change made meanwhile
-        const existing = await findPhoneMatch(tx, lead.projectId, phone.e164, lead.id);
+        const existing = await findPhoneMatch(tx, lead.projectId, [phone.e164], lead.id);
         if (existing) throw duplicatePhoneError(existing, canAccessLead(actor, existing.ownerId, members), "phoneNumber");
       }
       changes.phoneCountryCode = phone.countryCode;
@@ -358,18 +317,35 @@ export async function updateLead(db: Database, actor: Actor, leadId: string, inp
     const changed = Object.keys(changes).filter(
       (key) => String(changes[key as keyof typeof changes] ?? "") !== String(lead[key as keyof typeof lead] ?? ""),
     );
+    let phonesBefore: string[] = [];
+    if (extraPhones) {
+      phonesBefore = (await leadPhonesOf(tx, leadId)).map((p) => p.e164);
+      const after = extraPhones.map((p) => p.e164);
+      const added = after.filter((n) => !phonesBefore.includes(n));
+      const clash = await findPhoneMatch(tx, lead.projectId, added, lead.id);
+      if (clash) {
+        const index = (data.phones ?? []).findIndex((p) => p.number && clash && extraPhones!.some((e) => e.e164 === clash.phoneE164 && e.national.endsWith(p.number.replace(/\D/g, "").replace(/^0+/, ""))));
+        throw duplicatePhoneError(clash, canAccessLead(actor, clash.ownerId, members), `phones.${Math.max(0, index)}`);
+      }
+      if (JSON.stringify(after) !== JSON.stringify(phonesBefore)) {
+        await replaceLeadPhones(tx, leadId, extraPhones);
+        changed.push("phones");
+      }
+    }
     if (changed.length === 0) return { changed: [] as string[] };
 
     const now = new Date();
-    await tx.update(leads).set({ ...changes, updatedAt: now }).where(eq(leads.id, leadId));
+    const rowChanges = Object.keys(changes).length > 0;
+    if (rowChanges) await tx.update(leads).set({ ...changes, updatedAt: now }).where(eq(leads.id, leadId));
+    else await tx.update(leads).set({ updatedAt: now }).where(eq(leads.id, leadId));
     await logActivity(tx, { leadId, actorId: actor.id, type: "update", data: { fields: changed } });
     await audit(
       tx,
       actor,
       "lead.update",
       leadId,
-      Object.fromEntries(changed.map((k) => [k, lead[k as keyof typeof lead]])),
-      Object.fromEntries(changed.map((k) => [k, changes[k as keyof typeof changes]])),
+      Object.fromEntries(changed.map((k) => [k, k === "phones" ? phonesBefore : lead[k as keyof typeof lead]])),
+      Object.fromEntries(changed.map((k) => [k, k === "phones" ? extraPhones?.map((p) => p.e164) : changes[k as keyof typeof changes]])),
     );
     return { changed };
   });
@@ -416,6 +392,7 @@ export async function assignLead(db: Database, actor: Actor, leadId: string, inp
       type: "assignment",
       data: { mode: "manual", from: lead.ownerId, ownerId },
     });
+    await recordAssignment(tx, { leadId, assigneeId: ownerId, previousOwnerId: lead.ownerId, mode: "manual", reason: `Reassigned by ${actor.name}`, actorId: actor.id });
     await audit(tx, actor, "lead.assign", leadId, { ownerId: lead.ownerId }, { ownerId });
     await notify(
       tx,

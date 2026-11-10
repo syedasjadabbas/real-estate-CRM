@@ -38,6 +38,8 @@ test("desktop: dragging a card with the mouse moves the lead to the dropped stag
   const before = await columnTotal(target);
   const handle = page.getByRole("button", { name: `Drag ${name} to another stage` });
   await expect(handle).toBeVisible();
+  // Priority cards sort first (one rule for list and board), so the new card may start below the window.
+  await handle.scrollIntoViewIfNeeded();
 
   const from = (await handle.boundingBox())!;
   const to = await dropPoint(page, target);
@@ -65,6 +67,7 @@ test("desktop: dropping on Lost or Booked is refused with an explanation", async
   ] as const) {
     const handle = page.getByRole("button", { name: `Drag ${name} to another stage` });
     const target = column(page, label);
+    await handle.scrollIntoViewIfNeeded();
     const from = (await handle.boundingBox())!;
     const to = await dropPoint(page, target);
     await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { generateLeadCode } from "@/modules/leads/code";
 import { formatPhone, normalizePhone } from "@/modules/leads/phone";
 import { canAccessLead, canAssignTo, canDo, leadScope } from "@/modules/leads/policy";
-import { assertStageChange, pickNextAssignee } from "@/modules/leads/rules";
+import { assertStageChange } from "@/modules/leads/rules";
 import { leadListQuerySchema, createLeadSchema } from "@/modules/leads/validation";
 import { AppError } from "@/server/errors";
 import { clearFailures, isLimited, recordFailure } from "@/server/auth/rate-limit";
@@ -54,17 +54,6 @@ describe("stage rules", () => {
     expect(code(() => assertStageChange("contacted", "lost_lead"))).toBe("BUSINESS_RULE");
     expect(code(() => assertStageChange("contacted", "booked"))).toBe("BUSINESS_RULE");
     expect(code(() => assertStageChange("booked", "contacted"))).toBe("BUSINESS_RULE");
-  });
-});
-
-describe("round-robin", () => {
-  it("cycles through eligible users and wraps", () => {
-    const ids = ["a", "b", "c"];
-    expect(pickNextAssignee(ids, null)).toBe("a");
-    expect(pickNextAssignee(ids, "a")).toBe("b");
-    expect(pickNextAssignee(ids, "c")).toBe("a");
-    expect(pickNextAssignee(ids, "removed-user")).toBe("a");
-    expect(pickNextAssignee([], "a")).toBeNull();
   });
 });
 

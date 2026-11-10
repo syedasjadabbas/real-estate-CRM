@@ -1,3 +1,4 @@
+import { clientPhonesOf } from "@/modules/contacts/phones";
 import { clientInvestedIn, latestInvestments } from "@/modules/bookings/queries";
 import { canDoBooking } from "@/modules/bookings/policy";
 import { and, asc, count, desc, eq, ilike, isNull, or, sql, type SQL } from "drizzle-orm";
@@ -156,6 +157,8 @@ export async function getClientDetail(db: Database, actor: Actor, clientId: stri
       phoneE164: client.phoneE164,
       cityId: client.cityId,
       cityOther: client.cityOther,
+      /** Numbers 2–5. */
+      phones: (await clientPhonesOf(db, client.id)).map((p) => ({ ...p, display: formatPhone(p.countryCode, p.number) })),
       lastActivityAt: client.lastActivityAt,
     },
     linkedLeads: visibleLeads,

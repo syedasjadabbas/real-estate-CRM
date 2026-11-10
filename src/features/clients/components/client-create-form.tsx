@@ -8,6 +8,7 @@ import { Button, buttonClasses } from "@/components/ui/button";
 import { Field } from "@/components/ui/input";
 import { selectClass } from "@/features/leads/components/lead-fields";
 import { createClientAction } from "../actions";
+import { emptyExtraPhones, phoneFormErrors } from "@/modules/contacts/constants";
 import { ClientFields, type ClientFormValues } from "./client-fields";
 
 type Conflict = { message: string; existingClientId?: string; existingName?: string };
@@ -32,6 +33,7 @@ export function ClientCreateForm({
     cityId: "",
     cityOther: "",
     relationship: "",
+    phones: emptyExtraPhones(),
   });
   const [ownerId, setOwnerId] = useState(defaultOwnerId);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -42,6 +44,12 @@ export function ClientCreateForm({
     startTransition(async () => {
       setFormError(null);
       setConflict(null);
+      const early = phoneFormErrors(values.phoneNumber, values.phones);
+      if (Object.keys(early).length) {
+        setErrors(early);
+        setFormError("Check the highlighted fields.");
+        return;
+      }
       const result = await createClientAction({ ...values, ownerId });
       if (result.ok) {
         router.push(`/dashboard/clients/${result.data.clientId}`);

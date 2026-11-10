@@ -25,7 +25,17 @@ function describeLead(a: TimelineActivity): { title: string; tag: string } {
     case "follow_up_done":
       return { title: `Follow-up completed (was due ${formatDateTime(String(d.dueAt))})`, tag: "Follow-up" };
     case "assignment":
-      return { title: d.mode === "rotation" ? "Auto-assigned (rotation)" : "Reassigned", tag: "Assignment" };
+      return {
+        title:
+          d.mode === "scored" || d.mode === "rotation"
+            ? `Auto-assigned${d.reason ? ` · ${String(d.reason)}` : ""}`
+            : d.mode === "returning_customer"
+              ? "Assigned to the customer's original agent"
+              : d.mode === "claim"
+                ? "Claimed from the unassigned pool"
+                : "Reassigned",
+        tag: "Assignment",
+      };
     case "update":
       return { title: `Details updated (${(d.fields as string[] | undefined)?.join(", ") ?? "fields"})`, tag: "Update" };
     case "review":

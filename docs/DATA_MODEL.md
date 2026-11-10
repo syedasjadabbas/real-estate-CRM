@@ -143,6 +143,16 @@ Indexes: (`project_id`, `stage`), (`owner_id`, `stage`), (`project_id`, `created
 ### lead_favorites (REF)
 PK (`user_id`, `lead_id`).
 
+### Sprint tables (Nov 2026)
+| Table | Purpose |
+|---|---|
+| `lead_phones`, `client_phones` | Numbers 2–5 (position 2–5), normalised E.164, unique per record; every number is used for customer matching |
+| `lead_assignments` | Every ownership decision: mode (scored, returning_customer, claim, manual, creator, import), reason, each candidate's score breakdown, actor, previous owner |
+| `lead_import_batches`, `lead_import_rows` | Submitted import files and their validated rows; nothing becomes a lead until a Super Admin approves |
+| `backup_runs` | Backup, restore, restore-check and retention runs: status, folder name, size, message. No contents, no credentials |
+
+Assignment weights and thresholds are `app_settings` keys `assignment.*` (defaults in `src/modules/leads/assignment-score.ts`).
+
 ### lead_activities: timeline (REF)
 `lead_id`, `actor_id`, `type` enum(`note`,`stage_change`,`follow_up_scheduled`,`follow_up_done`,`file`,`assignment`,`meeting`,`booking`,`review`,`regenerated`,`system`), `data` jsonb (e.g. from / to stage), `body` text, `at`. Index (`lead_id`, `at desc`).
 

@@ -250,3 +250,15 @@ export function setProjectStatus(projectId: string, status: "active" | "inactive
     await db.update(projects).set({ status }).where(eq(projects.id, projectId));
   });
 }
+
+/** Makes a lead unassigned, as automatic assignment leaves it when no agent is available. */
+export function makeUnassigned(leadId: string) {
+  return withDb(async (db) => {
+    await db.update(leads).set({ ownerId: null }).where(eq(leads.id, leadId));
+  });
+}
+
+/** Who owns a lead now, for checking a claim or an assignment. */
+export function ownerOf(leadId: string) {
+  return withDb(async (db) => (await db.select({ ownerId: leads.ownerId }).from(leads).where(eq(leads.id, leadId)))[0]?.ownerId ?? null);
+}

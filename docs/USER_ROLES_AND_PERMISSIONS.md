@@ -80,6 +80,11 @@ Legend: **F** full · **T** own team · **O** own records · **R** read-only · 
 | Settings, users, roles | F | users only | — | — | — | — |
 | City list (FR-042, S-22) | F | F | — | — | — | — |
 | Audit log | F | R | — | — | — | — |
+| Lead import batches: submit (Nov 2026 sprint) | F | F | F | F | — | — |
+| Lead import batches: approve / reject | F | — | — | — | — | — |
+| Claim an unassigned lead | — | — | F | F | — | — |
+| Assignment weights and thresholds | F | F | — | — | — | — |
+| Backups page (read-only; restore only on the server) | F | — | — | — | — | — |
 
 **Changes from the client questionnaire (implemented 3 Nov 2026):** Tasks for HR and Accountants (Q45), HR records without logins (Q1), account management (Q2, Q3) and recording deletion (Q53).
 

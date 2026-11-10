@@ -11,6 +11,7 @@ import { RetentionForm } from "@/features/security/components/retention-form";
 import { PanelCard } from "@/features/leads/components/detail-panels";
 import { formatDateTime } from "@/features/leads/format";
 import { formatInt } from "@/lib/format";
+import { canViewBackups } from "@/modules/backups/policy";
 import { canManageSecurity } from "@/modules/security/policy";
 import { getRetentionStatus } from "@/modules/security/service";
 import { readProxyConfig, resolveClientIp } from "@/server/auth/client-ip";
@@ -50,7 +51,7 @@ export default async function SecuritySettingsPage() {
         description="Sign-in history retention and how client IP addresses are recorded. Super admins and admins only; every change is audited."
         icon={ShieldCheck}
       />
-      <SettingsTabs active="security" />
+      <SettingsTabs active="security" showBackups={canViewBackups(actor)} />
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <MiniStat label="Retention" value={`${formatInt(status.retentionMonths)} months`} caption={status.isDefault ? "Proposed default" : "Set by an admin"} />
         <MiniStat label="Automatic deletion" value={status.cleanupEnabled ? "On" : "Off"} caption={status.cleanupEnabled ? "Runs with the daily job" : "Nothing is deleted"} />

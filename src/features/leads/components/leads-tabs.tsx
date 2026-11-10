@@ -6,6 +6,9 @@ import { cn } from "@/lib/cn";
 
 const TABS = [
   { label: "All", href: "/dashboard/leads" },
+  // The leads list filtered to the New Lead stage; the tab bar follows the path only, so "All" stays selected there.
+  { label: "New leads", href: "/dashboard/leads?stage=new_lead" },
+  { label: "Unassigned", href: "/dashboard/leads/unassigned" },
   { label: "To-dos", href: "/dashboard/leads/todos" },
   { label: "Shared phones", href: "/dashboard/leads/phone-overlap" },
   { label: "Pipeline", href: "/dashboard/leads/pipeline" },
@@ -15,6 +18,7 @@ const TABS = [
   { label: "Won", href: "/dashboard/leads/won" },
   { label: "Lost", href: "/dashboard/leads/lost" },
   { label: "Duplicates", href: "/dashboard/leads/duplicates" },
+  { label: "Imports", href: "/dashboard/leads/import" },
 ];
 
 /** Sub-view tab bar (reference: white 16px-radius bar, green selected chip). Lead detail/new map to "All". */

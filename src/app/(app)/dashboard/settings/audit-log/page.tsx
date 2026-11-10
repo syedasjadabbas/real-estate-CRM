@@ -8,6 +8,7 @@ import { PanelCard } from "@/features/leads/components/detail-panels";
 import { Pagination } from "@/features/leads/components/pagination";
 import { formatDateTime } from "@/features/leads/format";
 import { flattenParams } from "@/features/leads/url";
+import { canViewBackups } from "@/modules/backups/policy";
 import { canViewAuditLog, listAuditLogs, type AuditRow, type AuditSortColumn } from "@/modules/audit/service";
 import { requirePageUser } from "@/server/auth/current-user";
 import { ROLE_LABELS, type Role } from "@/server/auth/types";
@@ -70,7 +71,7 @@ export default async function AuditLogPage({ searchParams }: PageProps<"/dashboa
         description="Who changed what, and when. Read-only: entries can't be edited or deleted. Times are Pakistan time; IP addresses appear only when a trusted proxy supplies them."
         icon={ScrollText}
       />
-      <SettingsTabs active="audit" />
+      <SettingsTabs active="audit" showBackups={canViewBackups(actor)} />
       <PanelCard title={`Entries · ${data.total}`}>
         <div className="mb-3">
           <AuditFilters path={PATH} params={params} options={data.options} />

@@ -5,6 +5,7 @@ import { RestrictedState } from "@/components/ui/empty-state";
 import { SettingsTabs } from "@/features/audit/components/audit-controls";
 import { CityManager } from "@/features/cities/components/city-manager";
 import { PanelCard } from "@/features/leads/components/detail-panels";
+import { canViewBackups } from "@/modules/backups/policy";
 import { canManageCities } from "@/modules/cities/policy";
 import { listCities } from "@/modules/cities/service";
 import { requirePageUser } from "@/server/auth/current-user";
@@ -25,7 +26,7 @@ export default async function CitiesSettingsPage() {
         description="The list offered on lead and client forms. Super admins and admins only; every change is recorded in the audit log."
         icon={MapPin}
       />
-      <SettingsTabs active="cities" />
+      <SettingsTabs active="cities" showBackups={canViewBackups(actor)} />
       <PanelCard title="City list" className="min-w-0">
         <p className="mb-4 text-xs text-zinc-600">
           Cities are never deleted. Deactivating one removes it from new selections, and records that use it keep it. Renaming changes the name on every

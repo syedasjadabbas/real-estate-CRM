@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   boolean,
   check,
   date,
@@ -853,7 +854,7 @@ export const dailyReportLines = pgTable(
   ],
 );
 
-/** FR-122 duty roster: one status per person per day. Recorded only; rotation is unchanged (T-A7). */
+/** FR-122 duty roster: one status per person per day. On leave and Leads off stop automatic assignment that day. */
 export const rosterEntries = pgTable(
   "roster_entries",
   {
@@ -1188,4 +1189,147 @@ export const auditLogs = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("audit_logs_entity_idx").on(t.entity, t.entityId), index("audit_logs_created_idx").on(t.createdAt)],
+);
+
+// ─── Sprint (Nov 2026): phones, assignment audit, import batches, backups ───
+
+/**
+ * Extra phone numbers for a lead (positions 2–5). Position 1 stays on the lead row. All are
+ * normalised to E.164 and every one of them is used for customer matching.
+ */
+export const leadPhones = pgTable(
+  "lead_phones",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    leadId: uuid("lead_id")
+      .notNull()
+      .references(() => leads.id, { onDelete: "cascade" }),
+    position: integer("position").notNull(),
+    countryCode: text("country_code").notNull(),
+    number: text("number").notNull(),
+    e164: text("e164").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("lead_phones_lead_position_uq").on(t.leadId, t.position),
+    uniqueIndex("lead_phones_lead_e164_uq").on(t.leadId, t.e164),
+    index("lead_phones_e164_idx").on(t.e164),
+    check("lead_phones_position_range", sql`${t.position} between 2 and 5`),
+    check("lead_phones_e164_format", sql`${t.e164} ~ '^\\+[1-9][0-9]{6,14}$'`),
+  ],
+);
+
+/** Extra phone numbers for a client (positions 2–5), as for leads. */
+export const clientPhones = pgTable(
+  "client_phones",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: uuid("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    position: integer("position").notNull(),
+    countryCode: text("country_code").notNull(),
+    number: text("number").notNull(),
+    e164: text("e164").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("client_phones_client_position_uq").on(t.clientId, t.position),
+    uniqueIndex("client_phones_client_e164_uq").on(t.clientId, t.e164),
+    index("client_phones_e164_idx").on(t.e164),
+    check("client_phones_position_range", sql`${t.position} between 2 and 5`),
+    check("client_phones_e164_format", sql`${t.e164} ~ '^\\+[1-9][0-9]{6,14}$'`),
+  ],
+);
+
+/** How a lead got its owner. */
+export const leadAssignmentMode = pgEnum("lead_assignment_mode", ["scored", "returning_customer", "claim", "manual", "creator", "import"]);
+
+/** Every ownership decision with its reason and, for scored assignment, each candidate's breakdown. */
+export const leadAssignments = pgTable(
+  "lead_assignments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    leadId: uuid("lead_id")
+      .notNull()
+      .references(() => leads.id, { onDelete: "cascade" }),
+    assigneeId: uuid("assignee_id").references(() => users.id, { onDelete: "set null" }),
+    previousOwnerId: uuid("previous_owner_id").references(() => users.id, { onDelete: "set null" }),
+    mode: leadAssignmentMode("mode").notNull(),
+    reason: text("reason").notNull(),
+    breakdown: jsonb("breakdown"),
+    actorId: uuid("actor_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("lead_assignments_lead_idx").on(t.leadId, t.createdAt), index("lead_assignments_assignee_idx").on(t.assigneeId, t.createdAt)],
+);
+
+export const importBatchStatus = pgEnum("import_batch_status", ["pending", "approved", "rejected"]);
+export const importRowStatus = pgEnum("import_row_status", ["valid", "duplicate", "invalid", "created", "skipped"]);
+
+/** A lead-import file submitted by an agent or manager. Nothing reaches the live pool until a Super Admin approves it. */
+export const leadImportBatches = pgTable(
+  "lead_import_batches",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "restrict" }),
+    fileName: text("file_name"),
+    uploadedById: uuid("uploaded_by_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    status: importBatchStatus("status").notNull().default("pending"),
+    totalRows: integer("total_rows").notNull().default(0),
+    validRows: integer("valid_rows").notNull().default(0),
+    duplicateRows: integer("duplicate_rows").notNull().default(0),
+    invalidRows: integer("invalid_rows").notNull().default(0),
+    createdLeads: integer("created_leads").notNull().default(0),
+    decidedById: uuid("decided_by_id").references(() => users.id, { onDelete: "set null" }),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    decisionNote: text("decision_note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("lead_import_batches_status_idx").on(t.status, t.createdAt), index("lead_import_batches_uploader_idx").on(t.uploadedById)],
+);
+
+/** One row of an import batch, validated when submitted. */
+export const leadImportRows = pgTable(
+  "lead_import_rows",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    batchId: uuid("batch_id")
+      .notNull()
+      .references(() => leadImportBatches.id, { onDelete: "cascade" }),
+    rowNo: integer("row_no").notNull(),
+    data: jsonb("data").notNull(),
+    phoneE164: text("phone_e164"),
+    status: importRowStatus("status").notNull(),
+    errors: jsonb("errors"),
+    matchLeadId: uuid("match_lead_id").references(() => leads.id, { onDelete: "set null" }),
+    leadId: uuid("lead_id").references(() => leads.id, { onDelete: "set null" }),
+  },
+  (t) => [uniqueIndex("lead_import_rows_batch_row_uq").on(t.batchId, t.rowNo), index("lead_import_rows_e164_idx").on(t.phoneE164)],
+);
+
+export const backupRunKind = pgEnum("backup_run_kind", ["backup", "restore", "restore_check", "prune"]);
+export const backupRunStatus = pgEnum("backup_run_status", ["running", "succeeded", "failed"]);
+
+/** Backup, restore and retention runs. Holds no backup contents and no credentials. */
+export const backupRuns = pgTable(
+  "backup_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    kind: backupRunKind("kind").notNull(),
+    status: backupRunStatus("status").notNull().default("running"),
+    trigger: text("trigger").notNull(),
+    location: text("location"),
+    /** Bytes; 64-bit, since a backup with uploaded files can pass 2 GB. */
+    sizeBytes: bigint("size_bytes", { mode: "number" }),
+    message: text("message"),
+    actorId: uuid("actor_id").references(() => users.id, { onDelete: "set null" }),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (t) => [index("backup_runs_started_idx").on(t.startedAt)],
 );

@@ -9,6 +9,7 @@ import {
   LayoutGrid,
   SquareCheckBig,
   Target,
+  UserPlus,
   Users,
   Wallet,
   type LucideIcon,
@@ -53,6 +54,12 @@ export const navigation: NavGroup[] = [
         href: "/dashboard/leads",
         icon: Database,
         description: "Pipeline, assignments, inbound channels, and lead history — per active project.",
+      },
+      {
+        label: "New leads",
+        href: "/dashboard/leads?stage=new_lead",
+        icon: UserPlus,
+        description: "Leads still in the New Lead stage, in the leads list.",
       },
       {
         label: "Clients",

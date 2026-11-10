@@ -8,6 +8,7 @@ import { Button, buttonClasses } from "@/components/ui/button";
 import { Field } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import type { LeadLookups } from "@/modules/leads/queries";
+import { emptyExtraPhones, phoneFormErrors } from "@/modules/contacts/constants";
 import { createLeadAction } from "../actions";
 import { textareaClass } from "./follow-up-dialog";
 import { FormSection, LeadFields, selectClass, type LeadFormValues } from "./lead-fields";
@@ -41,6 +42,7 @@ export function LeadCreateForm({
     priority: "none",
     cityId: "",
     cityOther: "",
+    phones: emptyExtraPhones(),
   });
   const [projectId, setProjectId] = useState(defaultProjectId);
   const [ownerId, setOwnerId] = useState("");
@@ -53,10 +55,18 @@ export function LeadCreateForm({
   const submit = (onDuplicate: "reject" | "duplicate" | "regenerate" = "reject") =>
     startTransition(async () => {
       setFormError(null);
+      const early = phoneFormErrors(values.phoneNumber, values.phones);
+      if (Object.keys(early).length) {
+        setErrors(early);
+        setFormError("Check the highlighted fields.");
+        return;
+      }
       const result = await createLeadAction({ ...values, projectId, ownerId, note, onDuplicate });
       if (result.ok) {
         setConflict(null);
-        if (result.data.outcome === "created") {
+        if (result.data.outcome === "created" && !result.data.visible) {
+          setNotice(`This customer already has an agent, so lead ${result.data.code} was assigned to them. They will follow it up.`);
+        } else if (result.data.outcome === "created") {
           router.push(`/dashboard/leads/${result.data.leadId}`);
         } else if (result.data.leadId) {
           router.push(`/dashboard/leads/${result.data.leadId}`);
@@ -125,10 +135,10 @@ export function LeadCreateForm({
               )}
             </Field>
             {canChooseOwner ? (
-              <Field label="Owner" error={errors.ownerId} hint="Leave empty to assign by rotation">
+              <Field label="Owner" error={errors.ownerId} hint="Leave empty to assign automatically (returning customers go to their original agent)">
                 {(id, describedBy) => (
                   <select id={id} aria-describedby={describedBy} value={ownerId} onChange={(e) => setOwnerId(e.target.value)} className={selectClass} disabled={pending}>
-                    <option value="">Auto-assign (rotation)</option>
+                    <option value="">Auto-assign</option>
                     {owners.map((o) => (
                       <option key={o.id} value={o.id}>
                         {o.name}

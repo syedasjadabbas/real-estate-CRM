@@ -6,7 +6,6 @@ import { ExecutiveEssentials } from "./executive-essentials";
 import { InstantInsights } from "./instant-insights";
 import { LostLeads } from "./lost-leads";
 import { PipelineHealth } from "./pipeline-health";
-import { RecentLeads } from "./recent-leads";
 
 /** Dashboard layout in the reference's block order. */
 export function DashboardView({ data, user, filters }: { data: DashboardData; user: SessionUser | null; filters?: DashboardFilters }) {
@@ -32,8 +31,7 @@ export function DashboardView({ data, user, filters }: { data: DashboardData; us
           emptyMessage="No inbound channels recorded yet."
         />
       </div>
-      <LostLeads data={data.snapshotAt ? data.lost : null} listParams={data.listParams} />
-      <RecentLeads leads={data.recentLeads} />
+      <LostLeads data={data.snapshotAt ? data.lost : null} />
     </div>
   );
 }

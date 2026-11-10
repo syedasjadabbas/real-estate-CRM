@@ -4,7 +4,8 @@ import { api, expect, login, seed, unique, selectTestProject } from "./support/s
 
 /**
  * Dashboard filters and lead-count consistency: the Total leads KPI for a range equals the leads
- * list for the same days, and a lost lead appears in the lost widget and in its click-through.
+ * list for the same days, a lost lead is counted by team, and the removed "Lost leads by reason" and
+ * "Recent leads" widgets stay gone.
  */
 
 async function kpi(page: Page, label: string) {
@@ -56,7 +57,7 @@ test("range chips update the URL, and the custom range matches the leads list", 
   expect(await listTotal(page, { from: today, to: today })).toBe(shown + 1);
 });
 
-test("a lost lead is counted in the lost widget and opens in the Lost list", async ({ page }) => {
+test("a lost lead is counted by team and listed in the Lost list; the reason and recent-leads widgets are gone", async ({ page }) => {
   const { today, lostReasonId } = seed();
   const name = unique("E2E Lost Widget");
   const leadId = await createLeadFor("agent1", name);
@@ -67,13 +68,34 @@ test("a lost lead is counted in the lost widget and opens in the Lost list", asy
   expect(lost.status).toBe(200);
 
   await page.goto(`/dashboard?range=custom&from=${today}&to=${today}`);
-  const lostApi = await listTotal(page, { view: "lost", from: today, to: today, lostReason: lostReasonId });
-  const reason = page.getByRole("link", { name: /Not interested/ });
-  await expect(reason).toBeVisible();
-  await expect(reason).toContainText(String(lostApi));
-  await reason.click();
-  await page.waitForURL(/\/dashboard\/leads\/lost\?/);
+  await expect(page.getByText("Lost leads by team")).toBeVisible();
+  // Removed at the client's request: no lost-by-reason widget and no recent-leads table.
+  await expect(page.getByText("Lost leads by reason")).toHaveCount(0);
+  await expect(page.getByText("Recent leads")).toHaveCount(0);
+  await expect(page.getByRole("link", { name: /Not interested/ })).toHaveCount(0);
+
+  // The Lost list keeps its own lost-reason filter.
+  expect(await listTotal(page, { view: "lost", from: today, to: today, lostReason: lostReasonId })).toBeGreaterThanOrEqual(1);
+  await page.goto(`/dashboard/leads/lost?lostReason=${lostReasonId}&from=${today}&to=${today}`);
   await expect(page.getByRole("link", { name, exact: true }).first()).toBeVisible();
+});
+
+test("the menu's New leads link opens the leads list filtered to the New Lead stage", async ({ page }) => {
+  const name = unique("E2E New Lead Menu");
+  await createLeadFor("agent1", name);
+  await selectTestProject(page.context());
+  await login(page, "manager");
+  await page.goto("/dashboard");
+
+  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "New leads", exact: true }).click();
+  await page.waitForURL(/\/dashboard\/leads\?stage=new_lead$/);
+  await expect(page.getByRole("link", { name, exact: true }).first()).toBeVisible();
+
+  // The leads tab bar offers the same view.
+  await expect(page.getByRole("navigation", { name: "Lead views" }).getByRole("link", { name: "New leads", exact: true })).toHaveAttribute(
+    "href",
+    "/dashboard/leads?stage=new_lead",
+  );
 });
 
 test("roles without lead analytics see no lead counts", async ({ page }) => {

@@ -1,0 +1,10 @@
+# Runs when mz-crm-backup.service fails (its OnFailure=). Install it next to that unit. It only
+# writes a high-priority journal entry; replace ExecStart with the alert agreed for handover item
+# H-12 (e.g. a mail command).
+# The Backups page in the CRM (Settings → Backups) also warns when the last good backup is old.
+[Unit]
+Description=Report a failed MZ CRM backup
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/logger -p user.err -t mz-crm-backup "MZ CRM backup FAILED: see journalctl -u mz-crm-backup.service"

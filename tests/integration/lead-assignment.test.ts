@@ -67,23 +67,23 @@ describe.skipIf(!hasTestDb)("F-15: lead assignment stays inside a manager's team
   };
 
   describe("Auto-assign", () => {
-    it("a manager's rotation goes round their own team only, and they can open every lead", async () => {
+    it("a manager's auto-assign spreads across their own team only, and they can open every lead", async () => {
       const { manager, agent1, agent2 } = f.actors;
       const made: string[] = [];
       for (let i = 0; i < 4; i += 1) made.push((await autoAssign(manager)).leadId);
       const rows = await Promise.all(made.map(async (id) => (await db.select({ ownerId: leads.ownerId }).from(leads).where(eq(leads.id, id)))[0].ownerId));
-      expect(rows).toEqual([agent1.id, agent2.id, agent1.id, agent2.id]);
+      expect(new Set(rows)).toEqual(new Set([agent1.id, agent2.id]));
       for (const id of made) expect((await getLeadDetail(db, manager, id)).lead.id).toBe(id);
     });
 
     it("keeps the timeline entry, audit row and owner's notification", async () => {
       const { leadId, ownerId } = await autoAssign(f.actors.manager);
       const activity = await db.select().from(leadActivities).where(and(eq(leadActivities.leadId, leadId), eq(leadActivities.type, "assignment")));
-      expect(activity).toEqual([expect.objectContaining({ actorId: null, data: { mode: "rotation", ownerId } })]);
+      expect(activity).toEqual([expect.objectContaining({ actorId: null, data: expect.objectContaining({ mode: "scored", ownerId }) })]);
       const [audit] = await db.select().from(auditLogs).where(and(eq(auditLogs.action, "lead.create"), eq(auditLogs.entityId, leadId)));
       expect(audit).toMatchObject({ actorId: f.actors.manager.id, after: expect.objectContaining({ ownerId }) });
       const [note] = await db.select().from(notifications).where(and(eq(notifications.userId, ownerId!), eq(notifications.type, "lead_assigned")));
-      expect(note.body).toMatch(/auto-assigned \(rotation\)/);
+      expect(note.body).toMatch(/auto-assigned/);
     });
 
     it("stays even when another team's rotation runs in between", async () => {
@@ -98,26 +98,26 @@ describe.skipIf(!hasTestDb)("F-15: lead assignment stays inside a manager's team
         mine.push((await autoAssign(manager)).ownerId);
         theirs.push((await autoAssign(second)).ownerId);
       }
-      expect(mine).toEqual([agent1.id, agent2.id, agent1.id, agent2.id]);
-      expect(theirs).toEqual([f.actors.outsideAgent.id, extra.id, f.actors.outsideAgent.id, extra.id]);
+      expect(new Set(mine)).toEqual(new Set([agent1.id, agent2.id]));
+      expect(new Set(theirs)).toEqual(new Set([f.actors.outsideAgent.id, extra.id]));
     });
 
-    it("an admin's rotation in between counts as the team's turn, and stays inside the team for the manager", async () => {
-      const { manager, superAdmin, agent1, agent2 } = f.actors;
-      expect((await autoAssign(superAdmin)).ownerId).toBe(agent1.id);
-      expect((await autoAssign(manager)).ownerId).toBe(agent2.id);
-      expect((await autoAssign(superAdmin)).ownerId).toBe(f.actors.outsideAgent.id);
-      expect((await autoAssign(manager)).ownerId).toBe(agent1.id);
-      expect((await autoAssign(manager)).ownerId).toBe(agent2.id);
+    it("an admin's auto-assign can reach any team, while the manager's stays inside theirs", async () => {
+      const { manager, superAdmin, agent1, agent2, outsideAgent } = f.actors;
+      const all = [agent1.id, agent2.id, outsideAgent.id];
+      for (let i = 0; i < 3; i += 1) {
+        expect(all).toContain((await autoAssign(superAdmin)).ownerId);
+        expect([agent1.id, agent2.id]).toContain((await autoAssign(manager)).ownerId);
+      }
     });
 
     it("covers all the manager's active teams, but not an inactive one", async () => {
       await db.update(teams).set({ managerId: f.actors.manager.id }).where(eq(teams.id, team2));
       const manager = await reload(f.actors.manager);
       const { agent1, agent2, outsideAgent } = f.actors;
-      expect(await owners(manager, 3)).toEqual([agent1.id, agent2.id, outsideAgent.id]);
+      expect(new Set(await owners(manager, 3))).toEqual(new Set([agent1.id, agent2.id, outsideAgent.id]));
       await updateTeam(db, f.actors.superAdmin, team2, { isActive: false });
-      expect(await owners(manager, 2)).toEqual([agent1.id, agent2.id]);
+      for (const o of await owners(manager, 2)) expect([agent1.id, agent2.id]).toContain(o);
     });
 
     it("skips agents on leave, and keeps the lead with the manager when no team agent can take it", async () => {
@@ -135,12 +135,13 @@ describe.skipIf(!hasTestDb)("F-15: lead assignment stays inside a manager's team
       expect(await owners(actor, 1)).toEqual([actor.id]);
     });
 
-    it("Admin and Super Admin rotation is unchanged: all active teams, one project pointer", async () => {
+    it("Admin and Super Admin auto-assign covers all active teams", async () => {
       const [u] = await db.insert(users).values({ name: "Zed Admin", email: "zed@test.local", role: "admin", passwordHash: "x" }).returning();
       const admin = await loadActor(db, { id: u.id, name: u.name, email: u.email, role: u.role });
       const { agent1, agent2, outsideAgent, superAdmin } = f.actors;
-      expect(await owners(superAdmin, 2)).toEqual([agent1.id, agent2.id]);
-      expect(await owners(admin, 2)).toEqual([outsideAgent.id, agent1.id]);
+      const picked = [...(await owners(superAdmin, 2)), ...(await owners(admin, 2))];
+      for (const o of picked) expect([agent1.id, agent2.id, outsideAgent.id]).toContain(o);
+      expect(new Set(picked).size).toBe(3);
     });
   });
 
@@ -164,11 +165,12 @@ describe.skipIf(!hasTestDb)("F-15: lead assignment stays inside a manager's team
 
     it("a manager's reassignment inside the team keeps its history", async () => {
       const { manager, agent1, agent2 } = f.actors;
-      const { leadId } = await autoAssign(manager);
-      await assignLead(db, manager, leadId, { ownerId: agent2.id });
+      const { leadId, ownerId: first } = await autoAssign(manager);
+      const next = first === agent1.id ? agent2.id : agent1.id;
+      await assignLead(db, manager, leadId, { ownerId: next });
       const [audit] = await db.select().from(auditLogs).where(and(eq(auditLogs.action, "lead.assign"), eq(auditLogs.entityId, leadId)));
-      expect(audit).toMatchObject({ before: { ownerId: agent1.id }, after: { ownerId: agent2.id } });
-      expect((await db.select().from(leadActivities).where(and(eq(leadActivities.leadId, leadId), eq(leadActivities.type, "assignment")))).map((a) => (a.data as { mode: string }).mode).sort()).toEqual(["manual", "rotation"]);
+      expect(audit).toMatchObject({ before: { ownerId: first }, after: { ownerId: next } });
+      expect((await db.select().from(leadActivities).where(and(eq(leadActivities.leadId, leadId), eq(leadActivities.type, "assignment")))).map((a) => (a.data as { mode: string }).mode).sort()).toEqual(["manual", "scored"]);
     });
 
     it("admins may still assign anyone; agents can't assign and always own what they create; HR can't create", async () => {

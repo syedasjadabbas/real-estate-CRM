@@ -17,11 +17,13 @@ import {
   teamMembers,
   teams,
   users,
+  leadPhones,
 } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
 import { forbidden } from "@/server/errors";
 import { BUSINESS_TIME_ZONE, LEAD_STAGES, PAGE_SIZE, UNATTENDED_HOURS, type LeadStage } from "./constants";
 import { formatPhone } from "./phone";
+import { leadPhonesOf } from "@/modules/contacts/phones";
 import { canAccessLead, canDo, leadScope } from "./policy";
 import { followUpLeadActive, loadAccessibleLead, pageWithin, scopeFilter, teamMemberIds } from "./support";
 import { leadListQuerySchema, type LeadListQuery } from "./validation";
@@ -38,12 +40,16 @@ function searchCondition(q: string | undefined): SQL | undefined {
   const term = `%${q.replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
   const digits = q.replace(/\D/g, "").replace(/^0+/, "");
   const parts: SQL[] = [ilike(leads.name, term), ilike(leads.email, term), ilike(leads.code, term)];
-  if (digits.length >= 3) parts.push(ilike(leads.phoneE164, `%${digits}%`));
+  if (digits.length >= 3) {
+    parts.push(ilike(leads.phoneE164, `%${digits}%`));
+    // Every number a lead holds is searchable, not only the first.
+    parts.push(sql`exists (select 1 from ${leadPhones} lp where lp.lead_id = ${leads.id} and lp.e164 like ${`%${digits}%`})`);
+  }
   if (/^[0-9a-f-]{36}$/i.test(q)) parts.push(eq(leads.id, q));
   return or(...parts);
 }
 
-function dayExpr(column: typeof leads.createdAt | typeof leads.updatedAt) {
+function dayExpr(column: typeof leads.createdAt | typeof leads.updatedAt | typeof leads.stageChangedAt) {
   return sql`(${column} at time zone ${BUSINESS_TIME_ZONE})::date`;
 }
 
@@ -72,9 +78,16 @@ function filterConditions(query: LeadListQuery, now: Date): SQL[] {
     if (query.followUp === "2d") out.push(and(gte(f, now), lte(f, inDays(2)))!);
     if (query.followUp === "after2d") out.push(gt(f, inDays(2)));
   }
-  const dateCol = query.dateField === "updated" ? leads.updatedAt : leads.createdAt;
-  if (query.from) out.push(sql`${dayExpr(dateCol)} >= ${query.from}::date`);
-  if (query.to) out.push(sql`${dayExpr(dateCol)} <= ${query.to}::date`);
+  const dateCol = query.dateField === "updated" ? leads.updatedAt : query.dateField === "decided" ? leads.stageChangedAt : leads.createdAt;
+  if (query.period) {
+    // This month / this quarter, by the Pakistan calendar.
+    const start = sql`date_trunc(${query.period}, (${now}::timestamptz at time zone ${BUSINESS_TIME_ZONE}))::date`;
+    out.push(sql`${dayExpr(dateCol)} >= ${start}`);
+    out.push(sql`${dayExpr(dateCol)} <= (${now}::timestamptz at time zone ${BUSINESS_TIME_ZONE})::date`);
+  } else {
+    if (query.from) out.push(sql`${dayExpr(dateCol)} >= ${query.from}::date`);
+    if (query.to) out.push(sql`${dayExpr(dateCol)} <= ${query.to}::date`);
+  }
   if (query.createdFrom) out.push(gte(leads.createdAt, new Date(query.createdFrom)));
   if (query.createdTo) out.push(lt(leads.createdAt, new Date(query.createdTo)));
   return out;
@@ -112,6 +125,12 @@ function viewConditions(query: LeadListQuery): SQL[] {
 
 /** The list city's name, or the name typed under "Other". */
 const cityLabel = sql<string | null>`coalesce(${cities.name}, ${leads.cityOther})`;
+
+/**
+ * Priority order shared by every lead list and the board: High, Medium, Low, then ordinary leads.
+ * Used whenever no column sort was chosen.
+ */
+export const priorityRank = sql<number>`case ${leads.priority} when 'high' then 3 when 'medium' then 2 when 'low' then 1 else 0 end`;
 
 const sortColumns = {
   name: leads.name,
@@ -186,7 +205,9 @@ export async function listLeads(db: Database, actor: Actor, projectId: string, r
   const orderBy =
     query.view === "regenerated" && !query.sort
       ? [desc(sql`${leads.lastActivityAt} < ${leads.regeneratedAt}`), desc(leads.regeneratedAt)]
-      : [query.dir === "asc" ? sql`${sortColumn} asc nulls last` : sql`${sortColumn} desc nulls last`, desc(leads.createdAt)];
+      : query.sort
+        ? [query.dir === "asc" ? sql`${sortColumn} asc nulls last` : sql`${sortColumn} desc nulls last`, desc(leads.createdAt)]
+        : [desc(priorityRank), desc(leads.createdAt)];
 
   const from = () =>
     db
@@ -241,7 +262,7 @@ export async function pipelineBoard(db: Database, actor: Actor, projectId: strin
   const ranked = db
     .select({
       id: leads.id,
-      rank: sql<number>`row_number() over (partition by ${leads.stage} order by ${leads.updatedAt} desc)`.as("rank"),
+      rank: sql<number>`row_number() over (partition by ${leads.stage} order by ${priorityRank} desc, ${leads.updatedAt} desc)`.as("rank"),
     })
     .from(leads)
     .leftJoin(leadFavorites, and(eq(leadFavorites.leadId, leads.id), eq(leadFavorites.userId, actor.id)))
@@ -260,7 +281,7 @@ export async function pipelineBoard(db: Database, actor: Actor, projectId: strin
     .leftJoin(original, eq(original.id, leads.duplicateOfId))
     .leftJoin(leadFavorites, and(eq(leadFavorites.leadId, leads.id), eq(leadFavorites.userId, actor.id)))
     .where(lte(ranked.rank, perStage))
-    .orderBy(desc(leads.updatedAt));
+    .orderBy(desc(priorityRank), desc(leads.updatedAt));
 
   return {
     generatedAt: now.getTime(),
@@ -341,6 +362,8 @@ export async function getLeadDetail(db: Database, actor: Actor, leadId: string) 
       ...row,
       phone: formatPhone(row.phoneCountryCode, row.phoneNumber),
       phoneE164: lead.phoneE164,
+      /** Numbers 2–5. */
+      phones: (await leadPhonesOf(db, lead.id)).map((p) => ({ ...p, display: formatPhone(p.countryCode, p.number) })),
       clientId: lead.clientId,
       projectId: lead.projectId,
       cityId: lead.cityId,

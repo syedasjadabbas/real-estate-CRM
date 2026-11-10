@@ -80,7 +80,7 @@ describe.skipIf(!hasTestDb)("FR-010: dashboard tiles open the leads they count (
       expect(await total("all", { stage: OPEN }), `open ${label}`).toBe(data.kpis!.openPipeline);
       expect(await total("won"), `won ${label}`).toBe(data.kpis!.won);
       expect(await total("regenerated"), `regenerated ${label}`).toBe(data.kpis!.regenerated);
-      expect(await total("lost", { lostReason: f.lostReasonId }), `lost ${label}`).toBe(data.lost!.byReason.find((r) => r.id === f.lostReasonId)?.count ?? 0);
+      expect(await total("lost"), `lost ${label}`).toBe(data.kpis!.lost);
     }
   });
 

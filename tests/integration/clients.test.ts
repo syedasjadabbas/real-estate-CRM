@@ -96,7 +96,8 @@ describe.skipIf(!hasTestDb)("Clients module (PostgreSQL integration)", () => {
     it("never reveals or links another team's client with the same phone", async () => {
       const outsideLead = await leadOf(f.actors.outsideAgent, { phoneNumber: "0300 7770002" });
       await convertLeadToClient(db, f.actors.superAdmin, { leadId: outsideLead });
-      const teamLead = await leadOf(f.actors.agent1, { phoneNumber: "0300 7770002", projectId: f.otherProjectId });
+      // A manager's explicit choice outranks the returning-customer rule, so this can still arise.
+      const teamLead = await leadOf(f.actors.manager, { phoneNumber: "0300 7770002", projectId: f.otherProjectId, ownerId: f.actors.agent1.id });
 
       for (const onExisting of ["reject", "link"] as const) {
         const e = await errorOf(convertLeadToClient(db, f.actors.manager, { leadId: teamLead, onExisting }));
@@ -169,7 +170,7 @@ describe.skipIf(!hasTestDb)("Clients module (PostgreSQL integration)", () => {
 
     it("lists only the linked leads the viewer could open in Leads", async () => {
       const teamLead = await leadOf(f.actors.agent1, { phoneNumber: "0300 7770004" });
-      const outsideLead = await leadOf(f.actors.outsideAgent, { phoneNumber: "0300 7770004", projectId: f.otherProjectId });
+      const outsideLead = await leadOf(f.actors.superAdmin, { phoneNumber: "0300 7770004", projectId: f.otherProjectId, ownerId: f.actors.outsideAgent.id });
       const { clientId } = await convertLeadToClient(db, f.actors.manager, { leadId: teamLead });
       await convertLeadToClient(db, f.actors.superAdmin, { leadId: outsideLead, onExisting: "link" });
 

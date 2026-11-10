@@ -1,4 +1,5 @@
 import { cityChoiceSchema, cityOtherSchema } from "@/modules/cities/validation";
+import { extraPhonesSchema } from "@/modules/contacts/validation";
 import { z } from "zod";
 import { CLIENT_SORT_COLUMNS, RELATIONSHIPS } from "./constants";
 
@@ -22,6 +23,8 @@ export const clientFieldsSchema = z.object({
     .trim()
     .regex(/^\+?[1-9]\d{0,3}$/, "Invalid country code"),
   phoneNumber: z.string().trim().min(6, "Phone number is required").max(25),
+  /** Numbers 2–5; only the first number is required. */
+  phones: extraPhonesSchema,
   email: z
     .string()
     .trim()

@@ -1,0 +1,12 @@
+# Runs mz-crm-backup.service every night at 02:00 server time. Persistent=true runs a missed backup
+# at the next boot. Check with: systemctl list-timers mz-crm-backup.timer
+[Unit]
+Description=Nightly MZ CRM backup
+
+[Timer]
+OnCalendar=*-*-* 02:00
+RandomizedDelaySec=10m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

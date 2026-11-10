@@ -168,10 +168,8 @@ describe.skipIf(!hasTestDb)("End-to-end workflows (PostgreSQL integration)", () 
       const lost = await listLeads(db, actor, f.projectId, { view: "lost", from: day, to: day });
       expect(dash.kpis!.totalLeads).toBe(all.total);
       expect(dash.kpis!.lost).toBe(lost.total);
-      expect(dash.lost!.total).toBe(lost.total);
-      expect(dash.lost!.byReason.reduce((n, r) => n + r.count, 0)).toBe(lost.total);
-      const reasonRow = dash.lost!.byReason.find((r) => r.id === f.lostReasonId);
-      if (reasonRow) expect((await listLeads(db, actor, f.projectId, { view: "lost", lostReason: f.lostReasonId, from: day, to: day })).total).toBe(reasonRow.count);
+      // Every lost lead here has the same reason, so the Lost list's reason filter returns them all.
+      expect((await listLeads(db, actor, f.projectId, { view: "lost", lostReason: f.lostReasonId, from: day, to: day })).total).toBe(lost.total);
     }
     // HR and accountants get no lead analytics.
     expect((await dashboardData(db, f.actors.hr, f.projectId, {}, new Date())).data).toBeNull();

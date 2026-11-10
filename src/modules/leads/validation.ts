@@ -1,5 +1,6 @@
 import { OTHER_CITY } from "@/modules/cities/constants";
 import { cityChoiceSchema, cityOtherSchema } from "@/modules/cities/validation";
+import { extraPhonesSchema } from "@/modules/contacts/validation";
 import { z } from "zod";
 import {
   FOLLOW_UP_WINDOWS,
@@ -31,6 +32,8 @@ export const leadFieldsSchema = z.object({
     .trim()
     .regex(/^\+?[1-9]\d{0,3}$/, "Invalid country code"),
   phoneNumber: z.string().trim().min(6, "Phone number is required").max(25),
+  /** Numbers 2–5; only the first number is required. */
+  phones: extraPhonesSchema,
   email: z
     .string()
     .trim()
@@ -113,7 +116,10 @@ export const leadListQuerySchema = z.object({
   lostReason: csvIds.catch([]),
   priority: csv(PRIORITIES).catch([]),
   followUp: z.enum(FOLLOW_UP_WINDOWS).optional().catch(undefined),
-  dateField: z.enum(["created", "updated"]).catch("created"),
+  /** "decided" = when the lead was won or lost (its last stage change). */
+  dateField: z.enum(["created", "updated", "decided"]).catch("created"),
+  /** Won / Lost reporting presets, in Pakistan time. Custom ranges use from / to. */
+  period: z.enum(["month", "quarter"]).optional().catch(undefined),
   from: dateParam.catch(undefined),
   to: dateParam.catch(undefined),
   /** Exact window and team from a dashboard tile (FR-010): rolling ranges start mid-day. */

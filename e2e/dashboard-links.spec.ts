@@ -7,9 +7,10 @@ import { api, expect, login, seed, selectTestProject, unique } from "./support/s
 test("a rolling range tile opens exactly its window, shows why, and can be cleared @mobile", async ({ page }) => {
   const inside = unique("Inside Window");
   const outside = unique("Before Window");
-  await createLeadFor("agent1", inside);
+  // High priority so the uncleared list shows them on its first page however many leads other specs add.
+  await createLeadFor("agent1", inside, "manager", { priority: "high" });
   // Before the 24h window, but on a day whole-day filtering would have included.
-  await setLeadCreatedHoursAgo(await createLeadFor("agent1", outside), 24.2);
+  await setLeadCreatedHoursAgo(await createLeadFor("agent1", outside, "manager", { priority: "high" }), 24.2);
 
   await selectTestProject(page.context());
   await login(page, "manager");

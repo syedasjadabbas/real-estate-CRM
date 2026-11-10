@@ -7,12 +7,17 @@ const field = "mt-1 block h-9 rounded-xl border border-zinc-200/80 bg-white px-2
 const labelClass = "text-[10px] font-black tracking-[0.05em] text-zinc-500 uppercase";
 const FILTERS = ["q", "actor", "entity", "action", "from", "to"] as const;
 
-/** Settings section tabs for Super Admins and Admins: Security settings, Cities and the Audit log. */
-export function SettingsTabs({ active }: { active: "security" | "cities" | "audit" }) {
+/**
+ * Settings section tabs for Super Admins and Admins: Security settings, Cities and the Audit log.
+ * Backups is added only when `showBackups` is set (Super Admins: see modules/backups/policy.ts).
+ */
+export function SettingsTabs({ active, showBackups = false }: { active: "security" | "cities" | "assignment" | "audit" | "backups"; showBackups?: boolean }) {
   const tabs = [
     { key: "security", label: "Security", href: "/dashboard/settings/security" },
     { key: "cities", label: "Cities", href: "/dashboard/settings/cities" },
+    { key: "assignment", label: "Assignment", href: "/dashboard/settings/assignment" },
     { key: "audit", label: "Audit log", href: "/dashboard/settings/audit-log" },
+    ...(showBackups ? [{ key: "backups", label: "Backups", href: "/dashboard/settings/backups" }] : []),
   ];
   return (
     <nav
