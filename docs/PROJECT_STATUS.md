@@ -1,6 +1,6 @@
 # Project status and completion checklist
 
-> **Latest: §54 (10 Nov 2026).** Pre-presentation cleanup on top of §53: phone numbers typed "92 300…" now match, the Teams tile shows a real average score, and HR and accountants no longer see menu links they can't open. Requirements unchanged at 60 implemented, 14 partial, 7 blocked, 4 excluded. The §53 sprint is committed as 3819bbf; §54 is not committed, and nothing is deployed. §1 – §23 are the 31 Oct baseline.
+> **Latest: §56 (11 Nov 2026).** The client's completed confirmations (10 Nov) answer several open decisions; matrix updated (60 implemented, 16 partial, 5 blocked, 4 excluded). Requirements spec written. Previously, **§54 (10 Nov 2026).** Pre-presentation cleanup on top of §53: phone numbers typed "92 300…" now match, the Teams tile shows a real average score, and HR and accountants no longer see menu links they can't open. Requirements unchanged at 60 implemented, 14 partial, 7 blocked, 4 excluded. The §53 sprint is committed as 3819bbf; §54 is not committed, and nothing is deployed. §1 – §23 are the 31 Oct baseline.
 
 Updated **31 Oct 2026 (final read-only audit, §9)**. Everything below was checked against the code and by running the checks named here.
 - Rounds 1–4 are committed and pushed as `e956033` on `main`.
@@ -1592,7 +1592,7 @@ Requested as "F-4"; in the §17 findings table this is **F-6** (F-4 there is the
 
 > **Current status (updated 10 Nov 2026, §53: sprint complete and verified, uncommitted).** The summary table, finding rows and requirement matrix below are kept current. The narrative, estimates and §C – §I are the 4 Nov baseline.
 > - **Fixed since:** F-13 (§25), F-15 (§27), F-9 (§28), F-20 (§30), F-16 (§31), F-24 / FR-027 (§32), F-23 (§33), F-10 (§34), FR-010 tile links (§35), FR-021 stage history (§36), FR-004 active project (§37), FR-042 cities (§38), FR-025 lead timeline (§39), FR-022 lead columns (§40), Regenerated sorting (§41, FR-005 stays partial), FR-028 first touch (§42), FR-061 inventory filters (§43), V1 readiness (§45 – §50), final audit (§51). F-7 was assessed as blocked by D-F1 (§26).
-> - **Counts now:** 60 implemented and verified, 14 partial, 0 not implemented, 7 blocked, 4 excluded. On 10 Nov FR-009, FR-043 and FR-122 became Implemented; FR-015, FR-016, FR-029, FR-030 and FR-031 were updated for the sprint (§52, §53).
+> - **Counts now:** 60 implemented and verified, 16 partial, 0 not implemented, 5 blocked, 4 excluded. On 11 Nov FR-081 and FR-152 moved from blocked to partial because the client's 10 Nov confirmations supplied their rules (§56). On 10 Nov FR-009, FR-043 and FR-122 became Implemented; FR-015, FR-016, FR-029, FR-030 and FR-031 were updated for the sprint (§52, §53).
 > - **Remaining agreed development:** about 1.25 developer-days.
 
 **Method.**
@@ -1610,9 +1610,9 @@ Requested as "F-4"; in the §17 findings table this is **F-6** (F-4 there is the
 | Status | Requirements now | On 4 Nov |
 |---|---|---|
 | Implemented and verified | **60** | 45 |
-| Partially implemented | **14** | 28 |
+| Partially implemented | **16** | 28 |
 | Not implemented | **0** | 0 |
-| Blocked by client decision | **7** | 7 |
+| Blocked by client decision | **5** | 7 |
 | Excluded from agreed scope | **4** | 5 |
 | **Total** | **85** | 85 |
 
@@ -1731,38 +1731,38 @@ FR-005 reads: "List pages support search, a filter panel, column sorting and pag
 | FR-074 | Unit detail | IV | Dimensions, booking history | `inventory/queries.ts:104` | inventory | T* | Page test | Yes |
 | FR-075 | Unit CSV import | IV | All-or-nothing, row report | `inventory/import.ts:95` | unit-import, inventory-import | T | — | Not listed; delivered |
 | FR-080 | New booking | PI | Whole units fully met; partially available waits on Q-B1 | `bookings/commands.ts:72` | bookings, booking-lead-stage | T | Q-B1 | Yes* |
-| FR-081 | Hold from token, auto-release | BC | Manual date and overdue chip; no job | `bookings/queries.ts:50` | bookings | T | Q-B2, then 1 d | Yes* |
+| FR-081 | Hold from token, auto-release | PI | Manual date and overdue chip; no job | `bookings/queries.ts:50` | bookings | T | Rule received 10 Nov (§56): hold expires after 7 days, unit returns to Available. Build the release job, about 1 d | Yes* |
 | FR-082 | Booking stages, cancel any stage | PI | Order and logs met. Paid or Confirmed bookings can't be cancelled; no payment gates | `bookings/commands.ts:132,161` | bookings | T | Q-B3; CR-3 | Yes* |
 | FR-083 | Booking overview, 30% | IV | Milestone exact; agreement and docs fields manual | `app/.../bookings/[id]/page.tsx:107` | finance, bookings | T | — | Yes |
-| FR-084 | Provisional receipt, Sales order | BC | **Nothing built**; placeholder only | `app/.../bookings/[id]/page.tsx:96` | None | – | Q-B5, C-21, then 2 d | Yes* |
+| FR-084 | Provisional receipt, Sales order | BC | **Nothing built**; placeholder only | `app/.../bookings/[id]/page.tsx:96` | None | – | Receipt format received 10 Nov (§56); templates, logo and fields still needed (Q-B5), then 2 d | Yes* |
 | FR-085 | Bookings list | IV | Search, project, stage, sort | `bookings/queries.ts:85` | bookings, list-controls | T* | Search test | Yes |
 | FR-090 | Tasks | IV | All fields and statuses | `tasks/commands.ts:143` | tasks | T | C-30 may change statuses | Yes |
-| FR-091 | Proposal builder, print | PI | Builder, cap, print work; print layout not final; F-19 | `tasks/commands.ts:132`, `app/print/proposal` | tasks, questionnaire-screens | T* | Q36, C-25, C-27, C-28; print test | Yes* |
+| FR-091 | Proposal builder, print | PI | Builder, cap, print work; print layout not final; F-19 | `tasks/commands.ts:132`, `app/print/proposal` | tasks, questionnaire-screens | T* | Rules received 10 Nov (§56): only Super Admin edits, 5% cap, 25% down payment, 10th, floor rates. Apply them; print map needs floor-plan assets | Yes* |
 | FR-092 | Overdue tasks in To-dos | IV | For lead-access roles. HR and accountants (added by Q45) use the Tasks list | `tasks/queries.ts:259` | tasks, todos | T | — | Yes |
 | FR-100 | Meetings | IV | All fields | `meetings/commands.ts:72` | meetings | T | Browser test | Yes |
 | FR-101 | Meeting → Meeting Done | IV | Option, default on | `meetings/commands.ts:152` | meetings | T | — | Yes |
 | FR-102 | Meetings list | IV | Search, filters, sort, 50 | `meetings/queries.ts:52` | meetings | T | — | Yes |
 | FR-110 | Set targets | IV | Calls, meetings, sold sq ft | `targets/service.ts:73` | teams-targets | T | Browser test | Yes |
-| FR-111 | Achievement % | PI | Meetings and sq ft computed; calls always null | `targets/service.ts:29` | teams-targets | T | C-19 | Yes* |
+| FR-111 | Achievement % | PI | Meetings and sq ft computed; calls always null | `targets/service.ts:29` | teams-targets | T | Rule received 10 Nov (§56): one uploaded recording = one call. Build with FR-150 to FR-152 | Yes* |
 | FR-120 | Teams | IV | Inactive excluded from rotation | `teams/commands.ts:40` | teams-targets | T* | Rotation test | Yes |
 | FR-121 | Daily report | IV | One per team per date; typed by hand | `teams/commands.ts:128` | teams-targets | T | Browser test | Yes |
 | FR-122 | Duty roster | IV | Views work. **On leave and Leads off now exclude the agent from automatic assignment** (C-15 settled by the client's 10 Nov brief, §52) | `teams/commands.ts`, `leads/assignment.ts` | teams-targets, ownership-assignment | T | — | Yes |
 | FR-130 | My Workplace | IV | Leave, holidays, sign-ins | `workplace/service.ts:25` | workplace | T | — | Yes |
 | FR-140 | Employee directory, Admin / HR only | PI | Fields done; managers can read it (matrix says R, requirement says no) | `employees/policy.ts:9` | employees | T | D-H1 | Yes |
 | FR-141 | Holidays | IV | Company and regional | `holidays/service.ts:56` | holidays, workplace | T | C-3 region rule | Yes |
-| FR-142 | Leave, balance, approvals | PI | Balance, overlap, cancel, senior path done. **Staff leave can't be approved until set** | `leave/service.ts:49,212` | leave, leave.spec, leave-two-step | T | C-4, C-5, C-10, C-13 | Yes* |
-| FR-143 | Attendance | BC | **Nothing built**, by design; sign-ins are not attendance | `app/.../hr/page.tsx:83` | None | – | C-16, CR-1 | Yes* (extent is CR-1) |
-| FR-150 | Agent KPI table | PI | All but calls and call minutes ("—") | `performance/service.ts:42` | performance | T | C-19 | Yes* |
-| FR-151 | Performance charts | PI | Outcome mix and top closers real; two call charts are placeholders | `performance/service.ts:188` | performance | T* | C-19 | Yes* |
-| FR-152 | Call quality buckets | BC | Duration stored; not computed | `schema.ts:316` | Upload only | – | C-19, then with FR-150 | Yes* |
-| FR-153 | Critical flag | BC | Disabled toggle | `app/.../performance/page.tsx:157` | None | – | C-17 | Yes* |
+| FR-142 | Leave, balance, approvals | PI | Balance, overlap, cancel, senior path done. **Staff leave can't be approved until set** | `leave/service.ts:49,212` | leave, leave.spec, leave-two-step | T | Partly answered 10 Nov (§56): two-step, Super Admin for senior staff. First approver for staff and the annual allowance still needed (C-4) | Yes* |
+| FR-143 | Attendance | BC | **Nothing built**, by design; sign-ins are not attendance | `app/.../hr/page.tsx:83` | None | – | Client asked on 10 Nov for a separate attendance module and for Zeploy Tech to confirm its scope (CR-1, §56). Commercial answer due from Zeploy Tech | Yes* (extent is CR-1) |
+| FR-150 | Agent KPI table | PI | All but calls and call minutes ("—") | `performance/service.ts:42` | performance | T | Rule received 10 Nov (§56): one uploaded recording = one call | Yes* |
+| FR-151 | Performance charts | PI | Outcome mix and top closers real; two call charts are placeholders | `performance/service.ts:188` | performance | T* | Rule received 10 Nov (§56): one uploaded recording = one call | Yes* |
+| FR-152 | Call quality buckets | PI | Duration stored; not computed | `schema.ts:316` | Upload only | – | Rule received 10 Nov (§56): recordings are the call counter. Compute the buckets with FR-150 | Yes* |
+| FR-153 | Critical flag | BC | Disabled toggle | `app/.../performance/page.tsx:157` | None | – | Partly answered 10 Nov (§56): Critical = new or meeting-commitment leads. Thresholds still needed (C-17) | Yes* |
 | FR-200 | Income records | IV | Finance role, attachments, void | `finance/entries.ts:113` | finance-entries | T | — | Yes |
 | FR-201 | Expense records | IV | Same, with payee | `finance/entries.ts:50` | finance-entries | T | — | Yes |
 | FR-202 | Booking payments | IV | Paid and milestone computed from the ledger | `finance/commands.ts:30` | finance, workflows | T | — | Yes |
-| FR-203 | Outstanding, overdue vs schedule | PI | Balance right; overdue understated (F-14); Finance page only | `finance/views.ts:133,192` | finance | T | C-27; show on booking | Yes* |
-| FR-204 | Payment history with receipt numbers | PI | Per booking and per client done (F-13); format waits on C-21 | `finance/queries.ts:20,82` | finance, client-bookings | T | C-21 | Yes* |
-| FR-205 | Reports, CSV | PI | All four and CSV. F-7 and F-18 affect figures (F-23 fixed, §33) | `finance/reports.ts:39`, `entries.ts:321` | finance-reports, finance-entries | T | D-F1, D-F2 | Yes* |
-| FR-206 | No hard delete; reversals | IV | Database-level immutability | `drizzle/0005`, `finance/commands.ts:135` | finance, workflows | T | — | Yes |
+| FR-203 | Outstanding, overdue vs schedule | PI | Balance right; overdue understated (F-14); Finance page only | `finance/views.ts:133,192` | finance | T | Rules received 10 Nov (§56): installments due on the 10th, overdue from the 16th; down payment due 7 days after booking + 3 days; aging 1-15, 16-30, 31-60, 60+. Grace periods marked to be confirmed. Showing the balance on the booking page is decision-free | Yes* |
+| FR-204 | Payment history with receipt numbers | PI | Per booking and per client done (F-13); format waits on C-21 | `finance/queries.ts:20,82` | finance, client-bookings | T | Format received 10 Nov (§56): BH-GF/FF/SS-123, gaps acceptable. Apply it | Yes* |
+| FR-205 | Reports, CSV | PI | All four and CSV. F-7 and F-18 affect figures (F-23 fixed, §33) | `finance/reports.ts:39`, `entries.ts:321` | finance-reports, finance-entries | T | Answered 10 Nov (§56): collections stay separate from income (current behaviour, D-F2 closed); a reversal counts in the period processed (D-F1, to build) | Yes* |
+| FR-206 | No hard delete; reversals | IV | Database-level immutability | `drizzle/0005`, `finance/commands.ts:135` | finance, workflows | T | Client wrote "reversals by Admin and Super Admin" (§56): confirm whether that means requesting, approving or both, then align roles | Yes |
 
 **Non-functional requirements:**
 
@@ -3464,6 +3464,8 @@ Records left by the check (nothing was deleted):
 
 ## 54. Pre-presentation cleanup (10 Nov 2026)
 
+> The "Partial and blocked requirements: review" table below is partly superseded by §56: the client's 10 Nov confirmations answer several of the decisions it lists.
+
 **State: done and verified locally. Not committed, pushed or deployed.** The 55 imported test leads, the original spreadsheet, the assignment weights and the ownership rules were not touched. No VoIP work.
 
 ### Changes
@@ -3570,3 +3572,45 @@ Name notes (kept exactly as written): 13 names end in "Lhr" (rows 1–6, 15, 20,
 - **Project "Demo Project":** the only active project in development.
 - **"Lhr" read as the city Lahore.**
 - **Rows 46 and 47:** the correct numbers.
+
+## 56. Client confirmations of 10 Nov 2026 applied to the open requirements (11 Nov 2026)
+
+**Source:** `MZ_MARKETING_CRM_Client_Inputs_and_Confirmations_COMPLETED.docx` (client folder, 10 Nov 2026). It confirms operational rules and states that it does not amend the quotation or add scope. **No code changed in this section**; only the record of what is decided.
+
+### Decisions now answered
+
+| Decision | Client answer | Requirements | Effect |
+|---|---|---|---|
+| C-19 Calls | Each uploaded recording linked to a lead counts as one call | FR-111, FR-150, FR-151, FR-152 | Unblocked; FR-152 now partial (durations stored) |
+| Q-B2 Token hold | Expires after 7 days; the unit returns to Available | FR-081 | Unblocked; now partial (manual date and overdue flag exist) |
+| C-27 / overdue | Installments due on the 10th, 5-day grace, overdue from the 16th; down payment due 7 days after booking plus 3 days' grace; aging 1-15, 16-30, 31-60, 60+ days. Grace periods marked "to be confirmed" | FR-203 | Can be built; confirm the grace periods |
+| D-F2 Collections | Keep booking collections separate from income | FR-205 | **Closed**: matches current behaviour |
+| D-F1 Reversal date | Counts in the period the reversal is processed | FR-205 | Can be built (the build copies the original date, F-7) |
+| C-21 Receipt format | BH-GF/FF/SS-123; gaps after cancellation or reversal acceptable | FR-204, FR-084 | Format can be applied; FR-084 still needs templates (Q-B5) |
+| Q36 / C-25 / C-28 Proposals | Only Super Admin edits; 5% agent and manager discount cap; 25% default down payment; installments on the 10th; floor rates GF 10,824, FF 9,593, SF 8,624 per sq ft; rounding to the final installment; only available units | FR-091 | Can be applied; print map needs floor-plan assets |
+| C-2 Sign-in retention | 12 months | FR-002 | Automatic deletion can be switched on at go-live |
+| Q3 Deactivation | Open leads move to the manager or a team pool | Accounts | Already built (lead shift) |
+| Recordings | Access: Manager, Admin, Super Admin; kept for life; deleted by Super Admin | FR-038 | Deletion already Super Admin only (hides the file); check playback roles against this |
+
+### Partly answered, still open
+
+- **Leave (FR-142):** two-step approval and Super Admin approval for Managers, HR, Admins and Super Admins confirmed. Still needed: the first approver for other staff (C-4) and the annual allowance in days.
+- **Critical flag (FR-153):** defined as new leads or meeting-commitment leads; thresholds still needed (C-17).
+- **Reversals (FR-206):** "Reversals by Admin and Super Admin". The build has Accountant or Super Admin request and Manager (own team), Admin or Super Admin approve. Ask whether the rule covers requesting, approving or both.
+- **Refunds:** "refund after a variable deduction" confirmed as the policy; refunds remain a change request (CR-3).
+
+### Needs an answer from Zeploy Tech
+
+- **Attendance (FR-143):** the client asks for a separate module (check-in and out, late arrivals, absences, hours, breaks) and asks Zeploy Tech to confirm it is within the quoted scope. The quotation lists "Attendance" as one line under Performance; the requested depth is the CR-1 commercial decision.
+
+### Data still to come from the client
+
+Server details, DNS authoriser, database arrangement, backup owner, initial users, team names and members, office address, the unit-wise inventory list for the first project (54 units, three pricing phases), floor plans, terms and disclaimers.
+
+### Counts after this update
+
+60 implemented and verified, 16 partial, 0 not implemented, 5 blocked, 4 excluded (85). Recounted from the matrix rows.
+
+### Requirements specification
+
+A Software Requirements Specification for the client's technical reviewer was written on 11 Nov 2026 as a shared document (architecture, roles, requirements by module with Done or Planned status, data model, API, non-functional requirements, deployment, test results, planned work). It reflects the decisions above.
