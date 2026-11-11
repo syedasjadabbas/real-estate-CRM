@@ -3,13 +3,13 @@ import type { Database } from "@/server/db";
 import { auditLogs, taskHistory, taskInstallmentRows, tasks, units, type TaskProposal } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
 import { forbidden } from "@/server/errors";
-import { buildRows, computeFigures, unitPricePerSqft, type ProposalSettings } from "./plan";
+import { buildRows, computeFigures, unitPricePerSqft, type PriceSettings, type ProposalSettings } from "./plan";
 import { canDoTask } from "./policy";
 import { getProposalSettings } from "./settings";
 
 type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 type DbOrTx = Database | Tx;
-type Unit = { areaSqft: number; basePrice: number };
+type Unit = { areaSqft: number; basePrice: number; floor: string | null };
 type ProposalTask = { id: string; type: string; status: string; title: string; proposal: TaskProposal | null };
 
 const rowKey = (r: { label: string; description: string | null; progress: string | null; amount: number; dueOn: string | null }) =>
@@ -30,8 +30,8 @@ function isHandEdited(stored: Awaited<ReturnType<typeof storedRows>>, old: TaskP
 }
 
 /** The figures a proposal would have at the unit's current price (discount %, down payment %, count and ROI kept). */
-function recalculated(old: TaskProposal, unit: Unit, settings: Pick<ProposalSettings, "defaultPricePerSqft">): TaskProposal {
-  const pricePerSqft = unitPricePerSqft(unit, settings.defaultPricePerSqft);
+function recalculated(old: TaskProposal, unit: Unit, settings: PriceSettings): TaskProposal {
+  const pricePerSqft = unitPricePerSqft(unit, settings);
   const figures = computeFigures({ areaSqft: unit.areaSqft, pricePerSqft, discountPct: old.discountPct, downPaymentPct: old.downPaymentPct, installmentCount: old.installmentCount, roiPerSqft: old.roiPerSqft });
   return { ...old, areaSqft: unit.areaSqft, pricePerSqft, ...figures };
 }
@@ -67,7 +67,7 @@ async function applyToProposal(tx: Tx, actor: Actor, task: { id: string; proposa
  * cancelled are touched; booking payment plans keep their agreed rate.
  */
 export async function syncProposalsForUnit(tx: Tx, actor: Actor, unitId: string) {
-  const [unit] = await tx.select({ areaSqft: units.areaSqft, basePrice: units.basePrice }).from(units).where(eq(units.id, unitId));
+  const [unit] = await tx.select({ areaSqft: units.areaSqft, basePrice: units.basePrice, floor: units.floor }).from(units).where(eq(units.id, unitId));
   if (!unit) return { updated: 0 };
   const settings = await getProposalSettings(tx);
   const linked = await tx
@@ -104,7 +104,7 @@ export async function proposalReconciliationReport(db: DbOrTx, actor: Actor) {
     .where(and(inArray(tasks.type, ["proposal", "payment_plan"]), sql`${tasks.proposal}->>'unitId' is not null`))
     .orderBy(asc(tasks.createdAt))) as ProposalTask[];
   const unitIds = [...new Set(planned.map((t) => t.proposal!.unitId!))];
-  const unitRows = unitIds.length ? await db.select({ id: units.id, unitNo: units.unitNo, areaSqft: units.areaSqft, basePrice: units.basePrice }).from(units).where(inArray(units.id, unitIds)) : [];
+  const unitRows = unitIds.length ? await db.select({ id: units.id, unitNo: units.unitNo, areaSqft: units.areaSqft, basePrice: units.basePrice, floor: units.floor }).from(units).where(inArray(units.id, unitIds)) : [];
   const rows: {
     taskId: string;
     title: string;
@@ -141,7 +141,7 @@ export async function applyProposalReconciliation(db: Database, actor: Actor) {
     for (const r of report.rows.filter((x) => x.action === "update" || x.action === "update_keep_rows")) {
       const [task] = await tx.select({ id: tasks.id, status: tasks.status, type: tasks.type, proposal: tasks.proposal }).from(tasks).where(eq(tasks.id, r.taskId)).for("update");
       if (!task?.proposal || task.type !== "proposal" || task.status === "cancelled") continue;
-      const [unit] = await tx.select({ areaSqft: units.areaSqft, basePrice: units.basePrice }).from(units).where(eq(units.id, task.proposal.unitId!));
+      const [unit] = await tx.select({ areaSqft: units.areaSqft, basePrice: units.basePrice, floor: units.floor }).from(units).where(eq(units.id, task.proposal.unitId!));
       if (unit && (await applyToProposal(tx, actor, { id: task.id, proposal: task.proposal }, unit, settings, "reconciliation"))) updated++;
     }
     await tx.insert(auditLogs).values({ actorId: actor.id, ip: actor.ip ?? null, action: "task.price_reconciliation", entity: "task", entityId: null, before: null, after: { updated, ...report.summary } });

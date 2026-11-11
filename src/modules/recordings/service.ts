@@ -1,6 +1,6 @@
 import type { Database } from "@/server/db";
 import type { Actor } from "@/server/auth/types";
-import { AppError } from "@/server/errors";
+import { AppError, forbidden } from "@/server/errors";
 import { assertCanUploadTo, hideLeadFile, listLeadFiles, openLeadFile, saveLeadFile, type LeadFileRow } from "@/modules/files/lead-files";
 import {
   cleanFileName,
@@ -48,7 +48,19 @@ export async function uploadRecording(
 export const listRecordings = (db: Database, actor: Actor, leadId: string) => listLeadFiles(db, actor, leadId, "call_recording");
 export type RecordingRow = LeadFileRow;
 
-export const openRecording = (db: Database, actor: Actor, fileId: string) => openLeadFile(db, actor, fileId, "call_recording");
+/**
+ * Who may play or download a recording (questionnaire Q52, confirmed again on 10 Nov 2026:
+ * "Recording access: Manager, Admin, Super Admin"). Agents still upload and see the list of their
+ * leads' recordings, but do not play them. Anyone outside the lead's scope still gets "not found".
+ */
+export const PLAYBACK_ROLES = ["manager", "admin", "super_admin"] as const;
+export const canPlayRecordings = (actor: Pick<Actor, "role">) => (PLAYBACK_ROLES as readonly string[]).includes(actor.role);
+
+export async function openRecording(db: Database, actor: Actor, fileId: string) {
+  const file = await openLeadFile(db, actor, fileId, "call_recording");
+  if (!canPlayRecordings(actor)) throw forbidden("Recordings are played by Managers, Admins and Super Admins.");
+  return file;
+}
 
 /** Super Admin only (Q53). Hides the recording; the audio file is kept pending C-33. */
 export function deleteRecording(db: Database, actor: Actor, fileId: string) {

@@ -521,17 +521,40 @@ export async function leadTodos(db: Database, actor: Actor, projectId: string, b
   return { counts, items, page, pageCount };
 }
 
-/** Non-duplicate leads in scope that share a phone number (FR-032, view only). */
-export async function sharedPhoneGroups(db: Database, actor: Actor, projectId: string) {
+/** Lists paged at 50 (FR-005): page number from the query string, clamped to 1…10,000. */
+export const SIDE_LIST_PAGE_SIZE = 50;
+const pageOf = (raw: unknown) => {
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 1 && n <= 10_000 ? n : 1;
+};
+
+/**
+ * Non-duplicate leads in scope that share a phone number (FR-032, view only), 50 phone groups per
+ * page (FR-005), oldest-shared number first. `totalLeads` counts every lead in every group.
+ */
+export async function sharedPhoneGroups(db: Database, actor: Actor, projectId: string, rawPage?: unknown) {
   if (!canDo(actor, "view")) throw forbidden();
   const members = await teamMemberIds(db, actor);
   const where = and(...baseConditions(actor, members, projectId), isNull(leads.duplicateOfId));
+  const sharedAll = db
+    .select({ phone: leads.phoneE164, n: sql<number>`count(*)::int`.as("n") })
+    .from(leads)
+    .where(where)
+    .groupBy(leads.phoneE164)
+    .having(sql`count(*) > 1`)
+    .as("shared_all");
+  const [totals] = await db.select({ groups: sql<number>`count(*)::int`, leads: sql<number>`coalesce(sum(${sharedAll.n}), 0)::int` }).from(sharedAll);
+  const pageCount = Math.max(1, Math.ceil(totals.groups / SIDE_LIST_PAGE_SIZE));
+  const page = Math.min(pageOf(rawPage), pageCount);
   const shared = db
     .select({ phone: leads.phoneE164 })
     .from(leads)
     .where(where)
     .groupBy(leads.phoneE164)
-    .having(sql`count(*) > 1`);
+    .having(sql`count(*) > 1`)
+    .orderBy(asc(leads.phoneE164))
+    .limit(SIDE_LIST_PAGE_SIZE)
+    .offset((page - 1) * SIDE_LIST_PAGE_SIZE);
   const rows = await db
     .select({
       id: leads.id,
@@ -549,20 +572,25 @@ export async function sharedPhoneGroups(db: Database, actor: Actor, projectId: s
     .where(and(where, inArray(leads.phoneE164, shared)))
     .orderBy(asc(leads.phoneE164), asc(leads.createdAt));
 
-  const groups = new Map<string, typeof rows>();
-  for (const row of rows) groups.set(row.phoneE164, [...(groups.get(row.phoneE164) ?? []), row]);
-  return [...groups.entries()].map(([phone, items]) => ({
+  const byPhone = new Map<string, typeof rows>();
+  for (const row of rows) byPhone.set(row.phoneE164, [...(byPhone.get(row.phoneE164) ?? []), row]);
+  const groups = [...byPhone.entries()].map(([phone, items]) => ({
     phone: formatPhone(items[0].phoneCountryCode, items[0].phoneNumber),
     phoneE164: phone,
     leads: items,
   }));
+  return { groups, page, pageCount, totalGroups: totals.groups, totalLeads: totals.leads };
 }
 
-/** Manager reviews on leads in the actor's scope (agents: their own leads). */
-export async function reviewsFeed(db: Database, actor: Actor, projectId: string) {
+/** Manager reviews on leads in the actor's scope (agents: their own leads), newest first, 50 per page. */
+export async function reviewsFeed(db: Database, actor: Actor, projectId: string, rawPage?: unknown) {
   if (!canDo(actor, "view")) throw forbidden();
   const members = await teamMemberIds(db, actor);
-  return db
+  const scope = and(...baseConditions(actor, members, projectId));
+  const [{ total }] = await db.select({ total: count() }).from(leadReviews).innerJoin(leads, eq(leads.id, leadReviews.leadId)).where(scope);
+  const pageCount = Math.max(1, Math.ceil(total / SIDE_LIST_PAGE_SIZE));
+  const page = Math.min(pageOf(rawPage), pageCount);
+  const rows = await db
     .select({
       id: leadReviews.id,
       body: leadReviews.body,
@@ -576,9 +604,11 @@ export async function reviewsFeed(db: Database, actor: Actor, projectId: string)
     .from(leadReviews)
     .innerJoin(leads, eq(leads.id, leadReviews.leadId))
     .innerJoin(users, eq(users.id, leadReviews.reviewerId))
-    .where(and(...baseConditions(actor, members, projectId)))
-    .orderBy(desc(leadReviews.createdAt))
-    .limit(200);
+    .where(scope)
+    .orderBy(desc(leadReviews.createdAt), desc(leadReviews.id))
+    .limit(SIDE_LIST_PAGE_SIZE)
+    .offset((page - 1) * SIDE_LIST_PAGE_SIZE);
+  return { rows, page, pageCount, total };
 }
 
 /** Pending lost requests the actor can decide (managers: their teams; admins: all). */

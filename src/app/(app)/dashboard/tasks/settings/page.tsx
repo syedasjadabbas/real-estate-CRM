@@ -28,7 +28,7 @@ export default async function ProposalSettingsPage() {
       <PageHeader
         as="h2"
         title="Proposal settings"
-        description="App settings for the proposal / payment-plan builder. Proposed defaults pending client confirmation; changes apply to proposals saved afterwards."
+        description="App settings for the proposal / payment-plan builder, with the defaults the client confirmed on 10 Nov 2026. Changes apply to proposals saved afterwards; saved proposals whose price changes are listed in the reconciliation below."
         actions={
           <Link href="/dashboard/tasks" className={buttonClasses({ variant: "secondary", size: "lg" })}>
             <ArrowLeft aria-hidden="true" className="size-4" />

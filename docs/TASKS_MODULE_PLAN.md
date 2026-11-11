@@ -318,3 +318,24 @@ The browser pane showed the accountant's Access denied page.
 |---|---|
 | The browser's interactive print dialog and a physical printer | The PDF output was verified with Chrome's print engine (§7.4), but the native dialog can't be driven from automation, and no printer is attached |
 | Client confirmation of §1.1 (C1–C14) | Business decisions |
+
+## 10. Client confirmations of 10 Nov 2026 (FR-091, FR-009)
+
+The client confirmed the proposal rules in writing on 10 Nov 2026 (`PROJECT_STATUS.md` §56). Each one, against the code on 11 Nov 2026:
+
+| Rule | State | Where |
+|---|---|---|
+| Anyone can own a proposal; only the Super Admin edits a saved one (Q36) | **Implemented now.** A task that has a saved plan (Proposal or Payment plan printable) can only be edited by the Super Admin: fields, plan, rows, type and "Rebuild installment rows". The owner, their manager and Admins can still change its status. An Admin can still reassign it (Q45), as long as nothing else changes. The task page hides Edit and Rebuild and says why; the edit page refuses. | `policy.ts` (`canEditSavedProposal`, `canEditTaskDetails`), `commands.ts` (`updateTask`, `rebuildInstallments`), `queries.ts` (`canEditDetails`), task and edit pages |
+| Default discount 0%; mismatched rows save with a warning (Q38, Q39) | Already done (C5, C6) | `validation.ts`, task form |
+| Agent and Manager discount limit 5% (Q40, Q41) | Already done: agent cap 5 (migration 0006), manager cap 5 (migration 0014) | `policy.ts` `discountCap`, settings |
+| Default down payment 25% (Q42) | Already done: migration 0014 and the code fallback | `constants.ts`, migration 0014 |
+| Installments due on the 10th (Q43) | Already done. **The first installment month is still chosen on the form**: the client's answer gives the down payment's date (7 days after booking, for overdue) but not which month the first installment falls in (C-27), so the behaviour is unchanged. | `plan.ts` |
+| Rounding difference on the final installment (Q37) | Already done (C4) | `plan.ts` `buildRows` |
+| Floor rates GF 10,824, FF 9,593, SF 8,624 per sq ft (Q44) | **Implemented now** as three admin settings (`proposal.floor_price_per_sqft.gf/ff/sf`) with these defaults. No migration: a missing row means the default; clearing one stores a blank row ("not set"). A floor rate is used only when the unit has no list price of its own (C-28 did not say they override unit prices or which projects they cover), then the default price. A unit's floor text matches a code case-insensitively: GF / Ground / Ground floor, FF / First / 1st (floor), SF / SS / Second / 2nd (floor). Changes are audited. | `constants.ts`, `plan.ts` `unitPricePerSqft`, `settings.ts`, settings form |
+| Only available units (Q48) | Already done | `commands.ts` `resolveProposal`, task form |
+| Saved proposals reflect unit price changes (Q47) | Already done (automatic sync and reconciliation). A floor-rate change shows up in the reconciliation report and on the task page; it isn't pushed into saved proposals automatically. | `price-sync.ts` |
+| Admin and Super Admin assign tasks (Q45) | **Implemented now** (the removal half). Managers and agents can no longer assign to anyone else; they still create tasks for themselves, because C-29 hasn't answered that. The list's Assignee filter still offers the people whose tasks they can see. | `policy.ts` `canAssignTo`, `queries.ts` |
+
+**Still open:** C-25 (may an owner correct a proposal before printing?), C-27 (first installment month), C-28 (projects covered by the floor rates, ROI rate), C-29 (self-tasks), C-31 (keep a printed copy). A unit's floor change doesn't trigger the proposal sync (only price and area changes do; that rule lives in Inventory).
+
+**Tests:** `tests/unit/tasks-rules.test.ts` (assignment, Q36 lock, floor rates and codes, settings validation); `tests/integration/tasks.test.ts` (updated for Q36 / Q45, plus "client confirmations of 10 Nov 2026"); `e2e/questionnaire-screens.spec.ts` (agent sees no Edit after saving). Integration and Playwright runs are pending: the shared test database was in use.

@@ -11,7 +11,7 @@ import { isUniqueViolation, loadAccessibleLead, logActivity, teamMemberIds, type
 import { BOOKING_STAGE_LABELS, CLOSED_STAGES, nextStage, type BookingStage } from "./constants";
 import { assertCanBooking, canAccessBooking, canMoveTo } from "./policy";
 import { netPaid } from "@/modules/finance/ledger";
-import { businessToday } from "./today";
+import { businessToday, defaultHoldUntil } from "./today";
 import { advanceSchema, cancelSchema, createBookingSchema, updateBookingSchema } from "./validation";
 
 const fieldError = (field: string, message: string) => new AppError("VALIDATION_FAILED", "Check the highlighted fields.", { fields: { [field]: message } });
@@ -67,7 +67,7 @@ async function writeStage(tx: Tx, bookingId: string, from: BookingStage, to: Boo
 /**
  * FR-080 create: an Available whole unit in the lead's project. The unit is claimed with the guarded
  * transition (concurrent attempts: exactly one wins, the others get CONFLICT) and the partial unique
- * index backs that up. The lead moves to Booking in Process.
+ * index backs that up. The lead moves to Booking in Process. Reserved until defaults to HOLD_DAYS from today (FR-081).
  */
 export async function createBooking(db: Database, actor: Actor, input: unknown) {
   assertCanBooking(actor, "create");
@@ -99,7 +99,8 @@ export async function createBooking(db: Database, actor: Actor, input: unknown) 
       areaSqft: unit.areaSqft,
       totalSale,
       tokenAmount: data.tokenAmount,
-      reservedUntil: data.reservedUntil ?? null,
+      // FR-081: a hold ends HOLD_DAYS after creation unless the creator picks another date.
+      reservedUntil: data.reservedUntil ?? defaultHoldUntil(),
       paymentInstructions: data.paymentInstructions ?? null,
       createdById: actor.id,
     };

@@ -124,13 +124,62 @@ Enable it with `systemctl daemon-reload && systemctl enable --now mz-crm-prune.t
 
 **First run:** after scheduling, run `npm run job:prune-signin-logs -- --dry-run` once by hand (with the env loaded). Security settings → "Last cleanup run" should then show "Dry run". A dry run deletes nothing; it only updates that last-run record.
 
+## 7b. Unit-hold release (scheduled job, FR-081)
+
+Client rule (10 Nov 2026): a token / unit hold expires after 7 days and the unit returns to Available. A new booking's **Reserved until** defaults to 7 days after creation (`HOLD_DAYS` in `src/modules/bookings/constants.ts`); the creator may still pick another date, and managers / admins may change it on the booking page.
+
+A hold is **released** when all of these are true:
+- the booking is still in **Negotiation** or **Token pending** (Token received and later stages mean the token is in);
+- its Reserved-until date is before today (business time zone, Asia/Karachi), so a hold "until 18 Nov" is released during 19 Nov;
+- **no payment has ever been recorded** on it (any payment row, even one later reversed).
+
+Releasing cancels the booking with the reason **"Hold expired"**, returns the unit from Reserved to Available, and writes a stage-history entry and audit rows (`booking.cancel` with `source: hold_expiry`, and `unit.status`) with no user and no IP. The lead stays where it is, as with a manual cancel. Each booking is released in its own transaction with the booking row locked first, the same lock a payment takes, and the rule is checked again under the lock, so a payment recorded at the same moment wins. Runs are safe to repeat or overlap. Bookings created before the 7-day default with no Reserved-until date are never released automatically. Until the job runs, the Bookings list and booking page show **"Hold expired · releasing"**; an overdue hold that has a payment shows **"Hold overdue"** and is left alone.
+
+```bash
+npm run job:release-holds              # cancels expired, unpaid holds and frees their units
+npm run job:release-holds -- --dry-run # changes nothing; lists the bookings that would be released
+```
+
+It prints one JSON line (`eligible`, `released`, `skipped`, `failed` and each booking). The exit code is non-zero when a booking failed to release or the database is unreachable. It needs `DATABASE_URL` in the process environment, exactly as in §7, and Node 22.18 or later (it loads the app's TypeScript module with Node's built-in type stripping; no build is needed). Run it **every hour**.
+
+**systemd timer:**
+```ini
+# /etc/systemd/system/mz-crm-release-holds.service
+[Unit]
+Description=MZ CRM: release expired unit holds (FR-081)
+After=network-online.target postgresql.service
+[Service]
+Type=oneshot
+User=mzcrm
+WorkingDirectory=/srv/mz-crm
+EnvironmentFile=/srv/mz-crm/.env
+ExecStart=/usr/bin/npm run job:release-holds
+
+# /etc/systemd/system/mz-crm-release-holds.timer
+[Unit]
+Description=Hourly MZ CRM unit-hold release
+[Timer]
+OnCalendar=hourly
+RandomizedDelaySec=2m
+Persistent=true
+[Install]
+WantedBy=timers.target
+```
+Enable it with `systemctl daemon-reload && systemctl enable --now mz-crm-release-holds.timer`, and check with `systemctl list-timers mz-crm-release-holds.timer` and `journalctl -u mz-crm-release-holds.service`.
+
+**cron** (as the app user): `5 * * * * cd /srv/mz-crm && set -a && . ./.env && set +a && /usr/bin/npm run job:release-holds >> /var/log/mz-crm/release-holds.log 2>&1`
+
+**Docker Compose:** `docker compose run --rm app npm run job:release-holds`, triggered hourly by the host.
+
+**First run:** after deploying, run `npm run job:release-holds -- --dry-run` once by hand (with the env loaded) and check the listed bookings before enabling the timer.
+
 ## 7a. Production checklist (summary)
 
 1. `NODE_ENV=production`, `DATABASE_URL`, `TRUST_PROXY=true`, `TRUSTED_PROXY_COUNT=1` (plus `PROXY_SHARED_SECRET` if used) in the app's env file.
 2. `npm ci && npm run build && npm run db:migrate` (with the env loaded), then start the app privately (§2).
 3. Caddy 2.5+ in front with the config in §3; firewall as in §2.
 4. Verification steps in §5 pass.
-5. Daily cleanup scheduled (§7) and one manual dry run done.
+5. Daily cleanup scheduled (§7) and one manual dry run done. Hourly hold release scheduled (§7b) after one manual dry run.
 6. Retention period confirmed by the client before anyone turns automatic deletion on (§8). CDN or load balancer settings wait on C3.
 
 The exit code is non-zero only on errors (for example the database is unreachable). "Skipped" (another run in progress) and "disabled" are normal results.

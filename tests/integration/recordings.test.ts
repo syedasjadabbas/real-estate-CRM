@@ -160,9 +160,11 @@ describe.skipIf(!hasTestDb)("Call recordings (PostgreSQL integration)", () => {
       expect(list.map((r) => r.name)).toEqual(["second.wav", "first.mp3"]);
       expect(list[1]).toMatchObject({ uploadedBy: "Agent A", mime: "audio/mpeg" });
 
-      for (const actor of [f.actors.agent1, f.actors.manager, admin, f.actors.superAdmin]) {
+      for (const actor of [f.actors.manager, admin, f.actors.superAdmin]) {
         expect((await openRecording(db, actor, id)).id).toBe(id);
       }
+      // Q52, confirmed 10 Nov 2026: agents upload and list recordings but do not play them, even their own.
+      expect(await errorCode(openRecording(db, f.actors.agent1, id))).toBe("FORBIDDEN");
       for (const actor of [f.actors.agent2, f.actors.outsideAgent]) {
         expect(await errorCode(openRecording(db, actor, id))).toBe("NOT_FOUND");
         expect(await errorCode(listRecordings(db, actor, leadId))).toBe("NOT_FOUND");
@@ -179,7 +181,7 @@ describe.skipIf(!hasTestDb)("Call recordings (PostgreSQL integration)", () => {
       const bytes = mp3(4096);
       bytes[4000] = 7;
       const { id } = await uploadRecording(db, f.actors.agent1, leadId, { bytes, name: "a.mp3" });
-      const file = await openRecording(db, f.actors.agent1, id);
+      const file = await openRecording(db, f.actors.manager, id);
       const whole = new Uint8Array(await new Response(readObject(file.storageKey)).arrayBuffer());
       expect(whole).toEqual(bytes);
       const part = new Uint8Array(await new Response(readObject(file.storageKey, { start: 3999, end: 4001 })).arrayBuffer());

@@ -9,5 +9,5 @@ export const GET = apiRoute(async ({ db, actor }) => {
   return getProposalSettings(db);
 });
 
-/** PATCH { agentCap?, managerCap?, downPaymentPct?, installmentCount?, defaultPricePerSqft?, roiPerSqft? } — admins; blank clears optional ones. */
+/** PATCH { agentCap?, managerCap?, downPaymentPct?, installmentCount?, defaultPricePerSqft?, roiPerSqft?, floorPriceGF?, floorPriceFF?, floorPriceSF? } — admins; blank clears optional ones. */
 export const PATCH = apiRoute(async ({ req, db, actor }) => updateProposalSettings(db, actor, await readJson(req)));

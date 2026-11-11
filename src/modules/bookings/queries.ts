@@ -47,9 +47,19 @@ function money(totalSale: number, paid: number) {
   return { paid, total: totalSale, outstanding, milestoneMet: toPaisa(paid) >= toPaisa(totalSale * MILESTONE_RATIO) };
 }
 
-/** Hold has passed its date while the booking still waits for the token (flag only; no auto-release until Q-B2). */
+/** Hold has passed its date while the booking still waits for the token. */
 function holdOverdue(b: { stage: (typeof bookings.$inferSelect)["stage"]; reservedUntil: string | null }, today: string) {
   return Boolean(b.reservedUntil && b.reservedUntil < today && HOLD_STAGES.includes(b.stage));
+}
+
+/**
+ * FR-081 display state: "expired" when the hourly release job will free the unit (overdue and no
+ * payment recorded, the rule in hold-release.ts), "overdue" when a payment keeps it from being
+ * released automatically, otherwise null.
+ */
+function holdState(b: { stage: (typeof bookings.$inferSelect)["stage"]; reservedUntil: string | null }, today: string, hasPayment: boolean) {
+  if (!holdOverdue(b, today)) return null;
+  return hasPayment ? ("overdue" as const) : ("expired" as const);
 }
 
 const rowSelection = {
@@ -132,7 +142,8 @@ async function withMoney<T extends { id: string; totalSale: number; stage: (type
   today: string,
 ) {
   const paid = await netPaidByBooking(db, rows.map((r) => r.id));
-  return rows.map((r) => ({ ...r, ...money(r.totalSale, paid.get(r.id) ?? 0), holdOverdue: holdOverdue(r, today) }));
+  // The map has an entry for every booking with any payment row (even one later reversed).
+  return rows.map((r) => ({ ...r, ...money(r.totalSale, paid.get(r.id) ?? 0), holdOverdue: holdOverdue(r, today), holdState: holdState(r, today, paid.has(r.id)) }));
 }
 
 export async function getBookingDetail(db: Database, actor: Actor, bookingId: string, today: string) {
@@ -183,6 +194,7 @@ export async function getBookingDetail(db: Database, actor: Actor, bookingId: st
     client: b.client?.id ? { id: b.client.id, name: b.client.name, visible: canAccessClient(actor, b.client.ownerId, members) } : null,
     money: money(b.booking.totalSale, await netPaid(db, b.booking.id)),
     holdOverdue: holdOverdue(b.booking, today),
+    holdState: holdState(b.booking, today, (await netPaidByBooking(db, [b.booking.id])).has(b.booking.id)),
     history,
     permissions: {
       nextStage: next,

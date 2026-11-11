@@ -7,14 +7,16 @@ import { MiniStat } from "@/components/ui/stat";
 import { StagePill } from "@/features/leads/components/chips";
 import { ScopeNotice, withLeadsAccess } from "@/features/leads/components/list-view";
 import { formatDateTime } from "@/features/leads/format";
+import { Pagination } from "@/features/leads/components/pagination";
+import { flattenParams } from "@/features/leads/url";
 import { sharedPhoneGroups } from "@/modules/leads/queries";
 
 export const metadata: Metadata = { title: "Shared phone numbers" };
 
-export default function SharedPhonesPage() {
+export default function SharedPhonesPage({ searchParams }: PageProps<"/dashboard/leads/phone-overlap">) {
   return withLeadsAccess(async ({ actor, db, projectId }) => {
-    const groups = await sharedPhoneGroups(db, actor, projectId);
-    const involved = groups.reduce((sum, g) => sum + g.leads.length, 0);
+    const params = flattenParams(await searchParams);
+    const { groups, page, pageCount, totalGroups, totalLeads: involved } = await sharedPhoneGroups(db, actor, projectId, params.page);
     return (
       <section className="space-y-6" aria-label="Shared phone numbers">
         <PageHeader
@@ -24,7 +26,7 @@ export default function SharedPhonesPage() {
         />
         <ScopeNotice actor={actor} />
         <div className="grid grid-cols-2 gap-3.5 md:grid-cols-4">
-          <MiniStat label="Phone groups" value={groups.length} caption="Shared numbers" />
+          <MiniStat label="Phone groups" value={totalGroups} caption="Shared numbers" />
           <MiniStat label="Leads involved" value={involved} caption="Across groups" />
         </div>
         {groups.length === 0 ? (
@@ -57,6 +59,7 @@ export default function SharedPhonesPage() {
           </div>
         )}
         <p className="text-xs text-zinc-500">Merging leads is planned for a later release; reassign from each lead&apos;s page.</p>
+        {pageCount > 1 ? <Pagination page={page} pageCount={pageCount} total={totalGroups} params={params} /> : null}
       </section>
     );
   });

@@ -7,6 +7,7 @@ import { buttonClasses } from "@/components/ui/button";
 import { EmptyState, RestrictedState } from "@/components/ui/empty-state";
 import { ProgressBar } from "@/components/ui/progress";
 import { findNavItem } from "@/config/navigation";
+import { Pagination } from "@/features/leads/components/pagination";
 import { flattenParams } from "@/features/leads/url";
 import { TargetEditButton } from "@/features/targets/components/target-edit";
 import { DateParam, SegmentParam } from "@/features/teams/components/param-controls";
@@ -80,7 +81,7 @@ export default async function TargetsPage({ searchParams }: PageProps<"/dashboar
           </div>
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center rounded-full border border-brand/30 bg-brand-50 px-2.5 py-1 text-[10px] leading-[15px] font-black tracking-[0.05em] text-brand-700 uppercase">
-              {formatInt(grid.rows.length)} {grid.rows.length === 1 ? "agent" : "agents"}
+              {formatInt(grid.total)} {grid.total === 1 ? "agent" : "agents"}
             </span>
             <a href={`/api/v1/targets/export?${query}`} className={buttonClasses({ variant: "secondary", className: "h-[33px] px-3 text-xs" })} download>
               <Download aria-hidden="true" className="size-3.5" />
@@ -97,7 +98,7 @@ export default async function TargetsPage({ searchParams }: PageProps<"/dashboar
             <table className="w-full min-w-max border-collapse text-left text-xs">
               <thead className="sticky top-0 z-10 bg-zinc-100">
                 <tr className="border-b border-zinc-200 text-[10px] font-black tracking-[0.05em] text-zinc-600 uppercase">
-                  {["Agent", "Calls (qualified)", "Meetings", "Sold sqft", "Actions"].map((h) => (
+                  {["Agent", "Calls", "Meetings", "Sold sqft", "Actions"].map((h) => (
                     <th key={h} scope="col" className="px-3 py-4 whitespace-nowrap">
                       {h}
                     </th>
@@ -109,7 +110,7 @@ export default async function TargetsPage({ searchParams }: PageProps<"/dashboar
                   <tr key={r.userId} className="border-b border-zinc-100/80 align-top last:border-b-0 hover:bg-zinc-50/60">
                     <td className="px-3 py-3 font-bold whitespace-nowrap">{r.name}</td>
                     <td className="px-3 py-3">
-                      <Cell achieved={r.achieved.calls} target={r.target?.calls ?? null} pct={r.percent?.calls ?? null} unavailable="No call data yet" />
+                      <Cell achieved={r.achieved.calls} target={r.target?.calls ?? null} pct={r.percent?.calls ?? null} />
                     </td>
                     <td className="px-3 py-3">
                       <Cell achieved={r.achieved.meetings} target={r.target?.meetings ?? null} pct={r.percent?.meetings ?? null} />
@@ -127,9 +128,10 @@ export default async function TargetsPage({ searchParams }: PageProps<"/dashboar
           </div>
         )}
       </div>
+      {grid.pageCount > 1 ? <Pagination page={grid.page} pageCount={grid.pageCount} total={grid.total} params={params} /> : null}
       <p className="text-[11px] text-zinc-500">
-        Meetings achieved = completed meetings the agent organized in the period. Sold sq ft = the agent&apos;s bookings confirmed in the period. Calls need call data, which is not
-        recorded yet. Periods use Pakistan time.
+        Meetings achieved = completed meetings the agent organized in the period. Sold sq ft = the agent&apos;s bookings confirmed in the period. Calls = call recordings the agent
+        uploaded to a lead in the period (one recording = one call; hidden recordings are not counted). Periods use Pakistan time.
       </p>
     </PageStack>
   );

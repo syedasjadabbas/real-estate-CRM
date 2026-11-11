@@ -9,7 +9,7 @@ import { formatPrice } from "@/features/inventory/format";
 import { Pagination } from "@/features/leads/components/pagination";
 import { SortTh } from "@/features/leads/components/sort-header";
 import { flattenParams } from "@/features/leads/url";
-import type { OutstandingSortColumn } from "@/modules/finance/constants";
+import { AGING_BUCKETS, type AgingBucket, type OutstandingSortColumn } from "@/modules/finance/constants";
 import { canDoFinance } from "@/modules/finance/policy";
 import { listOutstanding } from "@/modules/finance/views";
 import { inventoryProjects } from "@/modules/inventory/queries";
@@ -17,6 +17,8 @@ import { requirePageUser } from "@/server/auth/current-user";
 import { getDb } from "@/server/db";
 
 export const metadata: Metadata = { title: "Finance · Outstanding" };
+
+const AGING_LABELS = Object.fromEntries(AGING_BUCKETS.map((b) => [b.key, b.label])) as Record<AgingBucket, string>;
 
 const COLUMNS: { label: string; sort: OutstandingSortColumn }[] = [
   { label: "Lead", sort: "lead" },
@@ -27,7 +29,7 @@ const COLUMNS: { label: string; sort: OutstandingSortColumn }[] = [
   { label: "Total sale", sort: "total" },
   { label: "Paid", sort: "paid" },
   { label: "Outstanding", sort: "outstanding" },
-  { label: "Due to date (plan)", sort: "due" },
+  { label: "Due, past grace (plan)", sort: "due" },
   { label: "Overdue", sort: "overdue" },
   { label: "30% milestone", sort: "milestone" },
 ];
@@ -44,13 +46,13 @@ export default async function OutstandingPage({ searchParams }: PageProps<"/dash
       <PageHeader
         as="h2"
         title="Outstanding balances"
-        description="Per booking: total sale − posted payments (net of reversals). Overdue compares the booking's payment plan (installments due on the 10th) with what has been paid; installments without a date, such as the down payment, aren't counted."
+        description="Per booking: total sale − posted payments (net of reversals). Overdue compares the booking's payment plan with what has been paid. Installments are due on the 10th and overdue after 5 days' grace; the down payment is due 7 days after the booking and overdue after 3 more days. Aging counts days past the grace period of the oldest unpaid amount."
       />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
         <MiniStat label="Total sale" value={formatPrice(result.totals.total)} caption={`${result.total} bookings`} />
         <MiniStat label="Paid" value={formatPrice(result.totals.paid)} caption="Posted payments − reversals" />
         <MiniStat label="Outstanding" value={formatPrice(result.totals.outstanding)} caption="Still to collect" />
-        <MiniStat label="Overdue" value={formatPrice(result.totals.overdue)} caption="Past due on payment plans" />
+        <MiniStat label="Overdue" value={formatPrice(result.totals.overdue)} caption="Past grace on payment plans" />
       </div>
       <OutstandingToolbar params={params} projects={projects} agents={result.agents} />
       <div className="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-hairline">
@@ -91,7 +93,9 @@ export default async function OutstandingPage({ searchParams }: PageProps<"/dash
                     )}
                     {r.undatedRows ? <span className="block text-[10px] text-zinc-500">{r.undatedRows} undated row{r.undatedRows === 1 ? "" : "s"} not counted</span> : null}
                   </td>
-                  <td className={`px-3 py-2.5 whitespace-nowrap font-semibold tabular-nums ${r.overdue ? "text-rose-700" : ""}`}>{r.overdue === null ? "—" : formatPrice(r.overdue)}</td>
+                  <td className={`px-3 py-2.5 whitespace-nowrap font-semibold tabular-nums ${r.overdue ? "text-rose-700" : ""}`}>{r.overdue === null ? "—" : formatPrice(r.overdue)}
+                    {r.daysOverdue ? <span className="block text-[10px] font-bold text-rose-700">{AGING_LABELS[r.aging!]} overdue</span> : null}
+                  </td>
                   <td className="px-3 py-2.5 whitespace-nowrap">{r.milestoneMet ? "Met" : "Not met"}</td>
                 </tr>
               ))}

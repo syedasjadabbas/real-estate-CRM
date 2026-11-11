@@ -120,16 +120,16 @@ export default async function FinanceReportsPage({ searchParams }: PageProps<"/d
         ].map(({ title, report, data, label }) => (
           <PanelCard key={report} title={title} className="min-w-0">
             <div className="mb-3 flex items-center justify-between gap-2">
-              <p className="text-[11px] text-zinc-500">As of today · all bookings except cancelled · total sale − net paid.</p>
+              <p className="text-[11px] text-zinc-500">As of today · all bookings except cancelled · total sale − net paid. The CSV also splits overdue by aging.</p>
               {exportLink(report)}
             </div>
             {data.rows.length === 0 ? (
               <EmptyState size="sm">No bookings with balances.</EmptyState>
             ) : (
               <Table
-                head={[label, "Bookings", "Total sale", "Paid", "Outstanding"]}
-                rows={data.rows.map((r) => [r.label, r.bookings, formatPrice(r.total), formatPrice(r.paid), formatPrice(r.outstanding)])}
-                foot={["Total", data.totals.bookings, formatPrice(data.totals.total), formatPrice(data.totals.paid), formatPrice(data.totals.outstanding)]}
+                head={[label, "Bookings", "Total sale", "Paid", "Outstanding", "Overdue"]}
+                rows={data.rows.map((r) => [r.label, r.bookings, formatPrice(r.total), formatPrice(r.paid), formatPrice(r.outstanding), formatPrice(r.overdue)])}
+                foot={["Total", data.totals.bookings, formatPrice(data.totals.total), formatPrice(data.totals.paid), formatPrice(data.totals.outstanding), formatPrice(data.totals.overdue)]}
               />
             )}
           </PanelCard>

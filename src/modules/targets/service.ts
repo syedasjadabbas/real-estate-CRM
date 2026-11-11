@@ -4,6 +4,7 @@ import { auditLogs, bookings, meetings, targets, users } from "@/server/db/schem
 import type { Actor } from "@/server/auth/types";
 import { forbidden } from "@/server/errors";
 import { businessToday } from "@/modules/bookings/today";
+import { callStatsByUser } from "@/modules/performance/calls";
 import { teamMemberIds } from "@/modules/leads/support";
 import { parseTask as parse, taskFieldError as fieldError } from "@/modules/tasks/support";
 import { percent, periodStart, periodWindow, type TargetPeriod } from "./period";
@@ -26,17 +27,27 @@ async function scopedAgents(db: Database, actor: Actor) {
  * FR-110 / FR-111 grid: each agent's target for the period and the achievement so far.
  * Meetings achieved = completed meetings they organized that started in the window (T-A10);
  * sold sq ft = area of their bookings confirmed in the window (Q-H4 default, T-A11);
- * calls = not available: uploaded recordings don't count as calls unless confirmed (C-19, T-A12).
+ * calls = call recordings they uploaded in the window (client confirmation 10 Nov 2026, T-A12): a `files` row with
+ * kind 'call_recording', a lead and no deleted_at, attributed to `uploaded_by_id`, counted by `created_at`.
+ * Every recording counts, whatever its duration (definition in performance/calls.ts).
  */
-export async function listTargets(db: Database, actor: Actor, rawQuery: unknown, now = new Date()) {
+/** Agents per page on the Targets screen (FR-005). The CSV export always takes every agent. */
+export const TARGETS_PAGE_SIZE = 50;
+
+export async function listTargets(db: Database, actor: Actor, rawQuery: unknown, now = new Date(), opts: { all?: boolean } = {}) {
   if (!canViewTargets(actor)) throw forbidden();
   const q = targetQuerySchema.parse(rawQuery ?? {});
   const anchor = q.anchor ?? `${businessToday(now).slice(0, 7)}-01`;
   const start = periodStart(q.period, anchor);
   const window = periodWindow(q.period, start);
-  const agents = await scopedAgents(db, actor);
+  const everyone = await scopedAgents(db, actor);
+  const total = everyone.length;
+  const pageCount = Math.max(1, Math.ceil(total / TARGETS_PAGE_SIZE));
+  const rawPage = Number((rawQuery as { page?: unknown } | null)?.page);
+  const page = opts.all ? 1 : Math.min(Number.isInteger(rawPage) && rawPage >= 1 ? rawPage : 1, pageCount);
+  const agents = opts.all ? everyone : everyone.slice((page - 1) * TARGETS_PAGE_SIZE, page * TARGETS_PAGE_SIZE);
   const ids = agents.map((a) => a.id);
-  const [targetRows, meetingRows, sqftRows] = ids.length
+  const [targetRows, meetingRows, sqftRows, callStats] = ids.length
     ? await Promise.all([
         db.select().from(targets).where(and(inArray(targets.userId, ids), eq(targets.period, q.period), eq(targets.periodStart, start))),
         db
@@ -49,23 +60,25 @@ export async function listTargets(db: Database, actor: Actor, rawQuery: unknown,
           .from(bookings)
           .where(and(inArray(bookings.agentId, ids), eq(bookings.stage, "confirmed"), gte(bookings.confirmedAt, window.from), lt(bookings.confirmedAt, window.to)))
           .groupBy(bookings.agentId),
+        callStatsByUser(db, ids, { start: window.from, end: window.to }),
       ])
-    : [[], [], []];
+    : [[], [], [], new Map()];
   const members = targetScope(actor.role) === "team" ? await teamMemberIds(db, actor) : [];
   const rows = agents.map((a) => {
     const t = targetRows.find((r) => r.userId === a.id) ?? null;
     const meetingsDone = meetingRows.find((r) => r.userId === a.id)?.n ?? 0;
     const sqft = Number(sqftRows.find((r) => r.userId === a.id)?.sqft ?? 0);
+    const calls = callStats.get(a.id)?.calls ?? 0;
     return {
       userId: a.id,
       name: a.name,
       target: t ? { calls: t.calls, meetings: t.meetings, soldSqft: t.soldSqft } : null,
-      achieved: { calls: null as number | null, meetings: meetingsDone, soldSqft: sqft },
-      percent: t ? { calls: percent(null, t.calls), meetings: percent(meetingsDone, t.meetings), soldSqft: percent(sqft, t.soldSqft) } : null,
+      achieved: { calls, meetings: meetingsDone, soldSqft: sqft },
+      percent: t ? { calls: percent(calls, t.calls), meetings: percent(meetingsDone, t.meetings), soldSqft: percent(sqft, t.soldSqft) } : null,
       canEdit: canSetTargets(actor) && canSetTargetFor(actor, a.id, members),
     };
   });
-  return { period: q.period as TargetPeriod, anchor, periodStart: start, rows, canSet: canSetTargets(actor) };
+  return { period: q.period as TargetPeriod, anchor, periodStart: start, rows, canSet: canSetTargets(actor), page, pageCount, total };
 }
 export type TargetGrid = Awaited<ReturnType<typeof listTargets>>;
 
@@ -114,7 +127,7 @@ export function targetsCsv(grid: TargetGrid) {
   };
   const header = ["Agent", "Period", "Period start", "Calls target", "Calls achieved", "Meetings target", "Meetings achieved", "Sold sqft target", "Sold sqft achieved"];
   const lines = grid.rows.map((r) =>
-    [r.name, grid.period, grid.periodStart, r.target?.calls ?? 0, "", r.target?.meetings ?? 0, r.achieved.meetings, r.target?.soldSqft ?? 0, r.achieved.soldSqft].map(esc).join(","),
+    [r.name, grid.period, grid.periodStart, r.target?.calls ?? 0, r.achieved.calls, r.target?.meetings ?? 0, r.achieved.meetings, r.target?.soldSqft ?? 0, r.achieved.soldSqft].map(esc).join(","),
   );
   return [header.join(","), ...lines].join("\n") + "\n";
 }

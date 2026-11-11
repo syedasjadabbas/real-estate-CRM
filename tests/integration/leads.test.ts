@@ -322,7 +322,7 @@ describe.skipIf(!hasTestDb)("Leads module (PostgreSQL integration)", () => {
       const input = leadInput(f);
       await createLead(db, f.actors.superAdmin, { ...input, ownerId: f.actors.agent1.id });
       await createLead(db, f.actors.superAdmin, leadInput(f, { phoneNumber: input.phoneNumber, projectId: f.otherProjectId }));
-      expect(await sharedPhoneGroups(db, f.actors.superAdmin, f.projectId)).toHaveLength(0);
+      expect((await sharedPhoneGroups(db, f.actors.superAdmin, f.projectId)).groups).toHaveLength(0);
     });
   });
   describe("F-2: follow-ups of Lost leads leave To-dos and the follow-up filter", () => {

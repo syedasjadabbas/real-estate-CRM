@@ -13,7 +13,8 @@
     "db:generate": "node node_modules/drizzle-kit/bin.cjs generate",
     "db:migrate": "node scripts/db-migrate.mjs",
     "db:seed": "node scripts/db-seed.mjs",
-    "job:prune-signin-logs": "node scripts/jobs/prune-signin-logs.mjs"
+    "job:prune-signin-logs": "node scripts/jobs/prune-signin-logs.mjs",
+    "job:release-holds": "node scripts/jobs/release-holds.mjs"
   },
   "dependencies": {
     "@node-rs/argon2": "^2.2.2",

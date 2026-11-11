@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
   await connection();
   try {
     const actor = await requireActor();
-    const grid = await listTargets(getDb(), actor, queryObject(req));
+    const grid = await listTargets(getDb(), actor, queryObject(req), new Date(), { all: true });
     return new Response(targetsCsv(grid), {
       headers: {
         "content-type": "text/csv; charset=utf-8",

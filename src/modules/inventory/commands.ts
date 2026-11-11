@@ -129,8 +129,8 @@ export async function updateUnit(db: Database, actor: Actor, unitId: string, inp
       Object.fromEntries(changed.map((k) => [k, unit[k as keyof typeof unit]])),
       Object.fromEntries(changed.map((k) => [k, changes[k as keyof typeof changes]])),
     );
-    // Q47: saved proposals follow the unit's price; each recalculation is recorded on the proposal.
-    const proposalsUpdated = changed.includes("basePrice") || changed.includes("areaSqft") ? (await syncProposalsForUnit(tx, actor, unitId)).updated : 0;
+    // Q47: saved proposals follow the unit's price (and its floor, which sets the floor rate when the unit has no price).
+    const proposalsUpdated = changed.includes("basePrice") || changed.includes("areaSqft") || changed.includes("floor") ? (await syncProposalsForUnit(tx, actor, unitId)).updated : 0;
     return proposalsUpdated ? { changed, proposalsUpdated } : { changed };
   });
 }

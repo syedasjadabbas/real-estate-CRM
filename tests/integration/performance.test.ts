@@ -103,6 +103,12 @@ describe.skipIf(!hasTestDb)("Performance (PostgreSQL integration)", () => {
       booked: 1,
       lost: 2,
       winPct: 33,
+      calls: 0,
+      callMin: null,
+      callsTimed: 0,
+      callsVerified: 0,
+      callsQualified: 0,
+      callSeconds: 0,
       fuDue: 3,
       fuDone: 2,
       fuPct: 67,
@@ -170,7 +176,7 @@ describe.skipIf(!hasTestDb)("Performance (PostgreSQL integration)", () => {
     expect((await performanceReport(db, f.actors.superAdmin, {}, NOW)).range).toEqual({ from: "2026-09-29", to: "2026-10-29" });
     const csv = performanceCsv(byWin).split("\n");
     expect(csv[0]).toBe("Agent,From,To,Open leads,Booked,Lost,Win %,Calls,Call min,F/U due,F/U done,F/U %,Meetings,CRM sign-ins,CRM sign-outs,Avg first touch (min)");
-    expect(csv[1]).toBe("Agent B,2026-10-01,2026-10-29,0,1,0,100,,,0,0,,0,0,0,");
+    expect(csv[1]).toBe("Agent B,2026-10-01,2026-10-29,0,1,0,100,0,,0,0,,0,0,0,");
     expect(byWin.page).toBe(1);
     expect(byWin.pageCount).toBe(1);
   });

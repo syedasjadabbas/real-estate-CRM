@@ -65,8 +65,8 @@ export function OutcomeMix({ mix, winPct }: { mix: { open: number; booked: numbe
   );
 }
 
-/** Observed "Top closers": bookings closed in the selected range. */
-export function TopClosers({ rows }: { rows: { userId: string; name: string; booked: number; winPct: number | null }[] }) {
+/** Observed "Top closers": bookings closed in the selected range ("Win 0% · 606 calls"). */
+export function TopClosers({ rows }: { rows: { userId: string; name: string; booked: number; winPct: number | null; calls: number }[] }) {
   return (
     <Panel title="Top closers" badge={<Badge tone="neutral">Rank</Badge>} description="Bookings closed in selected range">
       {rows.length === 0 ? (
@@ -79,7 +79,9 @@ export function TopClosers({ rows }: { rows: { userId: string; name: string; boo
                 <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-[11px] font-black text-brand-700">{i + 1}</span>
                 <span className="min-w-0">
                   <span className="block truncate font-bold">{r.name}</span>
-                  <span className="block text-[11px] text-zinc-500">Win {r.winPct === null ? "—" : `${r.winPct}%`}</span>
+                  <span className="block text-[11px] text-zinc-500">
+                    Win {r.winPct === null ? "—" : `${r.winPct}%`} · {formatInt(r.calls)} {r.calls === 1 ? "call" : "calls"}
+                  </span>
                 </span>
               </span>
               <span className="text-base font-black tabular-nums">{formatInt(r.booked)}</span>
@@ -91,11 +93,159 @@ export function TopClosers({ rows }: { rows: { userId: string; name: string; boo
   );
 }
 
-/** Reference charts that need calls, which aren't available until recordings are confirmed to count as calls (FR-152, C-19). */
-export function NeedsCallData({ title, badge, description }: { title: string; badge: string; description: string }) {
+type CallQualityData = {
+  calls: number;
+  timed: number;
+  verified: number;
+  qualified: number;
+  callMin: number | null;
+  verifiedPct: number | null;
+  qualifiedPct: number | null;
+  rows: { userId: string; name: string; calls: number; timed: number; verified: number; qualified: number }[];
+};
+
+const pctLabel = (v: number | null) => (v === null ? "—" : `${v}%`);
+
+/**
+ * FR-152 "Call quality": verified (≥ 30 s) and qualified (≥ 60 s) recordings, per agent.
+ * Buckets come from stored durations only; recordings without one count as calls but sit in no bucket.
+ */
+export function CallQuality({ data }: { data: CallQualityData }) {
+  const untimed = data.calls - data.timed;
   return (
-    <Panel title={title} badge={<Badge tone="neutral">{badge}</Badge>} description={description}>
-      <EmptyState size="sm">Not available: uploaded call recordings are not counted as calls unless the client confirms that rule.</EmptyState>
+    <Panel title="Call quality" badge={<Badge>Quality</Badge>} description="Verified (≥30 s) and qualified (≥60 s) calls">
+      {data.calls === 0 ? (
+        <EmptyState size="sm">No call recordings uploaded in this range.</EmptyState>
+      ) : (
+        <div className="space-y-3 py-2">
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { label: "Verified ≥30 s", count: data.verified, pct: data.verifiedPct },
+              { label: "Qualified ≥60 s", count: data.qualified, pct: data.qualifiedPct },
+            ].map((b) => (
+              <div key={b.label} className="rounded-xl border border-zinc-200/80 px-3 py-2 shadow-hairline">
+                <p className="text-[9px] font-black tracking-[0.1em] text-zinc-400 uppercase">{b.label}</p>
+                <p className="text-xl font-black tabular-nums">
+                  {formatInt(b.count)} <span className="text-xs font-semibold text-zinc-400">{pctLabel(b.pct)}</span>
+                </p>
+              </div>
+            ))}
+          </div>
+          <div className="overflow-x-auto rounded-xl border border-zinc-200/80">
+            <table className="w-full min-w-max border-collapse text-left text-xs">
+              <thead className="bg-zinc-50">
+                <tr className="border-b border-zinc-200 text-[10px] font-black tracking-[0.05em] text-zinc-600 uppercase">
+                  <th scope="col" className="px-3 py-2">
+                    Agent
+                  </th>
+                  <th scope="col" className="px-3 py-2 text-right">
+                    Calls
+                  </th>
+                  <th scope="col" className="px-3 py-2 text-right">
+                    Verified
+                  </th>
+                  <th scope="col" className="px-3 py-2 text-right">
+                    Qualified
+                  </th>
+                  <th scope="col" className="px-3 py-2 text-right">
+                    No duration
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.rows.map((r) => (
+                  <tr key={r.userId} className="border-b border-zinc-100/80 last:border-b-0">
+                    <td className="px-3 py-2 font-bold whitespace-nowrap">{r.name}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{formatInt(r.calls)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{formatInt(r.verified)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{formatInt(r.qualified)}</td>
+                    <td className="px-3 py-2 text-right text-zinc-500 tabular-nums">{formatInt(r.calls - r.timed)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+      <p className="pb-1 text-[11px] text-zinc-500">
+        Shares are of the {formatInt(data.timed)} {data.timed === 1 ? "recording" : "recordings"} with a duration
+        {data.callMin === null ? "" : ` (${formatInt(data.callMin)} talk minutes)`}. Recordings without a duration
+        {untimed > 0 ? ` (${formatInt(untimed)} here)` : ""} count as calls but are not in either bucket.
+      </p>
+    </Panel>
+  );
+}
+
+/** Horizontal bar scaled to `max`. */
+function Bar({ value, max, className }: { value: number; max: number; className: string }) {
+  return (
+    <span className="block h-1.5 overflow-hidden rounded-full bg-zinc-100" aria-hidden="true">
+      <span className={cn("block h-full rounded-full", className)} style={{ width: `${max > 0 ? (value / max) * 100 : 0}%` }} />
+    </span>
+  );
+}
+
+/** FR-151 "Call volume leaders": call recordings by agent in the range. */
+export function CallVolume({ rows }: { rows: { userId: string; name: string; calls: number; callMin: number | null }[] }) {
+  const max = Math.max(0, ...rows.map((r) => r.calls));
+  return (
+    <Panel title="Call volume leaders" badge={<Badge tone="neutral">Activity</Badge>} description="Recordings by agent">
+      {rows.length === 0 ? (
+        <EmptyState size="sm">No call recordings uploaded in this range.</EmptyState>
+      ) : (
+        <ol className="space-y-2.5 py-1">
+          {rows.map((r) => (
+            <li key={r.userId} className="space-y-1 text-xs">
+              <span className="flex items-center justify-between gap-3">
+                <span className="truncate font-bold">{r.name}</span>
+                <span className="font-black tabular-nums">
+                  {formatInt(r.calls)} <span className="font-semibold text-zinc-400">· {r.callMin === null ? "—" : `${formatInt(r.callMin)} min`}</span>
+                </span>
+              </span>
+              <Bar value={r.calls} max={max} className="bg-brand" />
+            </li>
+          ))}
+        </ol>
+      )}
+    </Panel>
+  );
+}
+
+/** FR-151 "Calls vs meetings": top agents by calls + completed meetings in the range. */
+export function CallsVsMeetings({ rows }: { rows: { userId: string; name: string; calls: number; meetings: number }[] }) {
+  const max = Math.max(0, ...rows.flatMap((r) => [r.calls, r.meetings]));
+  return (
+    <Panel title="Calls vs meetings" badge={<Badge tone="neutral">Throughput</Badge>} description="Top agents by combined activity">
+      {rows.length === 0 ? (
+        <EmptyState size="sm">No calls or completed meetings in this range.</EmptyState>
+      ) : (
+        <>
+          <p className="flex gap-4 pt-1 text-[11px] font-semibold text-zinc-600">
+            <span className="flex items-center gap-1.5">
+              <span className="size-2.5 rounded-full bg-brand" aria-hidden="true" />
+              Calls
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="size-2.5 rounded-full bg-zinc-400" aria-hidden="true" />
+              Meetings
+            </span>
+          </p>
+          <ol className="space-y-3 py-2">
+            {rows.map((r) => (
+              <li key={r.userId} className="space-y-1 text-xs" aria-label={`${r.name}: ${r.calls} calls, ${r.meetings} meetings`}>
+                <span className="flex items-center justify-between gap-3">
+                  <span className="truncate font-bold">{r.name}</span>
+                  <span className="font-black tabular-nums">
+                    {formatInt(r.calls)} <span className="font-semibold text-zinc-400">/ {formatInt(r.meetings)}</span>
+                  </span>
+                </span>
+                <Bar value={r.calls} max={max} className="bg-brand" />
+                <Bar value={r.meetings} max={max} className="bg-zinc-400" />
+              </li>
+            ))}
+          </ol>
+        </>
+      )}
     </Panel>
   );
 }

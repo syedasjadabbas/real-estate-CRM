@@ -7,7 +7,7 @@ import { formatPrice } from "@/features/inventory/format";
 import { PanelCard } from "@/features/leads/components/detail-panels";
 import { formatDateTime } from "@/features/leads/format";
 import { canDoFinance } from "@/modules/finance/policy";
-import { getFinanceSettings, reversalRequestsForActor } from "@/modules/finance/queries";
+import { getFinanceSettings, reversalRequestsForActor, receiptLabel } from "@/modules/finance/queries";
 import { requirePageUser } from "@/server/auth/current-user";
 import { getDb } from "@/server/db";
 
@@ -24,7 +24,7 @@ export default async function ReversalApprovalsPage() {
     getFinanceSettings(db),
   ]);
   const canDecide = canDoFinance(actor, "decideReversal");
-  const receipt = (n: number | null) => `${settings.receipt_prefix}${n}`;
+  const receipt = (n: number | null, floor: string | null) => receiptLabel(settings.receipt_prefix, floor, n);
   const decided = [...approved, ...rejected].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)).slice(0, 25);
 
   return (
@@ -48,7 +48,7 @@ export default async function ReversalApprovalsPage() {
                 <div className="min-w-0 space-y-1">
                   <p className="font-bold">
                     <Link href={`/dashboard/finance/payments/${r.paymentId}`} className="text-brand hover:underline">
-                      Receipt {receipt(r.receiptNo)}
+                      Receipt {receipt(r.receiptNo, r.floor)}
                     </Link>{" "}
                     · {formatPrice(r.amount)} · {r.leadName} · Unit {r.unitNo}
                   </p>
@@ -76,7 +76,7 @@ export default async function ReversalApprovalsPage() {
               <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-zinc-200/80 px-3 py-2 text-xs shadow-hairline">
                 <span>
                   <Link href={`/dashboard/finance/payments/${r.paymentId}`} className="font-bold text-brand hover:underline">
-                    Receipt {receipt(r.receiptNo)}
+                    Receipt {receipt(r.receiptNo, r.floor)}
                   </Link>{" "}
                   · {formatPrice(r.amount)} · {r.leadName}
                 </span>

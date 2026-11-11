@@ -77,6 +77,9 @@ test("a proposal needs the first installment month; installments are due on the 
   for (const due of ["Dec 10, 2026", "Jan 10, 2027", "Feb 10, 2027"]) await expect(page.getByRole("cell", { name: due })).toBeVisible();
   // The down payment row has no date; 25% is the new default (Q42).
   await expect(page.getByText("Down payment 25%")).toBeVisible();
+  // Q36: once saved, only the Super Admin edits it; the agent keeps the status buttons.
+  await expect(page.getByText("Only the Super Admin can edit a saved proposal. You can still change its status.")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Edit", exact: true })).toHaveCount(0);
 });
 
 test("the unit picker offers only Available units for proposals (Q48)", async ({ page }) => {

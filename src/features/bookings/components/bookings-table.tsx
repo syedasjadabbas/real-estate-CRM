@@ -6,7 +6,7 @@ import { withParams } from "@/features/leads/url";
 import { cn } from "@/lib/cn";
 import type { BookingRow } from "@/modules/bookings/queries";
 import type { BookingSortColumn } from "@/modules/bookings/validation";
-import { BookingStagePill, HoldOverdueChip } from "./stage-pill";
+import { BookingStagePill, HoldChip } from "./stage-pill";
 
 type Column = { label: string; sort?: BookingSortColumn };
 
@@ -71,7 +71,7 @@ export function BookingsTable({ rows, emptyMessage, params = {} }: { rows: Booki
                 <td className="px-3 py-2.5">
                   <span className="flex flex-col items-start gap-1">
                     <BookingStagePill stage={r.stage} />
-                    {r.holdOverdue ? <HoldOverdueChip /> : null}
+                    <HoldChip state={r.holdState} />
                   </span>
                 </td>
                 <td className="px-3 py-2.5 whitespace-nowrap text-zinc-700 tabular-nums" title="Posted payments minus approved reversals">

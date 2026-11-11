@@ -34,8 +34,17 @@ export const CLOSED_STAGES: BookingStage[] = ["confirmed", "cancelled"];
 /** Highest stage an agent may move a booking to (permission matrix: "O (up to Sales order)"). */
 export const AGENT_MAX_STAGE: BookingStage = "sales_order";
 
-/** Stages during which the unit is only "held" for the token (used for the overdue-hold flag). */
+/**
+ * Stages during which the unit is only "held" for the token: the token has not been received yet
+ * (Token received and later stages mean it has). Used for the overdue flag and FR-081 auto-release.
+ */
 export const HOLD_STAGES: BookingStage[] = ["negotiation", "token_pending"];
+
+/** FR-081 (client confirmation, 10 Nov 2026): a hold expires after 7 days and the unit returns to Available. */
+export const HOLD_DAYS = 7;
+
+/** Cancellation reason (and stage-history note) written when the release job frees an expired hold. */
+export const HOLD_EXPIRED_REASON = "Hold expired";
 
 export const PAYMENT_DOCS_STATUSES = ["not_submitted", "submitted", "verified"] as const;
 export type PaymentDocsStatus = (typeof PAYMENT_DOCS_STATUSES)[number];

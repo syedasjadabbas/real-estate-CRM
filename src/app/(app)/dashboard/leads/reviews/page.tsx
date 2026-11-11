@@ -6,13 +6,16 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { StagePill } from "@/features/leads/components/chips";
 import { ScopeNotice, withLeadsAccess } from "@/features/leads/components/list-view";
 import { formatDateTime } from "@/features/leads/format";
+import { Pagination } from "@/features/leads/components/pagination";
+import { flattenParams } from "@/features/leads/url";
 import { reviewsFeed } from "@/modules/leads/queries";
 
 export const metadata: Metadata = { title: "Lead reviews" };
 
-export default function ReviewsPage() {
+export default function ReviewsPage({ searchParams }: PageProps<"/dashboard/leads/reviews">) {
   return withLeadsAccess(async ({ actor, db, projectId }) => {
-    const reviews = await reviewsFeed(db, actor, projectId);
+    const params = flattenParams(await searchParams);
+    const { rows: reviews, page, pageCount, total } = await reviewsFeed(db, actor, projectId, params.page);
     return (
       <section className="space-y-6" aria-label="Reviews">
         <PageHeader
@@ -41,6 +44,7 @@ export default function ReviewsPage() {
             ))}
           </div>
         )}
+        {pageCount > 1 ? <Pagination page={page} pageCount={pageCount} total={total} params={params} /> : null}
       </section>
     );
   });

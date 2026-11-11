@@ -79,7 +79,7 @@ Status: **implemented and verified 29 Oct 2026** (§6–§10).
 | T-A9 | **Achievement windows** use the period start and the next period start in **Pakistan time** (the reference labels its start as UTC; the rest of this app uses Pakistan time). The period start is normalised: daily = the date, weekly = Monday, monthly = the 1st. | Consistent with the rest of the app |
 | T-A10 | **Meetings achieved** = **completed** meetings where the agent is the organizer and the start falls in the window | Meetings module data |
 | T-A11 | **Sold sq ft achieved** = area of the agent's bookings **confirmed** in the window (Q-H4 default) | Bookings data |
-| T-A12 | **Calls (qualified) achieved: not available.** There is no call-recording or call-log data in the system yet, so the target is shown with "— (no call data yet)" and no %. | Nothing invented |
+| T-A12 | **Calls achieved** = call recordings the agent uploaded in the window. A call is a `files` row with kind `call_recording`, a `lead_id` and no `deleted_at`, attributed to its uploader (`uploaded_by_id`) and counted by `created_at` in the window (client confirmation 10 Nov 2026: one recording = one call). Code: `src/modules/performance/calls.ts`. Every recording counts, whatever its duration; % = calls ÷ target, rounded down. (Until 11 Nov 2026 this was "not available".) | Client confirmation 10 Nov 2026 |
 | T-A13 | Export CSV contains the visible grid: agent, the three targets and the available achievements, for the selected period | Observed button |
 
 ### 1.4 Questions for the client (none blocks this implementation)
@@ -91,7 +91,7 @@ Status: **implemented and verified 29 Oct 2026** (§6–§10).
 | TQ3 (A-12 / Q-L2) | Should "Leads off" and "On leave" exclude an agent from rotation that day? |
 | TQ4 | Does the 11:00 roster lock also apply to admins? Can past days ever be corrected? |
 | TQ5 | Can a daily report be corrected after its date, and by whom? |
-| TQ6 | Which calls count as "qualified" (the reference Performance page mentions ≥ 60 s), and where will call data come from? |
+| TQ6 | ~~Which calls count as "qualified", and where will call data come from?~~ **Answered 10 Nov 2026:** calls = uploaded recordings linked to a lead (one recording = one call). The reference column label "Calls (qualified)" is now shown as "Calls", because every recording counts (T-A12). |
 | TQ7 | Should achievement periods use UTC (as the reference label says) or Pakistan time? |
 | TQ8 | Should managers' own targets be supported (the reference grid says "Agent")? |
 
@@ -106,7 +106,7 @@ Status: **implemented and verified 29 Oct 2026** (§6–§10).
 
 **Out of scope:**
 - Rotation changes from the roster (T-A7).
-- Call logs and qualified calls (T-A12).
+- Telephony call logs (calls come from uploaded recordings, T-A12).
 - Performance analytics: Avg M, Avg QC, Critical.
 - The "team performance" panel.
 - External integrations.
@@ -200,7 +200,7 @@ Status: **implemented and verified 29 Oct 2026** (§6–§10).
   - agents see only their own entries;
   - the 11:00 lock, past-day lock, members only, operate scope.
 - **Targets:** admin and team-manager set; normalisation; no-op when unchanged; zero clears; audit; scope (admin all agents, manager team, agent self); HR and accountant denied.
-- **Achievement:** completed meetings only; bookings confirmed in the window; a weekly window; calls unavailable; CSV content.
+- **Achievement:** completed meetings only; bookings confirmed in the window; a weekly window; calls = recordings uploaded in the window (hidden, non-recording, other agents' and out-of-window files excluded); CSV content.
 - **Database constraints:** Monday and 1st checks, non-negative values, uniqueness.
 
 ## 9. Browser checks (built-in browser, real /login form for every role)
@@ -263,7 +263,7 @@ Status: **implemented and verified 29 Oct 2026** (§6–§10).
 ## 11. Remaining concerns
 
 - **Rotation:** "Leads off" and "On leave" are recorded but do not change rotation (TQ3).
-- **Calls:** qualified-calls achievement needs call data (TQ6).
+- **Calls:** achievement counts every uploaded recording (T-A12, 11 Nov 2026). If the client wants targets measured on qualified calls (≥ 60 s) only, that is a one-line filter in `listTargets`.
 - **Avg M / Avg QC:** the roster text mentions these Performance metrics, which aren't built yet.
 - **Team membership:** a user can belong to several teams (TQ1). A manager added as a member of another team would not gain its scope; scope still comes from `manager_id`.
 - **Clock-based locks:** both locks (report date and roster 11:00) follow the server's clock in Pakistan time.

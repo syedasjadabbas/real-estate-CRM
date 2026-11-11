@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildRows, computeFigures, installmentDueOn, rowsTotal, unitPricePerSqft } from "@/modules/tasks/plan";
-import { canAccessTask, canAssignTo, canDoTask, canEditDownPayment, discountCap, taskScope } from "@/modules/tasks/policy";
+import { floorCode } from "@/modules/tasks/constants";
+import { canAccessTask, canAssignTo, canDoTask, canEditDownPayment, canEditSavedProposal, canEditTaskDetails, discountCap, taskScope } from "@/modules/tasks/policy";
 import { createTaskSchema, proposalSettingsSchema, taskListQuerySchema } from "@/modules/tasks/validation";
 import type { Role } from "@/server/auth/types";
 
@@ -29,12 +30,20 @@ describe("tasks policy (Tasks F/F/T/O/—/—)", () => {
     expect(canAccessTask({ id: me, role: "admin" }, task)).toBe(true);
   });
 
-  it("limits who can be assigned", () => {
+  it("limits who can be assigned: only Admins and Super Admins assign to others (Q45)", () => {
     expect(canAssignTo({ id: me, role: "agent" }, me)).toBe(true);
     expect(canAssignTo({ id: me, role: "agent" }, mate)).toBe(false);
-    expect(canAssignTo({ id: me, role: "manager" }, mate, [mate])).toBe(true);
-    expect(canAssignTo({ id: me, role: "manager" }, other, [mate])).toBe(false);
+    expect(canAssignTo({ id: me, role: "manager" }, me)).toBe(true);
+    expect(canAssignTo({ id: me, role: "manager" }, mate)).toBe(false);
     expect(canAssignTo({ id: me, role: "admin" }, other)).toBe(true);
+    expect(canAssignTo({ id: me, role: "super_admin" }, other)).toBe(true);
+  });
+
+  it("lets only the Super Admin edit a saved proposal (Q36)", () => {
+    expect(roles.filter(canEditSavedProposal)).toEqual(["super_admin"]);
+    expect(canEditTaskDetails("admin", { proposal: { customerName: "Ali" } })).toBe(false);
+    expect(canEditTaskDetails("agent", { proposal: null })).toBe(true);
+    expect(canEditTaskDetails("super_admin", { proposal: { customerName: "Ali" } })).toBe(true);
   });
 
   it("applies the discount caps and the agents' down-payment lock", () => {
@@ -76,11 +85,37 @@ describe("payment-plan arithmetic", () => {
     expect(buildRows(f, 36, "Monthly")).toEqual([]);
   });
 
+  const prices = (defaultPricePerSqft: number | null, floors: Partial<Record<"floorPriceGF" | "floorPriceFF" | "floorPriceSF", number | null>> = {}) => ({
+    defaultPricePerSqft,
+    floorPriceGF: null,
+    floorPriceFF: null,
+    floorPriceSF: null,
+    ...floors,
+  });
+  const clientRates = { floorPriceGF: 10_824, floorPriceFF: 9_593, floorPriceSF: 8_624 };
+
   it("derives the unit rate from its list price, else the default setting", () => {
-    expect(unitPricePerSqft({ areaSqft: 500, basePrice: 10_000_000 }, 15_000)).toBe(20_000);
-    expect(unitPricePerSqft({ areaSqft: 3, basePrice: 10 }, null)).toBe(3.33);
-    expect(unitPricePerSqft({ areaSqft: 500, basePrice: 0 }, 15_000)).toBe(15_000);
-    expect(unitPricePerSqft({ areaSqft: 500, basePrice: 0 }, null)).toBeNull();
+    expect(unitPricePerSqft({ areaSqft: 500, basePrice: 10_000_000 }, prices(15_000))).toBe(20_000);
+    expect(unitPricePerSqft({ areaSqft: 3, basePrice: 10 }, prices(null))).toBe(3.33);
+    expect(unitPricePerSqft({ areaSqft: 500, basePrice: 0 }, prices(15_000))).toBe(15_000);
+    expect(unitPricePerSqft({ areaSqft: 500, basePrice: 0 }, prices(null))).toBeNull();
+  });
+
+  it("uses the floor rate (Q44) when a unit has no list price; the unit price always wins", () => {
+    const s = prices(15_000, clientRates);
+    expect(unitPricePerSqft({ areaSqft: 500, basePrice: 0, floor: "GF" }, s)).toBe(10_824);
+    expect(unitPricePerSqft({ areaSqft: 500, basePrice: 0, floor: "First floor" }, s)).toBe(9_593);
+    expect(unitPricePerSqft({ areaSqft: 500, basePrice: 0, floor: " sf " }, s)).toBe(8_624);
+    expect(unitPricePerSqft({ areaSqft: 500, basePrice: 10_000_000, floor: "GF" }, s)).toBe(20_000);
+    // Other floors, no floor, or a cleared floor rate fall back to the default price.
+    expect(unitPricePerSqft({ areaSqft: 500, basePrice: 0, floor: "Roof" }, s)).toBe(15_000);
+    expect(unitPricePerSqft({ areaSqft: 500, basePrice: 0, floor: null }, s)).toBe(15_000);
+    expect(unitPricePerSqft({ areaSqft: 500, basePrice: 0, floor: "GF" }, prices(15_000, { ...clientRates, floorPriceGF: null }))).toBe(15_000);
+  });
+
+  it("recognises floor codes and names", () => {
+    expect(["GF", "ground", "Ground Floor", "ff", "1st floor", "SF", "SS", "Second"].map(floorCode)).toEqual(["GF", "GF", "GF", "FF", "FF", "SF", "SF", "SF"]);
+    expect(["", null, "Roof", "Mezzanine", "G"].map(floorCode)).toEqual([null, null, null, null, null]);
   });
 });
 
@@ -104,6 +139,8 @@ describe("tasks validation", () => {
   it("falls back to safe list defaults and lets blank clear optional settings", () => {
     expect(taskListQuerySchema.parse({ sort: "bogus", dir: "x", page: "-3" })).toMatchObject({ sort: "updatedAt", dir: "desc", page: 1 });
     expect(proposalSettingsSchema.parse({ managerCap: "", roiPerSqft: "" })).toEqual({ managerCap: null, roiPerSqft: null });
+    expect(proposalSettingsSchema.parse({ floorPriceGF: "10,824", floorPriceSF: "" })).toEqual({ floorPriceGF: 10_824, floorPriceSF: null });
+    expect(proposalSettingsSchema.safeParse({ floorPriceFF: "-1" }).success).toBe(false);
     expect(proposalSettingsSchema.safeParse({ agentCap: "" }).success).toBe(false);
   });
 });

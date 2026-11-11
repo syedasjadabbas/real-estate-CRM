@@ -69,7 +69,7 @@ export function TargetEditButton({ userId, name, period, periodStart, current }:
               {msg}
             </p>
           ) : null}
-          {field("calls", "Calls (qualified)", "Achievement appears once call data is available.")}
+          {field("calls", "Calls", "Counted from call recordings this agent uploaded to leads (one recording = one call).")}
           {field("meetings", "Meetings", "Counted from completed meetings this agent organized.")}
           {field("soldSqft", "Sold sq ft", "Counted from this agent's bookings confirmed in the period.")}
         </div>

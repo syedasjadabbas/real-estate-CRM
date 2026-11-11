@@ -8,7 +8,7 @@ import { listTargets, setTarget, targetsCsv } from "@/modules/targets/service";
 import { createTeam, saveDailyReport, saveRoster, setTeamMembers, updateTeam } from "@/modules/teams/commands";
 import { getDailyReport, getRosterDay, getRosterMonth, listDailyReports, myRoster, teamDetail, teamTiles, visibleTeams } from "@/modules/teams/queries";
 import { loadActor } from "@/server/auth/session-store";
-import { auditLogs, bookings, dailyReports, rosterEntries, targets, teams, users } from "@/server/db/schema";
+import { auditLogs, bookings, dailyReports, files, rosterEntries, targets, teams, users } from "@/server/db/schema";
 import type { Database } from "@/server/db";
 import type { Actor } from "@/server/auth/types";
 import { AppError } from "@/server/errors";
@@ -193,7 +193,7 @@ describe.skipIf(!hasTestDb)("Teams & Targets (PostgreSQL integration)", () => {
       expect(await errorCode(listTargets(db, accountant, q, NOW))).toBe("FORBIDDEN");
     });
 
-    it("achievement: completed meetings organised in the window and sq ft of bookings confirmed in it; calls unavailable", async () => {
+    it("achievement: completed meetings organised in the window, sq ft of bookings confirmed in it, and call recordings uploaded in it", async () => {
       await set(admin, f.actors.agent1.id);
       const r = await createLead(db, f.actors.agent1, leadInput(f));
       if (r.outcome !== "created") throw new Error("setup");
@@ -206,15 +206,26 @@ describe.skipIf(!hasTestDb)("Teams & Targets (PostgreSQL integration)", () => {
       const unitId = (await createUnit(db, f.actors.superAdmin, { projectId: f.projectId, unitNo: "T-1", areaSqft: "500", basePrice: "1000000" })).unitId;
       const { bookingId } = await createBooking(db, f.actors.agent1, { projectId: f.projectId, leadId: r.leadId, unitId, ratePerSqft: "2000", tokenAmount: "1000" });
       await db.update(bookings).set({ stage: "confirmed", confirmedAt: new Date("2026-10-20T06:00:00Z") }).where(eq(bookings.id, bookingId));
+      // Calls = call recordings linked to a lead, by uploader and upload date (client confirmation 10 Nov 2026).
+      let k = 0;
+      const recording = (uploadedById: string, createdAt: string, extra: Partial<typeof files.$inferInsert> = {}) =>
+        db.insert(files).values({ leadId: r.leadId, kind: "call_recording", storageKey: `recordings/t-${k++}.mp3`, originalName: "c.mp3", mime: "audio/mpeg", sizeBytes: 1, sha256: "x", uploadedById, createdAt: new Date(createdAt), ...extra });
+      await recording(f.actors.agent1.id, "2026-09-30T19:00:00Z", { durationSec: 10 }); // first moment of October in Pakistan time
+      await recording(f.actors.agent1.id, "2026-10-21T07:00:00Z"); // no duration: still a call
+      await recording(f.actors.agent1.id, "2026-10-21T07:00:00Z", { kind: "document", mime: "application/pdf", originalName: "d.pdf" }); // not a recording
+      await recording(f.actors.agent1.id, "2026-10-22T07:00:00Z", { deletedAt: new Date() }); // hidden
+      await recording(f.actors.agent1.id, "2026-10-31T19:00:00Z"); // 1 Nov in Pakistan time
+      await recording(f.actors.agent2.id, "2026-10-21T07:00:00Z"); // another agent
       const grid = await listTargets(db, f.actors.manager, { period: "monthly", anchor: "2026-10-05" }, NOW);
       const a = grid.rows.find((x) => x.userId === f.actors.agent1.id)!;
-      expect(a.achieved).toEqual({ calls: null, meetings: 1, soldSqft: 500 });
-      expect(a.percent).toEqual({ calls: null, meetings: 5, soldSqft: 142 });
+      expect(a.achieved).toEqual({ calls: 2, meetings: 1, soldSqft: 500 });
+      expect(a.percent).toEqual({ calls: 0, meetings: 5, soldSqft: 142 });
+      expect(grid.rows.find((x) => x.userId === f.actors.agent2.id)?.achieved.calls).toBe(1);
       const csv = targetsCsv(grid);
       expect(csv.split("\n")[0]).toContain("Calls achieved");
-      expect(csv).toContain("Agent A,monthly,2026-10-01,1300,,20,1,350,500");
+      expect(csv).toContain("Agent A,monthly,2026-10-01,1300,2,20,1,350,500");
       const weekly = await listTargets(db, admin, { period: "weekly", anchor: "2026-10-21" }, NOW);
-      expect(weekly.rows.find((x) => x.userId === f.actors.agent1.id)).toMatchObject({ target: null, achieved: { meetings: 0, soldSqft: 500 } });
+      expect(weekly.rows.find((x) => x.userId === f.actors.agent1.id)).toMatchObject({ target: null, achieved: { calls: 1, meetings: 0, soldSqft: 500 } });
     });
 
     it("database constraints: weekly must start Monday, monthly the 1st, values non-negative, one per period", async () => {

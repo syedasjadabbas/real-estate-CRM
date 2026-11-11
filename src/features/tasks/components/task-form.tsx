@@ -123,7 +123,7 @@ export function TaskForm({
   // Q48: only Available units can be quoted in a Proposal; its existing unit stays listed so it can be kept.
   const projectUnits = options.units.filter((u) => u.projectId === p.projectId && (v.type !== "proposal" || u.status === "available" || u.id === existing?.unitId));
   // Q47: the unit's current price and area, also for a proposal saved earlier.
-  const pricePerSqft = unit ? unitPricePerSqft(unit, settings.defaultPricePerSqft) : null;
+  const pricePerSqft = unit ? unitPricePerSqft(unit, settings) : null;
   const areaSqft = unit ? unit.areaSqft : null;
   const roiPerSqft = existing ? existing.roiPerSqft : settings.roiPerSqft;
   const count = Math.trunc(num(p.installmentCount));
@@ -344,10 +344,10 @@ export function TaskForm({
             {readOnly("Unit description", unit ? [unit.type, unit.category, unit.bedrooms ? `${unit.bedrooms} bed` : null].filter(Boolean).join(" · ") || "—" : "—")}
             {readOnly("Apartment no", unit?.unitNo ?? "—")}
             {readOnly("Area sq ft", areaSqft ? formatArea(areaSqft) : "—")}
-            {readOnly("Price / sq ft (PKR)", pricePerSqft ? formatPrice(pricePerSqft) : unit ? "No list price or default rate set" : "—")}
+            {readOnly("Price / sq ft (PKR)", pricePerSqft ? formatPrice(pricePerSqft) : unit ? "No list price, floor rate or default rate set" : "—")}
             {readOnly("Total sale value (list)", formatPrice(figures.totalList))}
             <p className="text-[11px] text-zinc-500 sm:col-span-2">
-              Total sale value = area × price per sq ft (the default rate in settings is used when the unit has no list price). Your discount limit is {limits.discountCap}%.
+              Total sale value = area × price per sq ft. When the unit has no list price, the rate for its floor (GF, FF, SF) or the default rate in settings is used. Your discount limit is {limits.discountCap}%.
             </p>
           </Step>
           <Step n="03" title="Discount & payments" hint="Summary figures feed the printed schedule">

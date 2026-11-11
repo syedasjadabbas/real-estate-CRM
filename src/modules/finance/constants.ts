@@ -25,6 +25,43 @@ export const PAYABLE_STAGES = [
 export const SETTING_KEYS = ["receipt_prefix", "reversal_prefix"] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
 
+/**
+ * When an unpaid amount becomes overdue (client confirmations, 10 Nov 2026). The client marked the
+ * grace periods "to be confirmed", so they live here, in one place.
+ * - Installments are due on the 10th; after 5 days' grace they are overdue from the 16th.
+ * - The down payment is due 7 days after the booking, plus 3 days' grace.
+ */
+export const INSTALLMENT_GRACE_DAYS = 5;
+export const DOWN_PAYMENT_DUE_DAYS = 7;
+export const DOWN_PAYMENT_GRACE_DAYS = 3;
+
+/** Aging of the oldest overdue amount, in days past the end of its grace period. */
+export const AGING_BUCKETS = [
+  { key: "1-15", label: "1–15 days", min: 1, max: 15 },
+  { key: "16-30", label: "16–30 days", min: 16, max: 30 },
+  { key: "31-60", label: "31–60 days", min: 31, max: 60 },
+  { key: "60+", label: "60+ days", min: 61, max: Infinity },
+] as const;
+export type AgingBucket = (typeof AGING_BUCKETS)[number]["key"];
+
+/** Days → aging bucket; null when nothing is overdue. */
+export function agingBucket(daysOverdue: number | null): AgingBucket | null {
+  if (daysOverdue === null || daysOverdue < 1) return null;
+  return AGING_BUCKETS.find((b) => daysOverdue >= b.min && daysOverdue <= b.max)!.key;
+}
+
+/** YYYY-MM-DD plus n days (calendar dates, no time zone involved). */
+export function addDays(day: string, n: number) {
+  const d = new Date(`${day}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Whole days from `from` to `to` (both YYYY-MM-DD). */
+export function daysBetween(from: string, to: string) {
+  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
+}
+
 export const PAYMENT_PAGE_SIZE = 50;
 export const OUTSTANDING_PAGE_SIZE = 50;
 

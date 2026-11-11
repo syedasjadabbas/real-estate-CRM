@@ -3,9 +3,11 @@
  * Pure functions in paisa so the client and server always agree to the rupee and paisa.
  *
  * Documented: total = area × price per sq ft; discount %; down payment %; N equal installments.
- * Not documented, so kept minimal: rounding puts any leftover paisa on the last installment, and
- * the schedule rows carry no due dates (decision 29 Oct 2026).
+ * Confirmed by the client: any leftover paisa goes on the last installment (Q37), and installments
+ * fall on the 10th (Q43).
  */
+import { FLOOR_PRICE_KEY, floorCode, type FloorPriceKey } from "./constants";
+
 export type ProposalSettings = {
   agentCap: number;
   managerCap: number | null;
@@ -13,7 +15,13 @@ export type ProposalSettings = {
   installmentCount: number;
   defaultPricePerSqft: number | null;
   roiPerSqft: number | null;
+  /** Floor rates per sq ft (Q44); null when an admin cleared one. */
+  floorPriceGF: number | null;
+  floorPriceFF: number | null;
+  floorPriceSF: number | null;
 };
+
+export type PriceSettings = Pick<ProposalSettings, "defaultPricePerSqft" | FloorPriceKey>;
 
 export type PlanFigures = {
   totalList: number | null;
@@ -40,10 +48,15 @@ export function installmentDueOn(firstMonth: string, offset: number) {
 const paisa = (n: number) => Math.round(n * 100);
 const rupees = (p: number) => p / 100;
 
-/** Price per sq ft for a unit: its list price ÷ area, or the default setting when it has no list price. */
-export function unitPricePerSqft(unit: { areaSqft: number; basePrice: number }, defaultPricePerSqft: number | null) {
+/**
+ * Price per sq ft for a unit: its list price ÷ area; when it has no list price, the rate for its floor
+ * (Q44: GF / FF / SF), then the default price setting.
+ */
+export function unitPricePerSqft(unit: { areaSqft: number; basePrice: number; floor?: string | null }, settings: PriceSettings) {
   if (unit.basePrice > 0 && unit.areaSqft > 0) return rupees(Math.round(paisa(unit.basePrice) / unit.areaSqft));
-  return defaultPricePerSqft;
+  const code = floorCode(unit.floor);
+  const floorRate = code ? settings[FLOOR_PRICE_KEY[code]] : null;
+  return floorRate ?? settings.defaultPricePerSqft;
 }
 
 export function computeFigures(input: {

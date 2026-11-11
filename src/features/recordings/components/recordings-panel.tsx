@@ -47,7 +47,19 @@ function measureDuration(file: File): Promise<number | null> {
  * phone's built-in recorder, then upload the file here. Playback streams from the authenticated
  * `/api/v1/recordings/:id` route; nothing is public.
  */
-export function RecordingsPanel({ leadId, recordings, canUpload, canDelete = false }: { leadId: string; recordings: RecordingRow[]; canUpload: boolean; canDelete?: boolean }) {
+export function RecordingsPanel({
+  leadId,
+  recordings,
+  canUpload,
+  canDelete = false,
+  canPlay = true,
+}: {
+  leadId: string;
+  recordings: RecordingRow[];
+  canUpload: boolean;
+  canDelete?: boolean;
+  canPlay?: boolean;
+}) {
   const router = useRouter();
   const inputId = useId();
   const input = useRef<HTMLInputElement>(null);
@@ -126,11 +138,13 @@ export function RecordingsPanel({ leadId, recordings, canUpload, canDelete = fal
         <EmptyState size="sm">No call recordings yet.</EmptyState>
       ) : (
         <ul className="space-y-3">
+          {!canPlay ? <li className="text-[11px] text-zinc-500">Recordings are played by Managers, Admins and Super Admins.</li> : null}
           {recordings.map((r) => (
             <li key={r.id} className="rounded-xl border border-zinc-200/80 p-3">
               <div className="flex items-start justify-between gap-2">
                 <p className="min-w-0 text-xs font-bold break-words text-zinc-900">{r.name}</p>
                 <span className="flex shrink-0 items-center gap-3">
+                  {canPlay ? (
                   <a
                     href={`/api/v1/recordings/${r.id}?download=1`}
                     className="inline-flex items-center gap-1 text-[11px] font-bold text-brand hover:underline"
@@ -139,6 +153,7 @@ export function RecordingsPanel({ leadId, recordings, canUpload, canDelete = fal
                     <Download aria-hidden="true" className="size-3.5" />
                     Save
                   </a>
+                  ) : null}
                   {canDelete ? (
                     <button type="button" onClick={() => setRemoving(r)} className="text-[11px] font-bold text-rose-600 hover:underline" aria-label={`Delete ${r.name}`}>
                       Delete
@@ -149,9 +164,11 @@ export function RecordingsPanel({ leadId, recordings, canUpload, canDelete = fal
               <p className="mt-0.5 text-[11px] text-zinc-500">
                 {r.uploadedBy ?? "—"} · {formatDateTime(r.createdAt)} · {formatBytes(r.sizeBytes)} · {formatClock(r.durationSec)}
               </p>
-              <audio controls preload="none" src={`/api/v1/recordings/${r.id}`} className="mt-2 h-9 w-full" aria-label={`Play ${r.name}`}>
-                Your browser cannot play this recording. Use Save to download it.
-              </audio>
+              {canPlay ? (
+                <audio controls preload="none" src={`/api/v1/recordings/${r.id}`} className="mt-2 h-9 w-full" aria-label={`Play ${r.name}`}>
+                  Your browser cannot play this recording. Use Save to download it.
+                </audio>
+              ) : null}
             </li>
           ))}
         </ul>

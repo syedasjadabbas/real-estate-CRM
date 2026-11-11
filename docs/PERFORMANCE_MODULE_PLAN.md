@@ -4,7 +4,7 @@ Status: **implemented and verified 29 Oct 2026** (§5–§9).
 - **Data:** no database migration; every metric is computed from existing tables.
 - **Tests:** 201 / 201 pass; typecheck, lint and build are clean.
 - **Browser:** checked for all six roles, at 375, 768 and 1440.
-- **Not available:** call metrics and the Critical flag, with no data or rule yet (§1.3). Nothing is committed.
+- **Not available:** Meaningful calls (AI score) and the Critical flag, with no data or rule yet (§1.3). Calls, call minutes, call quality, call volume and calls vs meetings come from uploaded call recordings since 11 Nov 2026 (§10).
 
 ## Sources
 
@@ -55,7 +55,8 @@ Status: **implemented and verified 29 Oct 2026** (§5–§9).
 | Follow-ups due / done | `follow_ups` (assignee, due_at, status) | ✅ available |
 | Meetings | `meetings` (organizer, status, starts_at) | ✅ available |
 | CRM sign-ins / sign-outs | `signin_logs` (user, event, at), written on every login and logout | ✅ available |
-| Calls, call minutes, call quality, meaningful calls, call volume, calls vs meetings | No call-recording or call-log data exists | ❌ **not available** |
+| Calls, call minutes, call quality, call volume, calls vs meetings | `files` rows of kind `call_recording` (uploader, created_at, duration_sec, lead_id, deleted_at); client confirmation 10 Nov 2026 | ✅ available (§10) |
+| Meaningful calls | Needs an AI score per recording; AI call analysis is out of scope (Q-P4) | ❌ **not available** |
 | Critical flag | No documented rule or thresholds | ❌ **not available** (Q-L8) |
 | Pipeline pressure | Listed in MODULES §13 but not defined anywhere | ❌ **not available** |
 | Roster "Avg M / Avg QC" exclusion | Depends on call metrics; undefined | ❌ not available |
@@ -84,7 +85,7 @@ Status: **implemented and verified 29 Oct 2026** (§5–§9).
 | PQ2 | "Open leads": all leads assigned in the range (tooltip) or only those still open (numbers)? Implemented as still-open (P3); both are easy to switch. |
 | PQ3 | Is a lead's "assignment" its creation date, or the date it was last reassigned to the agent? |
 | PQ4 | Do meetings count only when completed, or also when scheduled? |
-| PQ5 | Where will call data come from (recordings upload / telephony)? It drives Calls, Call min, Call quality, Meaningful, Call volume and Calls vs meetings. |
+| PQ5 | ~~Where will call data come from?~~ **Answered 10 Nov 2026:** calls = uploaded recordings linked to a lead (one recording = one call). See §10. |
 | PQ6 | What is "Pipeline pressure"? |
 | PQ7 (Q-H2) | Is attendance needed at all? (Sign-in counts are not attendance.) |
 
@@ -95,7 +96,7 @@ Status: **implemented and verified 29 Oct 2026** (§5–§9).
 - **Team at a glance:** win rate, follow-ups done, pipeline (open / booked / lost + split bar), activity (meetings, CRM sign-ins, per-agent averages).
 - **Charts:** Outcome mix and Top closers.
 - **"Performance & CRM sign-in activity" table** (reference: "Performance & attendance", reworded 30 Oct 2026): sortable, paginated, Export CSV.
-- **Clearly marked as unavailable:** Calls, Call min, Meaningful calls, Call quality, Call volume leaders, Calls vs meetings, Critical flag and filter.
+- **Clearly marked as unavailable:** Meaningful calls, Critical flag and filter. (Calls, Call min, Call quality, Call volume leaders and Calls vs meetings were unavailable until 11 Nov 2026; see §10.)
 
 **Out of scope:** call data, AI scoring, the Critical rule, Pipeline pressure, the dashboard widgets, changes to rotation or targets.
 
@@ -124,8 +125,8 @@ A team the actor may not see is rejected with 403. Ranges are validated: dates, 
 |---|---|
 | Server | `src/modules/performance/range.ts`: range parsing (default last 30 days, inclusive, Pakistan time, reversed ranges swapped, spans clamped to 366 days), sort keys, page size, `pct`. `src/modules/performance/service.ts`: `canViewPerformance`, `performanceContexts`, agents in scope, per-agent metrics (P2–P9), summary, Outcome mix, Top closers, sorting (missing % last), pagination, `performanceCsv`. |
 | API | `GET /api/v1/performance?from&to&team&sort&dir&page`, `GET /api/v1/performance/export` (CSV) |
-| UI | `src/features/performance/components/performance-filters.tsx` ("Updated … · Refresh", Filters drawer: Context / From / To / Clear filters / Done); `charts.tsx` (Outcome mix donut, Top closers, and "needs call data" cards for Call quality, Call volume leaders and Calls vs meetings) |
-| Page | `src/app/(app)/dashboard/performance/page.tsx` (+ `loading.tsx`): header, **Team at a glance** (win rate, follow-ups done, meaningful calls unavailable, Pipeline open / booked / lost + split bar, Activity calls unavailable / meetings / CRM sign-ins with per-agent averages), charts, **Performance & attendance** table with every observed column (Calls / Call min shown as "—" with a reason), **Critical only** shown disabled with its reason, Export CSV, pagination |
+| UI | `src/features/performance/components/performance-filters.tsx` ("Updated … · Refresh", Filters drawer: Context / From / To / Clear filters / Done); `charts.tsx` (Outcome mix donut, Top closers, and since 11 Nov 2026 Call quality, Call volume leaders and Calls vs meetings from call recordings, §10) |
+| Page | `src/app/(app)/dashboard/performance/page.tsx` (+ `loading.tsx`): header, **Team at a glance** (win rate, follow-ups done, meaningful calls unavailable, Pipeline open / booked / lost + split bar, Activity calls / meetings / CRM sign-ins with per-agent averages), charts, **Performance & attendance** table with every observed column (Calls / Call min from recordings since 11 Nov 2026, §10), **Critical only** shown disabled with its reason, Export CSV, pagination |
 | Changed | `src/config/navigation.ts`: Performance visible to super admin / admin / manager / agent only |
 | Tests | `tests/unit/performance-rules.test.ts` (5), `tests/integration/performance.test.ts` (4) |
 
@@ -190,10 +191,7 @@ A team the actor may not see is rejected with 403. Ranges are validated: dates, 
 ## 9. Limitations and unresolved client decisions
 
 **Not available (no data or rule; shown as "—" with the reason, never estimated):**
-- Calls and call minutes.
-- Call quality: Verified ≥ 30 s and Qualified ≥ 60 s (FR-152 needs stored recording durations).
 - Meaningful calls (AI score; AI call analysis is out of scope, Q-P4).
-- Call volume leaders and Calls vs meetings.
 - The **Critical** flag and the "Critical only" filter (Q-L8).
 - Pipeline pressure (undefined).
 - The roster's "Avg M / Avg QC".
@@ -203,3 +201,21 @@ A team the actor may not see is rejected with 403. Ranges are validated: dates, 
 **30 Oct 2026 (`PRODUCTION_READINESS_PLAN.md` §4):** the header now says "Agent KPIs and CRM sign-in activity for your scope", the table is "Performance & CRM sign-in activity", the sign-in glance and column tooltips say "not attendance", and a footnote states that sign-ins are not attendance plus the retention policy. This departs from the reference wording on purpose (C1).
 
 **Inferred definitions:** P2–P11 in §1.4. Questions PQ1–PQ7 in §1.5 are open; none blocks use.
+
+## 10. Calls from uploaded recordings (11 Nov 2026)
+
+The client confirmed in writing on 10 Nov 2026: "Calls = uploaded recordings linked to a lead (one recording = one call)." The call metrics are now computed; nothing is estimated.
+
+| # | Metric | Definition |
+|---|---|---|
+| P12 | **Calls** | A call is a `files` row with kind `call_recording`, a `lead_id` and no `deleted_at`, attributed to its uploader (`uploaded_by_id`) and counted by `created_at` in the window (client confirmation 10 Nov 2026: one recording = one call). Code: `src/modules/performance/calls.ts`. Only agents in scope (P11) are counted, so a recording a manager uploads counts for the manager, not for the lead's agent. |
+| P13 | **Call min** | Sum of `duration_sec` ÷ 60 over those calls that have a duration, rounded to whole minutes. Shown "—" (blank in the CSV) only when no call in the range has a duration. |
+| P14 | **Call quality (FR-152)** | Duration ≥ 30 s = **verified**, ≥ 60 s = **qualified** (a qualified call is also verified). Calls with no stored duration count as calls but are in neither bucket; the card's footnote says so and gives the count. Shares are of the calls with a duration. Shown per agent. |
+| P15 | **Call volume leaders** | Top 5 agents by Calls (P12), with their Call min. |
+| P16 | **Calls vs meetings** | Top 5 agents by Calls + completed Meetings (P8), each shown as two bars. |
+
+- **Table:** Calls and Call min are sortable (missing Call min sorts last either way); the CSV fills both columns. Top closers show "Win % · N calls" as on the reference page.
+- **Team at a glance:** Activity → Calls shows the total, the per-agent average and the total call minutes.
+- **Still unavailable:** Meaningful calls (AI score ≥ 70) and the Critical flag.
+- **Durations** are reported by the uploader's browser from the audio metadata and can be missing; that is why recordings without one still count as calls.
+- **Tests:** `tests/integration/performance-calls.test.ts` (definition, window boundaries, hidden / non-recording files, uploader attribution, minutes, buckets, CSV, sorting, charts, scope); `performance.test.ts` and `tests/unit/performance-rules.test.ts` updated; `e2e/performance-page.spec.ts` now checks the call charts and footnote instead of the "not available" wording.

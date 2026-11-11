@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { pct, performanceQuerySchema, resolveRange } from "@/modules/performance/range";
+import { callMinutes, NO_CALLS, QUALIFIED_CALL_SEC, VERIFIED_CALL_SEC } from "@/modules/performance/calls";
+import { PERFORMANCE_SORTS, pct, performanceQuerySchema, resolveRange } from "@/modules/performance/range";
 import { canViewPerformance } from "@/modules/performance/service";
 import type { Role } from "@/server/auth/types";
 
@@ -30,5 +31,21 @@ describe("percentages and roles", () => {
   it("Performance F/F/T/O/—/—", () => {
     const roles: Role[] = ["super_admin", "admin", "manager", "agent", "hr", "accountant"];
     expect(roles.filter((role) => canViewPerformance({ role }))).toEqual(["super_admin", "admin", "manager", "agent"]);
+  });
+});
+
+describe("calls = uploaded call recordings (client confirmation 10 Nov 2026)", () => {
+  it("FR-152 thresholds: verified from 30 s, qualified from 60 s", () => {
+    expect([VERIFIED_CALL_SEC, QUALIFIED_CALL_SEC]).toEqual([30, 60]);
+  });
+  it("call minutes add up stored durations, and have no value when no call has one", () => {
+    expect(callMinutes({ timed: 5, seconds: 284 })).toBe(5);
+    expect(callMinutes({ timed: 1, seconds: 29 })).toBe(0);
+    expect(callMinutes({ timed: 0, seconds: 0 })).toBeNull();
+    expect(callMinutes(NO_CALLS)).toBeNull();
+  });
+  it("Calls and Call min are sortable columns", () => {
+    expect(PERFORMANCE_SORTS).toEqual(expect.arrayContaining(["calls", "callMin"]));
+    expect(performanceQuerySchema.parse({ sort: "callMin", dir: "desc" })).toMatchObject({ sort: "callMin", dir: "desc" });
   });
 });

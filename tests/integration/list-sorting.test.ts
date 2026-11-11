@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { businessToday } from "@/modules/bookings/today";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { advanceBooking, cancelBooking, createBooking } from "@/modules/bookings/commands";
 import { decideReversal, recordPayment, requestReversal } from "@/modules/finance/commands";
@@ -205,7 +206,9 @@ describe.skipIf(!hasTestDb)("F-16: column sorting on Inventory and Finance lists
       expect((await list({ kind: "reversal", sort: "amount" })).rows.map((r) => r.kind)).toEqual(["reversal"]);
       expect((await list({ method: bankId, sort: "amount", dir: "desc" })).rows.map((r) => Number(r.amount))).toEqual([9000, 1000]);
       expect(await netPaid(db, a)).toBe(before);
-      expect((await collectionsByProject(db, accountant, { from: "2026-09-01", to: TODAY })).totals).toMatchObject({ received: 24_000, reversed: 5_000, net: 19_000 });
+      // A reversal is dated on the day it is approved (the period it is processed), so the range runs to today.
+      const to = businessToday() > TODAY ? businessToday() : TODAY;
+      expect((await collectionsByProject(db, accountant, { from: "2026-09-01", to })).totals).toMatchObject({ received: 24_000, reversed: 5_000, net: 19_000 });
     });
 
     it("stays stable across pages, ignores invalid values, and keeps its permissions", async () => {

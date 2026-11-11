@@ -156,5 +156,8 @@ export const proposalSettingsSchema = z
     installmentCount: z.preprocess(toNumber, z.number("Required").int("Use a whole number").min(1, "At least 1").max(MAX_INSTALLMENTS, `At most ${MAX_INSTALLMENTS}`)),
     defaultPricePerSqft: optionalSetting("Default price per sq ft", 1e9),
     roiPerSqft: optionalSetting("ROI per sq ft", 1e9),
+    floorPriceGF: optionalSetting("Ground floor price per sq ft", 1e9),
+    floorPriceFF: optionalSetting("First floor price per sq ft", 1e9),
+    floorPriceSF: optionalSetting("Second floor price per sq ft", 1e9),
   })
   .partial();

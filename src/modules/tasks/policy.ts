@@ -64,26 +64,36 @@ export function canAccessTask(
   }
 }
 
-/** Who the actor may assign to: anyone (admins), self or team (managers), self (agents). */
-export function canAssignTo(actor: Pick<Actor, "id" | "role">, assigneeId: string, teamMemberIds: readonly string[] = []) {
-  switch (taskScope(actor.role)) {
-    case "all":
-      return true;
-    case "team":
-      return assigneeId === actor.id || teamMemberIds.includes(assigneeId);
-    case "own":
-      return assigneeId === actor.id;
-    default:
-      return false;
-  }
+/**
+ * Who the actor may assign to (Q45, confirmed 10 Nov 2026): only Admins and Super Admins assign
+ * tasks, to any user. Everyone else may only take a task themselves; whether agents and managers keep
+ * creating their own tasks is still open (C-29), so self-tasks stay allowed.
+ */
+export function canAssignTo(actor: Pick<Actor, "id" | "role">, assigneeId: string) {
+  return taskScope(actor.role) === "all" || assigneeId === actor.id;
 }
 
-/** Roles a task can be assigned to: all users (Q45). Managers and agents still assign only within their scope. */
+/**
+ * Q36 (confirmed 10 Nov 2026): anyone with Tasks access can create (own) a proposal, but only the
+ * Super Admin edits a saved one: its fields, plan, rows, type, or a rebuild. Status changes stay with
+ * the people who can see the task. Whether an owner may correct a proposal before printing is still
+ * open (C-25), so the lock applies from the first save.
+ */
+export function canEditSavedProposal(role: Role) {
+  return role === "super_admin";
+}
+
+/** Whether the actor may edit this task beyond its status: anything without a saved plan, or as Super Admin. */
+export function canEditTaskDetails(role: Role, task: { proposal: unknown }) {
+  return task.proposal === null || task.proposal === undefined || canEditSavedProposal(role);
+}
+
+/** Roles a task can be assigned to: all users (Q45). */
 export const ASSIGNABLE_ROLES: Role[] = ["super_admin", "admin", "manager", "agent", "hr", "accountant"];
 
 /**
- * FR-091 discount cap. Admins: any. Managers: the manager cap setting, or the agent cap while it is
- * unset (decision 29 Oct 2026). Agents: the agent cap (5% observed).
+ * FR-091 discount cap. Admins: any. Managers: the manager cap setting (5%, Q41, seeded by migration
+ * 0014), or the agent cap while it is unset. Agents: the agent cap (5%, Q40).
  */
 export function discountCap(role: Role, settings: Pick<ProposalSettings, "agentCap" | "managerCap">) {
   if (taskScope(role) === "all") return 100;

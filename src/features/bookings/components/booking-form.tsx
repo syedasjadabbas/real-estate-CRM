@@ -9,6 +9,7 @@ import { Field, Input } from "@/components/ui/input";
 import { formatArea, formatPrice } from "@/features/inventory/format";
 import { textareaClass } from "@/features/leads/components/follow-up-dialog";
 import { FormSection, selectClass } from "@/features/leads/components/lead-fields";
+import { HOLD_DAYS } from "@/modules/bookings/constants";
 import { createBookingAction } from "../actions";
 
 type Options = {
@@ -19,7 +20,7 @@ type Options = {
 
 /**
  * FR-080 new booking as observed: Project*, Lead*, Unit (available)*, Per sq ft rate*, Token amount*,
- * payment instructions; plus Reserved until (hold date, Q-B2 decision). Total = area × rate (approved).
+ * payment instructions; plus Reserved until (hold date; blank = 7 days, FR-081). Total = area × rate (approved).
  */
 export function BookingForm({ projectId, defaultLeadId, options }: { projectId: string; defaultLeadId: string; options: Options }) {
   const router = useRouter();
@@ -129,7 +130,7 @@ export function BookingForm({ projectId, defaultLeadId, options }: { projectId: 
           options.units.map((u) => ({ value: u.id, label: `${u.unitNo}${u.floor ? ` · ${u.floor}` : ""} · ${formatArea(u.areaSqft)}` })),
           options.units.length ? "Select an available unit…" : "No available whole units",
         )}
-        {text("reservedUntil", "Reserved until", { type: "date", hint: "Hold date. Holds are flagged when overdue, not released automatically." })}
+        {text("reservedUntil", "Reserved until", { type: "date", hint: `Leave blank for ${HOLD_DAYS} days from today. If no payment is recorded by then, the booking is cancelled and the unit becomes Available.` })}
       </FormSection>
       <FormSection title="Price">
         {text("ratePerSqft", "Per sq ft rate (PKR)", { required: true, placeholder: "e.g. 25,000" })}

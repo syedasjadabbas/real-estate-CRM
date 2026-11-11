@@ -9,7 +9,18 @@ import { MILESTONE_RATIO } from "@/modules/bookings/constants";
 import { canAccessBooking } from "@/modules/bookings/policy";
 import { businessToday } from "@/modules/bookings/today";
 import { teamMemberIds } from "@/modules/leads/support";
-import { OUTSTANDING_PAGE_SIZE, OUTSTANDING_SORT_COLUMNS, PAYABLE_STAGES, type OutstandingSortColumn } from "./constants";
+import {
+  addDays,
+  agingBucket,
+  daysBetween,
+  DOWN_PAYMENT_DUE_DAYS,
+  DOWN_PAYMENT_GRACE_DAYS,
+  INSTALLMENT_GRACE_DAYS,
+  OUTSTANDING_PAGE_SIZE,
+  OUTSTANDING_SORT_COLUMNS,
+  PAYABLE_STAGES,
+  type OutstandingSortColumn,
+} from "./constants";
 import { netPaidByBooking, toPaisa } from "./ledger";
 import { canDoFinance, canSeeItemisedPayments } from "./policy";
 import { formatReceipt, getFinanceSettings } from "./queries";
@@ -50,6 +61,7 @@ export async function getPaymentDetail(db: Database, actor: Actor, paymentId: st
       leadName: leads.name,
       leadCode: leads.code,
       unitNo: units.unitNo,
+      floor: units.floor,
       projectName: projects.name,
     })
     .from(bookings)
@@ -64,7 +76,7 @@ export async function getPaymentDetail(db: Database, actor: Actor, paymentId: st
   const [original] = row.kind === "payment" ? [row] : await load(eq(bookingPayments.id, originalId));
   const [reversal] = await load(eq(bookingPayments.reversalOfId, originalId));
   const settings = await getFinanceSettings(db);
-  const label = (r: typeof row) => formatReceipt(settings, r);
+  const label = (r: typeof row) => formatReceipt(settings, { ...r, floor: booking.floor });
 
   const requester = alias(users, "requester");
   const decider = alias(users, "decider");
@@ -127,37 +139,65 @@ const outstandingListSchema = outstandingQuerySchema.extend({
  * FR-203 per-booking balances (all bookings except cancelled): total, paid (from rows), outstanding,
  * milestone. "Overdue vs schedule" needs installment schedules, which don't exist yet.
  */
+/** A booking's creation date in the business time zone (Pakistan), as SQL. */
+const bookingDaySql = (createdAt: SQL | typeof bookings.createdAt) => sql`(${createdAt} at time zone 'Asia/Karachi')::date`;
+
 /**
- * FR-203 "overdue vs schedule". The schedule is the booking's payment plan: its most recent
- * Payment-plan task that isn't cancelled. Installments carry due dates (the 10th, Q43).
- * - Due to date = the plan's installments dated on or before today (Pakistan date).
- * - Rows without a date (the down payment until C-27 is answered, and plans saved before due
- *   dates existed) are not counted and are reported separately.
- * - A booking without a plan has no schedule: its figures are null, never guessed.
+ * FR-203 "overdue vs schedule", by the client's rule (10 Nov 2026). The schedule is the booking's
+ * payment plan: its most recent Payment-plan task that isn't cancelled.
+ * - An installment (due on the 10th) is overdue once its INSTALLMENT_GRACE_DAYS have passed.
+ * - The down payment (row 1, which carries no date) is due DOWN_PAYMENT_DUE_DAYS after the booking
+ *   was created and is overdue once DOWN_PAYMENT_GRACE_DAYS more have passed.
+ * - Other rows without a date (plans saved before due dates existed) are not counted and are
+ *   reported separately. A booking without a plan has no schedule: its figures are null.
+ * `dueToDate` is the total that is past its grace period today; `items` are those scheduled
+ * amounts with the first day each one counts as overdue, oldest first, for aging.
  */
 export async function scheduleDueByBooking(db: Database, bookingIds: string[], today = businessToday()) {
-  const out = new Map<string, { planTaskId: string; dueToDate: number; undatedRows: number }>();
+  type Item = { amount: number; overdueFrom: string };
+  const out = new Map<string, { planTaskId: string; dueToDate: number; undatedRows: number; items: Item[] }>();
   if (!bookingIds.length) return out;
   const plans = await db
-    .selectDistinctOn([tasks.bookingId], { bookingId: tasks.bookingId, taskId: tasks.id })
+    .selectDistinctOn([tasks.bookingId], { bookingId: tasks.bookingId, taskId: tasks.id, bookingDay: sql<string>`${bookingDaySql(bookings.createdAt)}::text` })
     .from(tasks)
+    .innerJoin(bookings, eq(bookings.id, tasks.bookingId))
     .where(and(inArray(tasks.bookingId, bookingIds), eq(tasks.type, "payment_plan"), ne(tasks.status, "cancelled")))
     .orderBy(tasks.bookingId, desc(tasks.createdAt));
   if (!plans.length) return out;
-  const sums = await db
-    .select({
-      taskId: taskInstallmentRows.taskId,
-      due: sql<string>`coalesce(sum(${taskInstallmentRows.amount}) filter (where ${taskInstallmentRows.dueOn} <= ${today}), 0)`,
-      undated: sql<number>`count(*) filter (where ${taskInstallmentRows.dueOn} is null)::int`,
-    })
+  const rows = await db
+    .select({ taskId: taskInstallmentRows.taskId, seq: taskInstallmentRows.seq, amount: taskInstallmentRows.amount, dueOn: taskInstallmentRows.dueOn })
     .from(taskInstallmentRows)
-    .where(inArray(taskInstallmentRows.taskId, plans.map((p) => p.taskId)))
-    .groupBy(taskInstallmentRows.taskId);
+    .where(inArray(taskInstallmentRows.taskId, plans.map((p) => p.taskId)));
   for (const p of plans) {
-    const s = sums.find((x) => x.taskId === p.taskId);
-    out.set(p.bookingId!, { planTaskId: p.taskId, dueToDate: Number(s?.due ?? 0), undatedRows: s?.undated ?? 0 });
+    const items: Item[] = [];
+    let undatedRows = 0;
+    for (const r of rows.filter((x) => x.taskId === p.taskId)) {
+      if (r.dueOn) items.push({ amount: r.amount, overdueFrom: addDays(r.dueOn, INSTALLMENT_GRACE_DAYS + 1) });
+      else if (r.seq === 1) items.push({ amount: r.amount, overdueFrom: addDays(p.bookingDay, DOWN_PAYMENT_DUE_DAYS + DOWN_PAYMENT_GRACE_DAYS + 1) });
+      else undatedRows += 1;
+    }
+    items.sort((a, b) => a.overdueFrom.localeCompare(b.overdueFrom));
+    const dueToDate = items.filter((i) => i.overdueFrom <= today).reduce((acc, i) => acc + toPaisa(i.amount), 0) / 100;
+    out.set(p.bookingId!, { planTaskId: p.taskId, dueToDate, undatedRows, items });
   }
   return out;
+}
+
+/**
+ * Days the oldest overdue amount is past its grace period, applying payments to the schedule
+ * oldest first. Null when nothing is overdue.
+ */
+export function daysOverdue(items: { amount: number; overdueFrom: string }[], paid: number, today: string) {
+  let left = toPaisa(paid);
+  for (const item of items) {
+    const amount = toPaisa(item.amount);
+    if (left >= amount) {
+      left -= amount;
+      continue;
+    }
+    return item.overdueFrom <= today ? daysBetween(item.overdueFrom, today) + 1 : null;
+  }
+  return null;
 }
 
 const outstandingAgent = alias(users, "agent");
@@ -192,6 +232,7 @@ async function withBalances<T extends OutstandingBase>(db: Database, rows: T[], 
     const p = paid.get(r.bookingId) ?? 0;
     const plan = schedule.get(r.bookingId) ?? null;
     const overdue = plan ? Math.max(0, toPaisa(plan.dueToDate) - toPaisa(p)) / 100 : null;
+    const days = plan && overdue ? daysOverdue(plan.items, p, today) : null;
     return {
       ...r,
       paid: p,
@@ -201,6 +242,8 @@ async function withBalances<T extends OutstandingBase>(db: Database, rows: T[], 
       dueToDate: plan?.dueToDate ?? null,
       undatedRows: plan?.undatedRows ?? 0,
       overdue,
+      daysOverdue: days,
+      aging: agingBucket(days),
     };
   });
 }
@@ -232,7 +275,10 @@ export async function listOutstanding(db: Database, actor: Actor, rawQuery: unkn
       projectName: sql<string>`${projects.name}`.as("project_name"),
       agentName: sql<string | null>`${outstandingAgent.name}`.as("agent_name"),
       paid: sql<string>`(select coalesce(sum(case when p.kind = 'payment' then p.amount else -p.amount end), 0) from booking_payments p where p.booking_id = ${bookings.id})`.as("paid"),
-      due: sql<string | null>`case when ${planId} is null then null else (select coalesce(sum(r.amount), 0) from task_installment_rows r where r.task_id = ${planId} and r.due_on <= ${today}::date) end`.as("due"),
+      // Same rule as scheduleDueByBooking: past the grace period today (tests hold the two equal).
+      due: sql<string | null>`case when ${planId} is null then null else (select coalesce(sum(r.amount), 0) from task_installment_rows r where r.task_id = ${planId} and (
+        (r.due_on is not null and r.due_on + ${INSTALLMENT_GRACE_DAYS}::int < ${today}::date)
+        or (r.due_on is null and r.seq = 1 and ${bookingDaySql(bookings.createdAt)} + ${DOWN_PAYMENT_DUE_DAYS + DOWN_PAYMENT_GRACE_DAYS}::int < ${today}::date))) end`.as("due"),
     })
     .from(bookings)
     .innerJoin(leads, eq(leads.id, bookings.leadId))

@@ -80,7 +80,8 @@ export default async function TaskDetailPage({ params, searchParams }: PageProps
   }
   const { task, lead, booking } = detail;
   const p = task.proposal;
-  const editable = detail.canEdit && task.status !== "cancelled";
+  // Q36: a saved proposal is edited by the Super Admin only; its status can still be changed.
+  const editable = detail.canEditDetails && task.status !== "cancelled";
 
   return (
     <section className="space-y-6" aria-label="Task">
@@ -185,7 +186,7 @@ export default async function TaskDetailPage({ params, searchParams }: PageProps
                 {detail.unitChanged ? (
                   <p role="note" className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
                     The unit&apos;s price changed after this proposal was saved (saved {formatPrice(detail.unitChanged.savedPricePerSqft)} / sq ft, now{" "}
-                    {formatPrice(detail.unitChanged.currentPricePerSqft)} / sq ft). Open Edit and save to update the figures and schedule.
+                    {formatPrice(detail.unitChanged.currentPricePerSqft)} / sq ft). The Super Admin can open Edit and save to update the figures and schedule.
                   </p>
                 ) : null}
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -256,6 +257,7 @@ export default async function TaskDetailPage({ params, searchParams }: PageProps
         <div className="min-w-0 space-y-6">
           <TaskStatusPanel taskId={task.id} status={task.status as TaskStatus} canEdit={detail.canEdit} />
           {task.status === "cancelled" ? <p className="text-[11px] text-zinc-500">Cancelled tasks can&apos;t be edited. Set another status to reopen it.</p> : null}
+          {detail.canEdit && !detail.canEditDetails ? <p className="text-[11px] text-zinc-500">Only the Super Admin can edit a saved proposal. You can still change its status.</p> : null}
         </div>
       </div>
     </section>

@@ -9,7 +9,7 @@ import { canAccessLead, leadScope } from "@/modules/leads/policy";
 import { pageWithin, scopeFilter as leadScopeFilter, teamMemberIds, type DbOrTx } from "@/modules/leads/support";
 import { selectableProjects } from "@/modules/projects/queries";
 import { ACTIVE_TASK_STATUSES, TASK_PAGE_SIZE } from "./constants";
-import { ASSIGNABLE_ROLES, canAccessTask, canDoTask, canEditDownPayment, discountCap, taskScope } from "./policy";
+import { ASSIGNABLE_ROLES, canAccessTask, canDoTask, canEditDownPayment, canEditTaskDetails, discountCap, taskScope } from "./policy";
 import { unitPricePerSqft } from "./plan";
 import { getProposalSettings } from "./settings";
 import { loadAccessibleTask } from "./support";
@@ -104,9 +104,25 @@ export async function listTasks(db: Database, actor: Actor, rawQuery: unknown, n
   };
 }
 
-/** Assignees the actor may pick: everyone (admins), self + team (managers), self (agents). */
-export async function assignableUsers(db: DbOrTx, actor: Actor) {
+/** People whose tasks the actor can see, for the list's Assignee filter: everyone (admins), self + team (managers), self. */
+export async function assigneeFilterUsers(db: DbOrTx, actor: Actor) {
   const members = await teamMemberIds(db, actor);
+  const scope = taskScope(actor.role);
+  return db
+    .select({ id: users.id, name: users.name, role: users.role })
+    .from(users)
+    .where(
+      and(
+        eq(users.status, "active"),
+        inArray(users.role, ASSIGNABLE_ROLES),
+        scope === "all" ? undefined : inArray(users.id, scope === "team" ? [actor.id, ...members] : [actor.id]),
+      ),
+    )
+    .orderBy(asc(users.name));
+}
+
+/** Assignees the actor may pick: everyone (Admins and Super Admins), otherwise only themselves (Q45). */
+export async function assignableUsers(db: DbOrTx, actor: Actor) {
   const scope = taskScope(actor.role);
   const rows = await db
     .select({ id: users.id, name: users.name, role: users.role })
@@ -115,7 +131,7 @@ export async function assignableUsers(db: DbOrTx, actor: Actor) {
       and(
         eq(users.status, "active"),
         inArray(users.role, ASSIGNABLE_ROLES),
-        scope === "all" ? undefined : inArray(users.id, scope === "team" ? [actor.id, ...members] : [actor.id]),
+        scope === "all" ? undefined : eq(users.id, actor.id),
       ),
     )
     .orderBy(asc(users.name));
@@ -166,6 +182,7 @@ export async function taskFormOptions(db: Database, actor: Actor, projectId: str
         unitNo: units.unitNo,
         areaSqft: units.areaSqft,
         basePrice: units.basePrice,
+        floor: units.floor,
         status: units.status,
         type: units.type,
         category: units.category,
@@ -221,11 +238,11 @@ export async function getTaskDetail(db: Database, actor: Actor, taskId: string, 
       .where(eq(taskHistory.taskId, task.id))
       .orderBy(desc(taskHistory.createdAt), desc(taskHistory.id)),
     task.proposal?.projectId ? db.select({ name: projects.name }).from(projects).where(eq(projects.id, task.proposal.projectId)).then((r) => r[0] ?? null) : null,
-    task.proposal?.unitId ? db.select({ areaSqft: units.areaSqft, basePrice: units.basePrice }).from(units).where(eq(units.id, task.proposal.unitId)).then((r) => r[0] ?? null) : null,
+    task.proposal?.unitId ? db.select({ areaSqft: units.areaSqft, basePrice: units.basePrice, floor: units.floor }).from(units).where(eq(units.id, task.proposal.unitId)).then((r) => r[0] ?? null) : null,
     task.proposal?.unitId ? getProposalSettings(db) : null,
   ]);
   // Q47: a proposal follows the unit's price. If the unit changed after the last save, say so.
-  const currentPrice = unitNow && settings ? unitPricePerSqft(unitNow, settings.defaultPricePerSqft) : null;
+  const currentPrice = unitNow && settings ? unitPricePerSqft(unitNow, settings) : null;
   const unitChanged =
     task.proposal && unitNow && (currentPrice !== task.proposal.pricePerSqft || unitNow.areaSqft !== task.proposal.areaSqft)
       ? { savedPricePerSqft: task.proposal.pricePerSqft, currentPricePerSqft: currentPrice, savedAreaSqft: task.proposal.areaSqft, currentAreaSqft: unitNow.areaSqft }
@@ -250,7 +267,10 @@ export async function getTaskDetail(db: Database, actor: Actor, taskId: string, 
     rows,
     history,
     userNames: Object.fromEntries(historyNames.map((u) => [u.id, u.name])) as Record<string, string>,
+    /** Status changes. */
     canEdit: canDoTask(actor, "edit") && canAccessTask(actor, task, members),
+    /** Editing fields, plan and rows (Q36: a saved proposal is Super Admin only). */
+    canEditDetails: canDoTask(actor, "edit") && canAccessTask(actor, task, members) && canEditTaskDetails(actor.role, task),
   };
 }
 export type TaskDetail = Awaited<ReturnType<typeof getTaskDetail>>;

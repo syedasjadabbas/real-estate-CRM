@@ -35,6 +35,14 @@ export default async function EditTaskPage({ params }: PageProps<"/dashboard/tas
       Back to task
     </Link>
   );
+  if (!detail.canEditDetails) {
+    return (
+      <section className="space-y-6" aria-label="Edit task">
+        <PageHeader as="h2" title="Edit task" actions={back} />
+        <EmptyState className="bg-white">Only the Super Admin can edit a saved proposal.</EmptyState>
+      </section>
+    );
+  }
   if (task.status === "cancelled") {
     return (
       <section className="space-y-6" aria-label="Edit task">

@@ -16,11 +16,23 @@ export function BookingStagePill({ stage, className }: { stage: BookingStage; cl
   );
 }
 
-/** Amber "hold overdue" chip: the entered Reserved-until date has passed while the token is still pending. */
-export function HoldOverdueChip() {
+/**
+ * FR-081 hold chip. "expired": the Reserved-until date has passed with no payment, so the hourly
+ * release job will cancel the booking and free the unit. "overdue": the date has passed but a payment
+ * is recorded, so it is not released automatically.
+ */
+export function HoldChip({ state }: { state: "expired" | "overdue" | null }) {
+  if (!state) return null;
+  const expired = state === "expired";
   return (
-    <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[9px] font-black tracking-[0.05em] whitespace-nowrap text-amber-800 uppercase">
-      Hold overdue
+    <span
+      title={expired ? "No payment recorded: the unit is released automatically within the hour." : "A payment is recorded, so this hold is not released automatically."}
+      className={cn(
+        "inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-black tracking-[0.05em] whitespace-nowrap uppercase",
+        expired ? "bg-rose-50 text-rose-700" : "bg-amber-50 text-amber-800",
+      )}
+    >
+      {expired ? "Hold expired · releasing" : "Hold overdue"}
     </span>
   );
 }

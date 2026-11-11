@@ -36,7 +36,7 @@ export const MAX_INSTALLMENTS = 360;
 /**
  * FR-009 proposal settings keys. The migration seeds the three defaults below (observed / documented,
  * approved 29 Oct 2026, final values pending Q-B6); the code falls back to the same values only if a
- * row is missing. Manager cap, default price and ROI have no documented value and stay unset.
+ * row is missing. Default price and ROI have no documented value and stay unset; floor rates below.
  */
 export const PROPOSAL_SETTING_KEYS = {
   agentCap: "proposal.agent_discount_cap_pct",
@@ -45,10 +45,45 @@ export const PROPOSAL_SETTING_KEYS = {
   installmentCount: "proposal.installment_count",
   defaultPricePerSqft: "proposal.default_price_per_sqft",
   roiPerSqft: "proposal.roi_per_sqft",
+  floorPriceGF: "proposal.floor_price_per_sqft.gf",
+  floorPriceFF: "proposal.floor_price_per_sqft.ff",
+  floorPriceSF: "proposal.floor_price_per_sqft.sf",
 } as const;
 export type ProposalSettingKey = keyof typeof PROPOSAL_SETTING_KEYS;
 
 /** Used when a setting is missing. Down payment 25% per questionnaire Q42 (was 30%). */
 export const PROPOSAL_FALLBACKS = { agentCap: 5, downPaymentPct: 25, installmentCount: 36 } as const;
+
+/**
+ * Floor rates per sq ft (Q44, confirmed by the client on 10 Nov 2026): Ground 10,824, First 9,593,
+ * Second 8,624. They apply only when a unit has no list price of its own (C-28 did not say they
+ * override unit prices or which projects they cover, so a unit's own price always wins). Stored in
+ * `app_settings` without a migration: a missing row means the default below, a blank value means
+ * an admin cleared it ("not set").
+ */
+export const FLOOR_CODES = ["GF", "FF", "SF"] as const;
+export type FloorCode = (typeof FLOOR_CODES)[number];
+export type FloorPriceKey = "floorPriceGF" | "floorPriceFF" | "floorPriceSF";
+export const FLOOR_LABELS: Record<FloorCode, string> = { GF: "Ground floor", FF: "First floor", SF: "Second floor" };
+export const FLOOR_PRICE_KEY: Record<FloorCode, FloorPriceKey> = { GF: "floorPriceGF", FF: "floorPriceFF", SF: "floorPriceSF" };
+export const FLOOR_PRICE_DEFAULTS: Record<FloorPriceKey, number> = { floorPriceGF: 10_824, floorPriceFF: 9_593, floorPriceSF: 8_624 };
+export const isFloorPriceKey = (key: string): key is FloorPriceKey => key in FLOOR_PRICE_DEFAULTS;
+
+/**
+ * Unit floor values that mean each floor code (case and spacing ignored). "SS" is how the client's
+ * receipt example (Q29) writes the second floor.
+ */
+const FLOOR_ALIASES: Record<FloorCode, string[]> = {
+  GF: ["gf", "ground", "ground floor"],
+  FF: ["ff", "first", "first floor", "1st", "1st floor"],
+  SF: ["sf", "ss", "second", "second floor", "2nd", "2nd floor"],
+};
+
+/** The floor code for a unit's floor text, or null when it is not one of the priced floors. */
+export function floorCode(floor: string | null | undefined): FloorCode | null {
+  if (!floor) return null;
+  const key = floor.trim().toLowerCase().replace(/\s+/g, " ");
+  return FLOOR_CODES.find((code) => FLOOR_ALIASES[code].includes(key)) ?? null;
+}
 
 export const DEFAULT_RECURRING_LABEL = "Monthly";

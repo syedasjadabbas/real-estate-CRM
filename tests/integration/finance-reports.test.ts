@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { businessToday } from "@/modules/bookings/today";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { advanceBooking, createBooking } from "@/modules/bookings/commands";
 import { decideReversal, recordPayment, requestReversal } from "@/modules/finance/commands";
@@ -143,6 +144,8 @@ describe.skipIf(!hasTestDb)("Finance reports FR-205 (PostgreSQL integration)", (
     const { requestId } = await requestReversal(db, accountant, paymentId, { reason: "Entered twice by mistake" });
     await decideReversal(db, admin, requestId, { approve: true });
     const [reversal] = await db.select().from(bookingPayments).where(eq(bookingPayments.reversalOfId, paymentId));
+    // Client rule (10 Nov 2026): a reversal counts in the period it is processed, not the original payment's.
+    expect(reversal.receivedOn).toBe(businessToday());
 
     const r = await collectionsByProject(db, accountant, { from: "2026-10-01", to: reversal.receivedOn > "2026-10-31" ? reversal.receivedOn : "2026-10-31" });
     const test = r.rows.find((x) => x.project === "Test Project")!;

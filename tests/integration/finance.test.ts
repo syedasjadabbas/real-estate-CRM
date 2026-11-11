@@ -3,14 +3,14 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { advanceBooking, cancelBooking, createBooking } from "@/modules/bookings/commands";
 import { getBookingDetail, listBookings } from "@/modules/bookings/queries";
 import { addPaymentMethod, decideReversal, recordPayment, requestReversal, setPaymentMethodActive, updateFinanceSettings } from "@/modules/finance/commands";
-import { bookingPaymentHistory, listPaymentMethods, listPayments, reversalRequestsForActor } from "@/modules/finance/queries";
-import { getPaymentDetail, outstandingBookings, payableBookings, scheduleDueByBooking } from "@/modules/finance/views";
+import { bookingPaymentHistory, listPaymentMethods, listPayments, receiptLabel, reversalRequestsForActor } from "@/modules/finance/queries";
+import { getPaymentDetail, listOutstanding, outstandingBookings, payableBookings, scheduleDueByBooking } from "@/modules/finance/views";
 import { businessToday } from "@/modules/bookings/today";
 import { createUnit } from "@/modules/inventory/commands";
 import { createLead } from "@/modules/leads/commands";
 import { hashPassword } from "@/server/auth/password";
 import { loadActor } from "@/server/auth/session-store";
-import { auditLogs, bookingPayments, paymentReversalRequests, taskInstallmentRows, tasks, users } from "@/server/db/schema";
+import { auditLogs, bookingPayments, bookings, paymentReversalRequests, taskInstallmentRows, tasks, units, users } from "@/server/db/schema";
 import type { Database } from "@/server/db";
 import type { Actor, Role } from "@/server/auth/types";
 import { AppError } from "@/server/errors";
@@ -259,6 +259,11 @@ describe.skipIf(!hasTestDb)("Finance F1: booking payments (PostgreSQL integratio
       expect(await errorCode(updateFinanceSettings(db, f.actors.superAdmin, { receipt_prefix: "<bad>" }))).toBe("VALIDATION_FAILED");
       await updateFinanceSettings(db, f.actors.superAdmin, { receipt_prefix: "RCPT-" });
       expect((await listPayments(db, admin, { bookingId })).rows[0].displayRef).toBe(`RCPT-${receiptNo}`);
+      // The client's format (10 Nov 2026): prefix, the unit's floor code, then the number, e.g. BH-GF-123.
+      await updateFinanceSettings(db, f.actors.superAdmin, { receipt_prefix: "BH-" });
+      await db.update(units).set({ floor: "gf" }).where(eq(units.id, (await db.select({ unitId: bookings.unitId }).from(bookings).where(eq(bookings.id, bookingId)))[0].unitId));
+      expect((await listPayments(db, admin, { bookingId })).rows[0].displayRef).toBe(`BH-GF-${receiptNo}`);
+      expect(receiptLabel("BH-", null, 7)).toBe("BH-7");
       expect((await errorOf(addPaymentMethod(db, f.actors.superAdmin, { name: "Cash" })))?.fields).toHaveProperty("name");
     });
   });
@@ -387,16 +392,18 @@ describe.skipIf(!hasTestDb)("Finance F1: booking payments (PostgreSQL integratio
       return t.id;
     };
 
-    it("compares installments due by today with net paid; undated rows and bookings without a plan are not guessed", async () => {
+    it("compares installments past their grace with net paid; undated rows and bookings without a plan are not guessed", async () => {
       const a = await bookingAt();
       const b = await bookingAt();
       const none = await bookingAt();
-      // a: 2 past-due installments (2,000,000), one future, one undated down payment.
+      // a: 2 past-due installments (2,000,000), one future, the down payment (row 1, not yet due for a
+      // booking made today) and one undated older row, which is not counted.
       const planA = await plan(a, [
         { amount: 3_000_000, dueOn: null },
         { amount: 1_000_000, dueOn: "2026-01-10" },
         { amount: 1_000_000, dueOn: "2026-02-10" },
         { amount: 1_000_000, dueOn: "2099-01-10" },
+        { amount: 250_000, dueOn: null },
       ]);
       await pay(a, "1500000");
       // b: a cancelled plan is ignored; the open one is fully covered by payments.
@@ -448,17 +455,53 @@ describe.skipIf(!hasTestDb)("Finance F1: booking payments (PostgreSQL integratio
       expect(await overdue()).toBe(0);
     });
 
-    it("an installment counts from its due date in Pakistan, not UTC", async () => {
+    it("an installment due on the 10th is overdue from the 16th, counted in Pakistan time, not UTC", async () => {
       const a = await bookingAt();
       await plan(a, [{ amount: 700_000, dueOn: "2026-11-10" }]);
-      // 2026-11-09 19:00 UTC is already the 10th in Pakistan (UTC+5); 18:59 UTC is still the 9th.
-      expect(businessToday(new Date("2026-11-09T18:59:59Z"))).toBe("2026-11-09");
-      expect(businessToday(new Date("2026-11-09T19:00:00Z"))).toBe("2026-11-10");
+      // 2026-11-15 19:00 UTC is already the 16th in Pakistan (UTC+5); 18:59 UTC is still the 15th.
+      expect(businessToday(new Date("2026-11-15T18:59:59Z"))).toBe("2026-11-15");
+      expect(businessToday(new Date("2026-11-15T19:00:00Z"))).toBe("2026-11-16");
       const dueOn = async (today: string) => (await scheduleDueByBooking(db, [a], today)).get(a)!.dueToDate;
-      expect(await dueOn("2026-11-09")).toBe(0);
-      expect(await dueOn("2026-11-10")).toBe(700_000);
-      expect((await outstandingBookings(db, accountant, {}, businessToday(new Date("2026-11-09T18:59:59Z")))).rows[0].overdue).toBe(0);
-      expect((await outstandingBookings(db, accountant, {}, businessToday(new Date("2026-11-09T19:00:00Z")))).rows[0].overdue).toBe(700_000);
+      expect(await dueOn("2026-11-10")).toBe(0); // due, but inside the 5 days' grace
+      expect(await dueOn("2026-11-15")).toBe(0);
+      expect(await dueOn("2026-11-16")).toBe(700_000);
+      expect((await outstandingBookings(db, accountant, {}, businessToday(new Date("2026-11-15T18:59:59Z")))).rows[0].overdue).toBe(0);
+      expect((await outstandingBookings(db, accountant, {}, businessToday(new Date("2026-11-15T19:00:00Z")))).rows[0]).toMatchObject({ overdue: 700_000, daysOverdue: 1, aging: "1-15" });
+    });
+
+    it("the down payment is due 7 days after the booking and overdue after 3 more days", async () => {
+      const a = await bookingAt();
+      // Booking made on 1 Oct 2026, Pakistan time: due on the 8th, overdue from the 12th.
+      await db.update(bookings).set({ createdAt: new Date("2026-10-01T06:00:00Z") }).where(eq(bookings.id, a));
+      await plan(a, [
+        { amount: 2_000_000, dueOn: null },
+        { amount: 1_000_000, dueOn: "2026-11-10" },
+      ]);
+      const due = async (today: string) => (await scheduleDueByBooking(db, [a], today)).get(a)!;
+      expect(await due("2026-10-11")).toMatchObject({ dueToDate: 0, undatedRows: 0 });
+      expect((await due("2026-10-12")).dueToDate).toBe(2_000_000);
+      await pay(a, "500000");
+      const row = (await outstandingBookings(db, accountant, {}, "2026-10-29")).rows[0];
+      expect(row).toMatchObject({ overdue: 1_500_000, daysOverdue: 18, aging: "16-30" });
+    });
+
+    it("ages the oldest unpaid amount into the client's buckets, and the database list agrees", async () => {
+      const a = await bookingAt();
+      await plan(a, [
+        { amount: 1_000_000, dueOn: "2026-06-10" },
+        { amount: 1_000_000, dueOn: "2026-09-10" },
+      ]);
+      const at = async (today: string, paid?: string) => {
+        if (paid) await pay(a, paid);
+        return (await outstandingBookings(db, accountant, {}, today)).rows[0];
+      };
+      // June's installment is overdue from 16 June: on 29 Oct that is 136 days.
+      expect(await at("2026-10-29")).toMatchObject({ overdue: 2_000_000, daysOverdue: 136, aging: "60+" });
+      // Paying June leaves September's, overdue from 16 Sep: 44 days.
+      expect(await at("2026-10-29", "1000000")).toMatchObject({ overdue: 1_000_000, daysOverdue: 44, aging: "31-60" });
+      expect(await at("2026-10-29", "1000000")).toMatchObject({ overdue: 0, daysOverdue: null, aging: null });
+      const listed = await listOutstanding(db, accountant, {}, "2026-10-29");
+      expect(listed.totals.overdue).toBe(0);
     });
 
     it("the most recent open plan is the schedule when a booking has several", async () => {

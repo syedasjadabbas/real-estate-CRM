@@ -12,7 +12,7 @@ import { TasksToolbar } from "@/features/tasks/components/tasks-toolbar";
 import { activeTaskFilters } from "@/features/tasks/url";
 import { formatInt } from "@/lib/format";
 import { canDoTask } from "@/modules/tasks/policy";
-import { assignableUsers, listTasks } from "@/modules/tasks/queries";
+import { assigneeFilterUsers, listTasks } from "@/modules/tasks/queries";
 import { requirePageUser } from "@/server/auth/current-user";
 import { getDb } from "@/server/db";
 
@@ -23,7 +23,7 @@ export default async function TasksPage({ searchParams }: PageProps<"/dashboard/
   if (!canDoTask(actor, "view")) return <RestrictedState />;
   const params = flattenParams(await searchParams);
   const db = getDb();
-  const [result, assignees] = await Promise.all([listTasks(db, actor, params), assignableUsers(db, actor)]);
+  const [result, assignees] = await Promise.all([listTasks(db, actor, params), assigneeFilterUsers(db, actor)]);
   const filters = activeTaskFilters(params);
 
   return (

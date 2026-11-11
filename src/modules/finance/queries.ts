@@ -16,9 +16,19 @@ export async function getFinanceSettings(db: Database): Promise<Record<SettingKe
   return Object.fromEntries(SETTING_KEYS.map((k) => [k, map.get(k) ?? ""])) as Record<SettingKey, string>;
 }
 
-/** Display reference: configured prefix + number. No format is assumed beyond that (Q-F3 pending). */
-export function formatReceipt(settings: Record<SettingKey, string>, row: { kind: string; receiptNo: number | null; reversalRef: number | null }) {
-  return row.kind === "payment" ? `${settings.receipt_prefix}${row.receiptNo}` : `${settings.reversal_prefix}${row.reversalRef}`;
+/**
+ * Receipt number in the client's format (10 Nov 2026): "BH-GF-123" = the configured receipt prefix
+ * (for example "BH-", set by the Super Admin), the unit's floor code (GF, FF, SF…) and the number.
+ * Gaps after a cancellation or reversal are acceptable. A unit without a floor prints prefix +
+ * number. Reversals keep their own prefix and number.
+ */
+export function receiptLabel(prefix: string, floor: string | null | undefined, receiptNo: number | null) {
+  const code = floor?.trim().toUpperCase();
+  return `${prefix}${code ? `${code}-` : ""}${receiptNo}`;
+}
+
+export function formatReceipt(settings: Record<SettingKey, string>, row: { kind: string; receiptNo: number | null; reversalRef: number | null; floor?: string | null }) {
+  return row.kind === "payment" ? receiptLabel(settings.receipt_prefix, row.floor, row.receiptNo) : `${settings.reversal_prefix}${row.reversalRef}`;
 }
 
 export async function listPaymentMethods(db: Database, opts: { activeOnly?: boolean } = {}) {
@@ -50,6 +60,7 @@ const paymentSelection = {
   recordedByName: recorder.name,
   leadName: leads.name,
   unitNo: units.unitNo,
+  floor: units.floor,
   projectName: projects.name,
 };
 
@@ -66,12 +77,12 @@ function baseQuery(db: Database) {
     .leftJoin(recorder, eq(recorder.id, bookingPayments.recordedById));
 }
 
-async function withReferences<T extends { kind: string; receiptNo: number | null; reversalRef: number | null; originalReceiptNo: number | null }>(db: Database, rows: T[]) {
+async function withReferences<T extends { kind: string; receiptNo: number | null; reversalRef: number | null; originalReceiptNo: number | null; floor: string | null }>(db: Database, rows: T[]) {
   const settings = await getFinanceSettings(db);
   return rows.map((r) => ({
     ...r,
     displayRef: formatReceipt(settings, r),
-    originalReceipt: r.originalReceiptNo === null ? null : `${settings.receipt_prefix}${r.originalReceiptNo}`,
+    originalReceipt: r.originalReceiptNo === null ? null : receiptLabel(settings.receipt_prefix, r.floor, r.originalReceiptNo),
   }));
 }
 
@@ -228,6 +239,7 @@ export async function reversalRequestsForActor(db: Database, actor: Actor, statu
       bookingId: bookings.id,
       leadName: leads.name,
       unitNo: units.unitNo,
+      floor: units.floor,
     })
     .from(paymentReversalRequests)
     .innerJoin(bookingPayments, eq(bookingPayments.id, paymentReversalRequests.paymentId))

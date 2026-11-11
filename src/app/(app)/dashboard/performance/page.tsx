@@ -11,7 +11,7 @@ import { EmptyState, RestrictedState } from "@/components/ui/empty-state";
 import { findNavItem } from "@/config/navigation";
 import { Pagination } from "@/features/leads/components/pagination";
 import { flattenParams, withParams } from "@/features/leads/url";
-import { NeedsCallData, OutcomeMix, TopClosers } from "@/features/performance/components/charts";
+import { CallQuality, CallVolume, CallsVsMeetings, OutcomeMix, TopClosers } from "@/features/performance/components/charts";
 import { PerformanceFilters } from "@/features/performance/components/performance-filters";
 import { cn } from "@/lib/cn";
 import { formatInt } from "@/lib/format";
@@ -23,17 +23,17 @@ import { getDb } from "@/server/db";
 
 export const metadata: Metadata = { title: "Performance" };
 
-const NO_CALLS = "Needs call data, which is not recorded yet";
+const NO_CALL_DURATION = "No call recording in the range has a duration";
 
-/** Observed columns, in order. `sort: null` = shown but not available (no data in this system). */
-const COLUMNS: { label: string; sort: PerformanceSort | null; title?: string }[] = [
+/** Observed columns, in order. */
+const COLUMNS: { label: string; sort: PerformanceSort; title?: string }[] = [
   { label: "Agent", sort: "agent" },
   { label: "Open leads", sort: "open", title: "Leads assigned in the selected date range that are not booked or lost." },
   { label: "Booked", sort: "booked", title: "Leads assigned in the range that are now Booked." },
   { label: "Lost", sort: "lost", title: "Leads assigned in the range that are now Lost." },
   { label: "Win %", sort: "winPct", title: "Booked ÷ (booked + lost)." },
-  { label: "Calls", sort: null, title: NO_CALLS },
-  { label: "Call min", sort: null, title: NO_CALLS },
+  { label: "Calls", sort: "calls", title: "Call recordings the agent uploaded to a lead in the range (one recording = one call)." },
+  { label: "Call min", sort: "callMin", title: "Total duration of those recordings, in minutes, counting recordings that have a duration." },
   { label: "F/U due", sort: "fuDue", title: "Follow-ups due in the range (not cancelled)." },
   { label: "F/U done", sort: "fuDone", title: "Of those, follow-ups marked done." },
   { label: "F/U %", sort: "fuPct", title: "Done ÷ due." },
@@ -94,7 +94,7 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Glance label="Win rate" value={pctText(s.winPct)} caption={`${formatInt(s.booked)} booked of ${formatInt(decided)} decided leads`} />
             <Glance label="Follow-ups done" value={pctText(s.fuPct)} caption={`${formatInt(s.fuDone)} of ${formatInt(s.fuDue)} due in the range`} />
-            <Glance label="Meaningful calls" value="—" caption="Needs scored call recordings (not captured)" muted />
+            <Glance label="Meaningful calls" value="—" caption="Needs AI call scoring, which is not part of this system" muted />
           </div>
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <div className="rounded-2xl border border-zinc-200/80 p-3">
@@ -124,7 +124,11 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
             <div className="rounded-2xl border border-zinc-200/80 p-3">
               <p className="mb-2 text-[10px] font-black tracking-[0.2em] text-zinc-500 uppercase">Activity</p>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                <Glance label="Calls" value="—" caption="No call data yet" muted />
+                <Glance
+                  label="Calls"
+                  value={formatInt(s.calls)}
+                  caption={`${s.perAgent.calls} per agent · ${s.callMin === null ? "— min" : `${formatInt(s.callMin)} min`}`}
+                />
                 <Glance label="Meetings" value={formatInt(s.meetings)} caption={`${s.perAgent.meetings} per agent`} />
                 <Glance label="CRM sign-ins" value={formatInt(s.signIns)} caption={`${s.perAgent.signIns} per agent · not attendance`} />
               </div>
@@ -136,9 +140,9 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <OutcomeMix mix={report.charts.outcomeMix} winPct={s.winPct} />
         <TopClosers rows={report.charts.topClosers} />
-        <NeedsCallData title="Call quality" badge="Quality" description="Verified (≥30 s) and qualified (≥60 s) calls" />
-        <NeedsCallData title="Call volume leaders" badge="Activity" description="Recordings by agent" />
-        <NeedsCallData title="Calls vs meetings" badge="Throughput" description="Top agents by combined activity" />
+        <CallQuality data={report.charts.callQuality} />
+        <CallVolume rows={report.charts.callVolume} />
+        <CallsVsMeetings rows={report.charts.callsVsMeetings} />
       </div>
 
       <Panel
@@ -178,20 +182,16 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
                       key={c.label}
                       scope="col"
                       title={c.title}
-                      aria-sort={c.sort && c.sort === report.sort ? (report.dir === "asc" ? "ascending" : "descending") : undefined}
+                      aria-sort={c.sort === report.sort ? (report.dir === "asc" ? "ascending" : "descending") : undefined}
                       className={cn("px-3 py-3.5 whitespace-nowrap", c.sort !== "agent" && "text-right")}
                     >
-                      {c.sort ? (
-                        <Link href={sortHref(c.sort)} className="inline-flex items-center gap-1.5 hover:text-zinc-900" aria-label={`Sort by ${c.label}`}>
-                          {c.label}
-                          <span aria-hidden="true" className="flex flex-col text-[7px] leading-[7px]">
-                            <span className={cn(report.sort === c.sort && report.dir === "asc" ? "text-brand" : "text-zinc-300")}>▲</span>
-                            <span className={cn(report.sort === c.sort && report.dir === "desc" ? "text-brand" : "text-zinc-300")}>▼</span>
-                          </span>
-                        </Link>
-                      ) : (
-                        <span className="text-zinc-400">{c.label}</span>
-                      )}
+                      <Link href={sortHref(c.sort)} className="inline-flex items-center gap-1.5 hover:text-zinc-900" aria-label={`Sort by ${c.label}`}>
+                        {c.label}
+                        <span aria-hidden="true" className="flex flex-col text-[7px] leading-[7px]">
+                          <span className={cn(report.sort === c.sort && report.dir === "asc" ? "text-brand" : "text-zinc-300")}>▲</span>
+                          <span className={cn(report.sort === c.sort && report.dir === "desc" ? "text-brand" : "text-zinc-300")}>▼</span>
+                        </span>
+                      </Link>
                     </th>
                   ))}
                 </tr>
@@ -200,8 +200,8 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
                 {report.rows.map((r) => (
                   <tr key={r.userId} className="border-b border-zinc-100/80 last:border-b-0 hover:bg-zinc-50/60">
                     <td className="px-3 py-2.5 font-bold whitespace-nowrap">{r.name}</td>
-                    {[r.open, r.booked, r.lost, pctText(r.winPct), null, null, r.fuDue, r.fuDone, pctText(r.fuPct), r.meetings, r.signIns, r.signOuts].map((v, i) => (
-                      <td key={i} className={cn("px-3 py-2.5 text-right tabular-nums", v === null && "text-zinc-400")} title={v === null ? NO_CALLS : undefined}>
+                    {[r.open, r.booked, r.lost, pctText(r.winPct), r.calls, r.callMin, r.fuDue, r.fuDone, pctText(r.fuPct), r.meetings, r.signIns, r.signOuts].map((v, i) => (
+                      <td key={i} className={cn("px-3 py-2.5 text-right tabular-nums", v === null && "text-zinc-400")} title={v === null ? NO_CALL_DURATION : undefined}>
                         {v === null ? "—" : typeof v === "number" ? formatInt(v) : v}
                       </td>
                     ))}
@@ -214,7 +214,9 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
         )}
         <Pagination page={report.page} pageCount={report.pageCount} total={report.total} params={params} />
         <p className="text-[11px] text-zinc-500">
-          Calls and call minutes are not available: uploaded call recordings are not counted as calls unless the client confirms that rule. Leads are counted under their current owner, on their original assignment date.
+          Calls are call recordings uploaded to a lead (one recording = one call), counted for the agent who uploaded them on the upload date; hidden recordings are
+          not counted. Call minutes add up the recordings that have a duration (&quot;—&quot; when none does). Leads are counted under their current owner, on their
+          original assignment date.
         </p>
         <p className="text-[11px] text-zinc-500">
           CRM sign-ins and sign-outs are authentication activity only. They are not attendance and are not used to work out hours, lateness or absences;

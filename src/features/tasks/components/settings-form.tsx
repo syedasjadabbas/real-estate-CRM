@@ -9,15 +9,18 @@ import type { ProposalSettings } from "@/modules/tasks/plan";
 import { updateProposalSettingsAction } from "../actions";
 
 const FIELDS: { key: keyof ProposalSettings; label: string; hint: string; optional?: boolean }[] = [
-  { key: "agentCap", label: "Agent discount cap %", hint: "Agents can't discount above this (5% observed in the reference)." },
-  { key: "managerCap", label: "Manager discount cap %", hint: "Blank: managers use the agent cap.", optional: true },
+  { key: "agentCap", label: "Agent discount cap %", hint: "Agents can't discount above this (5%, confirmed by the client)." },
+  { key: "managerCap", label: "Manager discount cap %", hint: "5%, confirmed by the client. Blank: managers use the agent cap.", optional: true },
   { key: "downPaymentPct", label: "Down payment %", hint: "Default for new proposals. Agents can't change it." },
   { key: "installmentCount", label: "No. of installments", hint: "Default for new proposals." },
-  { key: "defaultPricePerSqft", label: "Default price / sq ft (PKR)", hint: "Used when a unit has no list price. Blank: not set.", optional: true },
+  { key: "defaultPricePerSqft", label: "Default price / sq ft (PKR)", hint: "Used when a unit has no list price and no floor rate applies. Blank: not set.", optional: true },
   { key: "roiPerSqft", label: "ROI per sq ft per year (PKR)", hint: "Expected ROI = area × this. Blank: ROI not shown.", optional: true },
+  { key: "floorPriceGF", label: "Ground floor (GF) price / sq ft (PKR)", hint: "Used when a ground-floor unit has no list price. Client rate: 10,824. Blank: not set.", optional: true },
+  { key: "floorPriceFF", label: "First floor (FF) price / sq ft (PKR)", hint: "Used when a first-floor unit has no list price. Client rate: 9,593. Blank: not set.", optional: true },
+  { key: "floorPriceSF", label: "Second floor (SF) price / sq ft (PKR)", hint: "Used when a second-floor unit has no list price. Client rate: 8,624. Blank: not set.", optional: true },
 ];
 
-/** FR-009 proposal settings. Values are proposed defaults pending client confirmation (Q-B6). */
+/** FR-009 proposal settings. Defaults confirmed by the client on 10 Nov 2026 (caps 5%, down payment 25%, floor rates). */
 export function ProposalSettingsForm({ initial, canEdit }: { initial: ProposalSettings; canEdit: boolean }) {
   const [values, setValues] = useState(() => Object.fromEntries(FIELDS.map((f) => [f.key, initial[f.key] === null ? "" : String(initial[f.key])])) as Record<keyof ProposalSettings, string>);
   const [errors, setErrors] = useState<Record<string, string>>({});

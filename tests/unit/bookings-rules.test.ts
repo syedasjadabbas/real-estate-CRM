@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { FORWARD_PATH, nextStage } from "@/modules/bookings/constants";
+import { FORWARD_PATH, HOLD_DAYS, HOLD_STAGES, nextStage } from "@/modules/bookings/constants";
+import { addDays, defaultHoldUntil } from "@/modules/bookings/today";
 import { bookingScope, canDoBooking, canMoveTo } from "@/modules/bookings/policy";
 import { advanceSchema, cancelSchema, createBookingSchema, updateBookingSchema } from "@/modules/bookings/validation";
 import type { Role } from "@/server/auth/types";
@@ -49,5 +50,18 @@ describe("booking validation", () => {
     expect(cancelSchema.safeParse({ reason: " " }).success).toBe(false);
     expect(advanceSchema.safeParse({ toStage: "paid" }).success).toBe(false);
     expect(updateBookingSchema.parse({ ratePerSqft: 1, paymentDocsStatus: "verified" })).toEqual({ paymentDocsStatus: "verified" });
+  });
+});
+
+describe("FR-081 hold dates", () => {
+  it("defaults the hold to HOLD_DAYS (7) after today in the business time zone, across month and year ends", () => {
+    expect(HOLD_DAYS).toBe(7);
+    expect(HOLD_STAGES).toEqual(["negotiation", "token_pending"]);
+    expect(addDays("2026-11-11", 7)).toBe("2026-11-18");
+    expect(addDays("2026-12-28", 7)).toBe("2027-01-04");
+    expect(addDays("2028-02-25", 7)).toBe("2028-03-03");
+    // 20:00 UTC on 11 Nov is already 12 Nov in Karachi (UTC+5).
+    expect(defaultHoldUntil(new Date("2026-11-11T20:00:00Z"))).toBe("2026-11-19");
+    expect(defaultHoldUntil(new Date("2026-11-11T18:00:00Z"))).toBe("2026-11-18");
   });
 });

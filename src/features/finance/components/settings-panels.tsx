@@ -28,7 +28,7 @@ export function PrefixPanel({ initial, canEdit, nextExample }: { initial: { rece
       <div className="space-y-3">
         <p className="text-[11px] text-zinc-500">
           Every posted payment gets the next receipt number and each reversal its own reference; numbers are never reused (gaps are possible).
-          The prefix is shown in front of the number. The final format is pending client confirmation.
+          A receipt reads prefix, the floor code of the unit, then the number (for example BH-GF-123, the format the client confirmed); set the prefix to the project code followed by a dash.
         </p>
         {(["receipt_prefix", "reversal_prefix"] as const).map((key) => (
           <Field key={key} label={key === "receipt_prefix" ? "Receipt prefix" : "Reversal prefix"} error={errors[key]}>
@@ -38,7 +38,7 @@ export function PrefixPanel({ initial, canEdit, nextExample }: { initial: { rece
           </Field>
         ))}
         <p className="text-xs text-zinc-600">
-          Example: receipt <span className="font-bold">{values.receipt_prefix}{nextExample}</span>
+          Example: receipt <span className="font-bold">{values.receipt_prefix}GF-{nextExample}</span> for a ground-floor unit
         </p>
         {canEdit ? (
           <Button

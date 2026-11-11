@@ -162,7 +162,9 @@ export async function decideReversal(db: Database, actor: Actor, requestId: stri
           kind: "reversal",
           type: payment.type,
           amount: payment.amount,
-          receivedOn: payment.receivedOn,
+          // The client's rule (10 Nov 2026): a reversal counts in the period it is processed, so it
+          // is dated on the day it is approved (business time zone), not the original payment's date.
+          receivedOn: businessToday(),
           note: request.reason,
           reversalRef: sql`nextval('booking_payment_reversal_ref_seq')`,
           reversalOfId: payment.id,

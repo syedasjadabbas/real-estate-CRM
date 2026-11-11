@@ -3,13 +3,13 @@ import type { z } from "zod";
 import type { Database } from "@/server/db";
 import { auditLogs, bookings, projects, taskHistory, taskInstallmentRows, tasks, units, users, type TaskProposal } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
-import { AppError } from "@/server/errors";
+import { AppError, forbidden } from "@/server/errors";
 import { canAccessBooking } from "@/modules/bookings/policy";
 import { seesInactiveInSelector } from "@/modules/projects/policy";
 import { loadAccessibleLead, teamMemberIds, type DbOrTx, type Tx } from "@/modules/leads/support";
 import { DEFAULT_RECURRING_LABEL, TASK_STATUS_LABELS, hasPlan, type TaskType } from "./constants";
 import { buildRows, computeFigures, INSTALLMENT_DUE_DAY, unitPricePerSqft, type PlanRow, type ProposalSettings } from "./plan";
-import { ASSIGNABLE_ROLES, assertCanTask, canAssignTo, canEditDownPayment, discountCap } from "./policy";
+import { ASSIGNABLE_ROLES, assertCanTask, canAssignTo, canEditDownPayment, canEditTaskDetails, discountCap } from "./policy";
 import { getProposalSettings } from "./settings";
 import { loadAccessibleTask, parseTask, taskFieldError } from "./support";
 import { createTaskSchema, proposalSchema, statusSchema, updateTaskSchema } from "./validation";
@@ -22,12 +22,11 @@ async function record(tx: DbOrTx, actor: Actor, taskId: string, action: string, 
   await tx.insert(auditLogs).values({ actorId: actor.id, ip: actor.ip ?? null, action: `task.${action}`, entity: "task", entityId: taskId, before, after: data });
 }
 
-async function checkAssignee(tx: DbOrTx, actor: Actor, assigneeId: string, members: string[]) {
+/** Q45: only Admins and Super Admins assign to someone else; anyone may take a task themselves. */
+async function checkAssignee(tx: DbOrTx, actor: Actor, assigneeId: string) {
   const [user] = await tx.select({ id: users.id, role: users.role, status: users.status }).from(users).where(eq(users.id, assigneeId)).limit(1);
   if (!user || user.status !== "active" || !ASSIGNABLE_ROLES.includes(user.role)) throw taskFieldError("assigneeId", "Choose an active team member");
-  if (!canAssignTo(actor, assigneeId, members)) {
-    throw taskFieldError("assigneeId", actor.role === "agent" ? "Agents can only assign tasks to themselves" : "You can assign to yourself or your team");
-  }
+  if (!canAssignTo(actor, assigneeId)) throw taskFieldError("assigneeId", "Only Admins and Super Admins assign tasks to someone else");
 }
 
 /** Linked lead / booking must be visible to the actor; a booking linked with a lead must be that lead's booking. */
@@ -70,7 +69,7 @@ async function resolveProposal(tx: DbOrTx, actor: Actor, input: ProposalData, ex
   }
 
   const areaSqft = unit ? unit.areaSqft : null;
-  const pricePerSqft = unit ? unitPricePerSqft(unit, settings.defaultPricePerSqft) : null;
+  const pricePerSqft = unit ? unitPricePerSqft(unit, settings) : null;
   const roiPerSqft = existing ? existing.roiPerSqft : settings.roiPerSqft;
 
   const cap = discountCap(actor.role, settings);
@@ -139,14 +138,14 @@ async function replaceRows(tx: Tx, taskId: string, rows: (PlanRow | RowData)[]) 
   }
 }
 
-/** FR-090 create. Defaults the assignee to the creator; plan types need the builder's customer name. */
+/** FR-090 create. Defaults the assignee to the creator; plan types need the builder's customer name. Anyone with create access can own a proposal (Q36). */
 export async function createTask(db: Database, actor: Actor, input: unknown) {
   assertCanTask(actor, "create");
   const data = parseTask(createTaskSchema, input);
   return db.transaction(async (tx) => {
     const members = await teamMemberIds(tx, actor);
     const assigneeId = data.assigneeId ?? actor.id;
-    await checkAssignee(tx, actor, assigneeId, members);
+    await checkAssignee(tx, actor, assigneeId);
     await checkLinks(tx, actor, data.leadId, data.bookingId, members);
 
     let proposal: TaskProposal | null = null;
@@ -175,6 +174,9 @@ export async function createTask(db: Database, actor: Actor, input: unknown) {
   });
 }
 
+/** Q36: only the Super Admin edits a saved proposal or payment plan. */
+const SAVED_PROPOSAL_LOCKED = "Only the Super Admin can edit a saved proposal.";
+
 const TRACKED = ["title", "type", "dueAt", "assigneeId", "leadId", "bookingId", "description"] as const;
 const same = (a: unknown, b: unknown) => (a instanceof Date || b instanceof Date ? new Date(a as Date).getTime() === new Date(b as Date).getTime() : (a ?? null) === (b ?? null));
 
@@ -198,7 +200,13 @@ export async function updateTask(db: Database, actor: Actor, taskId: string, inp
       bookingId: "bookingId" in data ? (data.bookingId ?? null) : task.bookingId,
       description: "description" in data ? (data.description ?? null) : task.description,
     };
-    if (next.assigneeId !== task.assigneeId) await checkAssignee(tx, actor, next.assigneeId, members);
+    const changed = TRACKED.filter((k) => !same(next[k], task[k]));
+    // Q36: a saved proposal is edited by the Super Admin only. Q45 still lets Admins reassign it, so a
+    // change of assignee alone (no plan, rows or other field) is allowed; checkAssignee decides who.
+    if (!canEditTaskDetails(actor.role, task) && (data.proposal !== undefined || data.rows !== undefined || changed.some((k) => k !== "assigneeId"))) {
+      throw forbidden(SAVED_PROPOSAL_LOCKED);
+    }
+    if (next.assigneeId !== task.assigneeId) await checkAssignee(tx, actor, next.assigneeId);
     if (next.leadId !== task.leadId || next.bookingId !== task.bookingId) await checkLinks(tx, actor, next.leadId, next.bookingId, members);
 
     let proposal = task.proposal;
@@ -217,7 +225,6 @@ export async function updateTask(db: Database, actor: Actor, taskId: string, inp
       rows = data.rows;
     }
 
-    const changed = TRACKED.filter((k) => !same(next[k], task[k]));
     const planChanged = rows !== null || JSON.stringify(proposal) !== JSON.stringify(task.proposal);
     if (changed.length === 0 && !planChanged) return { changed: [] as string[] };
 
@@ -265,6 +272,7 @@ export async function rebuildInstallments(db: Database, actor: Actor, taskId: st
   return db.transaction(async (tx) => {
     const { task } = await loadAccessibleTask(tx, actor, taskId, true);
     if (!task.proposal) throw new AppError("BUSINESS_RULE", "Only proposal and payment-plan tasks have installment rows.");
+    if (!canEditTaskDetails(actor.role, task)) throw forbidden(SAVED_PROPOSAL_LOCKED);
     if (task.status === "cancelled") throw new AppError("BUSINESS_RULE", "A cancelled task can't be edited. Reopen it first.");
     const rows = generatedRows(task.proposal);
     await replaceRows(tx, task.id, rows);

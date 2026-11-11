@@ -50,7 +50,7 @@ async function idFromLink(href: string | null, prefix: string) {
   return href!.slice(prefix.length, prefix.length + 36);
 }
 
-test("an agent uploads a call recording; it plays for permitted users only", async ({ browser }) => {
+test("an agent uploads a call recording; only Managers, Admins and Super Admins play it", async ({ browser }) => {
   const name = unique("E2E Recording");
   const leadId = await createLeadFor("agent1", name);
   const fileName = `call-${Date.now()}.wav`;
@@ -62,10 +62,22 @@ test("an agent uploads a call recording; it plays for permitted users only", asy
   await expect(agent.getByText("No call recordings yet.")).toBeVisible();
   await (await chooseFile(agent, "Upload a recording", "Upload recording", { name: fileName, mimeType: "audio/wav", buffer: silentWav() })).click();
   await expect(agent.getByRole("status").filter({ hasText: "Recording uploaded." })).toBeVisible();
-  const player = agent.getByLabel(`Play ${fileName}`);
-  await expect(player).toBeVisible();
-  const recordingId = await idFromLink(await player.getAttribute("src"), "/api/v1/recordings/");
+  // Q52 (confirmed 10 Nov 2026): the agent sees the recording listed, with no player and no Save link.
+  await expect(agent.locator("ul li").filter({ hasText: fileName })).toBeVisible();
+  await expect(agent.getByText("Recordings are played by Managers, Admins and Super Admins.")).toBeVisible();
+  await expect(agent.getByLabel(`Play ${fileName}`)).toHaveCount(0);
+  const listed = await api<{ id: string; name: string }[]>(agent, `/api/v1/leads/${leadId}/recordings`);
+  const recordingId = listed.data.find((r) => r.name === fileName)!.id;
+  expect((await agent.request.get(`/api/v1/recordings/${recordingId}`)).status()).toBe(403);
   expect(await auditCount("lead.recording_upload", leadId)).toBe(1);
+  await agentCtx.close();
+
+  const managerCtx = await browser.newContext();
+  const manager = await managerCtx.newPage();
+  await login(manager, "manager");
+  await manager.goto(`/dashboard/leads/${leadId}`);
+  const player = manager.getByLabel(`Play ${fileName}`);
+  await expect(player).toBeVisible();
 
   // Playback: the page's audio element loads the file (one second long), and byte ranges work for seeking.
   const seconds = await player.evaluate(
@@ -77,12 +89,12 @@ test("an agent uploads a call recording; it plays for permitted users only", asy
       }),
   );
   expect(seconds).toBe(1);
-  const ranged = await agent.request.get(`/api/v1/recordings/${recordingId}`, { headers: { Range: "bytes=0-43" } });
+  const ranged = await manager.request.get(`/api/v1/recordings/${recordingId}`, { headers: { Range: "bytes=0-43" } });
   expect(ranged.status()).toBe(206);
   expect(ranged.headers()["content-range"]).toBe(`bytes 0-43/${silentWav().length}`);
   expect(ranged.headers()["cache-control"]).toContain("no-store");
   expect((await ranged.body()).subarray(0, 4).toString()).toBe("RIFF");
-  await agentCtx.close();
+  await managerCtx.close();
 
   // The team manager may play it; another agent, HR and the accountant may not.
   for (const [role, status] of [["manager", 200], ["agent2", 404], ["hr", 403], ["accountant", 403]] as const) {

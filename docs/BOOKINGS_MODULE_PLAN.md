@@ -21,7 +21,7 @@ Status: **confirmed scope implemented and verified against PostgreSQL** (29 Oct 
 
 ## 2. Decisions confirmed by the user (29 Oct 2026)
 
-1. **Hold:** the creator enters "Reserved until" (optional, not in the past). Overdue holds (date passed while Negotiation / Token pending) are flagged; nothing is released automatically.
+1. **Hold:** "Reserved until" defaults to 7 days after creation and can be changed (not in the past). Since 11 Nov 2026 (client rule of 10 Nov) an unpaid hold past its date, still in Negotiation or Token pending with no payment, is released by `npm run job:release-holds`: the booking is cancelled "Hold expired" and the unit returns to Available (`DEPLOYMENT_PROXY.md` §7b).
 2. **Stages:** forward one step at a time, no skipping, no going back; every move logged with an optional note. No payment or document gates.
 3. **Confirm:** unit → Booked (Sold stays a manual admin status for units without an active booking), lead → Booked, client created or linked by phone (FR-050; one client per phone).
 4. **Payments:** deferred to Finance at the time. **Update:** Finance F1/F2 now posts payments, and the booking page takes Paid and the 30% milestone from them.

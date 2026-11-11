@@ -7,7 +7,7 @@ import { buttonClasses } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState, RestrictedState } from "@/components/ui/empty-state";
 import { BookingDetailsPanel, BookingStagePanel } from "@/features/bookings/components/booking-panels";
-import { BookingStagePill, HoldOverdueChip } from "@/features/bookings/components/stage-pill";
+import { BookingStagePill, HoldChip } from "@/features/bookings/components/stage-pill";
 import { PaymentHistoryList } from "@/features/finance/components/payment-history";
 import { formatArea, formatListedOn, formatPrice } from "@/features/inventory/format";
 import { PanelCard } from "@/features/leads/components/detail-panels";
@@ -20,6 +20,7 @@ import { businessToday } from "@/modules/bookings/today";
 import { PAYABLE_STAGES } from "@/modules/finance/constants";
 import { canDoFinance } from "@/modules/finance/policy";
 import { bookingPaymentHistory } from "@/modules/finance/queries";
+import { daysOverdue, scheduleDueByBooking } from "@/modules/finance/views";
 import { requirePageUser } from "@/server/auth/current-user";
 import { getDb } from "@/server/db";
 import { AppError } from "@/server/errors";
@@ -55,6 +56,11 @@ export default async function BookingDetailPage({ params, searchParams }: PagePr
   }
   const { booking, lead, unit, client, money } = detail;
   const payments = await bookingPaymentHistory(getDb(), actor, booking.id);
+  // Overdue by the client's rule (FR-203): the payment plan's amounts past their grace period.
+  const today = businessToday();
+  const plan = (await scheduleDueByBooking(getDb(), [booking.id], today)).get(booking.id) ?? null;
+  const overdue = plan ? Math.max(0, plan.dueToDate - money.paid) : null;
+  const overdueDays = plan && overdue ? daysOverdue(plan.items, money.paid, today) : null;
   const canRecord = canDoFinance(actor, "record") && (PAYABLE_STAGES as readonly string[]).includes(booking.stage) && money.outstanding > 0;
 
   return (
@@ -103,23 +109,34 @@ export default async function BookingDetailPage({ params, searchParams }: PagePr
       ) : (
         <>
           <Card className="p-5">
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 xl:grid-cols-8">
               <Fact label="Total sale">{formatPrice(booking.totalSale)}</Fact>
               <Fact label="Paid">
                 {formatPrice(money.paid)} <span className="text-zinc-400">/ {formatPrice(money.total)}</span>
+              </Fact>
+              <Fact label="Outstanding">{formatPrice(money.outstanding)}</Fact>
+              <Fact label="Overdue (plan)">
+                {overdue === null ? (
+                  <span className="text-zinc-400">No plan</span>
+                ) : (
+                  <span className={overdue > 0 ? "font-bold text-rose-700" : undefined}>
+                    {formatPrice(overdue)}
+                    {overdueDays ? <span className="block text-[10px] font-bold">{overdueDays} days past grace</span> : null}
+                  </span>
+                )}
               </Fact>
               <Fact label={`${Math.round(MILESTONE_RATIO * 100)}% milestone`}>{money.milestoneMet ? "Met" : "Not met"}</Fact>
               <Fact label="Reserved until">
                 <span className="inline-flex items-center gap-1.5">
                   {formatListedOn(booking.reservedUntil)}
-                  {detail.holdOverdue ? <HoldOverdueChip /> : null}
+                  <HoldChip state={detail.holdState} />
                 </span>
               </Fact>
               <Fact label="Agreement sent">{booking.agreementSentOn ? formatListedOn(booking.agreementSentOn) : "Not sent"}</Fact>
               <Fact label="Payment docs">{PAYMENT_DOCS_LABELS[booking.paymentDocsStatus]}</Fact>
             </div>
             <p className="mt-4 rounded-xl bg-zinc-50 px-3 py-2 text-xs text-zinc-600">
-              Paid is the sum of payments posted by Finance minus approved reversals. Outstanding: {formatPrice(money.outstanding)}.
+              Paid is the sum of payments posted by Finance minus approved reversals. Overdue uses the payment plan: installments are overdue 5 days after the 10th, the down payment 3 days after its due date (7 days after booking).
             </p>
           </Card>
 

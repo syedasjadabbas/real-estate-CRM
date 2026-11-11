@@ -6,7 +6,7 @@ import { addDays } from "@/modules/teams/dates";
 export const DEFAULT_RANGE_DAYS = 30;
 export const MAX_RANGE_DAYS = 366;
 
-export const PERFORMANCE_SORTS = ["agent", "open", "booked", "lost", "winPct", "fuDue", "fuDone", "fuPct", "meetings", "signIns", "signOuts", "avgFirstTouchMs"] as const;
+export const PERFORMANCE_SORTS = ["agent", "open", "booked", "lost", "winPct", "calls", "callMin", "fuDue", "fuDone", "fuPct", "meetings", "signIns", "signOuts", "avgFirstTouchMs"] as const;
 export type PerformanceSort = (typeof PERFORMANCE_SORTS)[number];
 
 export const PERFORMANCE_PAGE_SIZE = 50;

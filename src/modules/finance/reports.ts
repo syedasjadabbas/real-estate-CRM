@@ -8,6 +8,7 @@ import { AppError, forbidden } from "@/server/errors";
 import { businessToday } from "@/modules/bookings/today";
 import { toPaisa } from "./ledger";
 import { canDoFinance } from "./policy";
+import { AGING_BUCKETS, type AgingBucket } from "./constants";
 import { outstandingBookings } from "./views";
 
 /**
@@ -69,20 +70,32 @@ export async function collectionsByProject(db: Database, actor: Actor, input: un
 
 export async function outstandingBy(db: Database, actor: Actor, by: "project" | "agent") {
   const { rows, totals } = await outstandingBookings(db, actor, {});
-  const groups = new Map<string, { key: string; label: string; bookings: number; total: number; paid: number; outstanding: number }>();
+  // Overdue is split by the aging of each booking's oldest overdue amount (client buckets, 10 Nov 2026).
+  type Group = { key: string; label: string; bookings: number; total: number; paid: number; outstanding: number; overdue: number; aging: Record<AgingBucket, number> };
+  const groups = new Map<string, Group>();
+  const noAging = () => Object.fromEntries(AGING_BUCKETS.map((b) => [b.key, 0])) as Record<AgingBucket, number>;
   for (const r of rows) {
     const label = by === "project" ? r.projectName : r.agentName ?? "No agent";
     // Agents group by id: two people can share a name. Project names are unique.
     const key = by === "project" ? label : (r.agentId ?? "none");
-    const g = groups.get(key) ?? { key, label, bookings: 0, total: 0, paid: 0, outstanding: 0 };
+    const g = groups.get(key) ?? { key, label, bookings: 0, total: 0, paid: 0, outstanding: 0, overdue: 0, aging: noAging() };
     g.bookings += 1;
     g.total += toPaisa(r.totalSale);
     g.paid += toPaisa(r.paid);
     g.outstanding += toPaisa(r.outstanding);
+    g.overdue += toPaisa(r.overdue ?? 0);
+    if (r.aging) g.aging[r.aging] += toPaisa(r.overdue ?? 0);
     groups.set(key, g);
   }
   const out = [...groups.values()]
-    .map((g) => ({ ...g, total: money(g.total), paid: money(g.paid), outstanding: money(g.outstanding) }))
+    .map((g) => ({
+      ...g,
+      total: money(g.total),
+      paid: money(g.paid),
+      outstanding: money(g.outstanding),
+      overdue: money(g.overdue),
+      aging: Object.fromEntries(Object.entries(g.aging).map(([k, v]) => [k, money(v)])) as Record<AgingBucket, number>,
+    }))
     .sort((a, b) => b.outstanding - a.outstanding || a.label.localeCompare(b.label) || a.key.localeCompare(b.key));
   return { by, rows: out, totals: { ...totals, bookings: rows.length } };
 }
@@ -128,8 +141,11 @@ export async function exportReport(db: Database, actor: Actor, input: Record<str
     const r = await outstandingBy(db, actor, by);
     const today = businessToday();
     body = csv(
-      [by === "project" ? "Project" : "Agent", "As of", "Bookings", "Total sale (PKR)", "Paid (PKR)", "Outstanding (PKR)"],
-      [...r.rows.map((x) => [x.label, today, x.bookings, x.total, x.paid, x.outstanding]), ["Total", today, r.totals.bookings, r.totals.total, r.totals.paid, r.totals.outstanding]],
+      [by === "project" ? "Project" : "Agent", "As of", "Bookings", "Total sale (PKR)", "Paid (PKR)", "Outstanding (PKR)", "Overdue (PKR)", ...AGING_BUCKETS.map((b) => `Overdue ${b.label} (PKR)`)],
+      [
+        ...r.rows.map((x) => [x.label, today, x.bookings, x.total, x.paid, x.outstanding, x.overdue, ...AGING_BUCKETS.map((b) => x.aging[b.key])]),
+        ["Total", today, r.totals.bookings, r.totals.total, r.totals.paid, r.totals.outstanding, r.totals.overdue, ...AGING_BUCKETS.map((b) => money(r.rows.reduce((n, x) => n + toPaisa(x.aging[b.key]), 0)))],
+      ],
     );
     filename = `outstanding-by-${by}-${today}.csv`;
     summary = { asOf: today, totals: r.totals };

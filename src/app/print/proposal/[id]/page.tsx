@@ -63,7 +63,7 @@ export default async function ProposalPrintPage({ params }: PageProps<"/print/pr
       <style>{"@media print { html, body { background: #fff !important; } }"}</style>
       {detail.unitChanged ? (
         <p role="note" className="mx-auto mb-3 max-w-[794px] rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900 print:hidden">
-          The unit&apos;s price changed after this proposal was saved. Edit and save the proposal before printing so the figures use the current price.
+          The unit&apos;s price changed after this proposal was saved. The Super Admin can save the proposal again (or apply the price reconciliation in Tasks settings) so the figures use the current price.
         </p>
       ) : null}
       <div className="mx-auto mb-4 flex max-w-[794px] flex-wrap items-center justify-between gap-2 px-4 print:hidden">

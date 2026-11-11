@@ -32,7 +32,7 @@ import { RecordingsPanel } from "@/features/recordings/components/recordings-pan
 import { listDocuments } from "@/modules/documents/service";
 import { INBOUND_LABELS } from "@/modules/leads/constants";
 import { telHref } from "@/modules/leads/phone";
-import { listRecordings } from "@/modules/recordings/service";
+import { canPlayRecordings, listRecordings } from "@/modules/recordings/service";
 import { Dialer } from "@/features/voip/components/dialer";
 import { getVoipStatus } from "@/modules/voip/service";
 import { assignableUsers, getLeadDetail, leadLookups } from "@/modules/leads/queries";
@@ -132,7 +132,7 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
             {detail.permissions.assign ? <AssignPanel leadId={lead.id} ownerId={lead.ownerId} owners={owners} /> : null}
             <FollowUpsPanel detail={detail} />
             <NotePanel leadId={lead.id} canEdit={detail.permissions.edit} />
-            <RecordingsPanel leadId={lead.id} recordings={recordings} canUpload={detail.permissions.edit} canDelete={actor.role === "super_admin"} />
+            <RecordingsPanel leadId={lead.id} recordings={recordings} canUpload={detail.permissions.edit} canDelete={actor.role === "super_admin"} canPlay={canPlayRecordings(actor)} />
             <DocumentsPanel leadId={lead.id} documents={documents} canUpload={detail.permissions.edit} />
             <ReviewsPanel detail={detail} />
             {clientStatus ? <LeadClientPanel leadId={lead.id} status={clientStatus} /> : null}
