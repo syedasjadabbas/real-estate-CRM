@@ -16,6 +16,7 @@ import { getMeetingDetail, type MeetingDetail } from "@/modules/meetings/queries
 import { requirePageUser } from "@/server/auth/current-user";
 import { getDb } from "@/server/db";
 import { AppError } from "@/server/errors";
+import { MEETING_TYPE_LABELS } from "@/modules/meetings/constants";
 
 export const metadata: Metadata = { title: "Meeting" };
 
@@ -23,6 +24,7 @@ const FIELD_LABELS: Record<string, string> = {
   title: "title",
   startsAt: "start",
   endsAt: "end",
+  type: "type",
   location: "location",
   organizerId: "organizer",
   leadId: "lead",
@@ -111,6 +113,7 @@ export default async function MeetingDetailPage({ params, searchParams }: PagePr
                 <span className={detail.overdue ? "text-rose-600" : undefined}>{formatDateTime(meeting.startsAt)}</span>
               </Fact>
               <Fact label="Ends">{meeting.endsAt ? formatDateTime(meeting.endsAt) : "—"}</Fact>
+              <Fact label="Type">{meeting.type ? MEETING_TYPE_LABELS[meeting.type] : "—"}</Fact>
               <Fact label="Location">{meeting.location ?? "—"}</Fact>
               <Fact label="Organizer">{detail.organizerName ?? "—"}</Fact>
               <Fact label="Created by">{detail.creatorName ?? "—"}</Fact>

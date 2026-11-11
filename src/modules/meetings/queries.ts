@@ -44,7 +44,7 @@ const SORTS = {
 
 export type MeetingListRow = Awaited<ReturnType<typeof listMeetings>>["rows"][number];
 
-/** FR-102 list: search (title, lead name / code), status, organizer, lead, overdue; sortable; pages. */
+/** FR-102 list: search (title, lead name / code), status, type, organizer, lead, overdue; sortable; pages. */
 export async function listMeetings(db: Database, actor: Actor, rawQuery: unknown, now = new Date()) {
   if (!canDoMeeting(actor, "view")) throw forbidden();
   const query = meetingListQuerySchema.parse(rawQuery ?? {});
@@ -53,6 +53,7 @@ export async function listMeetings(db: Database, actor: Actor, rawQuery: unknown
   const where = and(
     meetingScopeFilter(actor, members),
     query.status ? eq(meetings.status, query.status) : undefined,
+    query.type ? eq(meetings.type, query.type) : undefined,
     query.organizer ? eq(meetings.organizerId, query.organizer === "me" ? actor.id : query.organizer) : undefined,
     query.lead ? eq(meetings.leadId, query.lead) : undefined,
     query.overdue ? overdueCondition(now) : undefined,
@@ -69,6 +70,7 @@ export async function listMeetings(db: Database, actor: Actor, rawQuery: unknown
       title: meetings.title,
       startsAt: meetings.startsAt,
       endsAt: meetings.endsAt,
+      type: meetings.type,
       status: meetings.status,
       updatedAt: meetings.updatedAt,
       organizerName: organizer.name,

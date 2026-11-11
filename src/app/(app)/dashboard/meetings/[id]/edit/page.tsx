@@ -64,6 +64,7 @@ export default async function EditMeetingPage({ params }: PageProps<"/dashboard/
           title: meeting.title,
           startsLocal: toLocalInputValue(meeting.startsAt),
           endsLocal: meeting.endsAt ? toLocalInputValue(meeting.endsAt) : "",
+          type: meeting.type ?? "",
           location: meeting.location ?? "",
           organizerId: meeting.organizerId,
           leadId: meeting.leadId,

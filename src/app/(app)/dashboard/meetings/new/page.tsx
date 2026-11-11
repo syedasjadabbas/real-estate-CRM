@@ -37,7 +37,7 @@ export default async function NewMeetingPage({ searchParams }: PageProps<"/dashb
       <MeetingForm
         mode="create"
         options={options}
-        initial={{ title: "", startsLocal: "", endsLocal: "", location: "", organizerId: actor.id, leadId: fromLead, notes: "" }}
+        initial={{ title: "", startsLocal: "", endsLocal: "", type: "", location: "", organizerId: actor.id, leadId: fromLead, notes: "" }}
       />
     </section>
   );

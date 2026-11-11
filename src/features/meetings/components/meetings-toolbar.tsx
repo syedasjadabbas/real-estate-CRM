@@ -10,7 +10,7 @@ import { selectClass } from "@/features/leads/components/lead-fields";
 import { withParams } from "@/features/leads/url";
 import { cn } from "@/lib/cn";
 import { formatInt } from "@/lib/format";
-import { MEETING_STATUSES, MEETING_STATUS_LABELS } from "@/modules/meetings/constants";
+import { MEETING_STATUSES, MEETING_STATUS_LABELS, MEETING_TYPES, MEETING_TYPE_LABELS } from "@/modules/meetings/constants";
 import { activeMeetingFilters, MEETING_FILTER_KEYS } from "../url";
 
 /** FR-102: search + Filters drawer (Status, Organizer, Overdue) + Clear + count pill, in the Leads toolbar style. */
@@ -31,7 +31,7 @@ export function MeetingsToolbar({ params, total, organizers }: { params: Record<
   };
   const clearFilters = () => go(Object.fromEntries(MEETING_FILTER_KEYS.map((k) => [k, null])));
 
-  const select = (key: "status" | "organizer", label: string, options: { value: string; label: string }[]) => (
+  const select = (key: "status" | "type" | "organizer", label: string, options: { value: string; label: string }[]) => (
     <Field label={label}>
       {(id) => (
         <select id={id} value={params[key] ?? ""} onChange={(e) => go({ [key]: e.target.value || null })} className={selectClass} disabled={pending}>
@@ -108,6 +108,7 @@ export function MeetingsToolbar({ params, total, organizers }: { params: Record<
             {formatInt(total)} meetings
           </span>
           {select("status", "Status", MEETING_STATUSES.map((s) => ({ value: s, label: MEETING_STATUS_LABELS[s] })))}
+          {select("type", "Type", MEETING_TYPES.map((t) => ({ value: t, label: MEETING_TYPE_LABELS[t] })))}
           {select("organizer", "Organizer", [{ value: "me", label: "Organized by me" }, ...organizers.map((o) => ({ value: o.id, label: o.name }))])}
           <button
             type="button"

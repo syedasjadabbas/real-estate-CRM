@@ -3654,3 +3654,11 @@ Receipt and sales order printing (templates), the unit map on proposal prints (f
 | Production build | Pass. It took 2 h 17 min because the laptop slept at 14:19 |
 | Playwright (desktop and mobile) | **180 / 180** (the full run passed 179; the one failure was an ambiguous text check in the new recordings test, fixed and rerun: `files.spec` 3 / 3) |
 | Hold-release job | `npm run job:release-holds -- --dry-run` ran against development: 0 eligible, nothing changed |
+
+## 58. Agents see only their own score on the dashboard (11 Nov 2026)
+
+Decision (owner, 11 Nov): agents see only their own work. Agents' leads, sales overview, Performance, Targets and the Teams page were already limited to their own data; the dashboard was the one exception, showing an agent their team's performance score and the Teams tile average, built from other agents' scores.
+
+- An agent's dashboard now shows **"Your performance score"**: their own assignment score, provisional while their history is small. The Teams tile shows "—" for agents.
+- **Unchanged:** Managers see the teams they manage; Admins and Super Admins see every team.
+- Tests: `dashboard.test.ts` (agent sees only their own score; the manager still sees the team), `dashboard.spec.ts` (an agent's page shows "Your performance score" and no team scores). Dashboard integration 17 / 17; dashboard, dashboard-links and responsive browser specs 25 / 25; build 114 / 114.

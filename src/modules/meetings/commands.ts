@@ -82,6 +82,7 @@ export async function createMeeting(db: Database, actor: Actor, input: unknown) 
         title: data.title,
         startsAt: data.startsAt!,
         endsAt: data.endsAt,
+        type: data.type,
         location: data.location,
         organizerId,
         leadId: lead.id,
@@ -93,12 +94,12 @@ export async function createMeeting(db: Database, actor: Actor, input: unknown) 
     const movedLead = data.moveLead ? await moveLeadForward(tx, actor, lead, "meeting_scheduled", SCHEDULE_MOVES_FROM, `Meeting scheduled: ${data.title}`) : false;
     if (!movedLead) await tx.update(leads).set(touchValues(lead, now)).where(eq(leads.id, lead.id));
     await logActivity(tx, { leadId: lead.id, actorId: actor.id, type: "meeting", data: { action: "scheduled", meetingId: meeting.id, title: data.title, startsAt: data.startsAt } });
-    await record(tx, actor, meeting.id, "create", { title: data.title, startsAt: data.startsAt, organizerId, leadId: lead.id, movedLead });
+    await record(tx, actor, meeting.id, "create", { title: data.title, type: data.type, startsAt: data.startsAt, organizerId, leadId: lead.id, movedLead });
     return { meetingId: meeting.id, movedLead };
   });
 }
 
-const TRACKED = ["title", "startsAt", "endsAt", "location", "organizerId", "leadId", "notes"] as const;
+const TRACKED = ["title", "startsAt", "endsAt", "type", "location", "organizerId", "leadId", "notes"] as const;
 const same = (a: unknown, b: unknown) => (a instanceof Date || b instanceof Date ? new Date(a as Date).getTime() === new Date(b as Date).getTime() : (a ?? null) === (b ?? null));
 
 /** Edits a Scheduled meeting (assumption M-A5: completed / cancelled meetings are final). */
@@ -112,6 +113,7 @@ export async function updateMeeting(db: Database, actor: Actor, meetingId: strin
       title: data.title ?? meeting.title,
       startsAt: data.startsAt ?? meeting.startsAt,
       endsAt: "endsAt" in data ? (data.endsAt ?? null) : meeting.endsAt,
+      type: data.type ?? meeting.type,
       location: "location" in data ? (data.location ?? null) : meeting.location,
       organizerId: data.organizerId ?? meeting.organizerId,
       leadId: data.leadId ?? meeting.leadId,

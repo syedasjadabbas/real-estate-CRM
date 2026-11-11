@@ -127,7 +127,11 @@ export function InstantInsights({ data }: { data: DashboardData }) {
       </div>
 
       <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-3">
-        <Panel title="Team performance scores" badge={<Badge>Score</Badge>} description="Composite score by sales team">
+        <Panel
+          title={data.scoreScope === "own" ? "Your performance score" : "Team performance scores"}
+          badge={<Badge>Score</Badge>}
+          description={data.scoreScope === "own" ? "Your own assignment score; provisional while your history is small" : "Composite score by sales team"}
+        >
           {data.teamScores.length === 0 ? (
             <EmptyState>No team scores.</EmptyState>
           ) : (

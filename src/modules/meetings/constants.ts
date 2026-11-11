@@ -17,6 +17,18 @@ export const MEETING_STATUS_LABELS: Record<MeetingStatus, string> = {
 export const SCHEDULE_MOVES_FROM: LeadStage[] = ["new_lead", "contact_attempted", "contacted", "qualified_lead"];
 export const COMPLETE_MOVES_FROM: LeadStage[] = [...SCHEDULE_MOVES_FROM, "meeting_scheduled"];
 
+/** Where or how the meeting takes place (client request, 11 Nov 2026). */
+export const MEETING_TYPES = ["company_office", "site_visit", "virtual", "outdoor", "sales_event"] as const;
+export type MeetingType = (typeof MEETING_TYPES)[number];
+
+export const MEETING_TYPE_LABELS: Record<MeetingType, string> = {
+  company_office: "Company office",
+  site_visit: "Site visit",
+  virtual: "Virtual",
+  outdoor: "Outdoor",
+  sales_event: "Sales event",
+};
+
 export const MEETING_SORT_COLUMNS = ["title", "startsAt", "organizer", "lead", "status", "updatedAt"] as const;
 export type MeetingSortColumn = (typeof MEETING_SORT_COLUMNS)[number];
 

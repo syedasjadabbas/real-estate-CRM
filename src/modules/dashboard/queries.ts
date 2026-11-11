@@ -4,7 +4,7 @@ import type { Database } from "@/server/db";
 import { leadSources, leads, meetings, projects, teamMembers, teams, users } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
 import { INBOUND_LABELS } from "@/modules/leads/constants";
-import { teamScoreSummary, teamScores } from "@/modules/leads/assignment";
+import { agentScores, teamScoreSummary, teamScores } from "@/modules/leads/assignment";
 import { leadScope } from "@/modules/leads/policy";
 import { scopeFilter, teamMemberIds } from "@/modules/leads/support";
 import type { DashboardData, LostBreakdown, LostTeam, RangeKey } from "@/features/dashboard/types";
@@ -176,7 +176,10 @@ export async function dashboardData(db: Database, actor: Actor, projectId: strin
 
   const total = k.total;
   const openCount = total - k.won - k.lost;
-  const scoredTeams = await teamScores(db, actor, now);
+  // Agents see only their own work: their own score, never a team average built from other agents'
+  // scores (decided 11 Nov 2026). Managers keep their teams; Admins and Super Admins see every team.
+  const ownScore = actor.role === "agent" ? (await agentScores(db, [actor.id], now)).get(actor.id)! : null;
+  const scoredTeams = ownScore ? [] : await teamScores(db, actor, now);
   const data: DashboardData = {
     isSample: false,
     snapshotAt: now.toISOString(),
@@ -200,8 +203,9 @@ export async function dashboardData(db: Database, actor: Actor, projectId: strin
     topProjects: top,
     insights: null,
     insightsUpdatedAt: null,
-    teamScores: scoredTeams,
-    teamSummary: teamScoreSummary(scoredTeams),
+    teamScores: ownScore ? [{ id: actor.id, label: "Your score", count: Math.round(ownScore.score), provisional: ownScore.provisional }] : scoredTeams,
+    teamSummary: ownScore ? null : teamScoreSummary(scoredTeams),
+    scoreScope: ownScore ? "own" : "team",
     teamOutput: [],
     meetingMix: [],
     targets: null,

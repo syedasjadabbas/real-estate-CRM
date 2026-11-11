@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { MEETING_SORT_COLUMNS, MEETING_STATUSES } from "./constants";
+import { MEETING_SORT_COLUMNS, MEETING_STATUSES, MEETING_TYPES } from "./constants";
 
 const optionalText = (max: number) =>
   z
@@ -40,6 +40,7 @@ const fields = {
   title: z.string("Title is required").trim().min(1, "Title is required").max(200, "Use at most 200 characters"),
   startsAt: dateTime(true),
   endsAt: dateTime(false),
+  type: z.enum(MEETING_TYPES, "Choose the meeting type"),
   location: optionalText(200),
   organizerId: optionalId("Choose an organizer"),
   leadId: z.string("Choose a lead").trim().pipe(z.uuid("Choose a lead")),
@@ -64,6 +65,7 @@ export const cancelSchema = z.object({ note: optionalText(1000) });
 export const meetingListQuerySchema = z.object({
   q: z.string().trim().max(100).optional().catch(undefined),
   status: z.enum(MEETING_STATUSES).optional().catch(undefined),
+  type: z.enum(MEETING_TYPES).optional().catch(undefined),
   organizer: z.union([z.literal("me"), z.uuid()]).optional().catch(undefined),
   lead: z.uuid().optional().catch(undefined),
   overdue: z.literal("1").optional().catch(undefined),

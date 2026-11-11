@@ -100,6 +100,8 @@ export const holidayScope = pgEnum("holiday_scope", ["company", "regional"]);
 export const leaveType = pgEnum("leave_type", ["annual", "medical"]);
 export const leaveStatus = pgEnum("leave_status", ["pending", "approved", "rejected", "withdrawn", "cancel_requested", "cancelled"]);
 export const meetingStatus = pgEnum("meeting_status", ["scheduled", "completed", "cancelled"]);
+/** Meeting type (client request, 11 Nov 2026). Null only on meetings created before the field existed. */
+export const meetingType = pgEnum("meeting_type", ["company_office", "site_visit", "virtual", "outdoor", "sales_event"]);
 export const taskType = pgEnum("task_type", ["general", "payment_plan", "proposal"]);
 export const taskStatus = pgEnum("task_status", ["open", "in_progress", "done", "cancelled"]);
 export const clientActivityType = pgEnum("client_activity_type", [
@@ -1010,6 +1012,7 @@ export const meetings = pgTable(
     title: text("title").notNull(),
     startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
     endsAt: timestamp("ends_at", { withTimezone: true }),
+    type: meetingType("type"),
     location: text("location"),
     organizerId: uuid("organizer_id")
       .notNull()

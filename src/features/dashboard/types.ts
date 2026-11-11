@@ -74,6 +74,8 @@ export type DashboardData = {
   teamScores: NamedCount[];
   /** Teams tile: scored teams in view and their average score (null when none). */
   teamSummary: TeamScoreSummary | null;
+  /** "own" for agents: the scores panel shows only the agent's own score. */
+  scoreScope: "own" | "team";
   teamOutput: { id: string; label: string; meetings: number; bookings: number }[];
   meetingMix: MeetingFormat[];
   targets: TargetPeriods | null;
@@ -96,6 +98,7 @@ export const emptyDashboardData: DashboardData = {
   insightsUpdatedAt: null,
   teamScores: [],
   teamSummary: null,
+  scoreScope: "team",
   teamOutput: [],
   meetingMix: [],
   targets: null,

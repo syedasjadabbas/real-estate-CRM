@@ -106,3 +106,11 @@ test("roles without lead analytics see no lead counts", async ({ page }) => {
   await expect((await kpi(page, "Total leads")).locator("[data-kpi-value]")).toHaveText("—");
   await expect(page.getByRole("link", { name: /Not interested/ })).toHaveCount(0);
 });
+
+test("an agent sees their own performance score, not team averages", async ({ page }) => {
+  await selectTestProject(page.context());
+  await login(page, "agent1");
+  await page.goto("/dashboard");
+  await expect(page.getByText("Your performance score")).toBeVisible();
+  await expect(page.getByText("Team performance scores")).toHaveCount(0);
+});

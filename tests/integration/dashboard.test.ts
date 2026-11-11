@@ -110,6 +110,18 @@ describe.skipIf(!hasTestDb)("Dashboard analytics (PostgreSQL integration)", () =
     expect((await get(admin)).data!.teamSummary).toEqual({ teams: 0, avgScore: null, provisional: false });
   });
 
+  it("an agent sees only their own score, never a team average or other teams", async () => {
+    const mine = (await get(f.actors.agent1)).data!;
+    expect(mine.scoreScope).toBe("own");
+    expect(mine.teamScores).toHaveLength(1);
+    expect(mine.teamScores[0]).toMatchObject({ id: f.actors.agent1.id, label: "Your score" });
+    expect(mine.teamSummary).toBeNull();
+    // The manager still sees the team's score.
+    const managed = (await get(f.actors.manager)).data!;
+    expect(managed.scoreScope).toBe("team");
+    expect(managed.teamScores.map((t) => t.label)).toEqual(["Team 1"]);
+  });
+
   it("limits agents to their own leads and managers to their teams; HR and accountants see none", async () => {
     expect((await get(f.actors.agent1)).data!.kpis!.totalLeads).toBe(4);
     expect((await get(f.actors.agent1)).data!.teams).toEqual([]);

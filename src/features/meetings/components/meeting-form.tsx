@@ -10,7 +10,7 @@ import { textareaClass } from "@/features/leads/components/follow-up-dialog";
 import { FormSection, selectClass } from "@/features/leads/components/lead-fields";
 import { fromLocalInputValue } from "@/features/leads/format";
 import { STAGE_LABELS } from "@/modules/leads/constants";
-import { wouldMoveLead } from "@/modules/meetings/constants";
+import { MEETING_TYPES, MEETING_TYPE_LABELS, wouldMoveLead } from "@/modules/meetings/constants";
 import type { MeetingFormOptions } from "@/modules/meetings/queries";
 import { createMeetingAction, updateMeetingAction } from "../actions";
 
@@ -18,6 +18,7 @@ export type MeetingFormInitial = {
   title: string;
   startsLocal: string;
   endsLocal: string;
+  type: string;
   location: string;
   organizerId: string;
   leadId: string;
@@ -46,6 +47,7 @@ export function MeetingForm({ mode, meetingId, options, initial }: { mode: "crea
         title: v.title,
         startsAt: v.startsLocal ? fromLocalInputValue(v.startsLocal) : "",
         endsAt: v.endsLocal ? fromLocalInputValue(v.endsLocal) : null,
+        type: v.type || undefined,
         location: v.location,
         organizerId: v.organizerId || null,
         leadId: v.leadId,
@@ -96,6 +98,18 @@ export function MeetingForm({ mode, meetingId, options, initial }: { mode: "crea
         {text("title", "Title", true)}
         {when("startsLocal", "Starts (Pakistan time)", "startsAt", true)}
         {when("endsLocal", "Ends (optional)", "endsAt")}
+        <Field label="Meeting type" required error={errors.type}>
+          {(id, describedBy) => (
+            <select id={id} aria-describedby={describedBy} value={v.type} onChange={(e) => set({ type: e.target.value })} className={selectClass} disabled={pending}>
+              <option value="">Select a type…</option>
+              {MEETING_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {MEETING_TYPE_LABELS[t]}
+                </option>
+              ))}
+            </select>
+          )}
+        </Field>
         {text("location", "Location (optional)")}
         <Field label="Organizer" required error={errors.organizerId}>
           {(id, describedBy) => (

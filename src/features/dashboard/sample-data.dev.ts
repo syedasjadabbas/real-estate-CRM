@@ -30,6 +30,7 @@ export const dashboardSampleData: DashboardData = {
   insights: { teams: 0, avgScore: 0, meetings30d: 6, meetings6m: 21, teamMeetings: 0, bookings: 0 },
   insightsUpdatedAt: "2026-10-28T14:27:46Z",
   teamSummary: { teams: 0, avgScore: null, provisional: false },
+  scoreScope: "team",
   teamScores: [],
   teamOutput: [],
   meetingMix: [

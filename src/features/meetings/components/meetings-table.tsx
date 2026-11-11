@@ -7,13 +7,15 @@ import { cn } from "@/lib/cn";
 import type { MeetingSortColumn } from "@/modules/meetings/constants";
 import type { MeetingListRow } from "@/modules/meetings/queries";
 import { MeetingStatusPill } from "./meeting-pills";
+import { MEETING_TYPE_LABELS } from "@/modules/meetings/constants";
 
 type Column = { label: string; sort?: MeetingSortColumn };
 
-/** Reference columns: Title, When, Organizer, Lead, Status, Updated (sortable) and Actions. */
+/** Reference columns: Title, When, Organizer, Lead, Status, Updated (sortable) and Actions, plus Type. */
 const COLUMNS: Column[] = [
   { label: "Title", sort: "title" },
   { label: "When", sort: "startsAt" },
+  { label: "Type" },
   { label: "Organizer", sort: "organizer" },
   { label: "Lead", sort: "lead" },
   { label: "Status", sort: "status" },
@@ -70,6 +72,7 @@ export function MeetingsTable({ rows, params, emptyMessage }: { rows: MeetingLis
                     {r.overdue ? <OverdueChip /> : null}
                   </span>
                 </td>
+                <td className="px-3 py-2.5 whitespace-nowrap text-zinc-700">{r.type ? MEETING_TYPE_LABELS[r.type] : "—"}</td>
                 <td className="px-3 py-2.5 whitespace-nowrap text-zinc-800">{r.organizerName}</td>
                 <td className="max-w-[220px] px-3 py-2.5">
                   {r.leadId ? (
