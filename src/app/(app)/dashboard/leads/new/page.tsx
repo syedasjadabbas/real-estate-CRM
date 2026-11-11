@@ -1,4 +1,4 @@
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, FileUp } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader } from "@/components/shell/page-header";
@@ -6,6 +6,7 @@ import { buttonClasses } from "@/components/ui/button";
 import { RestrictedState } from "@/components/ui/empty-state";
 import { LeadCreateForm } from "@/features/leads/components/lead-create-form";
 import { withLeadsAccess } from "@/features/leads/components/list-view";
+import { canSubmitImport } from "@/modules/leads/imports";
 import { canDo } from "@/modules/leads/policy";
 import { activeProjects, assignableUsers, leadLookups } from "@/modules/leads/queries";
 
@@ -26,10 +27,19 @@ export default function NewLeadPage() {
               : `Choose an owner, or leave it empty to assign automatically among ${actor.role === "manager" ? "your teams' available agents" : "available agents"}. Returning customers go to their original agent.`
           }
           actions={
-            <Link href="/dashboard/leads" className={buttonClasses({ variant: "secondary", size: "lg" })}>
-              <ArrowLeft aria-hidden="true" className="size-4" />
-              Back to list
-            </Link>
+            <>
+              {canSubmitImport(actor) ? (
+                // Many leads at once go through an import batch (checked, then approved by a Super Admin).
+                <Link href="/dashboard/leads/import" className={buttonClasses({ variant: "secondary", size: "lg" })}>
+                  <FileUp aria-hidden="true" className="size-4" />
+                  Import from CSV
+                </Link>
+              ) : null}
+              <Link href="/dashboard/leads" className={buttonClasses({ variant: "secondary", size: "lg" })}>
+                <ArrowLeft aria-hidden="true" className="size-4" />
+                Back to list
+              </Link>
+            </>
           }
         />
         <LeadCreateForm

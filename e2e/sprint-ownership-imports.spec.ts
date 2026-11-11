@@ -128,3 +128,12 @@ test("admins tune assignment; My Teams shows each agent's score; won and lost ha
   await page.goto("/dashboard/leads/lost");
   await expect(page.getByRole("link", { name: "This month" })).toBeVisible();
 });
+
+test("the New lead page links to the CSV import", async ({ page, context }) => {
+  await selectTestProject(context);
+  await login(page, "agent1");
+  await page.goto("/dashboard/leads/new");
+  await page.getByRole("link", { name: "Import from CSV" }).click();
+  await page.waitForURL(/\/dashboard\/leads\/import$/);
+  await expect(page.getByRole("button", { name: "Submit for approval" })).toBeVisible();
+});
