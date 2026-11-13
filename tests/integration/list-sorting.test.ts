@@ -91,7 +91,10 @@ describe.skipIf(!hasTestDb)("F-16: column sorting on Inventory and Finance lists
     const lead = await createLead(db, f.actors.superAdmin, leadInput(f, { ownerId: owner.id, name }));
     if (lead.outcome !== "created") throw new Error("lead");
     const { bookingId } = await createBooking(db, f.actors.superAdmin, { projectId: f.projectId, leadId: lead.leadId, unitId, ratePerSqft: "1000", tokenAmount: "1000" });
-    for (const toStage of stages) await advanceBooking(db, f.actors.superAdmin, bookingId, { toStage });
+    // Bookings start at Token (token_pending); retired stage names are skipped.
+    for (const toStage of stages.filter((x) => !["token_pending", "token_received", "provisional_receipt", "sales_order", "booking_form"].includes(x))) {
+      await advanceBooking(db, f.actors.superAdmin, bookingId, { toStage });
+    }
     return bookingId;
   };
   const pay = (bookingId: string, amount: string, extra: Record<string, unknown> = {}) => recordPayment(db, accountant, { bookingId, type: "token", amount, receivedOn: TODAY, methodId: cashId, ...extra });
@@ -282,7 +285,7 @@ describe.skipIf(!hasTestDb)("F-16: column sorting on Inventory and Finance lists
   describe("Outstanding", () => {
     const list = (q: Record<string, string>) => listOutstanding(db, accountant, q, TODAY);
     type Row = Awaited<ReturnType<typeof listOutstanding>>["rows"][number];
-    const STAGE_ORDER = ["negotiation", "down_payment", "agreement_pending", "confirmed"];
+    const STAGE_ORDER = ["token_pending", "down_payment", "agreement_pending", "confirmed"];
     const KEYS: Record<string, (r: Row) => Key> = {
       lead: (r) => r.leadName,
       unit: (r) => r.unitNo,
@@ -303,7 +306,7 @@ describe.skipIf(!hasTestDb)("F-16: column sorting on Inventory and Finance lists
     /** Totals 500,000 / 800,000 / 300,000 / 500,000; mixed paid, plans, reversal, a booking with no agent, one cancelled. */
     const seedOutstanding = async () => {
       const a = await bookingFor(f.actors.agent1, ["token_pending"], "500", "Zed Buyer");
-      const b = await bookingFor(f.actors.agent2, ["token_pending", "token_received"], "800", "Amy Buyer");
+      const b = await bookingFor(f.actors.agent2, ["down_payment"], "800", "Amy Buyer");
       const c = await bookingFor(f.actors.agent1, ["token_pending"], "300", "Mia Buyer");
       const d = await bookingFor(f.actors.outsideAgent, ["token_pending"], "500", "Bob Buyer");
       const gone = await bookingFor(f.actors.agent1, [], "900", "Gone Buyer");
