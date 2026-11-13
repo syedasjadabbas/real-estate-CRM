@@ -45,7 +45,7 @@ describe.skipIf(!hasTestDb)("Sprint P3: lead import batches, priority order, won
     it("validates every row and sorts out duplicates before anything is created", async () => {
       await createLead(db, f.actors.agent1, leadInput(f, { phoneNumber: "03001110001" }));
       const before = await leadCount();
-      const r = await submit(f.actors.agent1, [
+      const r = await submit(admin, [
         "Ali Raza,03001110002,,Facebook,Islamabad,high,First",
         "Sara Khan,03001110003,03211110003,facebook,Murree,,",
         "Bad Phone,12,,Facebook,,,",
@@ -62,28 +62,36 @@ describe.skipIf(!hasTestDb)("Sprint P3: lead import batches, priority order, won
       expect((rows[5].errors as string[])[0]).toMatch(/Already a lead in this project/);
       expect((rows[3].errors as string[]).join()).toMatch(/Source is required/);
       const [batch] = await db.select().from(leadImportBatches).where(eq(leadImportBatches.id, r.batchId));
-      expect(batch).toMatchObject({ status: "pending", uploadedById: f.actors.agent1.id });
+      expect(batch).toMatchObject({ status: "pending", uploadedById: admin.id });
     });
 
     it("refuses a file with missing columns, no rows or broken quoting", async () => {
-      expect((await failure(submitImport(db, f.actors.agent1, { projectId: f.projectId, csv: "name,source\nA,Facebook" }))).message).toMatch(/Missing column: phone/);
-      expect((await failure(submitImport(db, f.actors.agent1, { projectId: f.projectId, csv: HEADER }))).message).toMatch(/no rows/);
-      expect((await failure(submitImport(db, f.actors.agent1, { projectId: f.projectId, csv: `${HEADER}\n"unclosed,03001110009` }))).code).toBe("VALIDATION_FAILED");
-      expect((await failure(submit(f.actors.hr, ["A,03001110010,,Facebook,,,"]))).code).toBe("FORBIDDEN");
+      expect((await failure(submitImport(db, admin, { projectId: f.projectId, csv: "name,source\nA,Facebook" }))).message).toMatch(/Missing column: phone/);
+      expect((await failure(submitImport(db, admin, { projectId: f.projectId, csv: HEADER }))).message).toMatch(/no rows/);
+      expect((await failure(submitImport(db, admin, { projectId: f.projectId, csv: `${HEADER}\n"unclosed,03001110009` }))).code).toBe("VALIDATION_FAILED");
+      // Owner's decision (13 Nov 2026): only Admins and Super Admins import; agents and managers cannot.
+      for (const who of [f.actors.agent1, f.actors.manager, f.actors.hr]) {
+        expect((await failure(submit(who, ["A,03001110010,,Facebook,,,"]))).code, who.role).toBe("FORBIDDEN");
+        expect((await failure(listImportBatches(db, who))).code, who.role).toBe("FORBIDDEN");
+      }
     });
 
-    it("uploaders see only their own batches; a Super Admin sees all", async () => {
-      const mine = await submit(f.actors.agent1, ["A One,03001110011,,Facebook,,,"]);
-      await submit(f.actors.manager, ["B Two,03001110012,,Facebook,,,"]);
-      expect((await listImportBatches(db, f.actors.agent1)).map((b) => b.id)).toEqual([mine.batchId]);
+    it("an Admin sees only their own batches; a Super Admin sees all and can import too", async () => {
+      const mine = await submit(admin, ["A One,03001110011,,Facebook,,,"]);
+      const own = await submit(f.actors.superAdmin, ["B Two,03001110012,,Facebook,,,"]);
+      expect((await listImportBatches(db, admin)).map((b) => b.id)).toEqual([mine.batchId]);
       expect(await listImportBatches(db, f.actors.superAdmin)).toHaveLength(2);
-      expect((await failure(getImportBatch(db, f.actors.agent2, mine.batchId))).code).toBe("NOT_FOUND");
+      expect((await failure(getImportBatch(db, admin, own.batchId))).code).toBe("NOT_FOUND");
+      expect((await failure(getImportBatch(db, f.actors.agent1, mine.batchId))).code).toBe("NOT_FOUND");
+      // A Super Admin's own batch still waits for approval.
+      const [batch] = await db.select().from(leadImportBatches).where(eq(leadImportBatches.id, own.batchId));
+      expect(batch.status).toBe("pending");
     });
   });
 
   describe("deciding", () => {
     it("only a Super Admin approves or rejects", async () => {
-      const r = await submit(f.actors.agent1, ["A One,03001110021,,Facebook,,,"]);
+      const r = await submit(admin, ["A One,03001110021,,Facebook,,,"]);
       for (const who of [f.actors.agent1, f.actors.manager, admin]) {
         expect((await failure(decideImportBatch(db, who, r.batchId, { approve: true }))).code).toBe("FORBIDDEN");
       }
@@ -91,7 +99,7 @@ describe.skipIf(!hasTestDb)("Sprint P3: lead import batches, priority order, won
     });
 
     it("approval creates the valid rows through normal assignment, and records who and when", async () => {
-      const r = await submit(f.actors.agent1, ["A One,03001110031,,Facebook,,high,Hi", "B Two,03001110032,,Facebook,,,", "Bad,1,,Facebook,,,"]);
+      const r = await submit(admin, ["A One,03001110031,,Facebook,,high,Hi", "B Two,03001110032,,Facebook,,,", "Bad,1,,Facebook,,,"]);
       const result = await decideImportBatch(db, f.actors.superAdmin, r.batchId, { approve: true });
       expect(result).toEqual({ status: "approved", created: 2, skipped: 0 });
       const rows = await db.select().from(leadImportRows).where(eq(leadImportRows.batchId, r.batchId)).orderBy(leadImportRows.rowNo);
@@ -106,21 +114,21 @@ describe.skipIf(!hasTestDb)("Sprint P3: lead import batches, priority order, won
     });
 
     it("a row that became a duplicate while waiting is skipped, not doubled", async () => {
-      const r = await submit(f.actors.agent1, ["Late Dup,03001110041,,Facebook,,,"]);
+      const r = await submit(admin, ["Late Dup,03001110041,,Facebook,,,"]);
       await createLead(db, f.actors.agent2, leadInput(f, { phoneNumber: "03001110041" }));
       expect(await decideImportBatch(db, f.actors.superAdmin, r.batchId, { approve: true })).toEqual({ status: "approved", created: 0, skipped: 1 });
       expect(await db.select().from(leads).where(eq(leads.phoneE164, "+923001110041"))).toHaveLength(1);
     });
 
     it("rejection needs a reason and creates nothing", async () => {
-      const r = await submit(f.actors.agent1, ["A One,03001110051,,Facebook,,,"]);
+      const r = await submit(admin, ["A One,03001110051,,Facebook,,,"]);
       expect((await failure(decideImportBatch(db, f.actors.superAdmin, r.batchId, { approve: false }))).fields?.note).toBeTruthy();
       expect(await decideImportBatch(db, f.actors.superAdmin, r.batchId, { approve: false, note: "Wrong project" })).toMatchObject({ status: "rejected", created: 0 });
       expect(await leadCount()).toBe(0);
     });
 
     it("a batch is decided once, even when two decisions arrive together", async () => {
-      const r = await submit(f.actors.agent1, ["A One,03001110061,,Facebook,,,"]);
+      const r = await submit(admin, ["A One,03001110061,,Facebook,,,"]);
       const results = await Promise.allSettled([
         decideImportBatch(db, f.actors.superAdmin, r.batchId, { approve: true }),
         decideImportBatch(db, f.actors.superAdmin, r.batchId, { approve: false, note: "no" }),

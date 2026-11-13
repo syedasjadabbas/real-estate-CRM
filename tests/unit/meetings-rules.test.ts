@@ -42,7 +42,7 @@ describe("forward-only lead moves (D1 / D2)", () => {
 });
 
 describe("meetings validation", () => {
-  const base = { title: "Site visit", startsAt: "2026-11-02T10:00:00+05:00", leadId: LEAD };
+  const base = { title: "Site visit", type: "site_visit", startsAt: "2026-11-02T10:00:00+05:00", leadId: LEAD };
   it("requires title, start and lead; defaults moveLead to true", () => {
     expect(createMeetingSchema.safeParse({ ...base, title: " " }).success).toBe(false);
     expect(createMeetingSchema.safeParse({ ...base, startsAt: "" }).success).toBe(false);

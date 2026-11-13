@@ -17,7 +17,10 @@ for (const role of ["superAdmin", "admin", "manager", "agent1"] satisfies Role[]
     await expect(page.getByText("need call recordings, which the CRM does not capture yet")).toHaveCount(0);
     // Calls now come from recordings (10 Nov 2026): no "not available" wording on the call charts or footnote.
     await expect(page.getByText(OLD_CALLS_NOTE, { exact: false })).toHaveCount(0);
-    for (const title of ["Call quality", "Call volume leaders", "Calls vs meetings"]) await expect(page.getByText(title, { exact: true })).toBeVisible();
+    await expect(page.getByText("Call quality", { exact: true })).toBeVisible();
+    // Ranking charts are for Admins; an agent sees only their own figures (13 Nov 2026).
+    for (const title of ["Call volume leaders", "Calls vs meetings"]) await expect(page.getByText(title, { exact: true })).toHaveCount(role === "agent1" ? 0 : 1);
+    await expect(page.getByText(role === "agent1" ? "Your performance" : "Team at a glance", { exact: true })).toBeVisible();
     await expect(page.getByText("count as calls but are not in either bucket", { exact: false })).toBeVisible();
     await expect(page.getByText("which the CRM does not capture")).toHaveCount(0);
     // The sign-in note beside it is unchanged.

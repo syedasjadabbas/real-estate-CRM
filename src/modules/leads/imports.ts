@@ -20,7 +20,11 @@ import { leadFieldsSchema } from "./validation";
 export const LEAD_IMPORT_COLUMNS = ["name", "phone_country_code", "phone", "phone2", "phone3", "phone4", "phone5", "email", "source", "city", "budget", "priority", "size", "gender", "note"] as const;
 const REQUIRED = ["name", "phone", "source"] as const;
 
-export const canSubmitImport = (actor: Pick<Actor, "role">) => ["agent", "manager", "admin", "super_admin"].includes(actor.role);
+/**
+ * Bulk import is an Admin and Super Admin task (owner's decision, 13 Nov 2026); agents and managers
+ * add leads one by one. Every batch, including a Super Admin's own, waits for a Super Admin's approval.
+ */
+export const canSubmitImport = (actor: Pick<Actor, "role">) => actor.role === "admin" || actor.role === "super_admin";
 export const canDecideImport = (actor: Pick<Actor, "role">) => actor.role === "super_admin";
 
 const isId = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);

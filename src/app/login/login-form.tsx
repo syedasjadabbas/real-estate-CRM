@@ -1,16 +1,17 @@
 "use client";
 
-import { AlertCircle, Lock, Mail } from "lucide-react";
-import { useActionState } from "react";
+import { AlertCircle, ArrowRight, Eye, EyeOff, Loader2, Lock, Mail } from "lucide-react";
+import { useActionState, useState } from "react";
 import { loginAction, type LoginState } from "@/features/auth/actions";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
 
 export function LoginForm() {
   const [state, formAction, pending] = useActionState<LoginState, FormData>(loginAction, undefined);
+  const [revealed, setRevealed] = useState(false);
 
   return (
-    <form action={formAction} className="space-y-4" noValidate>
+    <form action={formAction} className="space-y-5" noValidate>
       {state?.error ? (
         <p
           role="alert"
@@ -42,15 +43,38 @@ export function LoginForm() {
             name="password"
             aria-describedby={describedBy}
             invalid={Boolean(state?.fields?.password)}
-            type="password"
+            type={revealed ? "text" : "password"}
             autoComplete="current-password"
-            placeholder="••••••••"
+            placeholder="Your password"
             leading={<Lock aria-hidden="true" className="size-4" />}
+            trailing={
+              // The label avoids the word "password" so the field keeps a single accessible match.
+              <button
+                type="button"
+                onClick={() => setRevealed((v) => !v)}
+                aria-pressed={revealed}
+                aria-label={revealed ? "Hide the characters" : "Show the characters"}
+                title={revealed ? "Hide" : "Show"}
+                className="-mr-1 inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700"
+              >
+                {revealed ? <EyeOff aria-hidden="true" className="size-4" /> : <Eye aria-hidden="true" className="size-4" />}
+              </button>
+            }
           />
         )}
       </Field>
-      <Button type="submit" variant="primary" size="lg" className="w-full" disabled={pending}>
-        {pending ? "Signing in…" : "Sign in"}
+      <Button type="submit" variant="primary" size="lg" className="group w-full" disabled={pending}>
+        {pending ? (
+          <>
+            <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+            Signing in…
+          </>
+        ) : (
+          <>
+            Sign in
+            <ArrowRight aria-hidden="true" className="size-4 transition-transform group-hover:translate-x-0.5" />
+          </>
+        )}
       </Button>
     </form>
   );

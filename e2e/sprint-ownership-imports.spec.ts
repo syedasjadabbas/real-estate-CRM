@@ -65,11 +65,11 @@ test("an unassigned lead is claimed from the pool, and a second claim is refused
   await ctx.close();
 });
 
-test("a batch is submitted, stays pending, and only the Super Admin approves it @mobile", async ({ browser, page, context }) => {
+test("an Admin submits a batch, it stays pending, and only the Super Admin approves it @mobile", async ({ browser, page, context }) => {
   const a = unique("Imp A").replace(/\s+/g, " ");
   const csv = ["name,phone,source,priority", `${a},${uniquePhone()},Facebook,high`, `Bad Row,12,Facebook,`].join("\n");
   await selectTestProject(context);
-  await login(page, "agent1");
+  await login(page, "admin");
   await page.goto("/dashboard/leads/import");
   const submit = page.getByRole("button", { name: "Submit for approval" });
   // Re-attach if the page hydrated after the first attempt (the button enables once React has the file).
@@ -129,11 +129,29 @@ test("admins tune assignment; My Teams shows each agent's score; won and lost ha
   await expect(page.getByRole("link", { name: "This month" })).toBeVisible();
 });
 
-test("the New lead page links to the CSV import", async ({ page, context }) => {
+test("the New lead page links Admins to the CSV import", async ({ page, context }) => {
   await selectTestProject(context);
-  await login(page, "agent1");
+  await login(page, "admin");
   await page.goto("/dashboard/leads/new");
   await page.getByRole("link", { name: "Import from CSV" }).click();
   await page.waitForURL(/\/dashboard\/leads\/import$/);
   await expect(page.getByRole("button", { name: "Submit for approval" })).toBeVisible();
+});
+
+test("agents and managers cannot import leads: no button, no tab, page and API refuse", async ({ browser }) => {
+  for (const role of ["agent1", "manager"] as const) {
+    const ctx = await browser.newContext();
+    await selectTestProject(ctx);
+    const page = await ctx.newPage();
+    await login(page, role);
+    await page.goto("/dashboard/leads/new");
+    await expect(page.getByRole("heading", { name: "Add lead" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Import from CSV" })).toHaveCount(0);
+    await expect(page.getByRole("navigation", { name: "Lead views" }).getByRole("link", { name: "Imports" })).toHaveCount(0);
+    await page.goto("/dashboard/leads/import");
+    await expect(page.getByText("Access denied")).toBeVisible();
+    const res = await api(page, "/api/v1/lead-imports", { method: "POST", data: { projectId: seed().projectId, fileName: "x.csv", csv: "name,phone,source\nA,03001234567,Facebook" } });
+    expect(res.status, role).toBe(403);
+    await ctx.close();
+  }
 });

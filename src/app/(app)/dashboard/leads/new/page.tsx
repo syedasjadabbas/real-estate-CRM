@@ -23,7 +23,7 @@ export default function NewLeadPage() {
           title="Add lead"
           description={
             actor.role === "agent"
-              ? "The lead will be assigned to you."
+              ? "The lead will be assigned to you. An Admin or Super Admin verifies it before you can work on it."
               : `Choose an owner, or leave it empty to assign automatically among ${actor.role === "manager" ? "your teams' available agents" : "available agents"}. Returning customers go to their original agent.`
           }
           actions={

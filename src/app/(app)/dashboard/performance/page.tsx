@@ -15,6 +15,7 @@ import { CallQuality, CallVolume, CallsVsMeetings, OutcomeMix, TopClosers } from
 import { PerformanceFilters } from "@/features/performance/components/performance-filters";
 import { cn } from "@/lib/cn";
 import { formatInt } from "@/lib/format";
+import { businessToday } from "@/modules/bookings/today";
 import type { PerformanceSort } from "@/modules/performance/range";
 import { canViewPerformance, performanceContexts, performanceReport } from "@/modules/performance/service";
 import { signinRetentionNote } from "@/modules/security/service";
@@ -27,7 +28,7 @@ const NO_CALL_DURATION = "No call recording in the range has a duration";
 
 /** Observed columns, in order. */
 const COLUMNS: { label: string; sort: PerformanceSort; title?: string }[] = [
-  { label: "Agent", sort: "agent" },
+  { label: "Name", sort: "agent" },
   { label: "Open leads", sort: "open", title: "Leads assigned in the selected date range that are not booked or lost." },
   { label: "Booked", sort: "booked", title: "Leads assigned in the range that are now Booked." },
   { label: "Lost", sort: "lost", title: "Leads assigned in the range that are now Lost." },
@@ -61,8 +62,12 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
   if (!canViewPerformance(actor)) return <RestrictedState />;
   const params = flattenParams(await searchParams);
   const db = getDb();
+  const isAgent = actor.role === "agent";
+  const today = businessToday();
   const [report, contexts, retentionNote] = await Promise.all([performanceReport(db, actor, params), performanceContexts(db, actor), signinRetentionNote(db)]);
   const s = report.summary;
+  // An agent sees only themselves: personal wording, no per-agent averages, no ranking charts.
+  const own = report.context === "own";
   const decided = s.booked + s.lost;
   const csvQuery = new URLSearchParams({ from: report.range.from, to: report.range.to, ...(report.team ? { team: report.team } : {}) }).toString();
   const sortHref = (key: PerformanceSort) =>
@@ -71,8 +76,8 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
   return (
     <PageStack>
       <PageHeader
-        title="Performance"
-        description="Agent KPIs and CRM sign-in activity for your scope (same metrics as team reports)."
+        title={isAgent ? "My performance" : "Performance"}
+        description={isAgent ? "Your leads, calls, follow-ups and meetings. Your leave and sign-ins are in My workplace." : "Agent KPIs and CRM sign-in activity for your scope (same metrics as team reports)."}
         icon={item.icon}
         actions={
           <PerformanceFilters
@@ -82,13 +87,14 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
             contexts={contexts}
             allLabel={actor.role === "agent" ? null : actor.role === "manager" ? "My teams" : "All agents"}
             generatedAt={report.generatedAt}
+            today={today}
           />
         }
       />
 
       <Panel
-        title="Team at a glance"
-        description={`${formatInt(s.agents)} ${s.agents === 1 ? "agent" : "agents"} in scope · ${report.range.from} → ${report.range.to}`}
+        title={own ? "Your performance" : "Team at a glance"}
+        description={own ? `${report.range.from} → ${report.range.to}` : `${formatInt(s.agents)} ${s.agents === 1 ? "person" : "people"} in scope · ${report.range.from} → ${report.range.to}`}
       >
         <div className="space-y-4 py-2">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -100,7 +106,7 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
             <div className="rounded-2xl border border-zinc-200/80 p-3">
               <p className="mb-2 text-[10px] font-black tracking-[0.2em] text-zinc-500 uppercase">Pipeline</p>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                <Glance label="Open leads" value={formatInt(s.open)} caption={`${s.perAgent.open} per agent`} />
+                <Glance label="Open leads" value={formatInt(s.open)} caption={own ? "In range" : `${s.perAgent.open} per agent`} />
                 <Glance label="Booked" value={formatInt(s.booked)} caption="In range" />
                 <Glance label="Lost" value={formatInt(s.lost)} caption="In range" />
               </div>
@@ -127,10 +133,10 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
                 <Glance
                   label="Calls"
                   value={formatInt(s.calls)}
-                  caption={`${s.perAgent.calls} per agent · ${s.callMin === null ? "— min" : `${formatInt(s.callMin)} min`}`}
+                  caption={`${own ? "" : `${s.perAgent.calls} per agent · `}${s.callMin === null ? "— min" : `${formatInt(s.callMin)} min`}`}
                 />
-                <Glance label="Meetings" value={formatInt(s.meetings)} caption={`${s.perAgent.meetings} per agent`} />
-                <Glance label="CRM sign-ins" value={formatInt(s.signIns)} caption={`${s.perAgent.signIns} per agent · not attendance`} />
+                <Glance label="Meetings" value={formatInt(s.meetings)} caption={own ? "Completed" : `${s.perAgent.meetings} per agent`} />
+                <Glance label="CRM sign-ins" value={formatInt(s.signIns)} caption={own ? "Not attendance" : `${s.perAgent.signIns} per agent · not attendance`} />
               </div>
             </div>
           </div>
@@ -139,14 +145,14 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <OutcomeMix mix={report.charts.outcomeMix} winPct={s.winPct} />
-        <TopClosers rows={report.charts.topClosers} />
+        {own ? null : <TopClosers rows={report.charts.topClosers} />}
         <CallQuality data={report.charts.callQuality} />
-        <CallVolume rows={report.charts.callVolume} />
-        <CallsVsMeetings rows={report.charts.callsVsMeetings} />
+        {own ? null : <CallVolume rows={report.charts.callVolume} />}
+        {own ? null : <CallsVsMeetings rows={report.charts.callsVsMeetings} />}
       </div>
 
       <Panel
-        title="Performance & CRM sign-in activity"
+        title={own ? "Your figures & CRM sign-in activity" : "Performance & CRM sign-in activity"}
         description="Same KPI columns as team reports: leads, follow-ups, meetings, bookings, calls, and CRM sign-in counts for the date range."
         actions={
           <a href={`/api/v1/performance/export?${csvQuery}`} className={buttonClasses({ variant: "secondary", className: "h-[33px] px-3 text-xs" })} download>
@@ -166,9 +172,11 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
             Critical only
           </button>
           <span className="text-[11px] text-zinc-500">The Critical flag is not available until its rule is agreed.</span>
-          <Badge tone="neutral" className="ml-auto">
-            {formatInt(report.total)} {report.total === 1 ? "agent" : "agents"}
-          </Badge>
+          {own ? null : (
+            <Badge tone="neutral" className="ml-auto">
+              {formatInt(report.total)} {report.total === 1 ? "person" : "people"}
+            </Badge>
+          )}
         </div>
         {report.total === 0 ? (
           <EmptyState>No agents in this scope.</EmptyState>
@@ -223,6 +231,7 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
           attendance is not available until the client approves its rules. {retentionNote}
         </p>
       </Panel>
+
     </PageStack>
   );
 }

@@ -218,6 +218,48 @@
       "when": 1794399161058,
       "tag": "0030_meeting_type",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1794572811564,
+      "tag": "0031_lead_verification",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1794572859555,
+      "tag": "0032_lead_verification_notifications",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1794574954891,
+      "tag": "0033_client_per_person",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1794576639712,
+      "tag": "0034_managers_become_admins",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1794577502107,
+      "tag": "0035_assignment_rotation",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1794608605548,
+      "tag": "0036_booking_stages",
+      "breakpoints": true
     }
   ]
 }

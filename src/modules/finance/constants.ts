@@ -9,17 +9,8 @@ export const PAYMENT_TYPE_LABELS: Record<PaymentType, string> = {
   other: "Other",
 };
 
-/** Booking stages that accept payments: Token pending onward (proposed Q-F11 default); never Negotiation or Cancelled. */
-export const PAYABLE_STAGES = [
-  "token_pending",
-  "token_received",
-  "provisional_receipt",
-  "sales_order",
-  "booking_form",
-  "down_payment",
-  "agreement_pending",
-  "confirmed",
-] as const;
+/** Booking stages that accept payments: every stage from Token to Closed Won; never Cancelled. */
+export const PAYABLE_STAGES = ["token_pending", "down_payment", "agreement_pending", "confirmed"] as const;
 
 /** Finance setting keys. Values default to empty: the receipt format is pending client confirmation (Q-F3). */
 export const SETTING_KEYS = ["receipt_prefix", "reversal_prefix"] as const;

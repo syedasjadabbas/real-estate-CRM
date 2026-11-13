@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FORWARD_PATH, HOLD_DAYS, HOLD_STAGES, nextStage } from "@/modules/bookings/constants";
+import { BOOKING_STAGE_LABELS, FIRST_STAGE, FORWARD_PATH, HOLD_DAYS, HOLD_STAGES, nextStage } from "@/modules/bookings/constants";
 import { addDays, defaultHoldUntil } from "@/modules/bookings/today";
 import { bookingScope, canDoBooking, canMoveTo } from "@/modules/bookings/policy";
 import { advanceSchema, cancelSchema, createBookingSchema, updateBookingSchema } from "@/modules/bookings/validation";
@@ -9,10 +9,11 @@ const roles: Role[] = ["super_admin", "admin", "manager", "agent", "hr", "accoun
 const ID = "6f1c2a64-0a52-4b9b-9a0e-6f0d2b1c9e11";
 
 describe("booking stages", () => {
-  it("has the reference order and moves one step at a time; closed stages have no next", () => {
-    expect(FORWARD_PATH[0]).toBe("negotiation");
-    expect(FORWARD_PATH.at(-1)).toBe("confirmed");
-    expect(nextStage("negotiation")).toBe("token_pending");
+  it("has the four stages in order and moves one step at a time; closed stages have no next", () => {
+    expect(FORWARD_PATH).toEqual(["token_pending", "down_payment", "agreement_pending", "confirmed"]);
+    expect([FIRST_STAGE, ...FORWARD_PATH.slice(1)].map((s) => BOOKING_STAGE_LABELS[s])).toEqual(["Token", "Partial Down Payment", "Complete Down Payment", "Closed Won"]);
+    expect(nextStage("token_pending")).toBe("down_payment");
+    expect(nextStage("down_payment")).toBe("agreement_pending");
     expect(nextStage("agreement_pending")).toBe("confirmed");
     expect(nextStage("confirmed")).toBeNull();
     expect(nextStage("cancelled")).toBeNull();
@@ -27,12 +28,12 @@ describe("booking policy (proposed matrix, approved)", () => {
     expect(roles.map((role) => bookingScope(role))).toEqual(["all", "all", "team", "own", "none", "all"]);
   });
 
-  it("lets agents move up to Sales order only, and only managers / admins confirm", () => {
-    expect(canMoveTo({ role: "agent" }, "sales_order")).toBe(true);
-    expect(canMoveTo({ role: "agent" }, "booking_form")).toBe(false);
+  it("lets agents move up to Complete Down Payment, and only managers / admins close as won", () => {
+    expect(canMoveTo({ role: "agent" }, "down_payment")).toBe(true);
+    expect(canMoveTo({ role: "agent" }, "agreement_pending")).toBe(true);
     expect(canMoveTo({ role: "agent" }, "confirmed")).toBe(false);
     expect(canMoveTo({ role: "manager" }, "confirmed")).toBe(true);
-    expect(canMoveTo({ role: "accountant" }, "token_pending")).toBe(false);
+    expect(canMoveTo({ role: "accountant" }, "down_payment")).toBe(false);
   });
 });
 

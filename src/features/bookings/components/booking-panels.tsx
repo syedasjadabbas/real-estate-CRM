@@ -41,7 +41,7 @@ export function BookingStagePanel({ detail }: { detail: BookingDetail }) {
           </p>
         ) : permissions.advance && next ? (
           <div className="space-y-2">
-            <p className="text-[11px] text-zinc-500">Bookings move one stage at a time.{next === "confirmed" ? " Confirming books the unit and the lead, and creates or links the client." : ""}</p>
+            <p className="text-[11px] text-zinc-500">Bookings move one stage at a time.{next === "confirmed" ? " Closing as won books the unit and the lead, and creates or links the client." : ""}</p>
             <label className="sr-only" htmlFor="stage-note">
               Note
             </label>
@@ -60,12 +60,12 @@ export function BookingStagePanel({ detail }: { detail: BookingDetail }) {
                 })
               }
             >
-              {next === "confirmed" ? "Confirm booking" : `Move to ${BOOKING_STAGE_LABELS[next]}`}
+              {next === "confirmed" ? "Close as Won" : `Move to ${BOOKING_STAGE_LABELS[next]}`}
             </Button>
           </div>
         ) : next ? (
           <p className="text-xs text-zinc-600">
-            Next stage: {BOOKING_STAGE_LABELS[next]}. {next === "confirmed" ? "A manager or admin confirms bookings." : "Your role can't move this booking further."}
+            Next stage: {BOOKING_STAGE_LABELS[next]}. {next === "confirmed" ? "A manager or admin closes bookings as won." : "Your role can't move this booking further."}
           </p>
         ) : null}
 

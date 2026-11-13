@@ -43,7 +43,7 @@ test("a lead with an open booking can't be marked lost or moved until the bookin
   await page.getByRole("button", { name: "Mark lost" }).click();
   await expect(page.getByRole("alert").filter({ hasText: OPEN_BOOKING })).toBeVisible();
   expect(await leadStage(leadId)).toBe("booking_in_process");
-  expect(await bookingState(bookingId)).toEqual({ stage: "negotiation", unitStatus: "reserved" });
+  expect(await bookingState(bookingId)).toEqual({ stage: "token_pending", unitStatus: "reserved" });
 
   // Dragging the card to another stage on the pipeline is refused too.
   await page.setViewportSize({ width: 3100, height: 900 });

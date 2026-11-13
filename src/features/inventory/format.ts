@@ -15,3 +15,9 @@ export function formatListedOn(value: string | null | undefined) {
   if (!value) return "—";
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(`${value}T00:00:00Z`));
 }
+
+/** A booked unit's booking date, in the business time zone (e.g. "Oct 29, 2026"). */
+export function formatBookedOn(value: string | Date) {
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Karachi" });
+}

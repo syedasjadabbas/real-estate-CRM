@@ -56,8 +56,18 @@ function describeLead(a: TimelineActivity): { title: string; tag: string } {
       return { title: `${d.kind === "document" ? "Document" : "Call recording"} deleted${a.body ? `: ${a.body}` : ""}`, tag: "File" };
     case "client_linked":
       return {
-        title: d.mode === "converted" ? "Converted to a client" : d.mode === "booking_created" ? "Client created from the confirmed booking" : "Linked to an existing client",
+        title: d.mode === "converted" ? "Converted to a client" : d.mode === "created" ? "Client profile created" : d.mode === "booking_created" ? "Client created from the confirmed booking" : "Linked to an existing client",
         tag: "Client",
+      };
+    case "verification":
+      return {
+        title:
+          d.status === "approved"
+            ? "Lead approved in verification"
+            : d.status === "rejected"
+              ? `Lead rejected in verification${d.note ? `: ${String(d.note)}` : ""}`
+              : "Lead resubmitted for verification",
+        tag: "Verification",
       };
     default:
       return { title: a.type, tag: "Activity" };
@@ -94,6 +104,9 @@ export function Timeline({
                   <p className="mt-1 text-[11px] font-semibold text-zinc-600">
                     {STAGE_LABELS[d.from as LeadStage]} → {STAGE_LABELS[d.to as LeadStage]}
                   </p>
+                ) : null}
+                {a.type === "stage_change" && d.remarks ? (
+                  <p className="mt-1 text-xs whitespace-pre-line text-zinc-800">“{String(d.remarks)}”</p>
                 ) : null}
                 {a.body ? <p className="mt-1.5 text-xs whitespace-pre-line text-zinc-800">{a.body}</p> : null}
               </li>

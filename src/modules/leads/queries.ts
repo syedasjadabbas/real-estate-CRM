@@ -1,4 +1,5 @@
 import { OTHER_CITY } from "@/modules/cities/constants";
+import { canVerifyLeads } from "./verification";
 import { and, asc, count, desc, eq, gt, gte, ilike, inArray, isNotNull, isNull, lt, lte, or, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { Database } from "@/server/db";
@@ -18,6 +19,7 @@ import {
   teams,
   users,
   leadPhones,
+  units,
 } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
 import { forbidden } from "@/server/errors";
@@ -25,7 +27,7 @@ import { BUSINESS_TIME_ZONE, LEAD_STAGES, PAGE_SIZE, UNATTENDED_HOURS, type Lead
 import { formatPhone } from "./phone";
 import { leadPhonesOf } from "@/modules/contacts/phones";
 import { canAccessLead, canDo, leadScope } from "./policy";
-import { followUpLeadActive, loadAccessibleLead, pageWithin, scopeFilter, teamMemberIds } from "./support";
+import { followUpLeadActive, hasOpenBooking, loadAccessibleLead, pageWithin, scopeFilter, teamMemberIds } from "./support";
 import { leadListQuerySchema, type LeadListQuery } from "./validation";
 
 const owner = alias(users, "owner");
@@ -166,6 +168,7 @@ const listSelection = {
   phoneNumber: leads.phoneNumber,
   email: leads.email,
   stage: leads.stage,
+  verification: leads.verification,
   stageChangedAt: leads.stageChangedAt,
   createdAt: leads.createdAt,
   updatedAt: leads.updatedAt,
@@ -356,6 +359,13 @@ export async function getLeadDetail(db: Database, actor: Actor, leadId: string) 
   ]);
 
   const closed = lead.stage === "lost_lead" || lead.stage === "booked";
+  // An open booking must be cancelled before the lead can be lost (the server refuses it otherwise).
+  const openBooking = !closed && (await hasOpenBooking(db, lead.id));
+  // Lead verification: until an Admin or Super Admin approves an agent's lead, only they work on it;
+  // a rejected lead's details stay editable so the agent can correct and resubmit it.
+  const verifier = canVerifyLeads(actor);
+  const workable = verifier || lead.verification === "approved";
+  const [verifiedBy] = lead.verifiedById ? await db.select({ name: users.name }).from(users).where(eq(users.id, lead.verifiedById)) : [];
   return {
     generatedAt: Date.now(),
     lead: {
@@ -378,14 +388,26 @@ export async function getLeadDetail(db: Database, actor: Actor, leadId: string) 
     followUps: followUpRows,
     pendingLostRequest: pendingRequest[0] ?? null,
     reviews,
+    verification: {
+      status: lead.verification,
+      note: lead.verificationNote,
+      verifiedAt: lead.verifiedAt,
+      verifiedByName: verifiedBy?.name ?? null,
+    },
     permissions: {
-      edit: canDo(actor, "edit") && lead.stage !== "booked",
+      edit: canDo(actor, "edit") && lead.stage !== "booked" && workable,
+      /** The lead's details form: also open on a rejected lead so the agent can correct it. */
+      editDetails: canDo(actor, "edit") && lead.stage !== "booked" && (workable || lead.verification === "rejected"),
       assign: canDo(actor, "assign"),
-      markLostDirect: canDo(actor, "markLostDirect") && !closed,
-      requestLost: canDo(actor, "requestLost") && !closed && !pendingRequest[0],
+      markLostDirect: canDo(actor, "markLostDirect") && !closed && !openBooking && workable,
+      requestLost: canDo(actor, "requestLost") && !closed && !openBooking && !pendingRequest[0] && workable,
+      /** Lost is possible for this user, but only after the open booking is cancelled. */
+      lostNeedsBookingCancelled: (canDo(actor, "markLostDirect") || canDo(actor, "requestLost")) && openBooking && workable,
       decideLost: canDo(actor, "decideLost") && Boolean(pendingRequest[0]),
-      review: canDo(actor, "review"),
-      scheduleFollowUp: canDo(actor, "edit") && !closed,
+      review: canDo(actor, "review") && workable,
+      scheduleFollowUp: canDo(actor, "edit") && !closed && workable,
+      verify: verifier && lead.verification === "pending",
+      resubmit: lead.verification === "rejected" && (actor.role !== "agent" || lead.ownerId === actor.id),
     },
   };
 }
@@ -651,7 +673,7 @@ export async function lostReasonMix(db: Database, actor: Actor, projectId: strin
 
 export async function leadLookups(db: Database) {
   const pick = { id: leadSources.id, name: leadSources.name };
-  const [sources, allCities, budgets, reasons] = await Promise.all([
+  const [sources, allCities, budgets, reasons, sizes] = await Promise.all([
     db.select(pick).from(leadSources).where(eq(leadSources.isActive, true)).orderBy(asc(leadSources.sortOrder)),
     db.select({ id: cities.id, name: cities.name, isActive: cities.isActive }).from(cities).orderBy(asc(cities.sortOrder), asc(cities.name)),
     db
@@ -664,6 +686,8 @@ export async function leadLookups(db: Database) {
       .from(lostReasons)
       .where(eq(lostReasons.isActive, true))
       .orderBy(asc(lostReasons.sortOrder)),
+    // The Size dropdown offers each project's unit sizes from inventory.
+    db.selectDistinct({ projectId: units.projectId, areaSqft: units.areaSqft }).from(units).orderBy(asc(units.projectId), asc(units.areaSqft)),
   ]);
   const active = allCities.filter((c) => c.isActive).map(({ id, name }) => ({ id, name }));
   return {
@@ -677,6 +701,7 @@ export async function leadLookups(db: Database) {
     ],
     budgets,
     lostReasons: reasons,
+    unitSizes: sizes,
   };
 }
 export type LeadLookups = Awaited<ReturnType<typeof leadLookups>>;

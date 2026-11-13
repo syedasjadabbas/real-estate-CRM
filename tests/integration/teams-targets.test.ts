@@ -198,10 +198,10 @@ describe.skipIf(!hasTestDb)("Teams & Targets (PostgreSQL integration)", () => {
       const r = await createLead(db, f.actors.agent1, leadInput(f));
       if (r.outcome !== "created") throw new Error("setup");
       const inOct = new Date("2026-10-10T07:00:00Z").toISOString();
-      const done = await createMeeting(db, f.actors.agent1, { title: "Visit", startsAt: inOct, leadId: r.leadId, moveLead: false });
+      const done = await createMeeting(db, f.actors.agent1, { title: "Visit", type: "company_office", startsAt: inOct, leadId: r.leadId, moveLead: false });
       await completeMeeting(db, f.actors.agent1, done.meetingId, { moveLead: false });
-      await createMeeting(db, f.actors.agent1, { title: "Still scheduled", startsAt: inOct, leadId: r.leadId, moveLead: false });
-      const nov = await createMeeting(db, f.actors.agent1, { title: "Next month", startsAt: "2026-11-02T07:00:00Z", leadId: r.leadId, moveLead: false });
+      await createMeeting(db, f.actors.agent1, { title: "Still scheduled", type: "company_office", startsAt: inOct, leadId: r.leadId, moveLead: false });
+      const nov = await createMeeting(db, f.actors.agent1, { title: "Next month", type: "company_office", startsAt: "2026-11-02T07:00:00Z", leadId: r.leadId, moveLead: false });
       await completeMeeting(db, f.actors.agent1, nov.meetingId, { moveLead: false });
       const unitId = (await createUnit(db, f.actors.superAdmin, { projectId: f.projectId, unitNo: "T-1", areaSqft: "500", basePrice: "1000000" })).unitId;
       const { bookingId } = await createBooking(db, f.actors.agent1, { projectId: f.projectId, leadId: r.leadId, unitId, ratePerSqft: "2000", tokenAmount: "1000" });

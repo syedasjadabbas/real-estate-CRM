@@ -10,7 +10,7 @@ import {
   updateClient,
 } from "@/modules/clients/commands";
 import { clientStatusForLead, getClientDetail, listClients } from "@/modules/clients/queries";
-import { createLead } from "@/modules/leads/commands";
+import { assignLead, createLead } from "@/modules/leads/commands";
 import { getLeadDetail } from "@/modules/leads/queries";
 import { loadActor } from "@/server/auth/session-store";
 import { hashPassword } from "@/server/auth/password";
@@ -59,54 +59,50 @@ describe.skipIf(!hasTestDb)("Clients module (PostgreSQL integration)", () => {
   };
 
   describe("lead conversion and duplicates", () => {
-    it("converts a team lead into a linked client with history and audit", async () => {
+    it("every new lead creates its person's client, with history and audit; converting returns it", async () => {
+      // A client is the person; each lead is one of their inquiries (13 Nov 2026).
       const leadId = await leadOf(f.actors.agent1, { email: "buyer@example.com" });
-      const r = await convertLeadToClient(db, f.actors.manager, { leadId });
-      expect(r.outcome).toBe("created");
-
-      const [client] = await db.select().from(clients).where(eq(clients.id, r.clientId));
-      expect(client).toMatchObject({ ownerId: f.actors.agent1.id, email: "buyer@example.com", createdById: f.actors.manager.id });
       const [lead] = await db.select().from(leads).where(eq(leads.id, leadId));
-      expect(lead.clientId).toBe(r.clientId);
-      const acts = await db.select().from(clientActivities).where(eq(clientActivities.clientId, r.clientId));
-      expect(acts.map((a) => a.type)).toEqual(["created"]);
-      const audit = await db.select().from(auditLogs).where(eq(auditLogs.entityId, r.clientId));
-      expect(audit.map((a) => a.action)).toEqual(["client.convert"]);
+      expect(lead.clientId).not.toBeNull();
+      const clientId = lead.clientId!;
 
-      expect(await errorCode(convertLeadToClient(db, f.actors.manager, { leadId }))).toBe("BUSINESS_RULE");
-      expect((await getLeadDetail(db, f.actors.agent1, leadId)).lead.clientId).toBe(r.clientId);
+      const [client] = await db.select().from(clients).where(eq(clients.id, clientId));
+      expect(client).toMatchObject({ ownerId: f.actors.agent1.id, email: "buyer@example.com", createdById: f.actors.agent1.id });
+      const acts = await db.select().from(clientActivities).where(eq(clientActivities.clientId, clientId));
+      expect(acts.map((a) => a.type)).toEqual(["created"]);
+      const audit = await db.select().from(auditLogs).where(eq(auditLogs.entityId, clientId));
+      expect(audit.map((a) => a.action)).toEqual(["client.create_from_lead"]);
+
+      expect(await convertLeadToClient(db, f.actors.manager, { leadId })).toEqual({ outcome: "linked", clientId });
+      expect((await getLeadDetail(db, f.actors.agent1, leadId)).lead.clientId).toBe(clientId);
     });
 
-    it("keeps one client per phone across projects: warns, then links on request", async () => {
+    it("keeps one client per phone across projects: a new inquiry joins the person's client", async () => {
       const first = await leadOf(f.actors.agent1, { phoneNumber: "0300 7770001" });
       const second = await leadOf(f.actors.agent1, { phoneNumber: "+92 300 777 0001", projectId: f.otherProjectId });
-      const { clientId } = await convertLeadToClient(db, f.actors.manager, { leadId: first });
-
-      const warning = await errorOf(convertLeadToClient(db, f.actors.manager, { leadId: second }));
-      expect(warning?.code).toBe("CONFLICT");
-      expect(warning?.details).toMatchObject({ existingClientId: clientId });
-
-      expect(await convertLeadToClient(db, f.actors.manager, { leadId: second, onExisting: "link" })).toEqual({ outcome: "linked", clientId });
+      const [a] = await db.select().from(leads).where(eq(leads.id, first));
+      const [b] = await db.select().from(leads).where(eq(leads.id, second));
+      expect(b.clientId).toBe(a.clientId);
       expect((await db.select().from(clients)).length).toBe(1);
-      const detail = await getClientDetail(db, f.actors.manager, clientId);
+      const detail = await getClientDetail(db, f.actors.manager, a.clientId!);
       expect(detail.linkedLeads.map((l) => l.id).sort()).toEqual([first, second].sort());
-      expect(detail.activities.map((a) => a.type)).toEqual(["lead_linked", "created"]);
+      expect(detail.activities.map((x) => x.type)).toEqual(["lead_linked", "created"]);
+      expect(detail.interests.map((g) => g.status)).toEqual(["interested", "interested"]);
     });
 
-    it("never reveals or links another team's client with the same phone", async () => {
+    it("keeps another team's customer with their agent: their new inquiry can't be handed to someone else", async () => {
       const outsideLead = await leadOf(f.actors.outsideAgent, { phoneNumber: "0300 7770002" });
-      await convertLeadToClient(db, f.actors.superAdmin, { leadId: outsideLead });
-      // A manager's explicit choice outranks the returning-customer rule, so this can still arise.
-      const teamLead = await leadOf(f.actors.manager, { phoneNumber: "0300 7770002", projectId: f.otherProjectId, ownerId: f.actors.agent1.id });
+      const [original] = await db.select().from(leads).where(eq(leads.id, outsideLead));
+      const refused = await errorOf(createLead(db, f.actors.manager, leadInput(f, { phoneNumber: "0300 7770002", projectId: f.otherProjectId, ownerId: f.actors.agent1.id })));
+      expect(refused?.code).toBe("VALIDATION_FAILED");
+      expect(refused?.fields?.ownerId).toContain("Agent Outside");
 
-      for (const onExisting of ["reject", "link"] as const) {
-        const e = await errorOf(convertLeadToClient(db, f.actors.manager, { leadId: teamLead, onExisting }));
-        expect(e?.code).toBe("CONFLICT");
-        expect(e?.details).toEqual({});
-      }
-      const [lead] = await db.select().from(leads).where(eq(leads.id, teamLead));
-      expect(lead.clientId).toBeNull();
-      expect(await clientStatusForLead(db, f.actors.manager, lead)).toEqual({ status: "hiddenMatch" });
+      const again = await createLead(db, f.actors.manager, leadInput(f, { phoneNumber: "0300 7770002", projectId: f.otherProjectId }));
+      if (again.outcome !== "created") throw new Error("setup");
+      expect(again.visible).toBe(false);
+      const [lead] = await db.select().from(leads).where(eq(leads.id, again.leadId));
+      expect(lead).toMatchObject({ ownerId: f.actors.outsideAgent.id, clientId: original.clientId });
+      expect(await clientStatusForLead(db, f.actors.manager, lead)).toEqual({ status: "linked", client: null });
     });
 
     it("lets admins add clients manually and rejects the same phone in another format", async () => {
@@ -170,9 +166,11 @@ describe.skipIf(!hasTestDb)("Clients module (PostgreSQL integration)", () => {
 
     it("lists only the linked leads the viewer could open in Leads", async () => {
       const teamLead = await leadOf(f.actors.agent1, { phoneNumber: "0300 7770004" });
-      const outsideLead = await leadOf(f.actors.superAdmin, { phoneNumber: "0300 7770004", projectId: f.otherProjectId, ownerId: f.actors.outsideAgent.id });
-      const { clientId } = await convertLeadToClient(db, f.actors.manager, { leadId: teamLead });
-      await convertLeadToClient(db, f.actors.superAdmin, { leadId: outsideLead, onExisting: "link" });
+      // The person's next inquiry goes to their agent; a Super Admin later moves it to another team.
+      const outsideLead = await leadOf(f.actors.superAdmin, { phoneNumber: "0300 7770004", projectId: f.otherProjectId });
+      await assignLead(db, f.actors.superAdmin, outsideLead, { ownerId: f.actors.outsideAgent.id });
+      const [lead] = await db.select().from(leads).where(eq(leads.id, teamLead));
+      const clientId = lead.clientId!;
 
       const forManager = await getClientDetail(db, f.actors.manager, clientId);
       expect(forManager.linkedLeads.map((l) => l.id)).toEqual([teamLead]);

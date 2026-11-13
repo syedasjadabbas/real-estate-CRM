@@ -1,7 +1,7 @@
 import { leadLink, notify, teamManagersOf } from "@/modules/notifications/service";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { auditClient, logClientActivity } from "@/modules/clients/support";
-import { findCustomer, leadsWithAnyNumber, lockNumbers, normalizeExtraPhones, replaceLeadPhones, leadPhonesOf } from "@/modules/contacts/phones";
+import { copyLeadPhonesToClient, findCustomer, leadsWithAnyNumber, lockNumbers, normalizeExtraPhones, replaceLeadPhones, leadPhonesOf } from "@/modules/contacts/phones";
 import { resolveCity } from "@/modules/cities/resolve";
 import type { Database } from "@/server/db";
 import {
@@ -25,7 +25,8 @@ import { normalizePhone } from "./phone";
 import { assertCan, canAccessLead, canAssignTo, canDo, leadScope } from "./policy";
 import { chooseOwner, recordAssignment } from "./assignment";
 import { assertStageChange, OPEN_BOOKING_MESSAGE } from "./rules";
-import { audit, hasOpenBooking, isUniqueViolation, loadAccessibleLead, logActivity, refreshNextFollowUp, teamMemberIds, touchValues, type Tx } from "./support";
+import { assertWorkable, initialVerification, notifyVerifiers } from "./verification";
+import { adoptLeadClient, audit, hasOpenBooking, isUniqueViolation, loadAccessibleLead, logActivity, refreshNextFollowUp, teamMemberIds, touchValues, type Tx } from "./support";
 import {
   assignSchema,
   createLeadSchema,
@@ -103,7 +104,8 @@ async function findPhoneMatch(tx: Tx, projectId: string, numbers: string[], exce
 /** An original owner keeps a returning customer only while they can still own leads. */
 async function isActiveOwner(tx: Tx, userId: string) {
   const [u] = await tx.select({ role: users.role, status: users.status }).from(users).where(eq(users.id, userId)).limit(1);
-  return Boolean(u && u.status === "active" && (u.role === "agent" || u.role === "manager"));
+  // Admins included: former Sales Managers keep the leads and customers they own (merged 13 Nov 2026).
+  return Boolean(u && u.status === "active" && (u.role === "agent" || u.role === "manager" || u.role === "admin"));
 }
 
 const DUPLICATE_PHONE_MESSAGE = "A lead with this phone number already exists in this project.";
@@ -117,7 +119,7 @@ function duplicatePhoneError(existing: typeof leads.$inferSelect, visible: boole
 
 export type CreateLeadOutcome =
   /** `visible` is false when a returning customer's lead went to their original agent outside the creator's scope. */
-  | { outcome: "created"; leadId: string; code: string; visible: boolean; ownerName: string | null }
+  | { outcome: "created"; leadId: string; code: string; visible: boolean; ownerName: string | null; verification: "pending" | "approved" | "rejected" }
   | { outcome: "regenerated"; leadId: string | null; code: string | null };
 
 export async function createLead(db: Database, actor: Actor, input: unknown): Promise<CreateLeadOutcome> {
@@ -169,34 +171,44 @@ export async function createLead(db: Database, actor: Actor, input: unknown): Pr
       };
     }
 
-    // Owner, in order: a manager's or admin's explicit choice; a returning customer's original agent
-    // (phone numbers are the only identifier); the agent who created it; otherwise scored assignment.
+    // Owner, in order: a returning customer's original agent (no one else may be chosen); a manager's or admin's explicit choice;
+    // the agent who created it; otherwise scored assignment. Phone numbers are the only identifier.
     const customer = await findCustomer(tx, numbers);
     let ownerId: string | null;
-    let decision: { mode: "manual" | "returning_customer" | "creator" | "scored"; reason: string; breakdown?: unknown };
-    if (data.ownerId && actor.role !== "agent") {
+    let decision: { mode: "manual" | "returning_customer" | "creator" | "rotation"; reason: string; breakdown?: unknown };
+    // A returning customer belongs to the agent who already handles them (owner's rule, 13 Nov 2026):
+    // a Manager, Admin or Super Admin can't hand their new inquiry to someone else while that agent is active.
+    const originalOwnerId = customer?.originalOwnerId && (await isActiveOwner(tx, customer.originalOwnerId)) ? customer.originalOwnerId : null;
+    if (data.ownerId && actor.role !== "agent" && originalOwnerId && data.ownerId !== originalOwnerId) {
+      const [original] = await tx.select({ name: users.name }).from(users).where(eq(users.id, originalOwnerId));
+      const name = original?.name ?? "another agent";
+      throw new AppError("VALIDATION_FAILED", `This customer belongs to ${name}. Their new inquiry goes to ${name}.`, {
+        fields: { ownerId: `This customer belongs to ${name}. Leave Owner empty or choose ${name}.` },
+      });
+    }
+    if (originalOwnerId) {
+      ownerId = originalOwnerId;
+      decision = { mode: "returning_customer", reason: "Returning customer: kept with their original agent" };
+    } else if (data.ownerId && actor.role !== "agent") {
       await assertAssignable(tx, actor, data.ownerId);
       ownerId = data.ownerId;
       decision = { mode: "manual", reason: `Chosen by ${actor.name}` };
-    } else if (customer?.originalOwnerId && (await isActiveOwner(tx, customer.originalOwnerId))) {
-      ownerId = customer.originalOwnerId;
-      decision = { mode: "returning_customer", reason: "Returning customer: kept with their original agent" };
     } else if (actor.role === "agent") {
       ownerId = actor.id;
       decision = { mode: "creator", reason: "Created by the agent" };
     } else {
       const chosen = await chooseOwner(tx, actor, data.projectId, now);
       ownerId = chosen.ownerId;
-      decision = { mode: "scored", reason: chosen.reason, breakdown: chosen.breakdown };
+      decision = { mode: "rotation", reason: chosen.reason, breakdown: chosen.breakdown };
       if (!ownerId && actor.role === "manager") {
         ownerId = actor.id;
         decision.reason = `${chosen.reason}; the manager keeps it`;
       }
     }
-    const rotated = decision.mode === "scored" || decision.mode === "returning_customer";
-    // Join the customer's client only when the lead goes to their original agent. Any other owner
-    // links through conversion, which never links another team's client (F-13, clients module).
-    const joinClientId = decision.mode === "returning_customer" ? (customer?.clientId ?? null) : null;
+    const rotated = decision.mode === "rotation" || decision.mode === "returning_customer";
+    // A client is the person; every lead is one of their inquiries (owner's rule, 13 Nov 2026). The lead
+    // joins the person's existing client (matched by any number), or a new client is created below.
+    const joinClientId = customer?.clientId ?? null;
 
     await assertListValue(tx, leadSources, data.sourceId, "sourceId");
     if (data.budgetRangeId) await assertListValue(tx, budgetRanges, data.budgetRangeId, "budgetRangeId");
@@ -221,6 +233,8 @@ export async function createLead(db: Database, actor: Actor, input: unknown): Pr
       firstTouchAt: data.note ? now : null,
       lastActivityAt: now,
       createdById: actor.id,
+      // An agent's own lead waits for an Admin or Super Admin to verify it (lead verification).
+      verification: initialVerification(actor),
     };
 
     let created: { id: string; code: string } | undefined;
@@ -244,10 +258,35 @@ export async function createLead(db: Database, actor: Actor, input: unknown): Pr
     });
     await replaceLeadPhones(tx, created.id, extraPhones);
     if (joinClientId) {
-      // The customer's history shows each inquiry, as conversion and booking links do.
-      await tx.update(clients).set({ updatedAt: now, lastActivityAt: now }).where(eq(clients.id, joinClientId));
-      await logClientActivity(tx, { clientId: joinClientId, actorId: actor.id, type: "lead_linked", data: { leadId: created.id, leadCode: created.code, mode: "returning_customer" } });
-      await auditClient(tx, actor, "client.link_lead", joinClientId, null, { leadId: created.id, mode: "returning_customer" });
+      // The customer's history shows each inquiry. A client whose agent has gone passes to this lead's owner.
+      const [client] = await tx.select({ ownerId: clients.ownerId }).from(clients).where(eq(clients.id, joinClientId)).for("update");
+      const handOver = ownerId && client && client.ownerId !== ownerId && !(client.ownerId && (await isActiveOwner(tx, client.ownerId)));
+      await tx
+        .update(clients)
+        .set({ updatedAt: now, lastActivityAt: now, ...(handOver ? { ownerId } : {}) })
+        .where(eq(clients.id, joinClientId));
+      await logClientActivity(tx, { clientId: joinClientId, actorId: actor.id, type: "lead_linked", data: { leadId: created.id, leadCode: created.code, mode: decision.mode === "returning_customer" ? "returning_customer" : "inquiry" } });
+      await logActivity(tx, { leadId: created.id, actorId: actor.id, type: "client_linked", data: { clientId: joinClientId, mode: "linked" } });
+      await auditClient(tx, actor, "client.link_lead", joinClientId, handOver ? { ownerId: client?.ownerId ?? null } : null, { leadId: created.id, mode: decision.mode, ...(handOver ? { ownerId } : {}) });
+    } else {
+      // First inquiry from this person: their client profile starts now, held by the lead's owner.
+      const clientValues = {
+        name: data.name,
+        phoneCountryCode: phone.countryCode,
+        phoneNumber: phone.national,
+        phoneE164: phone.e164,
+        email: data.email ?? null,
+        cityId: values.cityId ?? null,
+        cityOther: values.cityOther ?? null,
+        ownerId,
+        createdById: actor.id,
+      };
+      const [client] = await tx.insert(clients).values(clientValues).returning({ id: clients.id });
+      await tx.update(leads).set({ clientId: client.id }).where(eq(leads.id, created.id));
+      await copyLeadPhonesToClient(tx, created.id, client.id);
+      await logClientActivity(tx, { clientId: client.id, actorId: actor.id, type: "created", data: { mode: "lead", leadId: created.id, leadCode: created.code } });
+      await logActivity(tx, { leadId: created.id, actorId: actor.id, type: "client_linked", data: { clientId: client.id, mode: "created" } });
+      await auditClient(tx, actor, "client.create_from_lead", client.id, null, { ...clientValues, leadId: created.id });
     }
     await recordAssignment(tx, { leadId: created.id, assigneeId: ownerId, mode: decision.mode, reason: decision.reason, breakdown: decision.breakdown, actorId: actor.id });
     if (rotated && ownerId) {
@@ -264,10 +303,11 @@ export async function createLead(db: Database, actor: Actor, input: unknown): Pr
         actor.id,
       );
     }
+    if (values.verification === "pending") await notifyVerifiers(tx, actor, { id: created.id, code: created.code, name: data.name });
     const visible = canAccessLead(actor, ownerId, members);
     // The original agent is named only when the creator could see them anyway (their own scope).
     const [owner] = ownerId && visible ? await tx.select({ name: users.name }).from(users).where(eq(users.id, ownerId)) : [];
-    return { outcome: "created", leadId: created.id, code: created.code, visible, ownerName: owner?.name ?? null };
+    return { outcome: "created", leadId: created.id, code: created.code, visible, ownerName: owner?.name ?? null, verification: values.verification };
   });
 }
 
@@ -288,6 +328,7 @@ export async function updateLead(db: Database, actor: Actor, leadId: string, inp
       await lockNumbers(tx, [target.e164, ...(extraPhones ?? []).map((p) => p.e164)]);
     }
     const { lead, members } = await loadAccessibleLead(tx, actor, leadId, true);
+    assertWorkable(actor, lead, { allowRejectedEdit: true });
     const changes: Partial<typeof leads.$inferInsert> = {};
     if (data.name !== undefined) changes.name = data.name;
     if (phoneEdited) {
@@ -353,9 +394,10 @@ export async function updateLead(db: Database, actor: Actor, leadId: string, inp
 
 export async function changeStage(db: Database, actor: Actor, leadId: string, input: unknown) {
   assertCan(actor, "edit");
-  const { stage } = parse(stageChangeSchema, input);
+  const { stage, remarks } = parse(stageChangeSchema, input);
   return db.transaction(async (tx) => {
     const { lead } = await loadAccessibleLead(tx, actor, leadId, true);
+    assertWorkable(actor, lead);
     assertStageChange(lead.stage, stage, await hasOpenBooking(tx, leadId));
     const now = new Date();
     await tx
@@ -366,9 +408,9 @@ export async function changeStage(db: Database, actor: Actor, leadId: string, in
       leadId,
       actorId: actor.id,
       type: "stage_change",
-      data: { from: lead.stage, to: stage, fromLabel: STAGE_LABELS[lead.stage], toLabel: STAGE_LABELS[stage] },
+      data: { from: lead.stage, to: stage, fromLabel: STAGE_LABELS[lead.stage], toLabel: STAGE_LABELS[stage], ...(remarks ? { remarks } : {}) },
     });
-    await audit(tx, actor, "lead.stage", leadId, { stage: lead.stage }, { stage });
+    await audit(tx, actor, "lead.stage", leadId, { stage: lead.stage }, remarks ? { stage, remarks } : { stage });
     return { from: lead.stage, to: stage };
   });
 }
@@ -382,6 +424,7 @@ export async function assignLead(db: Database, actor: Actor, leadId: string, inp
     await assertAssignable(tx, actor, ownerId);
     const now = new Date();
     await tx.update(leads).set({ ownerId, updatedAt: now }).where(eq(leads.id, leadId));
+    await adoptLeadClient(tx, leadId, ownerId);
     await tx
       .update(followUps)
       .set({ assigneeId: ownerId })
@@ -407,6 +450,7 @@ export async function addNote(db: Database, actor: Actor, leadId: string, input:
   const { body } = parse(noteSchema, input);
   return db.transaction(async (tx) => {
     const { lead } = await loadAccessibleLead(tx, actor, leadId, true);
+    assertWorkable(actor, lead);
     const now = new Date();
     await logActivity(tx, { leadId, actorId: actor.id, type: "note", body });
     await tx
@@ -425,6 +469,7 @@ export async function scheduleFollowUp(db: Database, actor: Actor, leadId: strin
   }
   return db.transaction(async (tx) => {
     const { lead } = await loadAccessibleLead(tx, actor, leadId, true);
+    assertWorkable(actor, lead);
     if (lead.stage === "lost_lead" || lead.stage === "booked") {
       throw new AppError("BUSINESS_RULE", "Follow-ups cannot be scheduled on closed leads.");
     }
@@ -454,6 +499,7 @@ export async function completeFollowUp(db: Database, actor: Actor, followUpId: s
     const [followUp] = await tx.select().from(followUps).where(eq(followUps.id, followUpId)).limit(1).for("update");
     if (!followUp) throw notFound("Follow-up");
     const { lead } = await loadAccessibleLead(tx, actor, followUp.leadId, true);
+    assertWorkable(actor, lead);
     if (followUp.status !== "pending") throw new AppError("BUSINESS_RULE", "This follow-up is already closed.");
     const now = new Date();
     await tx
@@ -488,7 +534,8 @@ export async function addReview(db: Database, actor: Actor, leadId: string, inpu
   assertCan(actor, "review");
   const { body } = parse(reviewSchema, input);
   return db.transaction(async (tx) => {
-    await loadAccessibleLead(tx, actor, leadId);
+    const { lead } = await loadAccessibleLead(tx, actor, leadId);
+    assertWorkable(actor, lead);
     const [review] = await tx.insert(leadReviews).values({ leadId, reviewerId: actor.id, body }).returning({ id: leadReviews.id });
     await logActivity(tx, { leadId, actorId: actor.id, type: "review", body });
     await audit(tx, actor, "lead.review", leadId, null, { reviewId: review.id, body });
@@ -509,6 +556,7 @@ export async function markLost(db: Database, actor: Actor, leadId: string, input
   const { lostReasonId, note } = parse(lostSchema, input);
   return db.transaction(async (tx) => {
     const { lead } = await loadAccessibleLead(tx, actor, leadId, true);
+    assertWorkable(actor, lead);
     if (lead.stage === "lost_lead") throw new AppError("BUSINESS_RULE", "The lead is already lost.");
     if (lead.stage === "booked") throw new AppError("BUSINESS_RULE", "Booked leads are managed from their booking.");
     // Checked for agents' requests too: an approval could otherwise only be refused later.

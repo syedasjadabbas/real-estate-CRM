@@ -66,10 +66,27 @@ type Props = {
   interestExtra?: ReactNode;
   /** The record's saved list city, kept as an option if it has since been deactivated. */
   currentCity?: { id: string; name: string | null } | null;
+  /** The lead's project, for the Size dropdown's unit sizes. */
+  projectId?: string;
 };
 
+const GENDERS = [
+  { value: "male", label: "Male" },
+  { value: "female", label: "Female" },
+];
+
+export const sizeLabel = (areaSqft: number) => `${Number(areaSqft).toLocaleString("en-US", { maximumFractionDigits: 2 })} sq ft`;
+
+/** A saved value that is no longer offered (typed before the dropdown) stays selectable. */
+function withCurrent(options: { value: string; label: string }[], current: string) {
+  return current && !options.some((o) => o.value === current) ? [...options, { value: current, label: current }] : options;
+}
+
 /** Lead fields shared by the create form and the detail page's edit form. */
-export function LeadFields({ values, onChange, errors, lookups, disabled, interestExtra, currentCity }: Props) {
+export function LeadFields({ values, onChange, errors, lookups, disabled, interestExtra, currentCity, projectId }: Props) {
+  const sizeOptions = [...new Set(lookups.unitSizes.filter((u) => !projectId || u.projectId === projectId).map((u) => Number(u.areaSqft)))]
+    .sort((a, b) => a - b)
+    .map((a) => ({ value: sizeLabel(a), label: sizeLabel(a) }));
   const text = (key: TextKey, label: string, opts: { required?: boolean; type?: string; placeholder?: string; autoComplete?: string } = {}) => (
     <Field label={label} required={opts.required} error={errors[key]}>
       {(id, describedBy) => (
@@ -120,8 +137,8 @@ export function LeadFields({ values, onChange, errors, lookups, disabled, intere
       </FormSection>
       <ExtraPhonesFields phones={values.phones} onChange={(phones) => onChange({ phones })} errors={errors} disabled={disabled} />
       <FormSection title="Profile">
-        {text("gender", "Gender", { placeholder: "e.g. male, female" })}
-        {text("desiredSize", "Size", { placeholder: "e.g. 674 sq ft" })}
+        {select("gender", "Gender", withCurrent(GENDERS, values.gender), { empty: "Not specified" })}
+        {select("desiredSize", "Size", withCurrent(sizeOptions, values.desiredSize), { empty: sizeOptions.length ? "Not specified" : "No unit sizes in inventory yet" })}
       </FormSection>
       <FormSection title="Interest & pipeline">
         {select("sourceId", "Source", lookups.sources.map((s) => ({ value: s.id, label: s.name })), { required: true, empty: "Select…" })}

@@ -31,9 +31,7 @@ export default async function ClientsPage({ searchParams }: PageProps<"/dashboar
         as="h2"
         title="All clients"
         description={
-          canDoClient(actor, "convertLead")
-            ? "Buyer profiles across projects. Convert a lead from its page, or add a client manually."
-            : "Buyer profiles across projects."
+          "Everyone who has enquired, across projects, with the projects they are interested in. Each new lead creates or joins the person's profile."
         }
         actions={
           canDoClient(actor, "createManual") ? (

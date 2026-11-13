@@ -148,7 +148,7 @@ test("a lead keeps its deactivated city through an edit, stays filterable, and n
   await manager.goto(`/dashboard/leads/${leadId}`);
   await expect(citySelect(manager).locator("option:checked")).toHaveText(`${city} (inactive)`);
   await expect(async () => {
-    await manager.getByLabel("Size").fill("674 sq ft");
+    await manager.getByLabel("Gender").selectOption("female");
     await expect(manager.getByRole("button", { name: "Save changes" })).toBeEnabled({ timeout: 1_000 });
   }).toPass();
   await manager.getByRole("button", { name: "Save changes" }).click();

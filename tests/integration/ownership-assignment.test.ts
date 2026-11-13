@@ -95,7 +95,8 @@ describe.skipIf(!hasTestDb)("Sprint P1–P2: phones, customers, ownership, claim
     it("edits extra numbers, refusing one that another lead in the project holds", async () => {
       const taken = phone();
       await lead(f.actors.agent1, { phoneNumber: taken });
-      const mine = await lead(f.actors.agent1);
+      // An agent's own new lead waits for Admin verification; one an Admin assigns them is workable.
+      const mine = await lead(f.actors.superAdmin, { ownerId: f.actors.agent1.id });
       await updateLead(db, f.actors.agent1, mine.leadId, { phones: [{ countryCode: "+92", number: phone() }] });
       expect(await db.select().from(leadPhones).where(eq(leadPhones.leadId, mine.leadId))).toHaveLength(1);
       expect((await failure(updateLead(db, f.actors.agent1, mine.leadId, { phones: [{ countryCode: "+92", number: taken }] }))).code).toBe("CONFLICT");
@@ -122,13 +123,26 @@ describe.skipIf(!hasTestDb)("Sprint P1–P2: phones, customers, ownership, claim
       expect(await row(r.leadId)).toMatchObject({ ownerId: f.actors.agent2.id, clientId });
     });
 
+    it("no one can hand a returning customer's new inquiry to another agent; the original agent can be chosen", async () => {
+      const shared = phone();
+      await lead(f.actors.agent1, { phoneNumber: shared });
+      for (const actor of [f.actors.superAdmin, f.actors.manager]) {
+        const err = await failure(createLead(db, actor, leadInput(f, { projectId: f.otherProjectId, phoneNumber: shared, ownerId: f.actors.agent2.id })));
+        expect(err.code).toBe("VALIDATION_FAILED");
+        expect(err.message).toContain(f.actors.agent1.name);
+      }
+      const r = await lead(f.actors.superAdmin, { projectId: f.otherProjectId, phoneNumber: shared, ownerId: f.actors.agent1.id });
+      expect((await row(r.leadId)).ownerId).toBe(f.actors.agent1.id);
+      expect((await history(r.leadId))[0].mode).toBe("returning_customer");
+    });
+
     it("an inactive original agent no longer keeps the customer", async () => {
       const shared = phone();
       await lead(f.actors.agent1, { phoneNumber: shared });
       await db.update(users).set({ status: "inactive" }).where(eq(users.id, f.actors.agent1.id));
       const r = await lead(f.actors.manager, { projectId: f.otherProjectId, phoneNumber: shared });
       expect((await row(r.leadId)).ownerId).not.toBe(f.actors.agent1.id);
-      expect((await history(r.leadId))[0].mode).toBe("scored");
+      expect((await history(r.leadId))[0].mode).toBe("rotation");
     });
   });
 
@@ -172,24 +186,23 @@ describe.skipIf(!hasTestDb)("Sprint P1–P2: phones, customers, ownership, claim
     });
   });
 
-  describe("scored assignment", () => {
-    it("a manager's unassigned lead is scored among their team's agents, with the breakdown recorded", async () => {
-      const r = await lead(f.actors.manager);
-      expect([f.actors.agent1.id, f.actors.agent2.id]).toContain((await row(r.leadId)).ownerId);
-      const [h] = await history(r.leadId);
-      expect(h.mode).toBe("scored");
-      const b = h.breakdown as { candidates: { userId: string; workload: number; performance: number; conversion: number; availability: number }[] };
-      expect(b.candidates.map((c) => c.userId).sort()).toEqual([f.actors.agent1.id, f.actors.agent2.id].sort());
-      expect(Object.keys(b.candidates[0])).toEqual(expect.arrayContaining(["workload", "performance", "conversion", "availability"]));
+  describe("automatic assignment (equal rotation)", () => {
+    it("a manager's unassigned lead goes to their team's agents in turn, with the order recorded", async () => {
+      const first = await lead(f.actors.manager);
+      const second = await lead(f.actors.manager);
+      expect([(await row(first.leadId)).ownerId, (await row(second.leadId)).ownerId]).toEqual([f.actors.agent1.id, f.actors.agent2.id]);
+      const [h] = await history(first.leadId);
+      expect(h.mode).toBe("rotation");
+      expect(h.breakdown).toMatchObject({ method: "rotation", order: ["Agent A", "Agent B"] });
     });
 
-    it("prefers the agent with spare capacity", async () => {
-      for (let i = 0; i < 6; i++) await lead(f.actors.agent1);
+    it("ignores load and performance: a busy agent still gets their turn", async () => {
+      for (let i = 0; i < 6; i++) await lead(f.actors.superAdmin, { ownerId: f.actors.agent1.id });
       const r = await lead(f.actors.manager);
-      expect((await row(r.leadId)).ownerId).toBe(f.actors.agent2.id);
+      expect((await row(r.leadId)).ownerId).toBe(f.actors.agent1.id);
     });
 
-    it("skips agents on leads-off and at full load", async () => {
+    it("skips agents on leads-off, and the manager keeps the lead when no team agent is available", async () => {
       const [team] = await db.select({ id: teams.id }).from(teams).where(eq(teams.name, "Team 1"));
       await db.insert(rosterEntries).values({ teamId: team.id, userId: f.actors.agent1.id, date: today(), status: "leads_off" });
       const r = await lead(f.actors.manager);
@@ -197,10 +210,10 @@ describe.skipIf(!hasTestDb)("Sprint P1–P2: phones, customers, ownership, claim
       const b = (await history(r.leadId))[0].breakdown as { excluded: { userId: string; reason: string }[] };
       expect(b.excluded.find((e) => e.userId === f.actors.agent1.id)?.reason).toBe("Leads off in today's roster");
 
-      await updateAssignmentSettings(db, admin, { ...(await readAssignmentSettings(db)), maxLoad: 1 });
-      const full = await lead(f.actors.manager);
-      expect((await row(full.leadId)).ownerId).toBe(f.actors.manager.id);
-      expect((await history(full.leadId))[0].reason).toMatch(/No eligible agent/);
+      await db.insert(rosterEntries).values({ teamId: team.id, userId: f.actors.agent2.id, date: today(), status: "leads_off" });
+      const none = await lead(f.actors.manager);
+      expect((await row(none.leadId)).ownerId).toBe(f.actors.manager.id);
+      expect((await history(none.leadId))[0].reason).toMatch(/No available agent/);
     });
 
     it("settings must add up to 100 and only admins can change them", async () => {
@@ -240,10 +253,11 @@ describe.skipIf(!hasTestDb)("Sprint P1–P2: phones, customers, ownership, claim
     expect(history.filter((h) => h.type === "lead_linked")).toHaveLength(2);
   });
 
-  it("a lead given by hand to someone else is not joined to another owner's client", async () => {
+  it("a known customer's inquiry can't be handed by hand to another agent", async () => {
     const shared = phone();
     await createClient(db, f.actors.superAdmin, { name: "Other Team Buyer", phoneCountryCode: "+92", phoneNumber: shared, ownerId: f.actors.outsideAgent.id });
-    const r = await lead(f.actors.manager, { phoneNumber: shared, ownerId: f.actors.agent1.id });
-    expect(await row(r.leadId)).toMatchObject({ ownerId: f.actors.agent1.id, clientId: null });
+    const err = await failure(createLead(db, f.actors.manager, leadInput(f, { phoneNumber: shared, ownerId: f.actors.agent1.id })));
+    expect(err.code).toBe("VALIDATION_FAILED");
+    expect(err.message).toContain(f.actors.outsideAgent.name);
   });
 });

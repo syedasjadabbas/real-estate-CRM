@@ -3662,3 +3662,78 @@ Decision (owner, 11 Nov): agents see only their own work. Agents' leads, sales o
 - An agent's dashboard now shows **"Your performance score"**: their own assignment score, provisional while their history is small. The Teams tile shows "—" for agents.
 - **Unchanged:** Managers see the teams they manage; Admins and Super Admins see every team.
 - Tests: `dashboard.test.ts` (agent sees only their own score; the manager still sees the team), `dashboard.spec.ts` (an agent's page shows "Your performance score" and no team scores). Dashboard integration 17 / 17; dashboard, dashboard-links and responsive browser specs 25 / 25; build 114 / 114.
+
+## 59. Login screen, call buttons, stage remarks, import limited to Admins (13 Nov 2026)
+
+**Not committed.** Owner's requests of 13 Nov.
+
+| Change | Detail |
+|---|---|
+| Login screen | Brand panel beside the form on wide screens, form alone on phones; "Welcome back" heading, show / hide control on the password, spinner while signing in, a line on asking an administrator for a reset |
+| Call from the list | A call button (tel: link) beside each phone in the leads list and on pipeline board cards, so a lead can be called without opening it |
+| Stage remarks | Optional remarks (up to 1,000 characters) with a stage move on the lead page; saved on the timeline entry and in the audit log |
+| Lost lead card | Mark lost / Send lost request and a pending request's decision are now a separate Lost lead card after the Pipeline stage card |
+| Lead import | **Only Admins and Super Admins import** (was: agents, managers, admins, super admins). Every batch, including a Super Admin's own, still waits for a Super Admin's approval. Agents and managers no longer see the Imports tab or the Import from CSV button; the page and the API refuse them (403) |
+
+Tests: lead import integration 11 / 11 (agents, managers and HR refused; an Admin sees only their own batches; a Super Admin's own batch stays pending); leads 38 / 38 (remarks); browser specs for import, sign-in, lists, board and lead pages pass; build 114 / 114.
+
+The client guides and the requirements spec were updated to match (import by Admin and Super Admin).
+
+## 60. Agents' new leads are verified by an Admin or Super Admin (13 Nov 2026)
+
+**Not committed.** Owner's rule of 13 Nov: when an agent adds a lead by hand, an Admin or Super Admin verifies it before the agent can work on it. On rejection the lead goes back to the agent (owner's choice).
+
+| Part | Detail |
+|---|---|
+| States | `pending` → `approved`, or `rejected` → (agent corrects and resubmits) → `pending`. Leads added by managers, admins and super admins, imported leads and every lead created before the rule are approved |
+| Locked while unverified | For the agent: stage moves, notes, follow-ups, reviews, lost requests, recordings and documents, meetings, bookings and tasks linked to the lead. The server refuses them with a plain message; the lead page hides those controls. The agent can still see and call the lead |
+| Rejected | The reason shows on the lead page; the agent can edit the details and press Resubmit for verification |
+| Verifying | A banner on the lead page (Approve, or Reject with a reason) and a **Verify** tab under Leads with the number waiting in the project; Admins and Super Admins only |
+| Notifications | Admins and Super Admins are told about each new or resubmitted lead; the agent is told when it is approved or rejected |
+| Lists | A "To verify" or "Rejected" badge beside the stage in the leads list |
+| Record | Timeline entries and audit rows (`lead.verify_approve`, `lead.verify_reject`, `lead.verify_resubmit`) |
+| API | `POST /api/v1/leads/{id}/verification` { approve, note }, `POST /api/v1/leads/{id}/resubmit`, `GET /api/v1/leads/verification` |
+| Database | Migrations 0031 (lead_verification enum, four lead columns, timeline type) and 0032 (two notification types) |
+
+Typecheck and lint pass. Tests not yet run for this change (run before the commit).
+
+## 61. Clients show their project interests; returning customers stay with their agent (13 Nov 2026)
+
+**Not committed.** Owner's explanation of 13 Nov: a client is one person in the system who goes on making inquiries; the Clients tab lists every client, and opening one shows each project they are interested in. The Leads tab stays limited to the project selected in the header.
+
+| Part | Detail |
+|---|---|
+| Client's leads | Leads linked to the client **plus any lead holding one of the client's numbers** (primary or extra, on either side), in any project. A new inquiry shows before anyone links it |
+| Client page | "Linked leads" is now **Project interests**: one group per project (most recent first) with the number of inquiries, the latest date and each lead (stage, owner, date). Leads the viewer can't open in Leads are counted per project, not listed. The facts row shows "Projects interested" |
+| Clients list | New **Interested in** column with the projects each client has enquired in. The list is still across all projects (not filtered by the header's project) |
+| Leads list | Unchanged: only the selected project's leads |
+| Returning customer's owner | A new inquiry from an existing customer (same phone, any project) **always goes to the agent who already handles them** while that agent is active. A Manager, Admin or Super Admin who picks another agent as Owner gets an error naming the original agent ("This customer belongs to …"); choosing that agent or leaving Owner empty works. The lead joins the customer's client profile. Was: a hand-picked owner overrode the original agent |
+
+Typecheck and lint pass. Tests not yet run for this change (run before the commit).
+
+## 62. Every lead belongs to a client: the person (13 Nov 2026)
+
+**Not committed.** Owner's model of 13 Nov: a client is a person, a lead is that person's interest in one project. The Clients tab lists everyone who has enquired; each shows the projects they are interested in, lost interest in, or booked.
+
+| Part | Detail |
+|---|---|
+| New leads | Every new lead (manual, API, approved import) **joins the person's client** (matched by any number) **or creates one**, held by the lead's owner, with the lead's extra numbers. A client whose agent is no longer active passes to the new lead's owner |
+| Existing data | Migration 0033 gave every existing lead a client: it joined a client holding one of its numbers, otherwise one client per phone number was created from that number's earliest lead. Open bookings were linked to the client (as on conversion). Lead details are unchanged. Dev: 65 leads, all linked |
+| Unassigned leads | The client follows the lead when it is assigned or claimed (when no one, or an inactive agent, holds the client) |
+| Interests | Per project: **Booked** (any lead booked), **Lost interest** (every lead there lost; greyed and struck through) or **Interested**. Clients list chips and the client page show current interests first, lost ones last; the facts row counts current and lost |
+| Convert to client | Removed from the lead page (every lead already has a client). The lead page's Client card links to the person's profile. The convert API stays for compatibility |
+
+Typecheck and lint pass. Tests not yet run (client conversion tests will need updating for the new model); run before the commit.
+
+## 63. Lead form dropdowns, Leads tabs tidied, Manager merged into Admin, agent dashboard (13 Nov 2026)
+
+**Not committed.**
+
+| Change | Detail |
+|---|---|
+| Gender and Size | Dropdowns on the lead form: Gender (Male, Female); Size = the lead's project's unit sizes from inventory (e.g. "500 sq ft"). A value typed before stays selectable |
+| Leads tabs | Ordered by daily use: All, New leads, To-dos, Pipeline, Favorites, Verify, Unassigned, Regenerated, Won, Lost, Reviews, Imports. **Duplicates and Shared phones tabs removed** (pages still open by link). **Unassigned hidden from agents** |
+| Manager → Admin | Owner: Manager and Admin are one role. Migration 0034 made every Sales Manager an Admin (dev: 2). The Manager role is no longer granted or offered in the HR role filter. Team form says "Team admin"; Admins can lead teams and be members; leads and customers owned by former Managers stay with them |
+| Agent dashboard | Agents see only their own figures: total leads, conversion rate, open pipeline, won / lost, regenerated (all from their own leads), their leads by project, their performance score and My Targets. Hidden from agents: Organization Health, team stats and team output, meeting mix and distribution, Aging vs Meetings (pipeline health), lead sources, inbound channels and lost leads by team |
+
+Typecheck and lint pass. Tests not yet run. Tests and browser specs still create Manager users (the database value remains), so they keep working; the dev seed's "manager" sign-in is now an Admin.

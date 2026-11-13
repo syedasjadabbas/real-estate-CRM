@@ -4,7 +4,7 @@ import { followUps, leadSources, leads, projects } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
 import { AppError, forbidden, notFound } from "@/server/errors";
 import { recordAssignment } from "./assignment";
-import { audit, logActivity } from "./support";
+import { adoptLeadClient, audit, logActivity } from "./support";
 
 /** Agents and managers can take an unassigned lead; admins assign instead. */
 export const canClaim = (actor: Pick<Actor, "role">) => actor.role === "agent" || actor.role === "manager";
@@ -43,6 +43,7 @@ export async function claimLead(db: Database, actor: Actor, leadId: string) {
       .set({ ownerId: actor.id, updatedAt: now })
       .where(and(eq(leads.id, leadId), isNull(leads.ownerId), isNull(leads.deletedAt)))
       .returning({ id: leads.id, code: leads.code, name: leads.name });
+    if (won) await adoptLeadClient(tx, won.id, actor.id);
     if (!won) {
       const [exists] = await tx.select({ id: leads.id }).from(leads).where(and(eq(leads.id, leadId), isNull(leads.deletedAt)));
       if (!exists) throw notFound("Lead");

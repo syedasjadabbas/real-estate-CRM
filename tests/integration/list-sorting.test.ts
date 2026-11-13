@@ -282,7 +282,7 @@ describe.skipIf(!hasTestDb)("F-16: column sorting on Inventory and Finance lists
   describe("Outstanding", () => {
     const list = (q: Record<string, string>) => listOutstanding(db, accountant, q, TODAY);
     type Row = Awaited<ReturnType<typeof listOutstanding>>["rows"][number];
-    const STAGE_ORDER = ["negotiation", "token_pending", "token_received", "provisional_receipt", "sales_order", "booking_form", "down_payment", "agreement_pending", "confirmed"];
+    const STAGE_ORDER = ["negotiation", "down_payment", "agreement_pending", "confirmed"];
     const KEYS: Record<string, (r: Row) => Key> = {
       lead: (r) => r.leadName,
       unit: (r) => r.unitNo,

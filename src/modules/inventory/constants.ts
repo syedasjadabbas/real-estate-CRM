@@ -47,5 +47,5 @@ export const DIMENSION_FIELD = {
 export const UNIT_PAGE_SIZE = 50;
 
 /** Sortable columns (FR-005). The row number and free-text comment have no useful order. */
-export const UNIT_SORT_COLUMNS = ["project", "floor", "unit", "saleModel", "area", "price", "nature", "category", "status", "type", "bedrooms", "listedOn"] as const;
+export const UNIT_SORT_COLUMNS = ["project", "floor", "unit", "saleModel", "area", "price", "nature", "category", "status", "type", "bedrooms", "listedOn", "bookedOn"] as const;
 export type UnitSortColumn = (typeof UNIT_SORT_COLUMNS)[number];

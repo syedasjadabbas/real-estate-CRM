@@ -10,6 +10,23 @@ import { selectClass } from "@/features/leads/components/lead-fields";
 import { formatDateTime } from "@/features/leads/format";
 import { withParams } from "@/features/leads/url";
 
+/** Quick ranges ending today (owner, 13 Nov 2026). "Last 30 days" is the page's default range. */
+const PRESETS = [
+  { label: "Today", days: 1 },
+  { label: "2 days", days: 2 },
+  { label: "3 days", days: 3 },
+  { label: "5 days", days: 5 },
+  { label: "7 days", days: 7 },
+  { label: "30 days", days: null },
+] as const;
+
+/** Adds days to a YYYY-MM-DD date. */
+function shiftDate(date: string, days: number) {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
 const dateClass =
   "h-[38px] w-full rounded-xl border border-zinc-200/80 bg-zinc-50/70 px-2.5 text-sm font-medium shadow-hairline focus:border-brand/50 focus:outline-none";
 
@@ -24,6 +41,7 @@ export function PerformanceFilters({
   contexts,
   allLabel,
   generatedAt,
+  today,
 }: {
   params: Record<string, string>;
   from: string;
@@ -32,6 +50,8 @@ export function PerformanceFilters({
   contexts: { id: string; name: string; isActive: boolean }[];
   allLabel: string | null;
   generatedAt: string;
+  /** Today in Pakistan time (YYYY-MM-DD), the end of every quick range. */
+  today: string;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -39,9 +59,37 @@ export function PerformanceFilters({
   const [pending, startTransition] = useTransition();
   const go = (overrides: Record<string, string | null>) => startTransition(() => router.replace(withParams(pathname, params, { ...overrides, page: null })));
   const active = Boolean(params.from || params.to || params.team);
+  const presetActive = (days: number | null) =>
+    days === null ? !params.from && !params.to : to === today && from === shiftDate(today, -(days - 1));
+  const customActive = !PRESETS.some((p) => presetActive(p.days));
 
   return (
     <div className="flex flex-wrap items-center gap-2" aria-busy={pending}>
+      <div role="group" aria-label="Date range" className="inline-flex flex-wrap rounded-xl border border-zinc-200/80 bg-white p-1 shadow-hairline">
+        {PRESETS.map((p) => {
+          const on = presetActive(p.days);
+          return (
+            <button
+              key={p.label}
+              type="button"
+              aria-pressed={on}
+              disabled={pending}
+              onClick={() => go(p.days === null ? { from: null, to: null } : { from: shiftDate(today, -(p.days - 1)), to: today })}
+              className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-colors ${on ? "bg-brand text-white shadow-hairline" : "text-zinc-700 hover:bg-zinc-100"}`}
+            >
+              {p.label}
+            </button>
+          );
+        })}
+        <button
+          type="button"
+          aria-pressed={customActive}
+          onClick={() => setOpen(true)}
+          className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-colors ${customActive ? "bg-brand text-white shadow-hairline" : "text-zinc-700 hover:bg-zinc-100"}`}
+        >
+          Custom
+        </button>
+      </div>
       <p className="text-[11px] font-semibold text-zinc-500">
         Updated {formatDateTime(generatedAt)} ·
       </p>

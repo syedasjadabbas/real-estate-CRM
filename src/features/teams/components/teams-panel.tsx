@@ -76,10 +76,10 @@ function TeamForm({ team, managers, onDone }: { team?: Detail["team"]; managers:
         <Field label="Team name" required error={errors.name}>
           {(id, d) => <Input id={id} aria-describedby={d} invalid={Boolean(errors.name)} value={name} maxLength={80} disabled={pending} onChange={(e) => setName(e.target.value)} />}
         </Field>
-        <Field label="Manager" error={errors.managerId}>
+        <Field label="Team admin" error={errors.managerId}>
           {(id, d) => (
             <select id={id} aria-describedby={d} value={managerId} onChange={(e) => setManagerId(e.target.value)} className={selectClass} disabled={pending}>
-              <option value="">No manager</option>
+              <option value="">No team admin</option>
               {managers.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.name}
@@ -181,7 +181,7 @@ function MembersEditor({ teamId, members, candidates }: { teamId: string; member
 
 const SORT_COLUMNS: SortLinkColumn<TeamSort>[] = [
   { key: "name", label: "Name" },
-  { key: "manager", label: "Manager" },
+  { key: "manager", label: "Team admin" },
   { key: "members", label: "Members", firstDir: "desc" },
   { key: "status", label: "Status" },
 ];
@@ -233,7 +233,7 @@ export function TeamsPanel({
                       <span className="min-w-0">
                         <span className="block font-bold break-words">{t.name}</span>
                         <span className="block text-[11px] text-zinc-500">
-                          {t.managerName ? `Manager: ${t.managerName}` : "No manager"} · {t.members} {t.members === 1 ? "member" : "members"}
+                          {t.managerName ? `Team admin: ${t.managerName}` : "No team admin"} · {t.members} {t.members === 1 ? "member" : "members"}
                         </span>
                       </span>
                       <StatusTag tone={t.isActive ? "brand" : "neutral"}>{t.isActive ? "Active" : "Inactive"}</StatusTag>

@@ -58,7 +58,8 @@ function dashboardHref(next: DashboardFilters) {
   return q ? `/dashboard?${q}` : "/dashboard";
 }
 
-export function ExecutiveEssentials({ data, filters = { range: "mtd" } }: { data: DashboardData; filters?: DashboardFilters }) {
+/** `own`: an agent's dashboard (their own leads only; no organisation-wide figures). */
+export function ExecutiveEssentials({ data, filters = { range: "mtd" }, own = false }: { data: DashboardData; filters?: DashboardFilters; own?: boolean }) {
   const { kpis } = data;
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -198,11 +199,12 @@ export function ExecutiveEssentials({ data, filters = { range: "mtd" } }: { data
               {from && to && from > to ? <p className="text-xs font-semibold text-rose-600">The start date must be on or before the end date.</p> : null}
             </form>
           ) : null}
-          {data.teams.length === 0 ? <p className="mt-3 text-sm text-zinc-600">No teams in your scope.</p> : null}
+          {data.teams.length === 0 && !own ? <p className="mt-3 text-sm text-zinc-600">No teams in your scope.</p> : null}
           {pending ? <p role="status" className="mt-2 text-xs font-semibold text-zinc-500">Updating…</p> : null}
         </div>
 
-        <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-2">
+        <div className={own ? "grid grid-cols-1 gap-3.5" : "grid grid-cols-1 gap-3.5 lg:grid-cols-2"}>
+          {own ? null : (
           <Card className="p-5">
             <div className="flex items-center justify-between border-b border-zinc-100 pb-3">
               <Eyebrow>Organization Health</Eyebrow>
@@ -222,10 +224,11 @@ export function ExecutiveEssentials({ data, filters = { range: "mtd" } }: { data
               </Link>
             </div>
           </Card>
+          )}
 
           <Card className="p-5">
             <div className="flex items-center justify-between border-b border-zinc-100 pb-3">
-              <Eyebrow>Top Projects · Lead Volume</Eyebrow>
+              <Eyebrow>{own ? "Your leads by project" : "Top Projects · Lead Volume"}</Eyebrow>
               <Link
                 href="/dashboard/leads"
                 className="inline-flex items-center gap-1 text-[10px] font-black tracking-[0.1em] text-zinc-600 uppercase hover:text-brand"

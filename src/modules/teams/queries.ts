@@ -114,15 +114,15 @@ export async function teamDetail(db: Database, actor: Actor, teamId: string) {
   return { team, members, history, canManage: canManageTeams(actor) };
 }
 
-/** Managers (for the team form) and candidate members (active agents and managers). */
+/** Team leads (active Admins) and candidate members (active agents, plus Admins who lead a team). */
 export async function teamFormOptions(db: Database, actor: Actor) {
   if (!canManageTeams(actor)) throw forbidden();
   const people = await db
     .select({ id: users.id, name: users.name, role: users.role })
     .from(users)
-    .where(and(eq(users.status, "active"), inArray(users.role, ["agent", "manager"])))
+    .where(and(eq(users.status, "active"), inArray(users.role, ["agent", "manager", "admin"])))
     .orderBy(asc(users.name));
-  return { managers: people.filter((p) => p.role === "manager"), candidates: people };
+  return { managers: people.filter((p) => p.role === "admin" || p.role === "manager"), candidates: people };
 }
 
 /** FR-121: one team's report for a date, with a line per current agent member. */

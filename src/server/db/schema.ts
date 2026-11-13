@@ -67,7 +67,14 @@ export const leadActivityType = pgEnum("lead_activity_type", [
   "file_uploaded",
   "file_deleted",
   "client_linked",
+  "verification",
 ]);
+/**
+ * Lead verification (owner's decision, 13 Nov 2026): a lead an agent adds by hand waits for an Admin
+ * or Super Admin. Rejected leads go back to the agent to correct and resubmit. Every other lead
+ * (and every lead created before this rule) is approved.
+ */
+export const leadVerification = pgEnum("lead_verification", ["pending", "approved", "rejected"]);
 /** DATA_MODEL.md "files". Only call recordings on leads are uploaded so far (FR-038). */
 export const fileKind = pgEnum("file_kind", ["call_recording", "document", "receipt", "other"]);
 export const followUpStatus = pgEnum("follow_up_status", ["pending", "done", "cancelled"]);
@@ -262,6 +269,10 @@ export const leads = pgTable(
     firstTouchAt: timestamp("first_touch_at", { withTimezone: true }),
     lastActivityAt: timestamp("last_activity_at", { withTimezone: true }).notNull().defaultNow(),
     isRegenerated: boolean("is_regenerated").notNull().default(false),
+    verification: leadVerification("verification").notNull().default("approved"),
+    verificationNote: text("verification_note"),
+    verifiedById: uuid("verified_by_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
     regeneratedAt: timestamp("regenerated_at", { withTimezone: true }),
     duplicateOfId: uuid("duplicate_of_id").references((): AnyPgColumn => leads.id, { onDelete: "restrict" }),
     clientId: uuid("client_id").references((): AnyPgColumn => clients.id, { onDelete: "set null" }),
@@ -495,7 +506,7 @@ export const bookings = pgTable(
     totalSale: numeric("total_sale", { precision: 16, scale: 2, mode: "number" }).notNull(),
     tokenAmount: numeric("token_amount", { precision: 15, scale: 2, mode: "number" }).notNull(),
     reservedUntil: date("reserved_until"),
-    stage: bookingStage("stage").notNull().default("negotiation"),
+    stage: bookingStage("stage").notNull().default("token_pending"),
     stageChangedAt: timestamp("stage_changed_at", { withTimezone: true }).notNull().defaultNow(),
     paymentInstructions: text("payment_instructions"),
     agreementSentOn: date("agreement_sent_on"),
@@ -1150,6 +1161,8 @@ export const notificationType = pgEnum("notification_type", [
   "lost_requested",
   "lost_rejected",
   "follow_up_soon",
+  "lead_verification_requested",
+  "lead_verified",
 ]);
 
 /** In-app notifications (DATA_MODEL.md "notifications"). One row per recipient and event key, never duplicated. */
@@ -1246,7 +1259,7 @@ export const clientPhones = pgTable(
 );
 
 /** How a lead got its owner. */
-export const leadAssignmentMode = pgEnum("lead_assignment_mode", ["scored", "returning_customer", "claim", "manual", "creator", "import"]);
+export const leadAssignmentMode = pgEnum("lead_assignment_mode", ["scored", "returning_customer", "claim", "manual", "creator", "import", "rotation"]);
 
 /** Every ownership decision with its reason and, for scored assignment, each candidate's breakdown. */
 export const leadAssignments = pgTable(

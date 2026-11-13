@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { selectClass } from "@/features/leads/components/lead-fields";
 import { withParams } from "@/features/leads/url";
 import { formatInt } from "@/lib/format";
-import { BOOKING_STAGES, BOOKING_STAGE_LABELS } from "@/modules/bookings/constants";
+import { BOOKING_STAGE_LABELS, CURRENT_STAGES } from "@/modules/bookings/constants";
 
 /** Reference bookings filters: search, Project, Stage (FR-085). */
 export function BookingsToolbar({
@@ -64,7 +64,7 @@ export function BookingsToolbar({
           <span className="sr-only">Stage</span>
           <select value={params.stage ?? ""} onChange={(e) => go({ stage: e.target.value || null })} className={selectClass} disabled={pending}>
             <option value="">All stages</option>
-            {BOOKING_STAGES.map((s) => (
+            {CURRENT_STAGES.map((s) => (
               <option key={s} value={s}>
                 {BOOKING_STAGE_LABELS[s]}
               </option>

@@ -1,6 +1,7 @@
 "use client";
 
-import { GripVertical } from "lucide-react";
+import { GripVertical, Phone } from "lucide-react";
+import { telHref } from "@/modules/leads/phone";
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition, type PointerEvent as ReactPointerEvent } from "react";
 import { cn } from "@/lib/cn";
@@ -62,7 +63,17 @@ function KanbanCard({
         </span>
         <span className="shrink-0 text-[10px] font-bold tracking-[0.05em] text-zinc-500">{card.code}</span>
       </div>
-      <p className="mt-1 text-[11px] text-zinc-600">{card.phone}</p>
+      <p className="mt-1 flex items-center gap-1.5 text-[11px] text-zinc-600">
+        <a
+          href={telHref(card.phoneCountryCode, card.phoneNumber)}
+          className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand ring-1 ring-brand/20 transition-colors hover:bg-brand hover:text-white"
+          aria-label={`Call ${card.name} on ${card.phone}`}
+          title={`Call ${card.phone}`}
+        >
+          <Phone aria-hidden="true" className="size-3" />
+        </a>
+        {card.phone}
+      </p>
       <p className="text-[11px] text-zinc-600">{card.ownerName ?? "Unassigned"}</p>
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         {card.priority !== "none" ? (

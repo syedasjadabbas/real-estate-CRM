@@ -2,7 +2,7 @@ import { rm } from "node:fs/promises";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import pg from "pg";
-import { advanceBooking, createBooking } from "@/modules/bookings/commands";
+import { createBooking } from "@/modules/bookings/commands";
 import { recordPayment } from "@/modules/finance/commands";
 import { listPaymentMethods } from "@/modules/finance/queries";
 import { createUnit } from "@/modules/inventory/commands";
@@ -48,7 +48,6 @@ export default async function globalSetup() {
     if (lead.outcome !== "created") throw new Error("[e2e] seed lead");
     const { unitId } = await createUnit(db, f.actors.superAdmin, { projectId: f.projectId, unitNo: "E2E-1", areaSqft: "500", basePrice: "1" });
     const { bookingId } = await createBooking(db, f.actors.agent1, { projectId: f.projectId, leadId: lead.leadId, unitId, ratePerSqft: "25000", tokenAmount: "500000" });
-    await advanceBooking(db, f.actors.superAdmin, bookingId, { toStage: "token_pending" });
     const cashId = (await listPaymentMethods(db, { activeOnly: true })).find((m) => m.name === "Cash")!.id;
     const today = new Date(Date.now() + 5 * 3_600_000).toISOString().slice(0, 10);
     await recordPayment(db, accountant, { bookingId, type: "token", amount: "500000", receivedOn: today, methodId: cashId });

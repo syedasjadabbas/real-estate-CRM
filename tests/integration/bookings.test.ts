@@ -26,7 +26,7 @@ const errorOf = async (p: Promise<unknown>) => {
 };
 const errorCode = async (p: Promise<unknown>) => (await errorOf(p))?.code ?? "ok";
 const TODAY = "2026-10-29";
-const PATH = ["token_pending", "token_received", "provisional_receipt", "sales_order", "booking_form", "down_payment", "agreement_pending"] as const;
+const PATH = ["down_payment", "agreement_pending"] as const;
 
 describe.skipIf(!hasTestDb)("Bookings module (PostgreSQL integration)", () => {
   let db: Database;
@@ -60,7 +60,7 @@ describe.skipIf(!hasTestDb)("Bookings module (PostgreSQL integration)", () => {
   const statusOf = async (unitId: string) => (await db.select().from(units).where(eq(units.id, unitId)))[0].status;
   const leadStage = async (leadId: string) => (await db.select().from(leads).where(eq(leads.id, leadId)))[0].stage;
   const advanceTo = async (actor: Actor, bookingId: string, stages: readonly string[]) => {
-    for (const s of stages) await advanceBooking(db, actor, bookingId, { toStage: s });
+    for (const s of stages.filter((x) => !["token_pending", "token_received", "provisional_receipt", "sales_order", "booking_form"].includes(x))) await advanceBooking(db, actor, bookingId, { toStage: s });
   };
 
   describe("create and reservation", () => {
@@ -70,11 +70,13 @@ describe.skipIf(!hasTestDb)("Bookings module (PostgreSQL integration)", () => {
       const { bookingId } = await book(f.actors.agent1, leadId, unitId, { paymentInstructions: "Bank transfer to escrow" });
 
       const [b] = await db.select().from(bookings).where(eq(bookings.id, bookingId));
-      expect(b).toMatchObject({ stage: "negotiation", areaSqft: 500, ratePerSqft: 25_000, totalSale: 12_500_000, tokenAmount: 500_000, agentId: f.actors.agent1.id, clientId: null });
+      expect(b).toMatchObject({ stage: "token_pending", areaSqft: 500, ratePerSqft: 25_000, totalSale: 12_500_000, tokenAmount: 500_000, agentId: f.actors.agent1.id });
+      // The lead's client (every lead has one since 13 Nov 2026) holds the booking at once.
+      expect(b.clientId).toBe((await db.select({ clientId: leads.clientId }).from(leads).where(eq(leads.id, b.leadId)))[0].clientId);
       expect(await statusOf(unitId)).toBe("reserved");
       expect(await leadStage(leadId)).toBe("booking_in_process");
       const history = await db.select().from(bookingStageHistory).where(eq(bookingStageHistory.bookingId, bookingId));
-      expect(history.map((h) => [h.fromStage, h.toStage])).toEqual([[null, "negotiation"]]);
+      expect(history.map((h) => [h.fromStage, h.toStage])).toEqual([[null, "token_pending"]]);
       const audit = await db.select().from(auditLogs).where(eq(auditLogs.entityId, bookingId));
       expect(audit.map((a) => a.action)).toEqual(["booking.create"]);
       const unitAudit = await db.select().from(auditLogs).where(and(eq(auditLogs.entityId, unitId), eq(auditLogs.action, "unit.status")));
@@ -142,28 +144,30 @@ describe.skipIf(!hasTestDb)("Bookings module (PostgreSQL integration)", () => {
   });
 
   describe("stages", () => {
-    it("moves one step at a time; agents stop at Sales order; managers confirm", async () => {
+    it("starts at Token and moves one step at a time; agents reach Complete Down Payment; managers close as won", async () => {
       const unitId = await unit();
       const leadId = await leadOf(f.actors.agent1);
       const { bookingId } = await book(f.actors.agent1, leadId, unitId);
+      expect((await db.select().from(bookings).where(eq(bookings.id, bookingId)))[0].stage).toBe("token_pending");
 
-      expect(await errorCode(advanceBooking(db, f.actors.agent1, bookingId, { toStage: "token_received" }))).toBe("BUSINESS_RULE");
+      // No skipping (Token → Complete Down Payment), no retired stages, no cancelling by moving.
+      expect(await errorCode(advanceBooking(db, f.actors.agent1, bookingId, { toStage: "agreement_pending" }))).toBe("BUSINESS_RULE");
+      expect(await errorCode(advanceBooking(db, f.actors.agent1, bookingId, { toStage: "sales_order" }))).toBe("BUSINESS_RULE");
       expect(await errorCode(advanceBooking(db, f.actors.agent1, bookingId, { toStage: "cancelled" }))).toBe("BUSINESS_RULE");
-      await advanceTo(f.actors.agent1, bookingId, PATH.slice(0, 4));
-      expect(await errorCode(advanceBooking(db, f.actors.agent1, bookingId, { toStage: "booking_form" }))).toBe("FORBIDDEN");
-      await advanceTo(f.actors.manager, bookingId, PATH.slice(4));
+      await advanceTo(f.actors.agent1, bookingId, PATH);
+      expect(await errorCode(advanceBooking(db, f.actors.agent1, bookingId, { toStage: "confirmed" }))).toBe("FORBIDDEN");
       expect(await errorCode(advanceBooking(db, f.actors.agent2, bookingId, { toStage: "confirmed" }))).toBe("NOT_FOUND");
 
       const history = await db.select().from(bookingStageHistory).where(eq(bookingStageHistory.bookingId, bookingId));
-      expect(history).toHaveLength(1 + PATH.length);
+      expect(history.map((h) => h.toStage)).toEqual(["token_pending", "down_payment", "agreement_pending"]);
       expect(await statusOf(unitId)).toBe("reserved");
     });
 
     it("lets only one of two concurrent moves on the same booking succeed", async () => {
       const { bookingId } = await book(f.actors.agent1, await leadOf(f.actors.agent1), await unit());
       const results = await Promise.allSettled([
-        advanceBooking(db, f.actors.agent1, bookingId, { toStage: "token_pending" }),
-        advanceBooking(db, f.actors.manager, bookingId, { toStage: "token_pending" }),
+        advanceBooking(db, f.actors.agent1, bookingId, { toStage: "down_payment" }),
+        advanceBooking(db, f.actors.manager, bookingId, { toStage: "down_payment" }),
       ]);
       expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
       expect(((results.find((r) => r.status === "rejected") as PromiseRejectedResult).reason as AppError).code).toMatch(/BUSINESS_RULE|CONFLICT/);
@@ -216,7 +220,6 @@ describe.skipIf(!hasTestDb)("Bookings module (PostgreSQL integration)", () => {
       const unitId = await unit();
       const leadId = await leadOf(f.actors.agent1);
       const { bookingId } = await book(f.actors.agent1, leadId, unitId);
-      await advanceBooking(db, f.actors.agent1, bookingId, { toStage: "token_pending" });
 
       expect(await errorCode(cancelBooking(db, f.actors.agent1, bookingId, { reason: "Changed mind" }))).toBe("FORBIDDEN");
       expect(await errorCode(cancelBooking(db, f.actors.manager, bookingId, { reason: "" }))).toBe("VALIDATION_FAILED");
@@ -253,7 +256,6 @@ describe.skipIf(!hasTestDb)("Bookings module (PostgreSQL integration)", () => {
       const unitId = await unit();
       const leadId = await leadOf(f.actors.agent1);
       const { bookingId } = await book(f.actors.agent1, leadId, unitId);
-      await advanceTo(f.actors.agent1, bookingId, ["token_pending"]);
       const activitiesBefore = (await db.select().from(leadActivities).where(eq(leadActivities.leadId, leadId))).length;
 
       expect(await msg(markLost(db, f.actors.manager, leadId, { lostReasonId: f.lostReasonId }))).toMatch(OPEN_BOOKING);
@@ -279,7 +281,7 @@ describe.skipIf(!hasTestDb)("Bookings module (PostgreSQL integration)", () => {
       expect(await pendingLostRequests(db, f.actors.manager, f.projectId)).toHaveLength(1); // still pending
       await decideLostRequest(db, f.actors.manager, request.id, { approve: false, comment: "Booking in progress" });
       expect(await pendingLostRequests(db, f.actors.manager, f.projectId)).toEqual([]);
-      expect((await db.select().from(bookings).where(eq(bookings.id, bookingId)))[0].stage).toBe("negotiation");
+      expect((await db.select().from(bookings).where(eq(bookings.id, bookingId)))[0].stage).toBe("token_pending");
     });
 
     it("refuses every other stage while the booking is open (pipeline drag / stage menu)", async () => {
@@ -297,7 +299,7 @@ describe.skipIf(!hasTestDb)("Bookings module (PostgreSQL integration)", () => {
       const { bookingId } = await book(f.actors.manager, await leadOf(f.actors.agent1), await unit());
       const early = await leadOf(f.actors.agent1);
       await db.update(bookings).set({ leadId: early }).where(eq(bookings.id, bookingId));
-      const { meetingId } = await createMeeting(db, f.actors.agent1, { title: "Site visit", startsAt: new Date(Date.now() + 3_600_000).toISOString(), leadId: early, moveLead: true });
+      const { meetingId } = await createMeeting(db, f.actors.agent1, { title: "Site visit", type: "site_visit", startsAt: new Date(Date.now() + 3_600_000).toISOString(), leadId: early, moveLead: true });
       expect(await leadStage(early)).toBe("new_lead");
       await completeMeeting(db, f.actors.agent1, meetingId, { moveLead: true });
       expect(await leadStage(early)).toBe("new_lead");
@@ -388,12 +390,13 @@ describe.skipIf(!hasTestDb)("Bookings module (PostgreSQL integration)", () => {
       expect(await ids(accountant)).toEqual([b1, b2, b3].sort());
       expect(await errorCode(listBookings(db, f.actors.hr, {}, f.projectId, TODAY))).toBe("FORBIDDEN");
       expect(await errorCode(getBookingDetail(db, f.actors.manager, b3, TODAY))).toBe("NOT_FOUND");
-      expect(await ids(f.actors.superAdmin, { stage: "token_pending" })).toEqual([]);
+      expect(await ids(f.actors.superAdmin, { stage: "down_payment" })).toEqual([]);
+      expect(await ids(f.actors.superAdmin, { stage: "token_pending" })).toEqual([b1, b2, b3].sort());
 
       const detail = await getBookingDetail(db, accountant, b1, TODAY);
       expect(detail.money).toEqual({ paid: 0, total: 12_500_000, outstanding: 12_500_000, milestoneMet: false });
       expect(detail.permissions).toMatchObject({ advance: false, cancel: false, editDetails: false });
-      expect(await errorCode(advanceBooking(db, accountant, b1, { toStage: "token_pending" }))).toBe("FORBIDDEN");
+      expect(await errorCode(advanceBooking(db, accountant, b1, { toStage: "down_payment" }))).toBe("FORBIDDEN");
     });
 
     it("updates overview fields (managers / admins), flags overdue holds, and keeps rate and token fixed", async () => {

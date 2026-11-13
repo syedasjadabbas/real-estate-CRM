@@ -10,7 +10,6 @@ import {
   leads,
   leaveRequests,
   rosterEntries,
-  rotationState,
   sessions,
   teamMembers,
   teams,
@@ -18,20 +17,7 @@ import {
 } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
 import { AppError, forbidden } from "@/server/errors";
-import {
-  agentScore,
-  availabilityScore,
-  conversionScore,
-  DEFAULT_ASSIGNMENT_SETTINGS,
-  inWorkingHours,
-  performanceScore,
-  pickCandidate,
-  weightedScore,
-  workloadScore,
-  type AgentStats,
-  type AssignmentSettings,
-  type Candidate,
-} from "./assignment-score";
+import { agentScore, DEFAULT_ASSIGNMENT_SETTINGS, type AgentStats, type AssignmentSettings } from "./assignment-score";
 import type { Tx } from "./support";
 
 type Db = Database | Tx;
@@ -191,23 +177,30 @@ export type AssignmentDecision = {
   breakdown: Record<string, unknown>;
 };
 
+/** Shared rotation pointer: the last agent who received an automatically assigned lead. */
+export const ROTATION_LAST_KEY = "assignment.rotation_last_agent";
+/** One transaction-scoped lock for the rotation, so two leads saved at once never get the same turn. */
+const ROTATION_LOCK = 740_215_101;
+
 /**
- * Picks an owner for a new lead in `projectId`. Eligible: active agents in active teams (a
- * manager's own teams when a manager creates the lead), not on approved leave today, not marked
- * on leave or "leads off" in today's roster, not on their team's weekend without a roster entry,
- * and below the maximum load. Among those, the highest weighted score wins. Runs under the
- * project's assignment lock so two simultaneous leads see each other's load.
+ * Picks an owner for a new lead by equal rotation (owner's decision, 13 Nov 2026): imported, API and
+ * hand-added leads without a chosen owner go to the next available agent in one shared loop, ordered
+ * by name. Performance, conversion and load play no part. Available: active agents in active teams,
+ * not on approved leave today, not marked on leave or "leads off" in today's roster, and not on their
+ * team's weekend without a roster entry. An agent who is unavailable is skipped and rejoins the loop
+ * when back. The pointer survives across projects, batches and days, so the split stays even. A
+ * manager's leads rotate among their own teams' agents, with their own turn.
  */
 export async function chooseOwner(tx: Tx, actor: Actor, projectId: string, now = new Date()): Promise<AssignmentDecision> {
-  const s = await readAssignmentSettings(tx);
-  await tx.insert(rotationState).values({ projectId }).onConflictDoNothing();
-  await tx.select().from(rotationState).where(eq(rotationState.projectId, projectId)).for("update");
-
+  await tx.execute(sql`select pg_advisory_xact_lock(${ROTATION_LOCK})`);
   const today = businessToday(now);
   const weekday = new Date(`${today}T00:00:00Z`).getUTCDay();
+  // A manager hands leads only to agents in the teams they manage (F-15); everyone else to all teams.
   const managedOnly = actor.role === "manager";
-  // Share-lock the teams being considered: a team change in progress (which takes the team row's
-  // update lock) finishes first, so an agent being removed can't be handed the lead (F-15).
+  // A manager's loop keeps its own turn; imports, the API and admins share one.
+  const pointerKey = managedOnly ? `${ROTATION_LAST_KEY}:${actor.id}` : ROTATION_LAST_KEY;
+  // Share-lock the teams considered: a team change in progress (which takes the team row's update
+  // lock) finishes first, so an agent being removed can't be handed the lead (F-15).
   await tx
     .select({ id: teams.id })
     .from(teams)
@@ -219,8 +212,7 @@ export async function chooseOwner(tx: Tx, actor: Actor, projectId: string, now =
     .from(users)
     .innerJoin(teamMembers, eq(teamMembers.userId, users.id))
     .innerJoin(teams, eq(teams.id, teamMembers.teamId))
-    .where(and(eq(users.role, "agent"), eq(users.status, "active"), eq(teams.isActive, true), managedOnly ? eq(teams.managerId, actor.id) : undefined))
-    .orderBy(asc(users.id));
+    .where(and(eq(users.role, "agent"), eq(users.status, "active"), eq(teams.isActive, true), managedOnly ? eq(teams.managerId, actor.id) : undefined));
   const agents = new Map<string, { name: string; weekend: boolean }>();
   for (const m of members) {
     const weekend = m.weekendDays.includes(weekday);
@@ -228,62 +220,53 @@ export async function chooseOwner(tx: Tx, actor: Actor, projectId: string, now =
     // On weekend only if every team they are in has today as a weekend day.
     agents.set(m.id, { name: m.name, weekend: prior ? prior.weekend && weekend : weekend });
   }
-  const ids = [...agents.keys()];
+  const order = [...agents.entries()]
+    .map(([id, a]) => ({ id, name: a.name, weekend: a.weekend }))
+    .sort((x, y) => x.name.localeCompare(y.name) || x.id.localeCompare(y.id));
   const excluded: { userId: string; name: string; reason: string }[] = [];
-  if (ids.length === 0) return { ownerId: null, reason: "No active agents in an active team", breakdown: { settings: s, candidates: [], excluded } };
+  if (order.length === 0) return { ownerId: null, reason: "No active agents in an active team", breakdown: { method: "rotation", order: [], excluded } };
 
-  const [onLeave, roster, lastAssigned] = await inOrder([
+  const ids = order.map((a) => a.id);
+  const [onLeave, roster, pointer] = await inOrder([
     tx
       .selectDistinct({ id: leaveRequests.userId })
       .from(leaveRequests)
       .where(and(inArray(leaveRequests.userId, ids), inArray(leaveRequests.status, ["approved", "cancel_requested"]), lte(leaveRequests.startDate, today), gte(leaveRequests.endDate, today))),
     tx.select({ id: rosterEntries.userId, status: rosterEntries.status }).from(rosterEntries).where(and(inArray(rosterEntries.userId, ids), eq(rosterEntries.date, today))),
-    tx
-      .select({ id: leadAssignments.assigneeId, at: sql<string>`max(${leadAssignments.createdAt})` })
-      .from(leadAssignments)
-      .where(inArray(leadAssignments.assigneeId, ids))
-      .groupBy(leadAssignments.assigneeId),
+    tx.select({ value: appSettings.value }).from(appSettings).where(eq(appSettings.key, pointerKey)),
   ]);
   const leave = new Set(onLeave.map((r) => r.id));
   const rosterBy = new Map(roster.map((r) => [r.id, r.status]));
-  const lastBy = new Map(lastAssigned.map((r) => [r.id, new Date(r.at).getTime()]));
-  const stats = await agentStats(tx, ids, s, now);
-  const hours = inWorkingHours(now, s.workStart, s.workEnd);
-
-  const candidates: Candidate[] = [];
-  for (const id of ids) {
-    const a = agents.get(id)!;
-    const st = stats.get(id)!;
-    const status = rosterBy.get(id);
-    const load = st.openLeads + st.pendingFollowUps;
+  const available = order.filter((a) => {
+    const status = rosterBy.get(a.id);
     let why: string | null = null;
-    if (leave.has(id) || status === "on_leave") why = "On leave today";
+    if (leave.has(a.id) || status === "on_leave") why = "On leave today";
     else if (status === "leads_off") why = "Leads off in today's roster";
     else if (!status && a.weekend) why = "Team weekend";
-    else if (load >= s.maxLoad) why = `Full: ${load} of ${s.maxLoad} open leads and follow-ups`;
-    if (why) {
-      excluded.push({ userId: id, name: a.name, reason: why });
-      continue;
-    }
-    const components = {
-      workload: workloadScore(load, s.maxLoad),
-      performance: performanceScore(st, s.minPerformanceSample),
-      conversion: conversionScore(st.booked, st.lost, s.minDecidedLeads),
-      availability: availabilityScore(st.online, hours, s.offlineAvailability),
-    };
-    candidates.push({ userId: id, name: a.name, load, lastAssignedAt: lastBy.get(id) ?? null, components, score: weightedScore(components, s) });
+    if (why) excluded.push({ userId: a.id, name: a.name, reason: why });
+    return !why;
+  });
+  const breakdown = { method: "rotation", previousAgentId: pointer[0]?.value ?? null, order: available.map((a) => a.name), excluded };
+  if (available.length === 0) return { ownerId: null, reason: "No available agent: every agent is on leave, leads off or on their weekend", breakdown };
+
+  // The next agent after the previous one in the full name order (so a returning agent takes their
+  // usual place); past the end, back to the first.
+  const lastId = pointer[0]?.value ?? null;
+  const lastAt = lastId ? order.findIndex((a) => a.id === lastId) : -1;
+  let winner = available[0];
+  if (lastAt >= 0) winner = available.find((a) => order.indexOf(a) > lastAt) ?? available[0];
+  else if (lastId) {
+    // The previous agent left the team or was deactivated: continue from where their name would sit.
+    const [gone] = await tx.select({ name: users.name }).from(users).where(eq(users.id, lastId));
+    if (gone) winner = available.find((a) => a.name.localeCompare(gone.name) > 0) ?? available[0];
   }
-  const winner = pickCandidate(candidates);
-  const breakdown = {
-    settings: s,
-    inWorkingHours: hours,
-    candidates: candidates.map((c) => ({ userId: c.userId, name: c.name, load: c.load, score: c.score, ...c.components })).sort((a, b) => b.score - a.score),
-    excluded,
-  };
-  if (!winner) return { ownerId: null, reason: "No eligible agent: every agent is unavailable or full", breakdown };
+  await tx
+    .insert(appSettings)
+    .values({ key: pointerKey, value: winner.id, updatedById: actor.id, updatedAt: now })
+    .onConflictDoUpdate({ target: appSettings.key, set: { value: winner.id, updatedById: actor.id, updatedAt: now } });
   return {
-    ownerId: winner.userId,
-    reason: `Highest assignment score ${Math.round(winner.score * 100)} of ${candidates.length} eligible agent${candidates.length === 1 ? "" : "s"}`,
+    ownerId: winner.id,
+    reason: `Next in the equal rotation (${available.length} available agent${available.length === 1 ? "" : "s"})`,
     breakdown,
   };
 }

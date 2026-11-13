@@ -1,4 +1,9 @@
-/** FR-082 stages in reference order. Cancelled is reachable from any open stage. */
+/**
+ * Every value the database may hold. Since 14 Nov 2026 (owner's decision) bookings use four stages:
+ * Token → Partial Down Payment → Complete Down Payment → Closed Won, plus Cancelled. They are stored as
+ * token_pending, down_payment, agreement_pending and confirmed; the other values are no longer used
+ * (existing bookings were moved to Token) and stay only so old history entries keep a label.
+ */
 export const BOOKING_STAGES = [
   "negotiation",
   "token_pending",
@@ -15,30 +20,38 @@ export type BookingStage = (typeof BOOKING_STAGES)[number];
 
 export const BOOKING_STAGE_LABELS: Record<BookingStage, string> = {
   negotiation: "Negotiation",
-  token_pending: "Token pending",
+  token_pending: "Token",
   token_received: "Token received",
   provisional_receipt: "Provisional receipt",
   sales_order: "Sales order",
   booking_form: "Booking form",
-  down_payment: "Down payment",
-  agreement_pending: "Agreement pending",
-  confirmed: "Confirmed",
+  down_payment: "Partial Down Payment",
+  agreement_pending: "Complete Down Payment",
+  confirmed: "Closed Won",
   cancelled: "Cancelled",
 };
 
-/** The forward path (decision 29 Oct 2026: one step at a time, no skipping, no going back). */
-export const FORWARD_PATH: BookingStage[] = BOOKING_STAGES.filter((s) => s !== "cancelled");
+/** The forward path, one step at a time, no skipping, no going back (stages of 14 Nov 2026). */
+export const FORWARD_PATH: BookingStage[] = ["token_pending", "down_payment", "agreement_pending", "confirmed"];
+
+/** Stages offered in filters and shown to users, in order. */
+export const CURRENT_STAGES: BookingStage[] = [...FORWARD_PATH, "cancelled"];
+
+/** Where a new booking starts. */
+export const FIRST_STAGE: BookingStage = "token_pending";
 
 export const CLOSED_STAGES: BookingStage[] = ["confirmed", "cancelled"];
 
-/** Highest stage an agent may move a booking to (permission matrix: "O (up to Sales order)"). */
-export const AGENT_MAX_STAGE: BookingStage = "sales_order";
+/** Highest stage an agent may move a booking to: Complete Down Payment. Closed Won is for managers and admins. */
+export const AGENT_MAX_STAGE: BookingStage = "agreement_pending";
 
 /**
  * Stages during which the unit is only "held" for the token: the token has not been received yet
  * (Token received and later stages mean it has). Used for the overdue flag and FR-081 auto-release.
  */
 export const HOLD_STAGES: BookingStage[] = ["negotiation", "token_pending"];
+// Token covers both "token awaited" and "token paid": the release job only frees a hold with no
+// payment recorded at all (hold-release.ts), so a paid token keeps the unit.
 
 /** FR-081 (client confirmation, 10 Nov 2026): a hold expires after 7 days and the unit returns to Available. */
 export const HOLD_DAYS = 7;

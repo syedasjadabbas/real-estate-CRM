@@ -3,6 +3,9 @@ import { and, asc, count, desc, eq, ilike, isNotNull, or, sql, type SQL, type SQ
 import { alias } from "drizzle-orm/pg-core";
 import type { Database } from "@/server/db";
 import { auditLogs, projects, units, users } from "@/server/db/schema";
+
+/** When a booked unit was booked: its active booking's confirmation date (else when it was made). */
+const bookedOnSql = sql`(select coalesce(b.confirmed_at, b.created_at) from bookings b where b.unit_id = ${units.id} and b.stage <> 'cancelled' order by b.created_at desc limit 1)`;
 import type { Actor } from "@/server/auth/types";
 import { forbidden, notFound } from "@/server/errors";
 import { UNIT_PAGE_SIZE, type UnitSortColumn } from "./constants";
@@ -41,6 +44,8 @@ const rowSelection = {
   statusChangedAt: units.statusChangedAt,
   comment: units.comment,
   listedOn: units.listedOn,
+  /** Shown only for booked, partially booked and sold units (owner, 13 Nov 2026). */
+  bookedOn: sql<string | null>`case when ${units.status} in ('booked', 'partially_booked', 'sold') then ${bookedOnSql} end`,
   createdAt: units.createdAt,
   updatedAt: units.updatedAt,
 };
@@ -62,6 +67,7 @@ const SORTS: Record<UnitSortColumn, SQL> = {
   type: text(units.type),
   bedrooms: sql`${units.bedrooms}`,
   listedOn: sql`${units.listedOn}`,
+  bookedOn: sql`case when ${units.status} in ('booked', 'partially_booked', 'sold') then ${bookedOnSql} end`,
 };
 
 export type UnitRow = Awaited<ReturnType<typeof listUnits>>["rows"][number];

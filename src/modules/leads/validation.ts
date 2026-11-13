@@ -63,7 +63,16 @@ export type CreateLeadInput = z.input<typeof createLeadSchema>;
 export const updateLeadSchema = leadFieldsSchema.extend({ priority: z.enum(PRIORITIES) }).partial();
 export type UpdateLeadInput = z.input<typeof updateLeadSchema>;
 
-export const stageChangeSchema = z.object({ stage: z.enum(LEAD_STAGES) });
+/** A stage move, with optional remarks recorded on the timeline (empty text = none). */
+export const stageChangeSchema = z.object({
+  stage: z.enum(LEAD_STAGES),
+  remarks: z
+    .string()
+    .trim()
+    .max(1000, "Keep remarks under 1,000 characters")
+    .optional()
+    .transform((v) => (v ? v : undefined)),
+});
 export const assignSchema = z.object({ ownerId: z.uuid("Choose an owner") });
 export const noteSchema = z.object({ body: z.string().trim().min(1, "Write a note").max(4000) });
 export const reviewSchema = z.object({ body: z.string().trim().min(1, "Write a review").max(4000) });

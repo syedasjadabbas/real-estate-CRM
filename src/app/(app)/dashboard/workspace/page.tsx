@@ -1,4 +1,4 @@
-import { CalendarDays, Circle } from "lucide-react";
+import { Circle } from "lucide-react";
 import { MyLeavePanel } from "@/features/leave/components/my-leave-panel";
 import { businessToday } from "@/modules/bookings/today";
 import { myLeave } from "@/modules/leave/service";
@@ -8,15 +8,12 @@ import { PageHeader, PageStack } from "@/components/shell/page-header";
 import { StatusTag } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { MiniStat } from "@/components/ui/stat";
-import { formatListedOn } from "@/features/inventory/format";
 import { PanelCard } from "@/features/leads/components/detail-panels";
 import { Pagination } from "@/features/leads/components/pagination";
 import { formatDateTime } from "@/features/leads/format";
 import { flattenParams, withParams } from "@/features/leads/url";
 import { cn } from "@/lib/cn";
 import { formatInt } from "@/lib/format";
-import { canViewHolidays } from "@/modules/holidays/policy";
-import { HOLIDAY_SCOPE_LABELS, weekdayOf } from "@/modules/holidays/validation";
 import { signinRetentionNote } from "@/modules/security/service";
 import { getMyWorkplace } from "@/modules/workplace/service";
 import { SIGNIN_COUNT_DAYS, SIGNIN_EVENT_LABELS, type SigninEvent } from "@/modules/workplace/validation";
@@ -32,9 +29,7 @@ const EVENT_FILTERS: { label: string; value: SigninEvent | null }[] = [
   { label: "Sign-outs", value: "sign_out" },
 ];
 
-const inDays = (n: number) => (n === 0 ? "Today" : n === 1 ? "Tomorrow" : `In ${formatInt(n)} days`);
-
-/** My Workplace (FR-130): my leave, upcoming holidays and the user's own sign-in log. */
+/** My Workplace (FR-130): my leave and the user's own sign-in log. Upcoming holidays removed (owner, 13 Nov 2026). */
 export default async function WorkspacePage({ searchParams }: PageProps<"/dashboard/workspace">) {
   const actor = await requirePageUser();
   const all = flattenParams(await searchParams);
@@ -48,61 +43,18 @@ export default async function WorkspacePage({ searchParams }: PageProps<"/dashbo
   const leaveYear = Number.isInteger(askedYear) && askedYear >= 2000 && askedYear <= thisYear + 1 ? askedYear : thisYear;
   const db = getDb();
   const [{ holidays, signins }, retentionNote, leave] = await Promise.all([getMyWorkplace(db, actor, params), signinRetentionNote(db), myLeave(db, actor, leaveYear)]);
-  const next = holidays.rows[0] ?? null;
   const listParams: Record<string, string> = signins.query.event ? { event: signins.query.event } : {};
 
   return (
     <PageStack>
-      <PageHeader title="My workplace" description="Your leave, company holidays, and CRM sign-in history (web sessions)." icon={Circle} />
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <MiniStat
-          label="Upcoming holidays"
-          value={<span className="block truncate text-sm leading-[18px]">{next ? next.name : "None scheduled"}</span>}
-          caption={next ? `${formatListedOn(next.date)} · ${inDays(next.daysAway)}` : "Next on the calendar"}
-        />
+      <PageHeader title="My workplace" description="Your leave and CRM sign-in history (web sessions)." icon={Circle} />
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <MiniStat label={`Leave · ${leave.year}`} value={`${leave.balance.remaining} / ${leave.balance.allowance}`} caption="Days remaining / allowance" />
         <MiniStat label="Sign-ins logged" value={formatInt(signins.recentSignins)} caption={`Last ${SIGNIN_COUNT_DAYS} days · not attendance`} />
       </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         <div className="min-w-0 space-y-6">
-          <PanelCard title="Upcoming holidays">
-            <p className="text-[11px] text-zinc-500">
-              Company-wide and regional dates from HR, in Pakistan time. Regional holidays apply to their region only.
-            </p>
-            {holidays.rows.length === 0 ? (
-              <EmptyState size="sm" className="mt-3">
-                No upcoming holidays on the calendar.
-              </EmptyState>
-            ) : (
-              <ol className="mt-3 divide-y divide-zinc-100">
-                {holidays.rows.map((h) => (
-                  <li key={h.id} className="flex items-start gap-3 py-2.5 first:pt-0 last:pb-0">
-                    <div className="w-[92px] shrink-0">
-                      <p className="text-xs font-bold tabular-nums text-zinc-900">{formatListedOn(h.date)}</p>
-                      <p className="text-[11px] text-zinc-500">{weekdayOf(h.date)}</p>
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold break-words text-zinc-900">{h.name}</p>
-                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                        <StatusTag tone={h.scope === "company" ? "brand" : "sky"}>
-                          {h.scope === "company" ? HOLIDAY_SCOPE_LABELS.company : `Regional · ${h.region}`}
-                        </StatusTag>
-                        <span className="text-[11px] text-zinc-500">{inDays(h.daysAway)}</span>
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            )}
-            {canViewHolidays(actor) ? (
-              <Link href="/dashboard/hr/holidays" className="mt-4 inline-flex items-center gap-1.5 text-xs font-bold text-brand hover:underline">
-                <CalendarDays aria-hidden="true" className="size-3.5" />
-                Open holiday calendar
-              </Link>
-            ) : null}
-          </PanelCard>
-
           <MyLeavePanel
             balance={leave.balance}
             rows={leave.rows}

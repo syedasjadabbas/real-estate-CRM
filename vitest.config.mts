@@ -22,6 +22,8 @@ export default defineConfig({
     environment: "node",
     include: ["tests/**/*.test.ts"],
     globalSetup: ["tests/support/global-setup.ts"],
+    // Agents' new leads start approved in tests written before lead verification (see the file).
+    setupFiles: ["tests/support/approved-leads.ts"],
     // Integration tests share one database; run files sequentially.
     fileParallelism: false,
     testTimeout: 20_000,

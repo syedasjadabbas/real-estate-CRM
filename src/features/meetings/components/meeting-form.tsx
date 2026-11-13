@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertCircle } from "lucide-react";
+import { LeadPicker } from "@/features/leads/components/lead-picker";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -124,14 +125,15 @@ export function MeetingForm({ mode, meetingId, options, initial }: { mode: "crea
         </Field>
         <Field label="Lead" required error={errors.leadId} className="sm:col-span-2">
           {(id, describedBy) => (
-            <select id={id} aria-describedby={describedBy} value={v.leadId} onChange={(e) => set({ leadId: e.target.value })} className={selectClass} disabled={pending}>
-              <option value="">{options.leads.length ? "Select a lead…" : "No leads in this project"}</option>
-              {options.leads.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.name} ({l.code}) · {STAGE_LABELS[l.stage]}
-                </option>
-              ))}
-            </select>
+            <LeadPicker
+              id={id}
+              describedBy={describedBy}
+              value={v.leadId}
+              onChange={(leadId) => set({ leadId })}
+              options={options.leads.map((l) => ({ value: l.id, label: `${l.name} (${l.code}) · ${STAGE_LABELS[l.stage]}` }))}
+              empty={options.leads.length ? "Select a lead…" : "No leads in this project"}
+              disabled={pending}
+            />
           )}
         </Field>
         {mode === "create" && lead ? (

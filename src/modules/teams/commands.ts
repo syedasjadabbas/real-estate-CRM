@@ -21,10 +21,10 @@ export async function loadTeam(tx: DbOrTx, teamId: string, forUpdate = false) {
   return team;
 }
 
-/** Team managers must be active users with role manager (T-A2). */
+/** Team managers must be active Admins (Sales Managers until they were merged into Admin, 13 Nov 2026). */
 async function checkManager(tx: DbOrTx, managerId: string) {
   const [u] = await tx.select({ role: users.role, status: users.status }).from(users).where(eq(users.id, managerId)).limit(1);
-  if (!u || u.status !== "active" || u.role !== "manager") throw fieldError("managerId", "Choose an active sales manager");
+  if (!u || u.status !== "active" || (u.role !== "admin" && u.role !== "manager")) throw fieldError("managerId", "Choose an active admin");
 }
 
 async function checkNameFree(tx: DbOrTx, name: string, exceptId?: string) {
@@ -89,7 +89,7 @@ export async function setTeamMembers(db: Database, actor: Actor, teamId: string,
     const team = await loadTeam(tx, teamId, true);
     if (wanted.length) {
       const rows = await tx.select({ id: users.id, role: users.role, status: users.status }).from(users).where(inArray(users.id, wanted));
-      const ok = rows.filter((u) => u.status === "active" && (u.role === "agent" || u.role === "manager"));
+      const ok = rows.filter((u) => u.status === "active" && (u.role === "agent" || u.role === "manager" || u.role === "admin"));
       if (ok.length !== wanted.length) throw fieldError("userIds", "Members must be active agents or managers");
     }
     const current = (await tx.select({ userId: teamMembers.userId }).from(teamMembers).where(eq(teamMembers.teamId, team.id))).map((r) => r.userId);

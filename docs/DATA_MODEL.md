@@ -138,6 +138,9 @@ Admin-managed lookup tables: `name` unique, `is_active`. City names are unique i
 | duplicate_of_id | FK leads | REF |
 | lost_reason_id | FK | |
 | latest_comment | text | denormalised |
+| verification | enum(`pending`,`approved`,`rejected`) | Lead verification (13 Nov 2026): an agent's hand-added lead starts `pending`; everything else (and every older lead) is `approved` |
+| verification_note | text | The reason given when rejected |
+| verified_by_id, verified_at | FK users, timestamptz | Who approved or rejected it, and when |
 Indexes: (`project_id`, `stage`), (`owner_id`, `stage`), (`project_id`, `created_at desc`), (`next_follow_up_at`), trigram index on `name` for search.
 
 ### lead_favorites (REF)
@@ -173,6 +176,8 @@ Assignment weights and thresholds are `app_settings` keys `assignment.*` (defaul
 ## 5. Clients and bookings
 
 ### clients (REF)
+**Since 13 Nov 2026 a client is the person and every lead is one of their inquiries:** each new lead joins the client holding one of its numbers or creates one (owner = the lead's owner); `leads.client_id` is set for every lead (migration 0033 backfilled existing leads, one client per phone number). A client's standing per project is derived from its leads there: booked, lost interest (every lead lost) or interested.
+
 `lead_id` FK unique (nullable for manual), `name`, `phone_e164`, `email`, `cnic` ⚠ (sensitive; confirm if needed), `address`, `relationship` enum(`prospect`,`investor`,`repeat_investor`) ⚠, `next_follow_up_at`.
 
 ### bookings (REF)

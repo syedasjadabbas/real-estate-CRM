@@ -1,4 +1,5 @@
 import { and, eq } from "drizzle-orm";
+import { assertWorkable } from "@/modules/leads/verification";
 import type { z } from "zod";
 import type { Database } from "@/server/db";
 import { auditLogs, bookings, projects, taskHistory, taskInstallmentRows, tasks, units, users, type TaskProposal } from "@/server/db/schema";
@@ -32,11 +33,13 @@ async function checkAssignee(tx: DbOrTx, actor: Actor, assigneeId: string) {
 /** Linked lead / booking must be visible to the actor; a booking linked with a lead must be that lead's booking. */
 async function checkLinks(tx: DbOrTx, actor: Actor, leadId: string | null, bookingId: string | null, members: string[]) {
   if (leadId) {
+    let lead;
     try {
-      await loadAccessibleLead(tx, actor, leadId);
+      ({ lead } = await loadAccessibleLead(tx, actor, leadId));
     } catch {
       throw taskFieldError("leadId", "Choose a lead you can access");
     }
+    assertWorkable(actor, lead);
   }
   if (bookingId) {
     const [booking] = await tx.select({ id: bookings.id, agentId: bookings.agentId, leadId: bookings.leadId }).from(bookings).where(eq(bookings.id, bookingId)).limit(1);

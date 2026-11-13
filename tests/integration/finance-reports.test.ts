@@ -56,7 +56,6 @@ describe.skipIf(!hasTestDb)("Finance reports FR-205 (PostgreSQL integration)", (
     const lead = await createLead(db, owner, leadInput(f, { projectId }));
     if (lead.outcome !== "created") throw new Error("setup");
     const { bookingId } = await createBooking(db, owner, { projectId, leadId: lead.leadId, unitId, ratePerSqft: "25000", tokenAmount: "500000" });
-    await advanceBooking(db, f.actors.superAdmin, bookingId, { toStage: "token_pending" });
     return bookingId;
   };
   const pay = (bookingId: string, amount: string, receivedOn: string) => recordPayment(db, accountant, { bookingId, type: "token", amount, receivedOn, methodId: cashId });

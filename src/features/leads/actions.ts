@@ -17,6 +17,7 @@ import {
 } from "@/modules/leads/commands";
 import { completeNextFollowUp } from "@/modules/leads/follow-ups";
 import { claimLead } from "@/modules/leads/claims";
+import { resubmitLead, verifyLead } from "@/modules/leads/verification";
 import { requireActor } from "@/server/auth/current-user";
 import { getDb } from "@/server/db";
 import { toActionError, type ActionResult } from "@/server/errors";
@@ -40,12 +41,22 @@ export async function createLeadAction(input: Record<string, unknown>): Promise<
   return run((db, actor) => createLead(db, actor, input));
 }
 
+/** Admin or Super Admin approves or rejects (with a reason) a lead an agent added. */
+export async function verifyLeadAction(leadId: string, approve: boolean, note?: string) {
+  return run((db, actor) => verifyLead(db, actor, leadId, { approve, note }));
+}
+
+/** The agent sends a corrected, rejected lead back for verification. */
+export async function resubmitLeadAction(leadId: string) {
+  return run((db, actor) => resubmitLead(db, actor, leadId));
+}
+
 export async function updateLeadAction(leadId: string, input: Record<string, unknown>) {
   return run((db, actor) => updateLead(db, actor, leadId, input));
 }
 
-export async function changeStageAction(leadId: string, stage: string) {
-  return run((db, actor) => changeStage(db, actor, leadId, { stage }));
+export async function changeStageAction(leadId: string, stage: string, remarks?: string) {
+  return run((db, actor) => changeStage(db, actor, leadId, { stage, remarks }));
 }
 
 export async function assignLeadAction(leadId: string, ownerId: string) {

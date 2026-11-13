@@ -103,8 +103,9 @@ describe.skipIf(!hasTestDb)("Leads module (PostgreSQL integration)", () => {
       expect(detail.lead.phoneE164).toMatch(/^\+92300\d+$/);
       expect(detail.lead.latestComment).toBe("Interested in 1 bed");
       expect(detail.lead.firstTouchAt).not.toBeNull();
-      expect(detail.activities.map((a) => a.type).sort()).toEqual(["created", "note"]);
-      expect(await db.select().from(auditLogs)).toHaveLength(1);
+      // client_linked: the lead created its person's client (13 Nov 2026).
+      expect(detail.activities.map((a) => a.type).sort()).toEqual(["client_linked", "created", "note"]);
+      expect((await db.select().from(auditLogs)).map((r) => r.action).sort()).toEqual(["client.create_from_lead", "lead.create"]);
     });
 
     it("returns field errors for invalid input", async () => {
@@ -203,6 +204,21 @@ describe.skipIf(!hasTestDb)("Leads module (PostgreSQL integration)", () => {
   });
 
   describe("editing, stages and history", () => {
+    it("records optional remarks with a stage move, on the timeline and in the audit log", async () => {
+      const r = await createLead(db, f.actors.agent1, leadInput(f));
+      if (r.outcome !== "created") throw new Error("setup");
+      await changeStage(db, f.actors.agent1, r.leadId, { stage: "contacted", remarks: "  Asked for the payment plan  " });
+      await changeStage(db, f.actors.agent1, r.leadId, { stage: "qualified_lead", remarks: "   " });
+      const moves = (await getLeadDetail(db, f.actors.agent1, r.leadId)).activities.filter((a) => a.type === "stage_change");
+      const withRemarks = moves.find((a) => (a.data as { to?: string }).to === "contacted")!;
+      const without = moves.find((a) => (a.data as { to?: string }).to === "qualified_lead")!;
+      expect(withRemarks.data).toMatchObject({ remarks: "Asked for the payment plan" });
+      expect(without.data).not.toHaveProperty("remarks");
+      const [row] = await db.select().from(auditLogs).where(sql`${auditLogs.entityId} = ${r.leadId} and ${auditLogs.action} = 'lead.stage' and ${auditLogs.after}->>'stage' = 'contacted'`);
+      expect(row.after).toMatchObject({ stage: "contacted", remarks: "Asked for the payment plan" });
+      expect(await errorCode(changeStage(db, f.actors.agent1, r.leadId, { stage: "contacted", remarks: "x".repeat(1001) }))).toBe("VALIDATION_FAILED");
+    });
+
     it("persists edits and stage changes with history", async () => {
       const r = await createLead(db, f.actors.agent1, leadInput(f));
       if (r.outcome !== "created") throw new Error("setup");

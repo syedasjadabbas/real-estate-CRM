@@ -141,7 +141,8 @@ export async function convertLeadToClient(db: Database, actor: Actor, input: unk
     await loadAccessibleLead(tx, actor, leadId);
     await tx.select({ id: bookings.id }).from(bookings).where(openUnlinkedBookings(leadId)).for("update");
     const { lead, members } = await loadAccessibleLead(tx, actor, leadId, true);
-    if (lead.clientId) throw new AppError("BUSINESS_RULE", "This lead is already linked to a client.");
+    // Every lead has its person's client since 13 Nov 2026; converting returns that client (kept for API callers).
+    if (lead.clientId) return { outcome: "linked", clientId: lead.clientId };
     const now = new Date();
 
     const leadNumbers = [lead.phoneE164, ...(await leadPhonesOf(tx, lead.id)).map((p) => p.e164)];

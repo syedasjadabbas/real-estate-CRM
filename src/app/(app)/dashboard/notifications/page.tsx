@@ -22,6 +22,8 @@ const TYPE_LABELS: Record<NotificationType, string> = {
   lost_requested: "Lost request",
   lost_rejected: "Lost rejected",
   follow_up_soon: "Follow-up soon",
+  lead_verification_requested: "To verify",
+  lead_verified: "Verification",
 };
 
 /** Notification history (FR-006): the user's own notifications only. */

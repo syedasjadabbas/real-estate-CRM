@@ -1,4 +1,6 @@
 import { ArrowLeft } from "lucide-react";
+import { InterestStatusTag } from "@/features/clients/components/interest-chip";
+import { cn } from "@/lib/cn";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -85,7 +87,10 @@ export default async function ClientDetailPage({ params }: PageProps<"/dashboard
           <Fact label="Email">{client.email ?? "—"}</Fact>
           <Fact label="Relationship">{relationshipLabel(client.relationship)}</Fact>
           <Fact label="City">{client.cityName ?? "—"}</Fact>
-          <Fact label="Linked leads">{detail.linkedLeads.length + detail.hiddenLeadCount}</Fact>
+          <Fact label="Projects interested">
+            {detail.interests.filter((g) => g.status !== "lost").length}
+            {detail.interests.some((g) => g.status === "lost") ? <span className="text-zinc-400"> · {detail.interests.filter((g) => g.status === "lost").length} lost</span> : null}
+          </Fact>
           <Fact label="Next follow-up">{formatDateTime(client.nextFollowUpAt)}</Fact>
         </div>
       </Card>
@@ -94,32 +99,49 @@ export default async function ClientDetailPage({ params }: PageProps<"/dashboard
         <div className="min-w-0 space-y-6">
           <EditClientForm detail={detail} cities={lookups.cities} />
 
-          <PanelCard title="Linked leads">
-            {detail.linkedLeads.length === 0 ? (
-              <EmptyState size="sm">No linked leads you can open.</EmptyState>
+          <PanelCard title={`Project interests · ${detail.interests.length}`}>
+            {detail.interests.length === 0 ? (
+              <EmptyState size="sm">No inquiries from this client yet.</EmptyState>
             ) : (
-              <ul className="space-y-1.5">
-                {detail.linkedLeads.map((l) => (
-                  <li key={l.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-zinc-200/80 px-3 py-2 text-xs shadow-hairline">
-                    <div className="min-w-0">
-                      <Link href={`/dashboard/leads/${l.id}`} className="font-bold hover:text-brand hover:underline">
-                        {l.name}
-                      </Link>{" "}
-                      <span className="font-bold tracking-[0.05em] text-zinc-500">{l.code}</span>
+              <ul className="space-y-3">
+                {detail.interests.map((g) => (
+                  <li key={g.projectId} className={cn("rounded-xl border border-zinc-200/80 p-3 shadow-hairline", g.status === "lost" && "bg-zinc-50/80 opacity-60")}>
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <p className="flex items-center gap-2 text-sm font-black">
+                        <span className={g.status === "lost" ? "text-zinc-500 line-through decoration-zinc-300" : undefined}>{g.projectName}</span>
+                        <InterestStatusTag status={g.status} />
+                      </p>
                       <p className="text-[11px] text-zinc-500">
-                        {l.projectName} · {l.ownerName ?? "Unassigned"} · added {formatDateTime(l.createdAt)}
+                        {g.leads.length + g.hiddenCount} {g.leads.length + g.hiddenCount === 1 ? "inquiry" : "inquiries"} · latest {formatDateTime(g.latestAt)}
                       </p>
                     </div>
-                    <StagePill stage={l.stage} />
+                    {g.leads.length ? (
+                      <ul className="mt-2 space-y-1.5">
+                        {g.leads.map((l) => (
+                          <li key={l.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-zinc-50 px-3 py-2 text-xs">
+                            <div className="min-w-0">
+                              <Link href={`/dashboard/leads/${l.id}`} className="font-bold hover:text-brand hover:underline">
+                                {l.name}
+                              </Link>{" "}
+                              <span className="font-bold tracking-[0.05em] text-zinc-500">{l.code}</span>
+                              <p className="text-[11px] text-zinc-500">
+                                {l.ownerName ?? "Unassigned"} · added {formatDateTime(l.createdAt)}
+                              </p>
+                            </div>
+                            <StagePill stage={l.stage} />
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    {g.hiddenCount > 0 ? (
+                      <p className="mt-2 text-[11px] text-zinc-500">
+                        {g.hiddenCount} {g.hiddenCount === 1 ? "lead is" : "leads are"} handled outside your access.
+                      </p>
+                    ) : null}
                   </li>
                 ))}
               </ul>
             )}
-            {detail.hiddenLeadCount > 0 ? (
-              <p className="mt-3 text-[11px] text-zinc-500">
-                {detail.hiddenLeadCount} more linked {detail.hiddenLeadCount === 1 ? "lead is" : "leads are"} outside your access.
-              </p>
-            ) : null}
           </PanelCard>
 
           <PanelCard title="Investments">

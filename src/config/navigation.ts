@@ -1,5 +1,6 @@
 import {
   Activity,
+  SlidersHorizontal,
   BookText,
   Building,
   CalendarDays,
@@ -7,6 +8,7 @@ import {
   Database,
   Grid3x3,
   LayoutGrid,
+  ListTodo,
   SquareCheckBig,
   Target,
   UserPlus,
@@ -27,6 +29,8 @@ export type NavItem = {
    * the menu. Hiding a link changes nothing on the server: the pages and APIs still check access.
    */
   roles?: string[];
+  /** A different menu label for some roles (e.g. agents see Performance as "My performance"). */
+  labels?: Record<string, string>;
 };
 
 /** Roles with any lead access (leads/policy.ts: HR and accountants have none). */
@@ -73,6 +77,13 @@ export const navigation: NavGroup[] = [
         roles: LEAD_ROLES,
       },
       {
+        label: "To-dos",
+        href: "/dashboard/leads/todos",
+        icon: ListTodo,
+        description: "Follow-ups due today and coming up, overdue leads, tasks and meetings, unattended leads.",
+        roles: LEAD_ROLES,
+      },
+      {
         label: "Clients",
         href: "/dashboard/clients",
         icon: Users,
@@ -109,13 +120,17 @@ export const navigation: NavGroup[] = [
         label: "My workplace",
         href: "/dashboard/workspace",
         icon: Circle,
-        description: "Your leave, company holidays, and CRM sign-in history.",
+        description: "Your leave and CRM sign-in history.",
+        // Agents have it under Reports, beside My performance (owner, 13 Nov 2026).
+        roles: ["super_admin", "admin", "manager", "hr", "accountant"],
       },
       {
         label: "HR",
         href: "/dashboard/hr",
         icon: Users,
         description: "Employee records, holiday calendar, leave requests, and activity.",
+        // Agents and accountants use My workplace for their own leave (owner, 13 Nov 2026).
+        roles: ["super_admin", "admin", "manager", "hr"],
       },
     ],
   },
@@ -134,7 +149,9 @@ export const navigation: NavGroup[] = [
         href: "/dashboard/teams",
         icon: Users,
         description: "Manage sales teams, members, performance, and manager daily reports.",
-        roles: ["super_admin", "admin", "manager", "agent", "hr"],
+        // Not shown to agents (owner's decision, 13 Nov 2026): team management isn't their work. The page
+        // itself still lets an agent see their own roster if they open it directly.
+        roles: ["super_admin", "admin", "manager", "hr"],
       },
       {
         label: "Bookings",
@@ -176,6 +193,29 @@ export const navigation: NavGroup[] = [
         icon: Activity,
         description: "Agent KPIs and CRM sign-in activity for your scope.",
         roles: ["super_admin", "admin", "manager", "agent"],
+        labels: { agent: "My performance" },
+      },
+      {
+        // Agents' own reports: My performance and My workplace (leave, sign-ins) side by side (owner, 13 Nov 2026).
+        // Other roles find My workplace under Staff.
+        label: "My workplace",
+        href: "/dashboard/workspace",
+        icon: Circle,
+        description: "Your leave and CRM sign-in history.",
+        roles: ["agent"],
+      },
+    ],
+  },
+  {
+    label: "Settings",
+    items: [
+      {
+        label: "Lead assignment",
+        href: "/dashboard/settings/assignment",
+        icon: SlidersHorizontal,
+        description: "How new leads are shared out, and the weights behind agent and team scores.",
+        // Same check as the page (leads/assignment.ts canManageAssignment).
+        roles: ["super_admin", "admin"],
       },
     ],
   },

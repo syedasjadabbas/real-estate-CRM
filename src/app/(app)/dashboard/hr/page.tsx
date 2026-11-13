@@ -6,6 +6,7 @@ import type { LucideIcon } from "lucide-react";
 import { PageHeader, PageStack } from "@/components/shell/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Panel } from "@/components/ui/card";
+import { RestrictedState } from "@/components/ui/empty-state";
 import { findNavItem } from "@/config/navigation";
 import { HrTabs } from "@/features/hr/components/hr-tabs";
 import { canViewEmployees } from "@/modules/employees/policy";
@@ -52,6 +53,8 @@ function ModuleCard({ m }: { m: Module }) {
 export default async function HrPage() {
   const actor = await requirePageUser();
   const item = findNavItem("/dashboard/hr")!;
+  // HR is for HR, Admins and Super Admins; agents and accountants see their leave in My workplace.
+  if (item.roles && !item.roles.includes(actor.role)) return <RestrictedState />;
   const holidays = canViewHolidays(actor);
   const employees = canViewEmployees(actor);
   const modules: Module[] = [

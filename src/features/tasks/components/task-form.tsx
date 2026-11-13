@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertCircle, RotateCcw } from "lucide-react";
+import { LeadPicker } from "@/features/leads/components/lead-picker";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition, type ReactNode } from "react";
@@ -263,14 +264,15 @@ export function TaskForm({
         </Field>
         <Field label="Lead" error={errors.leadId}>
           {(id, describedBy) => (
-            <select id={id} aria-describedby={describedBy} value={v.leadId} onChange={(e) => set({ leadId: e.target.value })} className={selectClass} disabled={pending}>
-              <option value="">No lead</option>
-              {options.leads.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.name} ({l.code})
-                </option>
-              ))}
-            </select>
+            <LeadPicker
+              id={id}
+              describedBy={describedBy}
+              value={v.leadId}
+              onChange={(leadId) => set({ leadId })}
+              options={options.leads.map((l) => ({ value: l.id, label: `${l.name} (${l.code})` }))}
+              empty="No lead"
+              disabled={pending}
+            />
           )}
         </Field>
         <Field label="Booking" error={errors.bookingId} className="sm:col-span-2">

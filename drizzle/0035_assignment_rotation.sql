@@ -1,0 +1,1 @@
+ALTER TYPE "public"."lead_assignment_mode" ADD VALUE 'rotation';

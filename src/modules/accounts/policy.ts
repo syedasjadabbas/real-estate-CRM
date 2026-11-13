@@ -34,5 +34,6 @@ export function assertNotSelf(actor: Pick<Actor, "id">, userId: string, what: st
 /** Roles the actor may grant when creating or changing an account. */
 export function grantableRoles(actor: Pick<Actor, "role">): Role[] {
   if (!canManageAccounts(actor)) return [];
-  return ROLES.filter((r) => actor.role === "super_admin" || r !== "super_admin");
+  // Manager was merged into Admin (13 Nov 2026) and is no longer granted.
+  return ROLES.filter((r) => r !== "manager" && (actor.role === "super_admin" || r !== "super_admin"));
 }

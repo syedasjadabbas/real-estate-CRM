@@ -132,9 +132,10 @@ describe.skipIf(!hasTestDb)("Projects module (PostgreSQL integration)", () => {
 
       const links = async (actor: Actor) => (await getProjectDetail(db, actor, f.projectId)).links;
       expect(await links(f.actors.agent1)).toEqual({ leads: 1, clients: 1, unitsTracked: 0 });
-      expect(await links(f.actors.manager)).toEqual({ leads: 2, clients: 1, unitsTracked: 0 });
-      expect(await links(f.actors.superAdmin)).toEqual({ leads: 3, clients: 2, unitsTracked: 0 });
-      expect(await links(accountant)).toEqual({ leads: null, clients: 2, unitsTracked: 0 });
+      // Every lead has its person's client since 13 Nov 2026, so each of the three leads brings one.
+      expect(await links(f.actors.manager)).toEqual({ leads: 2, clients: 2, unitsTracked: 0 });
+      expect(await links(f.actors.superAdmin)).toEqual({ leads: 3, clients: 3, unitsTracked: 0 });
+      expect(await links(accountant)).toEqual({ leads: null, clients: 3, unitsTracked: 0 });
       expect((await getProjectDetail(db, f.actors.agent1, f.otherProjectId)).links.leads).toBe(0);
       expect((await getProjectDetail(db, f.actors.agent1, f.projectId)).permissions.manage).toBe(false);
       expect(await errorCode(getProjectDetail(db, f.actors.hr, f.projectId))).toBe("FORBIDDEN");

@@ -2,7 +2,7 @@
 
 import { Search } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { brand } from "@/config/brand";
 import { navigation, type NavGroup } from "@/config/navigation";
@@ -11,15 +11,37 @@ import { Kbd } from "@/components/ui/input";
 import { cn } from "@/lib/cn";
 import type { SessionUser } from "@/lib/session";
 
-function isActive(pathname: string | null, href: string) {
+/** An item whose link carries a query (New leads = Leads filtered to the New Lead stage) matches on it. */
+function matchesQuery(href: string, search: URLSearchParams | null) {
+  const query = href.split("?")[1];
+  if (!query) return false;
+  return [...new URLSearchParams(query)].every(([key, value]) => search?.get(key) === value);
+}
+
+/**
+ * The item for the current page. A link with a query (New leads) is active only when the URL has that
+ * query, and then the plain item for the same page (Leads) is not. A deeper menu item (To-dos inside
+ * Leads) wins over its parent the same way, so exactly one item lights up.
+ */
+export function isActive(pathname: string | null, search: URLSearchParams | null, href: string, siblings: string[]) {
   if (!pathname) return false;
-  if (href === "/dashboard") return pathname === "/dashboard";
-  return pathname === href || pathname.startsWith(`${href}/`);
+  const [path, query] = href.split("?");
+  if (query) return pathname === path && matchesQuery(href, search);
+  if (path === "/dashboard") return pathname === "/dashboard";
+  const under = (p: string) => pathname === p || pathname.startsWith(`${p}/`);
+  if (!under(path)) return false;
+  return !siblings.some((other) => {
+    if (other === href) return false;
+    const [otherPath, otherQuery] = other.split("?");
+    if (otherQuery) return otherPath === path && pathname === path && matchesQuery(other, search);
+    return otherPath.startsWith(`${path}/`) && under(otherPath);
+  });
 }
 
 type NavGroupsProps = { groups: NavGroup[]; onNavigate?: () => void };
 
-function NavGroups({ groups, pathname, onNavigate }: NavGroupsProps & { pathname: string | null }) {
+function NavGroups({ groups, pathname, search, onNavigate }: NavGroupsProps & { pathname: string | null; search: URLSearchParams | null }) {
+  const hrefs = groups.flatMap((g) => g.items.map((i) => i.href));
   return groups.map((group) => (
     <div key={group.label} className="mb-3">
       <div className="px-3 py-1 leading-6">
@@ -27,7 +49,7 @@ function NavGroups({ groups, pathname, onNavigate }: NavGroupsProps & { pathname
       </div>
       <ul className="mt-1 space-y-1">
         {group.items.map((item) => {
-          const active = isActive(pathname, item.href);
+          const active = isActive(pathname, search, item.href, hrefs);
           const Icon = item.icon;
           return (
             <li key={item.href}>
@@ -61,7 +83,7 @@ function NavGroups({ groups, pathname, onNavigate }: NavGroupsProps & { pathname
 }
 
 function ActiveNavGroups(props: NavGroupsProps) {
-  return <NavGroups {...props} pathname={usePathname()} />;
+  return <NavGroups {...props} pathname={usePathname()} search={useSearchParams()} />;
 }
 
 export function Sidebar({
@@ -93,7 +115,12 @@ export function Sidebar({
     const q = query.trim().toLowerCase();
     // Items with a role list are shown only to those roles (the lists mirror the pages' own checks).
     const visible = navigation
-      .map((group) => ({ ...group, items: group.items.filter((item) => !item.roles || (user ? item.roles.includes(user.role) : false)) }))
+      .map((group) => ({
+        ...group,
+        items: group.items
+          .filter((item) => !item.roles || (user ? item.roles.includes(user.role) : false))
+          .map((item) => (user && item.labels?.[user.role] ? { ...item, label: item.labels[user.role] } : item)),
+      }))
       .filter((group) => group.items.length > 0);
     if (!q) return visible;
     return visible
@@ -142,7 +169,7 @@ export function Sidebar({
         className="flex-1 overflow-y-auto px-3 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {/* The current URL is request data: stream the active highlight, prerender the plain menu. */}
-        <Suspense fallback={<NavGroups groups={groups} pathname={null} onNavigate={onNavigate} />}>
+        <Suspense fallback={<NavGroups groups={groups} pathname={null} search={null} onNavigate={onNavigate} />}>
           <ActiveNavGroups groups={groups} onNavigate={onNavigate} />
         </Suspense>
         {groups.length === 0 ? (

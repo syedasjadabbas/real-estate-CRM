@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { InterestChip } from "./interest-chip";
 import { EmptyState } from "@/components/ui/empty-state";
 import { formatDateTime } from "@/features/leads/format";
 import { withParams } from "@/features/leads/url";
@@ -16,6 +17,7 @@ const COLUMNS: Column[] = [
   { key: "client", label: "Client", sort: "name" },
   { key: "contact", label: "Contact" },
   { key: "relationship", label: "Relationship", sort: "relationship" },
+  { key: "interests", label: "Interested in" },
   { key: "investment", label: "Latest investment" },
   { key: "next", label: "Next follow-up", sort: "nextFollowUpAt" },
   { key: "updated", label: "Updated", sort: "updatedAt" },
@@ -91,6 +93,17 @@ export function ClientsTable({
                   </td>
                   <td className="px-3 py-2.5">
                     <RelationshipPill value={r.relationship} />
+                  </td>
+                  <td className="max-w-[240px] px-3 py-2.5">
+                    {r.interests.length ? (
+                      <span className="flex flex-wrap gap-1">
+                        {r.interests.map((p) => (
+                          <InterestChip key={p.projectId} projectName={p.projectName} status={p.status} />
+                        ))}
+                      </span>
+                    ) : (
+                      <span className="text-zinc-400">—</span>
+                    )}
                   </td>
                   <td className="px-3 py-2.5 text-zinc-700">
                     {r.latestInvestment ? (

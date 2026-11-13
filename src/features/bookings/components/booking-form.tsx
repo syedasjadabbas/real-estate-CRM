@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertCircle } from "lucide-react";
+import { LeadPicker } from "@/features/leads/components/lead-picker";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -118,12 +119,19 @@ export function BookingForm({ projectId, defaultLeadId, options }: { projectId: 
             </select>
           )}
         </Field>
-        {select(
-          "leadId",
-          "Lead",
-          options.leads.map((l) => ({ value: l.id, label: `${l.name} (${l.code})` })),
-          options.leads.length ? "Select a lead…" : "No eligible leads in this project",
-        )}
+        <Field label="Lead" required error={errors.leadId}>
+          {(id, describedBy) => (
+            <LeadPicker
+              id={id}
+              describedBy={describedBy}
+              value={values.leadId}
+              onChange={(leadId) => set({ leadId })}
+              options={options.leads.map((l) => ({ value: l.id, label: `${l.name} (${l.code})` }))}
+              empty={options.leads.length ? "Select a lead…" : "No eligible leads in this project"}
+              disabled={pending}
+            />
+          )}
+        </Field>
         {select(
           "unitId",
           "Unit (available)",

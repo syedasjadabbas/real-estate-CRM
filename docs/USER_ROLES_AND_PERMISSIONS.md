@@ -44,6 +44,8 @@ Users can hold **one role**. PROPOSED: permissions are role-based, with optional
 
 ### Permission matrix (PROPOSED)
 
+> **13 Nov 2026: Manager merged into Admin.** The owner treats Manager and Admin as one role. Every Sales Manager became an Admin with full Admin access (migration 0034), and the Manager role is no longer offered when creating or changing accounts. The Manager column below is kept for history only. Admins can lead teams ("Team admin") and receive their team's lost requests.
+
 Legend: **F** full · **T** own team · **O** own records · **R** read-only · **—** none
 
 | Module / action | Super Admin | Admin | Manager | Agent | HR | Accountant |
@@ -51,6 +53,8 @@ Legend: **F** full · **T** own team · **O** own records · **R** read-only · 
 | Dashboard | F | F | T | O | — | R (finance KPIs) |
 | Leads: view | F | F | T | O | — | — |
 | Leads: create | F | F | T | O | — | — |
+| Leads: verify an agent's new lead (approve / reject with reason; since 13 Nov 2026) | F | F | — | — | — | — |
+| Leads: work on own lead before it is verified | F | F | T | — (view only; a rejected lead's details can be corrected and resubmitted) | — | — |
 | Leads: reassign | F | F | T | — | — | — |
 | Leads: mark lost | F | F | T (approve) | O (request) | — | — |
 | Leads: delete | F | — | — | — | — | — |
@@ -80,7 +84,7 @@ Legend: **F** full · **T** own team · **O** own records · **R** read-only · 
 | Settings, users, roles | F | users only | — | — | — | — |
 | City list (FR-042, S-22) | F | F | — | — | — | — |
 | Audit log | F | R | — | — | — | — |
-| Lead import batches: submit (Nov 2026 sprint) | F | F | F | F | — | — |
+| Lead import batches: submit (Admin and Super Admin only since 13 Nov 2026) | F | F | — | — | — | — |
 | Lead import batches: approve / reject | F | — | — | — | — | — |
 | Claim an unassigned lead | — | — | F | F | — | — |
 | Assignment weights and thresholds | F | F | — | — | — | — |

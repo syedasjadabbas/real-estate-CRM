@@ -79,7 +79,7 @@ describe.skipIf(!hasTestDb)("F-15: lead assignment stays inside a manager's team
     it("keeps the timeline entry, audit row and owner's notification", async () => {
       const { leadId, ownerId } = await autoAssign(f.actors.manager);
       const activity = await db.select().from(leadActivities).where(and(eq(leadActivities.leadId, leadId), eq(leadActivities.type, "assignment")));
-      expect(activity).toEqual([expect.objectContaining({ actorId: null, data: expect.objectContaining({ mode: "scored", ownerId }) })]);
+      expect(activity).toEqual([expect.objectContaining({ actorId: null, data: expect.objectContaining({ mode: "rotation", ownerId }) })]);
       const [audit] = await db.select().from(auditLogs).where(and(eq(auditLogs.action, "lead.create"), eq(auditLogs.entityId, leadId)));
       expect(audit).toMatchObject({ actorId: f.actors.manager.id, after: expect.objectContaining({ ownerId }) });
       const [note] = await db.select().from(notifications).where(and(eq(notifications.userId, ownerId!), eq(notifications.type, "lead_assigned")));
@@ -170,7 +170,7 @@ describe.skipIf(!hasTestDb)("F-15: lead assignment stays inside a manager's team
       await assignLead(db, manager, leadId, { ownerId: next });
       const [audit] = await db.select().from(auditLogs).where(and(eq(auditLogs.action, "lead.assign"), eq(auditLogs.entityId, leadId)));
       expect(audit).toMatchObject({ before: { ownerId: first }, after: { ownerId: next } });
-      expect((await db.select().from(leadActivities).where(and(eq(leadActivities.leadId, leadId), eq(leadActivities.type, "assignment")))).map((a) => (a.data as { mode: string }).mode).sort()).toEqual(["manual", "scored"]);
+      expect((await db.select().from(leadActivities).where(and(eq(leadActivities.leadId, leadId), eq(leadActivities.type, "assignment")))).map((a) => (a.data as { mode: string }).mode).sort()).toEqual(["manual", "rotation"]);
     });
 
     it("admins may still assign anyone; agents can't assign and always own what they create; HR can't create", async () => {

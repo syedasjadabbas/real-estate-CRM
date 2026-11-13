@@ -5,6 +5,7 @@ import { canDoClient } from "@/modules/clients/policy";
 import { canDoFinance } from "@/modules/finance/policy";
 import { canDoInventory } from "@/modules/inventory/policy";
 import { canDo as canDoLead } from "@/modules/leads/policy";
+import { canManageAssignment } from "@/modules/leads/assignment";
 import { canDoMeeting } from "@/modules/meetings/policy";
 import { canViewPerformance } from "@/modules/performance/service";
 import { canDoProject } from "@/modules/projects/policy";
@@ -25,6 +26,8 @@ const shows = (href: string, role: Role) => {
 const pageAllows: Record<string, (actor: { role: Role }) => boolean> = {
   "/dashboard/leads": (a) => canDoLead(a, "view"),
   "/dashboard/leads?stage=new_lead": (a) => canDoLead(a, "view"),
+  "/dashboard/leads/todos": (a) => canDoLead(a, "view"),
+  "/dashboard/settings/assignment": (a) => canManageAssignment(a),
   "/dashboard/clients": (a) => canDoClient(a, "view"),
   "/dashboard/projects": (a) => canDoProject(a, "view"),
   "/dashboard/inventory": (a) => canDoInventory(a, "view"),
@@ -34,7 +37,8 @@ const pageAllows: Record<string, (actor: { role: Role }) => boolean> = {
   "/dashboard/tasks": (a) => canDoTask(a, "view"),
   "/dashboard/meetings": (a) => canDoMeeting(a, "view"),
   "/dashboard/targets": (a) => canViewTargets(a),
-  "/dashboard/teams": (a) => canViewTeams(a) || canViewOwnRoster(a),
+  // Agents can still open their own roster by address, but the menu leaves Teams out for them.
+  "/dashboard/teams": (a) => (canViewTeams(a) || canViewOwnRoster(a)) && a.role !== "agent",
   "/dashboard/performance": (a) => canViewPerformance(a),
 };
 
@@ -46,9 +50,18 @@ describe("sidebar links follow page permissions", () => {
   });
 
   it("HR and accountants no longer see sales modules they can't open", () => {
-    const visible = (role: Role) => items.filter((i) => shows(i.href, role)).map((i) => i.label);
+    // Each menu entry by its own role list, as the sidebar filters them (a link may appear in two groups).
+    const visible = (role: Role) => items.filter((i) => !i.roles || i.roles.includes(role)).map((i) => i.label);
     expect(visible("hr")).toEqual(["Dashboard", "My workplace", "HR", "Teams", "Tasks"]);
-    expect(visible("accountant")).toEqual(["Dashboard", "Clients", "Projects", "Inventory", "My workplace", "HR", "Bookings", "Finance", "Tasks"]);
+    // HR is for HR, Admins and Super Admins (13 Nov 2026); accountants keep My workplace for their leave.
+    expect(visible("accountant")).toEqual(["Dashboard", "Clients", "Projects", "Inventory", "My workplace", "Bookings", "Finance", "Tasks"]);
+    // Agents: no HR; their Reports group holds My performance and My workplace.
+    expect(visible("agent")).not.toContain("HR");
+    const agentReports = navigation.find((g) => g.label === "Reports")!.items.filter((i) => !i.roles || i.roles.includes("agent"));
+    expect(agentReports.map((i) => i.labels?.agent ?? i.label)).toEqual(["My performance", "My workplace"]);
+    const agentStaff = navigation.find((g) => g.label === "Staff")!.items.filter((i) => !i.roles || i.roles.includes("agent"));
+    expect(agentStaff).toEqual([]);
     expect(visible("agent")).toContain("New leads");
+    expect(visible("agent")).toContain("To-dos");
   });
 });

@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { assertWorkable } from "@/modules/leads/verification";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { Database } from "@/server/db";
@@ -25,6 +26,7 @@ const uploader = alias(users, "file_uploader");
 export async function assertCanUploadTo(db: Database, actor: Actor, leadId: string) {
   if (!canDo(actor, "edit")) throw forbidden();
   const { lead } = await loadAccessibleLead(db, actor, leadId);
+  assertWorkable(actor, lead);
   if (lead.stage === "booked") throw new AppError("BUSINESS_RULE", "Booked leads are read-only.");
   return lead;
 }

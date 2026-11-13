@@ -120,6 +120,7 @@ export function LeadCreateForm({
         onChange={(patch) => setValues((v) => ({ ...v, ...patch }))}
         errors={errors}
         lookups={lookups}
+        projectId={projectId}
         disabled={pending}
         interestExtra={
           <>
@@ -135,7 +136,7 @@ export function LeadCreateForm({
               )}
             </Field>
             {canChooseOwner ? (
-              <Field label="Owner" error={errors.ownerId} hint="Leave empty to assign automatically (returning customers go to their original agent)">
+              <Field label="Owner" error={errors.ownerId} hint="Leave empty to assign automatically. A returning customer always goes to their original agent.">
                 {(id, describedBy) => (
                   <select id={id} aria-describedby={describedBy} value={ownerId} onChange={(e) => setOwnerId(e.target.value)} className={selectClass} disabled={pending}>
                     <option value="">Auto-assign</option>

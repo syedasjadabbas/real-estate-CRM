@@ -20,7 +20,7 @@ export default async function NewClientPage() {
       <PageHeader
         as="h2"
         title="Add client"
-        description="Manual client profile. To turn a lead into a client, use Convert to client on the lead's page."
+        description="Manual client profile. Everyone who makes an inquiry already has one: each lead creates or joins the person's profile."
         actions={
           <Link href="/dashboard/clients" className={buttonClasses({ variant: "secondary", size: "lg" })}>
             <ArrowLeft aria-hidden="true" className="size-4" />

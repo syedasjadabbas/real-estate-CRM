@@ -1,4 +1,5 @@
 import { and, eq } from "drizzle-orm";
+import { assertWorkable } from "@/modules/leads/verification";
 import type { Database } from "@/server/db";
 import { auditLogs, leads, meetingHistory, meetings, users } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
@@ -35,11 +36,14 @@ async function checkOrganizer(tx: DbOrTx, actor: Actor, organizerId: string, mem
 }
 
 async function accessibleLead(tx: Tx, actor: Actor, leadId: string) {
+  let lead;
   try {
-    return (await loadAccessibleLead(tx, actor, leadId, true)).lead;
+    lead = (await loadAccessibleLead(tx, actor, leadId, true)).lead;
   } catch {
     throw fieldError("leadId", "Choose a lead you can access");
   }
+  assertWorkable(actor, lead);
+  return lead;
 }
 
 /**

@@ -85,7 +85,8 @@ function TargetColumn({ title, lines }: { title: string; lines: TargetLine[] }) 
   );
 }
 
-export function InstantInsights({ data }: { data: DashboardData }) {
+/** `own`: an agent's dashboard, which shows only their own score and targets (no team or project-wide panels). */
+export function InstantInsights({ data, own = false }: { data: DashboardData; own?: boolean }) {
   const [range, setRange] = useState<RangeKey>("mtd");
   const { insights } = data;
   const mixTotal = data.meetingMix.reduce((sum, f) => sum + f.count, 0);
@@ -100,13 +101,14 @@ export function InstantInsights({ data }: { data: DashboardData }) {
           <Badge>Live</Badge>
         </div>
         <p className="text-[11px] leading-[16.5px] text-zinc-600">
-          Charts · Sales Teams MTD ·{" "}
+          {own ? "Your score and targets" : "Charts · Sales Teams MTD"} ·{" "}
           {data.insightsUpdatedAt
             ? `${formatDate(data.insightsUpdatedAt)}, ${formatTime(data.insightsUpdatedAt)}`
             : "waiting for data"}
         </p>
       </Card>
 
+      {own ? null : (
       <div className="grid grid-cols-2 gap-3.5 md:grid-cols-4">
         <MiniStat
           label="Teams"
@@ -125,8 +127,9 @@ export function InstantInsights({ data }: { data: DashboardData }) {
         <MiniStat label="Team meetings" value={formatInt(insights?.teamMeetings)} caption="MTD period" />
         <MiniStat label="Bookings" value={formatInt(insights?.bookings)} caption="Across top teams" />
       </div>
+      )}
 
-      <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-3">
+      <div className={own ? "grid grid-cols-1 gap-3.5" : "grid grid-cols-1 gap-3.5 lg:grid-cols-3"}>
         <Panel
           title={data.scoreScope === "own" ? "Your performance score" : "Team performance scores"}
           badge={<Badge>Score</Badge>}
@@ -148,6 +151,8 @@ export function InstantInsights({ data }: { data: DashboardData }) {
             </ul>
           )}
         </Panel>
+        {own ? null : (
+          <>
         <Panel title="Meetings vs bookings" badge={<Badge>Output</Badge>} description="Top teams throughput">
           {data.teamOutput.length === 0 ? (
             <EmptyState>No team output.</EmptyState>
@@ -200,9 +205,11 @@ export function InstantInsights({ data }: { data: DashboardData }) {
             </div>
           )}
         </Panel>
+          </>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+      <div className={own ? "grid grid-cols-1 gap-5" : "grid grid-cols-1 gap-5 xl:grid-cols-2"}>
         <Card className="self-start p-4">
           <Eyebrow className="text-xs leading-4">My Targets</Eyebrow>
           <p className="mt-0.5 text-[11px] text-zinc-600">Daily, weekly, and monthly goals vs your activity.</p>
@@ -219,6 +226,7 @@ export function InstantInsights({ data }: { data: DashboardData }) {
           )}
         </Card>
 
+        {own ? null : (
         <Card className="overflow-hidden">
           <CardHeader
             title="Meetings Distribution"
@@ -271,6 +279,7 @@ export function InstantInsights({ data }: { data: DashboardData }) {
             </div>
           </div>
         </Card>
+        )}
       </div>
     </div>
   );

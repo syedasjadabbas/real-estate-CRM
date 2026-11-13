@@ -17,6 +17,7 @@ import {
   ReviewsPanel,
   StagePanel,
 } from "@/features/leads/components/detail-panels";
+import { VerificationBanner } from "@/features/leads/components/verification";
 import { withLeadsAccess } from "@/features/leads/components/list-view";
 import { FavoriteButton } from "@/features/leads/components/row-actions";
 import { Timeline } from "@/features/leads/components/timeline";
@@ -91,6 +92,8 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
           }
         />
 
+        <VerificationBanner leadId={lead.id} verification={detail.verification} canVerify={detail.permissions.verify} canResubmit={detail.permissions.resubmit} />
+
         <Card className="p-5">
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
             <Fact label="Code">
@@ -139,7 +142,7 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
             {canDoBooking(actor, "view") ? (
               <PanelCard title="Bookings">
                 <BookingsMiniList rows={leadBookings} empty="No bookings for this lead yet." />
-                {canDoBooking(actor, "create") && lead.stage !== "lost_lead" && lead.stage !== "booked" ? (
+                {canDoBooking(actor, "create") && detail.permissions.edit && lead.stage !== "lost_lead" && lead.stage !== "booked" ? (
                   <Link
                     href={`/dashboard/bookings/new?project=${lead.projectId}&lead=${lead.id}`}
                     className={buttonClasses({ variant: "secondary", size: "lg", className: "mt-3" })}
@@ -153,7 +156,7 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
             {canDoMeeting(actor, "view") ? (
               <PanelCard title="Meetings">
                 <LeadMeetingsList rows={leadMeetings} />
-                {canDoMeeting(actor, "create") ? (
+                {canDoMeeting(actor, "create") && detail.permissions.edit ? (
                   <Link href={`/dashboard/meetings/new?lead=${lead.id}`} className={buttonClasses({ variant: "secondary", size: "lg", className: "mt-3" })}>
                     <CalendarPlus aria-hidden="true" className="size-4" />
                     Schedule meeting →

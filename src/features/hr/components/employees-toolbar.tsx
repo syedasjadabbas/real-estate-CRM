@@ -105,7 +105,7 @@ export function EmployeesToolbar({ params, total, departments }: { params: Recor
           <span className="inline-flex rounded-full border border-brand/30 bg-brand-50 px-2.5 py-1 text-[10px] font-black tracking-[0.05em] text-brand-700 uppercase">
             {formatInt(total)} {total === 1 ? "employee" : "employees"}
           </span>
-          {select("role", "Role", "All roles", [...ROLES.map((r) => ({ value: r, label: ROLE_LABELS[r] })), { value: "none", label: "No CRM login" }])}
+          {select("role", "Role", "All roles", [...ROLES.filter((r) => r !== "manager").map((r) => ({ value: r, label: ROLE_LABELS[r] })), { value: "none", label: "No CRM login" }])}
           {select("status", "Account status", "All statuses", [
             { value: "active", label: "Active" },
             { value: "inactive", label: "Inactive" },

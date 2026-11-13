@@ -1,3 +1,4 @@
+import { Phone } from "lucide-react";
 import Link from "next/link";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/cn";
@@ -7,6 +8,7 @@ import type { LeadListRow } from "@/modules/leads/queries";
 import { formatDateTime, formatDuration, since } from "../format";
 import { withParams } from "../url";
 import { SourcePill, StagePill } from "./chips";
+import { VerificationBadge } from "./verification";
 import { CopyCodeButton, FavoriteButton, FollowUpButtons } from "./row-actions";
 
 type Column = { key: string; label: string; sort?: SortColumn; className?: string };
@@ -135,9 +137,18 @@ export function LeadsTable({
                     <td className="px-3 py-2.5 font-bold tracking-[0.05em] text-zinc-700">{r.originalCode ?? "—"}</td>
                   ) : null}
                   <td className="px-3 py-2.5 text-zinc-700">
-                    <a href={telHref(r.phoneCountryCode, r.phoneNumber)} className="block whitespace-nowrap hover:text-brand hover:underline" aria-label={`Call ${r.name} on ${r.phone}`}>
-                      {r.phone}
-                    </a>
+                    <span className="flex items-center gap-2 whitespace-nowrap">
+                      {/* Calls from the list without opening the lead: the phone dials through the tel: link. */}
+                      <a
+                        href={telHref(r.phoneCountryCode, r.phoneNumber)}
+                        className="inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand ring-1 ring-brand/20 transition-colors hover:bg-brand hover:text-white"
+                        aria-label={`Call ${r.name} on ${r.phone}`}
+                        title={`Call ${r.phone}`}
+                      >
+                        <Phone aria-hidden="true" className="size-3.5" />
+                      </a>
+                      <span>{r.phone}</span>
+                    </span>
                     <span className="block">{r.email ?? "—"}</span>
                   </td>
                   <td className="px-3 py-2.5 text-zinc-700">{r.cityName ?? "—"}</td>
@@ -163,7 +174,10 @@ export function LeadsTable({
                     </span>
                   </td>
                   <td className="px-3 py-2.5">
-                    <StagePill stage={r.stage} />
+                    <span className="inline-flex flex-wrap items-center gap-1">
+                      <StagePill stage={r.stage} />
+                      <VerificationBadge status={r.verification} />
+                    </span>
                   </td>
                   <td className="px-3 py-2.5">
                     <SourcePill>{r.sourceName ?? INBOUND_LABELS[r.inboundChannel]}</SourcePill>

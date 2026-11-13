@@ -1,4 +1,5 @@
 import { and, eq, sql } from "drizzle-orm";
+import { assertWorkable } from "@/modules/leads/verification";
 import type { Database } from "@/server/db";
 import { auditLogs, bookingStageHistory, bookings, leads, projects, units } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
@@ -8,7 +9,7 @@ import { parse } from "@/modules/clients/support";
 import { transitionUnitStatus, reserveAvailableUnit } from "@/modules/inventory/status";
 import { STAGE_LABELS } from "@/modules/leads/constants";
 import { isUniqueViolation, loadAccessibleLead, logActivity, teamMemberIds, type DbOrTx, type Tx } from "@/modules/leads/support";
-import { BOOKING_STAGE_LABELS, CLOSED_STAGES, nextStage, type BookingStage } from "./constants";
+import { BOOKING_STAGE_LABELS, CLOSED_STAGES, nextStage, type BookingStage, FIRST_STAGE } from "./constants";
 import { assertCanBooking, canAccessBooking, canMoveTo } from "./policy";
 import { netPaid } from "@/modules/finance/ledger";
 import { businessToday, defaultHoldUntil } from "./today";
@@ -79,6 +80,7 @@ export async function createBooking(db: Database, actor: Actor, input: unknown) 
     if (!project || project.status !== "active") throw fieldError("projectId", "Choose an active project");
     // Visibility check without a lock; the lead row is locked after the unit, matching confirm's lock order.
     const { lead } = await loadAccessibleLead(tx, actor, data.leadId);
+    assertWorkable(actor, lead);
     if (lead.projectId !== data.projectId) throw fieldError("leadId", "This lead belongs to another project");
     if (lead.stage === "lost_lead" || lead.stage === "booked") {
       throw new AppError("BUSINESS_RULE", `A ${STAGE_LABELS[lead.stage].toLowerCase()} lead can't be booked.`);
@@ -111,11 +113,11 @@ export async function createBooking(db: Database, actor: Actor, input: unknown) 
       if (isUniqueViolation(error, "bookings_one_active_per_unit_uq")) throw new AppError("CONFLICT", "This unit already has an active booking.");
       throw error;
     }
-    await tx.insert(bookingStageHistory).values({ bookingId: created.id, fromStage: null, toStage: "negotiation", actorId: actor.id, note: "Booking created" });
+    await tx.insert(bookingStageHistory).values({ bookingId: created.id, fromStage: null, toStage: FIRST_STAGE, actorId: actor.id, note: "Booking created" });
     const lockedLead = await setLeadStage(tx, actor, lead.id, "booking_in_process", "Booking created");
     // F-13: a buyer who is already a client sees this booking at once; a new buyer's client still waits for confirmation (FR-050).
     const clientId = await linkExistingClient(tx, actor, lockedLead, created.id);
-    await auditBooking(tx, actor, "booking.create", created.id, null, { ...values, stage: "negotiation", unitNo: unit.unitNo, leadCode: lead.code, clientId });
+    await auditBooking(tx, actor, "booking.create", created.id, null, { ...values, stage: FIRST_STAGE, unitNo: unit.unitNo, leadCode: lead.code, clientId });
     return { bookingId: created.id };
   });
 }

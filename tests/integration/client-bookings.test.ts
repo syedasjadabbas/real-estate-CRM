@@ -7,7 +7,7 @@ import { getClientDetail, listClients } from "@/modules/clients/queries";
 import { decideReversal, recordPayment, requestReversal } from "@/modules/finance/commands";
 import { bookingPaymentHistory, listPaymentMethods } from "@/modules/finance/queries";
 import { createUnit } from "@/modules/inventory/commands";
-import { createLead } from "@/modules/leads/commands";
+import { assignLead, createLead } from "@/modules/leads/commands";
 import { loadActor } from "@/server/auth/session-store";
 import { auditLogs, bookingPayments, bookings, clientActivities, clients, leads, units, users } from "@/server/db/schema";
 import type { Database } from "@/server/db";
@@ -24,7 +24,7 @@ const errorCode = async (p: Promise<unknown>) => {
     throw e;
   }
 };
-const PATH = ["token_pending", "token_received", "provisional_receipt", "sales_order", "booking_form", "down_payment", "agreement_pending", "confirmed"];
+const PATH = ["down_payment", "agreement_pending", "confirmed"];
 const TODAY = "2026-10-15";
 
 describe.skipIf(!hasTestDb)("F-13: a client's open bookings and payments (FR-051, FR-052, FR-204, PostgreSQL integration)", () => {
@@ -74,61 +74,40 @@ describe.skipIf(!hasTestDb)("F-13: a client's open bookings and payments (FR-051
       const clientId = await existingClient(leadId);
       const { bookingId, unitId } = await book(leadId);
       expect(await linkOf(bookingId)).toBe(clientId);
-      expect((await bookingsFor(db, f.actors.superAdmin, { clientId })).map((b) => [b.id, b.stage])).toEqual([[bookingId, "negotiation"]]);
+      expect((await bookingsFor(db, f.actors.superAdmin, { clientId })).map((b) => [b.id, b.stage])).toEqual([[bookingId, "token_pending"]]);
       const row = (await listClients(db, f.actors.superAdmin, {})).rows.find((r) => r.id === clientId);
-      expect(row?.latestInvestment).toMatchObject({ bookingId, stage: "negotiation" });
+      expect(row?.latestInvestment).toMatchObject({ bookingId, stage: "token_pending" });
       expect((await listClients(db, f.actors.superAdmin, { project: f.projectId })).rows.map((r) => r.id)).toEqual([clientId]);
       expect(await unitStatus(unitId)).toBe("reserved");
       const [audit] = await db.select().from(auditLogs).where(and(eq(auditLogs.action, "booking.create"), eq(auditLogs.entityId, bookingId)));
       expect(audit.after).toMatchObject({ clientId });
     });
 
-    it("a repeat buyer's new lead is matched by phone, as confirmation does, without a second client", async () => {
+    it("a repeat buyer's new lead joins their client at once (matched by phone), without a second client", async () => {
       const first = await newLead(f.actors.agent1, { phoneNumber: "03001234567" });
       const clientId = await existingClient(first);
-      const second = await newLead(f.actors.agent2, { phoneNumber: "0300 1234567" }, f.otherProjectId);
-      // Assigned by hand to another agent, so it isn't joined to the client until the booking links it.
-      expect(await leadClient(second)).toBeNull();
-      const { bookingId } = await book(second, f.actors.superAdmin, f.otherProjectId);
+      // Every lead belongs to its person's client (13 Nov 2026); the repeat buyer stays with their agent.
+      const r = await createLead(db, f.actors.superAdmin, leadInput(f, { projectId: f.otherProjectId, phoneNumber: "0300 1234567" }));
+      if (r.outcome !== "created") throw new Error("lead");
+      expect(await leadClient(r.leadId)).toBe(clientId);
+      const { bookingId } = await book(r.leadId, f.actors.superAdmin, f.otherProjectId);
       expect(await linkOf(bookingId)).toBe(clientId);
-      expect(await leadClient(second)).toBe(clientId);
       expect(await clientCount()).toBe(1);
       expect(await db.select().from(auditLogs).where(and(eq(auditLogs.action, "client.link_lead"), eq(auditLogs.entityId, clientId)))).toHaveLength(1);
       expect((await db.select().from(clientActivities).where(eq(clientActivities.clientId, clientId))).map((a) => a.type)).toContain("lead_linked");
     });
 
-    it("a new buyer has no client until confirmation or conversion (FR-050), and nothing is created early", async () => {
+    it("a new buyer's client starts with their first lead, and their bookings link to it at once", async () => {
       const leadId = await newLead();
-      const { bookingId } = await book(leadId);
-      expect(await linkOf(bookingId)).toBeNull();
-      expect(await clientCount()).toBe(0);
-    });
-
-    it("converting a lead links all its open bookings, but not cancelled ones, and records them", async () => {
-      const leadId = await newLead();
+      const clientId = await leadClient(leadId);
+      expect(clientId).not.toBeNull();
       const open = await book(leadId);
       const second = await book(leadId);
-      const gone = await book(leadId);
-      await cancelBooking(db, f.actors.manager, gone.bookingId, { reason: "Changed unit" });
-      const clientId = await existingClient(leadId);
       expect(await linkOf(open.bookingId)).toBe(clientId);
       expect(await linkOf(second.bookingId)).toBe(clientId);
-      expect(await linkOf(gone.bookingId)).toBeNull();
-      const [audit] = await db.select().from(auditLogs).where(eq(auditLogs.action, "client.convert"));
-      expect(((audit.after as { bookingIds: string[] }).bookingIds).sort()).toEqual([open.bookingId, second.bookingId].sort());
-    });
-
-    it("linking a lead to an existing client on request also links its open bookings", async () => {
-      const first = await newLead(f.actors.agent1, { phoneNumber: "03007654321" });
-      const clientId = await existingClient(first);
-      const second = await createLead(db, f.actors.superAdmin, leadInput(f, { projectId: f.otherProjectId, ownerId: f.actors.outsideAgent.id, phoneNumber: "03009990001" }));
-      if (second.outcome !== "created") throw new Error("lead");
-      const { bookingId } = await book(second.leadId, f.actors.superAdmin, f.otherProjectId);
-      expect(await linkOf(bookingId)).toBeNull();
-      // The same person's number arrives on the client later; the lead is then linked by hand.
-      await db.update(leads).set({ phoneE164: "+923007654321" }).where(eq(leads.id, second.leadId));
-      expect(await convertLeadToClient(db, f.actors.superAdmin, { leadId: second.leadId, onExisting: "link" })).toEqual({ outcome: "linked", clientId });
-      expect(await linkOf(bookingId)).toBe(clientId);
+      expect(await clientCount()).toBe(1);
+      // Converting is no longer needed; it returns the same client.
+      expect(await convertLeadToClient(db, f.actors.superAdmin, { leadId })).toEqual({ outcome: "linked", clientId });
     });
   });
 
@@ -137,7 +116,6 @@ describe.skipIf(!hasTestDb)("F-13: a client's open bookings and payments (FR-051
       const leadId = await newLead();
       const clientId = await existingClient(leadId);
       const { bookingId } = await book(leadId);
-      await advanceBooking(db, f.actors.agent1, bookingId, { toStage: "token_pending" });
       const token = await pay(bookingId, "50000");
       await pay(bookingId, "100000", "installment");
 
@@ -158,8 +136,6 @@ describe.skipIf(!hasTestDb)("F-13: a client's open bookings and payments (FR-051
       const clientId = await existingClient(leadId);
       const a = await book(leadId);
       const b = await book(leadId);
-      await advanceBooking(db, f.actors.agent1, a.bookingId, { toStage: "token_pending" });
-      await advanceBooking(db, f.actors.agent1, b.bookingId, { toStage: "token_pending" });
       await pay(a.bookingId, "10000");
       await pay(b.bookingId, "20000");
       const rows = await bookingsFor(db, f.actors.superAdmin, { clientId });
@@ -209,7 +185,6 @@ describe.skipIf(!hasTestDb)("F-13: a client's open bookings and payments (FR-051
       const leadId = await newLead();
       await existingClient(leadId);
       const { bookingId } = await book(leadId);
-      await advanceBooking(db, f.actors.agent1, bookingId, { toStage: "token_pending" });
       await pay(bookingId, "1000");
       expect(await errorCode(cancelBooking(db, f.actors.manager, bookingId, { reason: "x y z" }))).toBe("BUSINESS_RULE");
     });
@@ -219,8 +194,11 @@ describe.skipIf(!hasTestDb)("F-13: a client's open bookings and payments (FR-051
     it("the client's owner doesn't see another team's booking on the client page; those who may, do", async () => {
       const mine = await newLead(f.actors.agent1, { phoneNumber: "03005551234" });
       const clientId = await existingClient(mine);
-      const theirs = await newLead(f.actors.outsideAgent, { phoneNumber: "03005551234" }, f.otherProjectId);
-      const { bookingId } = await book(theirs, f.actors.superAdmin, f.otherProjectId);
+      // The person's next inquiry goes to their agent; a Super Admin then moves it to another team.
+      const r = await createLead(db, f.actors.superAdmin, leadInput(f, { projectId: f.otherProjectId, phoneNumber: "03005551234" }));
+      if (r.outcome !== "created") throw new Error("lead");
+      await assignLead(db, f.actors.superAdmin, r.leadId, { ownerId: f.actors.outsideAgent.id });
+      const { bookingId } = await book(r.leadId, f.actors.superAdmin, f.otherProjectId);
       expect(await linkOf(bookingId)).toBe(clientId);
 
       expect(await bookingsFor(db, f.actors.agent1, { clientId })).toEqual([]);
@@ -239,7 +217,6 @@ describe.skipIf(!hasTestDb)("F-13: a client's open bookings and payments (FR-051
       const leadId = await newLead();
       const clientId = await existingClient(leadId);
       const { bookingId } = await book(leadId);
-      await advanceBooking(db, f.actors.agent1, bookingId, { toStage: "token_pending" });
       await pay(bookingId, "50000");
       await db.update(bookings).set({ clientId: null }).where(eq(bookings.id, bookingId)); // as stored before the fix
       const payments = await db.select().from(bookingPayments).where(eq(bookingPayments.bookingId, bookingId));
@@ -280,9 +257,9 @@ describe.skipIf(!hasTestDb)("F-13: a client's open bookings and payments (FR-051
         const before = await clientCount();
         const results = await Promise.allSettled([advanceBooking(db, f.actors.manager, bookingId, { toStage: "confirmed" }), convertLeadToClient(db, f.actors.superAdmin, { leadId })]);
         expect(results[0].status).toBe("fulfilled");
-        // The conversion either got in first, or found the lead already linked.
-        if (results[1].status === "rejected") expect((results[1].reason as AppError).code).toBe("BUSINESS_RULE");
-        expect(await clientCount()).toBe(before + 1);
+        expect(results[1].status).toBe("fulfilled");
+        // The lead already had its client, so neither creates another.
+        expect(await clientCount()).toBe(before);
         expect(await linkOf(bookingId)).toBe(await leadClient(leadId));
       }
     });

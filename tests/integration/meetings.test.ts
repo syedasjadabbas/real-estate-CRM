@@ -43,7 +43,7 @@ describe.skipIf(!hasTestDb)("Meetings module (PostgreSQL integration)", () => {
     return r.leadId;
   };
   const schedule = (actor: Actor, leadId: string, extra: Record<string, unknown> = {}) =>
-    createMeeting(db, actor, { title: "Site visit", startsAt: inHours(24), leadId, ...extra });
+    createMeeting(db, actor, { title: "Site visit", type: "site_visit", startsAt: inHours(24), leadId, ...extra });
   const lead = async (id: string) => (await db.select().from(leads).where(eq(leads.id, id)))[0];
   const meeting = async (id: string) => (await db.select().from(meetings).where(eq(meetings.id, id)))[0];
   const setStage = (id: string, stage: (typeof leads.$inferSelect)["stage"]) => db.update(leads).set({ stage }).where(eq(leads.id, id));
@@ -85,7 +85,7 @@ describe.skipIf(!hasTestDb)("Meetings module (PostgreSQL integration)", () => {
     expect(await fieldOf(schedule(f.actors.agent1, own, { title: "" }))).toBe("title");
     expect(await fieldOf(schedule(f.actors.agent1, own, { startsAt: "" }))).toBe("startsAt");
     expect(await fieldOf(schedule(f.actors.agent1, own, { endsAt: inHours(23) }))).toBe("endsAt");
-    expect(await fieldOf(createMeeting(db, f.actors.agent1, { title: "x", startsAt: inHours(1) }))).toBe("leadId");
+    expect(await fieldOf(createMeeting(db, f.actors.agent1, { title: "x", type: "virtual", startsAt: inHours(1) }))).toBe("leadId");
     expect(await fieldOf(schedule(f.actors.agent1, others))).toBe("leadId");
     expect(await fieldOf(schedule(f.actors.agent1, own, { organizerId: f.actors.agent2.id }))).toBe("organizerId");
     expect(await errorCode(schedule(f.actors.manager, own, { organizerId: f.actors.agent1.id }))).toBe("ok");
@@ -106,6 +106,26 @@ describe.skipIf(!hasTestDb)("Meetings module (PostgreSQL integration)", () => {
     expect((await listMeetings(db, f.actors.superAdmin, {})).total).toBe(2);
     expect(await errorCode(listMeetings(db, f.actors.hr, {}))).toBe("FORBIDDEN");
     expect((await overdueMeetings(db, f.actors.hr)).count).toBe(0);
+  });
+
+  it("requires a meeting type from the five options, stores it, filters by it and records a change", async () => {
+    const leadId = await leadOf(f.actors.agent1);
+    expect(await fieldOf(schedule(f.actors.agent1, leadId, { type: undefined }))).toBe("type");
+    expect(await fieldOf(schedule(f.actors.agent1, leadId, { type: "phone" }))).toBe("type");
+    for (const type of ["company_office", "site_visit", "virtual", "outdoor", "sales_event"]) {
+      const { meetingId } = await schedule(f.actors.agent1, leadId, { type, moveLead: false });
+      expect((await meeting(meetingId)).type).toBe(type);
+    }
+    expect((await listMeetings(db, f.actors.agent1, { type: "virtual" })).rows.map((r) => r.type)).toEqual(["virtual"]);
+    expect((await listMeetings(db, f.actors.agent1, {})).total).toBe(5);
+
+    const { meetingId } = await schedule(f.actors.agent1, leadId, { type: "virtual", moveLead: false });
+    expect((await updateMeeting(db, f.actors.agent1, meetingId, { type: "outdoor" })).changed).toEqual(["type"]);
+    expect((await meeting(meetingId)).type).toBe("outdoor");
+    // A meeting saved before the field existed keeps working: edits without a type leave it empty.
+    await db.update(meetings).set({ type: null }).where(eq(meetings.id, meetingId));
+    expect((await updateMeeting(db, f.actors.agent1, meetingId, { title: "Older meeting" })).changed).toEqual(["title"]);
+    expect((await meeting(meetingId)).type).toBeNull();
   });
 
   it("edits a scheduled meeting with history; completed / cancelled meetings are final", async () => {

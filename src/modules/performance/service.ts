@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import type { Database } from "@/server/db";
 import { followUps, leads, meetings, signinLogs, teamMembers, teams, users } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
@@ -8,7 +8,7 @@ import { PERFORMANCE_PAGE_SIZE, pct, performanceQuerySchema, resolveRange, type 
 
 /**
  * Performance (FR-150 / FR-151 / FR-002): agent KPIs computed from existing records only.
- * Scope (matrix "Performance F/F/T/O/—/—"): admins all agents; managers their teams' agents;
+ * Scope (matrix "Performance F/F/T/O/—/—"): admins all agents and lead-owning admins; managers their teams' agents;
  * agents themselves; HR and accountants none. Calls are call recordings uploaded to leads (client
  * confirmation 10 Nov 2026; definition in ./calls.ts). Meaningful calls (AI score) and the Critical flag
  * have no data or rule in this system and are reported as unavailable (see PERFORMANCE_MODULE_PLAN.md).
@@ -30,7 +30,9 @@ async function agentsInScope(db: Database, actor: Actor, teamId: string | undefi
   if (actor.role === "manager" && teamId && !actor.managedTeamIds.includes(teamId)) throw forbidden("You can only see your own teams.");
   const teamIds = teamId ? [teamId] : actor.role === "manager" ? actor.managedTeamIds : null;
   if (teamIds && teamIds.length === 0) return [];
-  const base = and(eq(users.role, "agent"), eq(users.status, "active"));
+  // Agents, plus Admins who own leads (former Sales Managers keep and work leads; merged 13 Nov 2026).
+  const ownsLeads = sql`exists (select 1 from ${leads} l where l.owner_id = ${users.id} and l.deleted_at is null)`;
+  const base = and(eq(users.status, "active"), or(eq(users.role, "agent"), and(inArray(users.role, ["admin", "manager"]), ownsLeads)));
   if (!teamIds) return db.select({ id: users.id, name: users.name }).from(users).where(base).orderBy(asc(users.name));
   return db
     .selectDistinct({ id: users.id, name: users.name })

@@ -21,14 +21,16 @@ export default async function AssignmentSettingsPage() {
     <PageStack>
       <PageHeader
         title="Assignment"
-        description="How new leads find an owner. Returning customers always go to their original agent; the rest are scored. Every change is recorded in the audit log."
+        description="How new leads find an owner, and how agents are scored. Every change is recorded in the audit log."
         icon={Shuffle}
       />
       <SettingsTabs active="assignment" showBackups={canViewBackups(actor)} />
-      <PanelCard title="Automatic assignment">
+      <PanelCard title="Automatic assignment and agent scores">
         <p className="mb-4 text-xs text-zinc-600">
-          Eligible agents are active, in an active team, not on leave or marked &quot;Leads off&quot; in today&apos;s roster, not on their team weekend, and below the
-          maximum load. Among them the highest weighted score wins; ties go to the lighter load. Each decision and its scores are kept in the assignment history.
+          New leads with no chosen owner (imports, the API, or added by hand) go to agents in turn, one each in name order, looping back to the first: an equal
+          share whatever their performance. Agents on leave, marked &quot;Leads off&quot; in today&apos;s roster or on their team weekend are skipped and rejoin
+          when back. Returning customers stay with their original agent. The weights below no longer choose owners: they set the agent and team scores shown on
+          My Teams and the dashboard.
         </p>
         <AssignmentSettingsForm settings={settings} />
       </PanelCard>

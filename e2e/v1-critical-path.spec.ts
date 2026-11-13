@@ -43,6 +43,7 @@ test("a lead goes from reassignment to meeting, booking, payment, confirmation a
   await expect(async () => {
     await page.getByLabel("Title").fill(title);
     await page.getByLabel("Starts (Pakistan time)").fill("2099-01-15T11:00");
+    await choose(page, "Meeting type", "Site visit");
     await choose(page, "Lead", name);
     await page.getByRole("button", { name: "Schedule meeting" }).click();
     await page.waitForURL(/\/dashboard\/meetings\/[0-9a-f-]{36}/, { timeout: 3_000 });
@@ -71,10 +72,7 @@ test("a lead goes from reassignment to meeting, booking, payment, confirmation a
   await page.goto(`/dashboard/bookings/new?project=${seed().projectId}`);
   await expect(combo(page, "Unit (available)").locator("option", { hasText: unitNo })).toHaveCount(0);
 
-  // A booking takes payments from Token pending, so it moves there first.
-  await page.goto(bookingUrl);
-  await page.getByRole("button", { name: "Move to Token Pending" }).click();
-  await expect(page.getByText("Moved to Token Pending.")).toBeVisible();
+  // A booking starts at Token, which already takes payments.
 
   // The accountant posts the token. Dated last year, so other specs' current-period totals don't move.
   const accountantContext = await browser.newContext();
@@ -95,9 +93,9 @@ test("a lead goes from reassignment to meeting, booking, payment, confirmation a
   await expect(accountant.getByText("PKR 500,000").first()).toBeVisible();
   await accountantContext.close();
 
-  // The manager walks the booking through each stage to Confirmed.
+  // The manager walks the booking through each stage to Closed Won.
   await page.goto(bookingUrl);
-  const confirm = page.getByRole("button", { name: "Confirm booking" });
+  const confirm = page.getByRole("button", { name: "Close as Won" });
   const move = page.getByRole("button", { name: /^Move to / });
   for (let i = 0; i < 12; i++) {
     // Wait for the next action to render before deciding: the last stage offers Confirm instead.
@@ -108,7 +106,7 @@ test("a lead goes from reassignment to meeting, booking, payment, confirmation a
     await expect(page.getByText(`Moved to ${label}.`)).toBeVisible();
   }
   await confirm.click();
-  await expect(page.getByText("Moved to Confirmed.")).toBeVisible();
+  await expect(page.getByText("Moved to Closed Won.")).toBeVisible();
   expect(await leadStage(leadId)).toBe("booked");
 
   // The lead's history shows the sale, and the buyer is a client.

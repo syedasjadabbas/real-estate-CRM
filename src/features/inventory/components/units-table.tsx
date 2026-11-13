@@ -3,7 +3,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { SortTh } from "@/features/leads/components/sort-header";
 import { SALE_MODEL_LABELS, type UnitSortColumn } from "@/modules/inventory/constants";
 import type { UnitRow } from "@/modules/inventory/queries";
-import { formatArea, formatListedOn, formatPrice } from "../format";
+import { formatArea, formatBookedOn, formatPrice } from "../format";
 import { UnitStatusPill } from "./status-pill";
 
 /** Reference columns (MODULES_AND_FEATURES.md §5) minus "Sales", whose meaning is unknown. */
@@ -18,10 +18,8 @@ const COLUMNS: { label: string; sort?: UnitSortColumn }[] = [
   { label: "Nature", sort: "nature" },
   { label: "Category", sort: "category" },
   { label: "Status", sort: "status" },
-  { label: "Type", sort: "type" },
   { label: "Bed", sort: "bedrooms" },
-  { label: "Comment" },
-  { label: "Date", sort: "listedOn" },
+  { label: "Booked on", sort: "bookedOn" },
 ];
 
 /** Units table in the Leads table style (540px scroll area, sticky zinc-100 header, 12px cells). */
@@ -63,12 +61,8 @@ export function UnitsTable({ rows, offset, emptyMessage, params, sort, dir }: { 
                 <td className="px-3 py-2.5">
                   <UnitStatusPill status={r.status} />
                 </td>
-                <td className="px-3 py-2.5 whitespace-nowrap text-zinc-700">{r.type ?? "—"}</td>
                 <td className="px-3 py-2.5 text-zinc-700 tabular-nums">{r.bedrooms ?? "—"}</td>
-                <td className="max-w-[208px] px-3 py-2.5">
-                  <p className="line-clamp-2 text-zinc-700">{r.comment ?? "—"}</p>
-                </td>
-                <td className="px-3 py-2.5 whitespace-nowrap text-zinc-600">{formatListedOn(r.listedOn)}</td>
+                <td className="px-3 py-2.5 whitespace-nowrap text-zinc-600">{r.bookedOn ? formatBookedOn(r.bookedOn) : "—"}</td>
               </tr>
             ))}
           </tbody>

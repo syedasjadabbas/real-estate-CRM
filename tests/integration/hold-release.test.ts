@@ -44,7 +44,7 @@ describe.skipIf(!hasTestDb)("FR-081 unit-hold expiry and release (PostgreSQL int
     const lead = await createLead(db, f.actors.agent1, leadInput(f));
     if (lead.outcome !== "created") throw new Error("setup");
     const { bookingId } = await createBooking(db, f.actors.agent1, { projectId: f.projectId, leadId: lead.leadId, unitId, ratePerSqft: "25000", tokenAmount: "500000", ...extra });
-    for (const s of stages) await advanceBooking(db, f.actors.superAdmin, bookingId, { toStage: s });
+    for (const s of stages.filter((x) => !["token_pending", "token_received", "provisional_receipt", "sales_order", "booking_form"].includes(x))) await advanceBooking(db, f.actors.superAdmin, bookingId, { toStage: s });
     return { bookingId, unitId, leadId: lead.leadId };
   };
   const bookingRow = async (id: string) => (await db.select().from(bookings).where(eq(bookings.id, id)))[0];
@@ -97,7 +97,7 @@ describe.skipIf(!hasTestDb)("FR-081 unit-hold expiry and release (PostgreSQL int
     expect(await createBooking(db, f.actors.agent1, { projectId: f.projectId, leadId, unitId, ratePerSqft: "25000", tokenAmount: "500000" })).toHaveProperty("bookingId");
   });
 
-  it("releases a hold still in Negotiation too", async () => {
+  it("releases a hold at Token with no payment, from a booking created with the default stage", async () => {
     const { bookingId, unitId } = await bookingAt();
     const result = await releaseExpiredHolds(db, { today: dayAfter((await bookingRow(bookingId)).reservedUntil) });
     expect(result).toMatchObject({ released: 1 });
@@ -115,10 +115,10 @@ describe.skipIf(!hasTestDb)("FR-081 unit-hold expiry and release (PostgreSQL int
     expect(await unitStatus(unitId)).toBe("reserved");
   });
 
-  it("does not release a booking past the hold stages (token received)", async () => {
-    const { bookingId, unitId } = await bookingAt(["token_pending", "token_received"]);
+  it("does not release a booking past the Token stage (Partial Down Payment)", async () => {
+    const { bookingId, unitId } = await bookingAt(["down_payment"]);
     expect(await releaseExpiredHolds(db, { today: dayAfter((await bookingRow(bookingId)).reservedUntil) })).toMatchObject({ eligible: 0 });
-    expect((await bookingRow(bookingId)).stage).toBe("token_received");
+    expect((await bookingRow(bookingId)).stage).toBe("down_payment");
     expect(await unitStatus(unitId)).toBe("reserved");
   });
 

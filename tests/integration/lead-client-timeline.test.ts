@@ -11,7 +11,7 @@ import type { Database } from "@/server/db";
 import type { Actor } from "@/server/auth/types";
 import { connectTestDb, hasTestDb, leadInput, resetDb, seedFixture, type Fixture } from "../support/db";
 
-const PATH = ["token_pending", "token_received", "provisional_receipt", "sales_order", "booking_form", "down_payment", "agreement_pending"];
+const PATH = ["down_payment", "agreement_pending"];
 
 describe.skipIf(!hasTestDb)("FR-025: everything reaches the lead's timeline (PostgreSQL integration)", () => {
   let db: Database;
@@ -33,10 +33,6 @@ describe.skipIf(!hasTestDb)("FR-025: everything reaches the lead's timeline (Pos
     return r.leadId;
   };
   const phoneOf = async (leadId: string) => (await db.select().from(leads).where(eq(leads.id, leadId)))[0];
-  const clientWithPhoneOf = async (leadId: string) => {
-    const lead = await phoneOf(leadId);
-    return (await createClient(db, f.actors.superAdmin, { name: "Existing", phoneCountryCode: lead.phoneCountryCode, phoneNumber: lead.phoneNumber })).clientId;
-  };
   const links = (leadId: string) => db.select().from(leadActivities).where(and(eq(leadActivities.leadId, leadId), eq(leadActivities.type, "client_linked")));
   const book = async (actor: Actor, leadId: string) => {
     const { unitId } = await createUnit(db, f.actors.superAdmin, {
@@ -51,35 +47,19 @@ describe.skipIf(!hasTestDb)("FR-025: everything reaches the lead's timeline (Pos
     for (const toStage of [...PATH, "confirmed"]) await advanceBooking(db, f.actors.manager, bookingId, { toStage });
   };
 
-  it("converting a lead records it on the lead, by the person who did it", async () => {
+  it("a new lead records its client on the lead, by the person who added it", async () => {
+    // Every lead creates or joins its person's client (13 Nov 2026).
     const leadId = await newLead();
-    const { clientId } = await convertLeadToClient(db, f.actors.manager, { leadId });
+    const { clientId } = await phoneOf(leadId);
     const [entry] = await links(leadId);
-    expect(entry).toMatchObject({ actorId: f.actors.manager.id, data: { clientId, mode: "converted" } });
+    expect(entry).toMatchObject({ actorId: f.actors.agent1.id, data: { clientId, mode: "created" } });
     expect((await getLeadDetail(db, f.actors.manager, leadId)).activities.some((a) => a.type === "client_linked")).toBe(true);
   });
 
-  it("linking to an existing client records it", async () => {
-    const leadId = await newLead();
-    const clientId = await clientWithPhoneOf(leadId);
-    await convertLeadToClient(db, f.actors.superAdmin, { leadId, onExisting: "link" });
+  it("a lead joining an existing client records it", async () => {
+    const { clientId } = await createClient(db, f.actors.superAdmin, { name: "Existing", phoneCountryCode: "+92", phoneNumber: "03001110001", ownerId: f.actors.agent1.id });
+    const leadId = await newLead({ phoneNumber: "0300 1110001" });
     expect((await links(leadId)).map((l) => l.data)).toEqual([{ clientId, mode: "linked" }]);
-  });
-
-  it("a new booking linking an existing client by phone records it", async () => {
-    const leadId = await newLead();
-    const clientId = await clientWithPhoneOf(leadId);
-    await book(f.actors.agent1, leadId);
-    expect((await links(leadId)).map((l) => l.data)).toEqual([{ clientId, mode: "booking_linked" }]);
-  });
-
-  it("a confirmed booking creating the client records it, once", async () => {
-    const leadId = await newLead();
-    const { bookingId } = await book(f.actors.agent1, leadId);
-    expect(await links(leadId)).toEqual([]);
-    await confirm(bookingId);
-    const { clientId } = await phoneOf(leadId);
-    expect((await links(leadId)).map((l) => l.data)).toEqual([{ clientId, mode: "booking_created" }]);
   });
 
   it("an already linked lead records no second link when it books and confirms", async () => {
@@ -90,17 +70,11 @@ describe.skipIf(!hasTestDb)("FR-025: everything reaches the lead's timeline (Pos
     expect(await links(leadId)).toHaveLength(1);
   });
 
-  it("a refused conversion records nothing", async () => {
+  it("converting a lead that already has its client records nothing more", async () => {
     const leadId = await newLead();
-    await clientWithPhoneOf(leadId);
-    await expect(convertLeadToClient(db, f.actors.manager, { leadId })).rejects.toThrow();
+    await convertLeadToClient(db, f.actors.manager, { leadId });
     await expect(convertLeadToClient(db, f.actors.agent2, { leadId })).rejects.toThrow();
-    expect(await links(leadId)).toEqual([]);
-
-    const linked = await newLead();
-    await convertLeadToClient(db, f.actors.manager, { leadId: linked });
-    await expect(convertLeadToClient(db, f.actors.manager, { leadId: linked })).rejects.toThrow();
-    expect(await links(linked)).toHaveLength(1);
+    expect(await links(leadId)).toHaveLength(1);
   });
 
   it("the entry names no client, because the lead's viewers may not have access to it", async () => {

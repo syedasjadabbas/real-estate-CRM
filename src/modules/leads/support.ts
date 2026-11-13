@@ -94,6 +94,18 @@ export async function audit(
  * concurrently is either visible here or re-checks the lead itself (bookings/commands.ts setLeadStage).
  * The database enforces the same rule (trigger `leads_stage_follows_open_booking`, migration 0022).
  */
+/**
+ * A lead's client goes with the lead to its new owner when no one holds the client yet, or the
+ * client's agent is no longer active (clients are created with every lead since 13 Nov 2026).
+ */
+export async function adoptLeadClient(db: DbOrTx, leadId: string, ownerId: string) {
+  await db.execute(sql`
+    update clients c set owner_id = ${ownerId}, updated_at = now()
+    from leads l
+    where l.id = ${leadId} and c.id = l.client_id
+      and (c.owner_id is null or exists (select 1 from users u where u.id = c.owner_id and u.status <> 'active'))`);
+}
+
 export async function hasOpenBooking(db: DbOrTx, leadId: string) {
   const [row] = await db
     .select({ id: bookings.id })

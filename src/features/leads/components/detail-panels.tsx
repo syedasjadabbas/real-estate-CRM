@@ -43,37 +43,48 @@ function Status({ message, ok }: { message: string | null; ok?: boolean }) {
   );
 }
 
-/** Pipeline stage + lost flow (+ approval decision when a request is pending). */
+/**
+ * Pipeline stage (with optional remarks recorded on the timeline), then a separate Lost lead card:
+ * the lost request or decision is its own step, not part of a stage move.
+ */
 export function StagePanel({ detail, lostReasons }: { detail: LeadDetail; lostReasons: LeadLookups["lostReasons"] }) {
   const { lead, permissions, pendingLostRequest } = detail;
   const [target, setTarget] = useState<string>("");
+  const [remarks, setRemarks] = useState("");
   const [reasonId, setReasonId] = useState("");
   const [lostNote, setLostNote] = useState("");
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [lostMsg, setLostMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [pending, startTransition] = useTransition();
   const options = LEAD_STAGES.filter((s) => s !== lead.stage && s !== "lost_lead" && s !== "booked");
+  const showLost = Boolean(pendingLostRequest) || permissions.markLostDirect || permissions.requestLost || permissions.lostNeedsBookingCancelled;
 
   const move = () =>
     startTransition(async () => {
-      const result = await changeStageAction(lead.id, target);
+      const result = await changeStageAction(lead.id, target, remarks);
       setMsg(result.ok ? { text: `Moved to ${STAGE_LABELS[target as LeadStage]}.`, ok: true } : { text: result.message, ok: false });
-      if (result.ok) setTarget("");
+      if (result.ok) {
+        setTarget("");
+        setRemarks("");
+      }
     });
 
   const lose = () =>
     startTransition(async () => {
       const result = await markLostAction(lead.id, { lostReasonId: reasonId, note: lostNote });
       if (result.ok) {
-        setMsg({ text: result.data.status === "lost" ? "Lead marked lost." : "Lost request sent for manager approval.", ok: true });
+        setLostMsg({ text: result.data.status === "lost" ? "Lead marked lost." : "Lost request sent for manager approval.", ok: true });
         setReasonId("");
         setLostNote("");
-      } else setMsg({ text: result.fields?.lostReasonId ?? result.message, ok: false });
+      } else setLostMsg({ text: result.fields?.lostReasonId ?? result.message, ok: false });
     });
 
   return (
+    <>
     <PanelCard title="Pipeline stage">
       <div className="space-y-4">
         {permissions.edit ? (
+          <div className="space-y-3">
           <div className="flex flex-wrap items-end gap-2">
             <Field label="Target stage" className="min-w-0 flex-1">
               {(id) => (
@@ -91,9 +102,31 @@ export function StagePanel({ detail, lostReasons }: { detail: LeadDetail; lostRe
               Move
             </Button>
           </div>
+            <Field label="Remarks">
+              {(id) => (
+                <textarea
+                  id={id}
+                  rows={2}
+                  maxLength={1000}
+                  value={remarks}
+                  onChange={(e) => setRemarks(e.target.value)}
+                  placeholder="Why the lead is moving, what was agreed (optional)"
+                  className={textareaClass}
+                  disabled={pending}
+                />
+              )}
+            </Field>
+          </div>
         ) : (
           <p className="text-xs text-zinc-600">This lead is read-only for you.</p>
         )}
+        <Status message={msg?.text ?? null} ok={msg?.ok} />
+      </div>
+    </PanelCard>
+
+    {showLost ? (
+    <PanelCard title="Lost lead">
+      <div className="space-y-4">
 
         {pendingLostRequest ? (
           <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50/80 p-3 text-xs text-amber-950">
@@ -106,8 +139,14 @@ export function StagePanel({ detail, lostReasons }: { detail: LeadDetail; lostRe
           </div>
         ) : null}
 
+        {permissions.lostNeedsBookingCancelled ? (
+          <p className="rounded-xl bg-zinc-50 px-3 py-2 text-xs font-semibold text-zinc-600">
+            This lead has an open booking. Cancel the booking first (this releases the unit), then the lead can be marked lost.
+          </p>
+        ) : null}
+
         {permissions.markLostDirect || permissions.requestLost ? (
-          <div className="space-y-2 border-t border-zinc-100 pt-4">
+          <div className="space-y-2">
             <p className="text-[10px] font-black tracking-[0.1em] text-zinc-500 uppercase">
               {permissions.markLostDirect ? "Mark lost" : "Request lost (needs manager approval)"}
             </p>
@@ -133,9 +172,11 @@ export function StagePanel({ detail, lostReasons }: { detail: LeadDetail; lostRe
             </Button>
           </div>
         ) : null}
-        <Status message={msg?.text ?? null} ok={msg?.ok} />
+        <Status message={lostMsg?.text ?? null} ok={lostMsg?.ok} />
       </div>
     </PanelCard>
+    ) : null}
+    </>
   );
 }
 
@@ -363,8 +404,8 @@ export function EditDetailsForm({ detail, lookups }: { detail: LeadDetail; looku
       }}
       className="space-y-4"
     >
-      <LeadFields values={values} onChange={(p) => setValues((v) => ({ ...v, ...p }))} errors={errors} lookups={lookups} currentCity={lead.cityId ? { id: lead.cityId, name: lead.cityName } : null} disabled={pending || !detail.permissions.edit} />
-      {detail.permissions.edit ? (
+      <LeadFields values={values} onChange={(p) => setValues((v) => ({ ...v, ...p }))} errors={errors} lookups={lookups} projectId={lead.projectId} currentCity={lead.cityId ? { id: lead.cityId, name: lead.cityName } : null} disabled={pending || !detail.permissions.editDetails} />
+      {detail.permissions.editDetails ? (
         <div className="flex flex-wrap items-center justify-end gap-2">
           <Status message={msg?.text ?? null} ok={msg?.ok} />
           <Button variant="secondary" size="lg" disabled={!dirty || pending} onClick={() => { setValues(initial); setErrors({}); setMsg(null); }}>

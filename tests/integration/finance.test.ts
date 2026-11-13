@@ -59,7 +59,7 @@ describe.skipIf(!hasTestDb)("Finance F1: booking payments (PostgreSQL integratio
     const lead = await createLead(db, owner, leadInput(f));
     if (lead.outcome !== "created") throw new Error("setup");
     const { bookingId } = await createBooking(db, owner, { projectId: f.projectId, leadId: lead.leadId, unitId, ratePerSqft: "25000", tokenAmount: "500000" });
-    for (const s of stages) await advanceBooking(db, f.actors.superAdmin, bookingId, { toStage: s });
+    for (const s of stages.filter((x) => !["token_pending", "token_received", "provisional_receipt", "sales_order", "booking_form"].includes(x))) await advanceBooking(db, f.actors.superAdmin, bookingId, { toStage: s });
     return bookingId;
   };
   const pay = (bookingId: string, amount: string, extra: Record<string, unknown> = {}, actor: Actor = accountant) =>
@@ -90,8 +90,10 @@ describe.skipIf(!hasTestDb)("Finance F1: booking payments (PostgreSQL integratio
     });
 
     it("rejects payments by stage, amount, date, method and role", async () => {
-      const negotiation = await bookingAt([]);
-      expect(await errorCode(pay(negotiation, "1000"))).toBe("BUSINESS_RULE");
+      // Token takes payments (the token itself); a cancelled booking takes none.
+      const cancelled = await bookingAt([]);
+      await cancelBooking(db, f.actors.manager, cancelled, { reason: "Buyer withdrew" });
+      expect(await errorCode(pay(cancelled, "1000"))).toBe("BUSINESS_RULE");
 
       const bookingId = await bookingAt();
       const over = await errorOf(pay(bookingId, "12500000.01"));
@@ -115,7 +117,7 @@ describe.skipIf(!hasTestDb)("Finance F1: booking payments (PostgreSQL integratio
     });
 
     it("accepts payments on Confirmed bookings and refuses them on Cancelled ones", async () => {
-      const confirmed = await bookingAt(["token_pending", "token_received", "provisional_receipt", "sales_order", "booking_form", "down_payment", "agreement_pending", "confirmed"]);
+      const confirmed = await bookingAt(["down_payment", "agreement_pending", "confirmed"]);
       expect(await errorCode(pay(confirmed, "1000", { type: "installment" }))).toBe("ok");
       const cancelled = await bookingAt();
       await cancelBooking(db, f.actors.manager, cancelled, { reason: "Changed mind" });
@@ -313,7 +315,7 @@ describe.skipIf(!hasTestDb)("Finance F1: booking payments (PostgreSQL integratio
     it("reconciles Outstanding totals with the rows and lists only bookings that can take a payment", async () => {
       const a = await bookingAt();
       const b = await bookingAt();
-      await bookingAt([]); // Negotiation: listed in Outstanding, not payable
+      const c = await bookingAt([]); // Token, nothing paid yet: listed and payable
       await pay(a, "3750000"); // 30% of 12.5M
       await pay(b, "12500000"); // fully paid
 
@@ -327,7 +329,7 @@ describe.skipIf(!hasTestDb)("Finance F1: booking payments (PostgreSQL integratio
       expect(await errorCode(outstandingBookings(db, f.actors.manager, {}))).toBe("FORBIDDEN");
 
       const payable = (await payableBookings(db, accountant)).map((r) => r.id);
-      expect(payable).toEqual([a]);
+      expect(payable.sort()).toEqual([a, c].sort());
       expect(await errorCode(payableBookings(db, admin))).toBe("FORBIDDEN");
     });
   });

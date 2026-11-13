@@ -177,7 +177,8 @@ describe.skipIf(!hasTestDb)("FR-042: city administration and the Other city (Pos
       await newLead();
       await newClient({ cityId: f.cityId });
       await deactivate(f.cityId);
-      expect((await listCities(db, admin))[0]).toMatchObject({ name: "Islamabad", isActive: false, leads: 2, clients: 1 });
+      // Each lead also created its person's client in the same city (13 Nov 2026): 2 + the manual one.
+      expect((await listCities(db, admin))[0]).toMatchObject({ name: "Islamabad", isActive: false, leads: 2, clients: 3 });
     });
 
     it("the database refuses to delete a city records use", async () => {

@@ -137,7 +137,7 @@ describe.skipIf(!hasTestDb)("FR-021: every stage change is on the timeline as fr
     await changeStage(db, f.actors.agent1, leadId, { stage: "contacted" });
     expect((await moves(leadId))[0]).toMatchObject({ from: "new_lead", to: "contacted" });
 
-    const { meetingId } = await createMeeting(db, f.actors.agent1, { title: "Site visit", leadId, startsAt: new Date(Date.now() + 3_600_000), moveLead: false });
+    const { meetingId } = await createMeeting(db, f.actors.agent1, { title: "Site visit", type: "site_visit", leadId, startsAt: new Date(Date.now() + 3_600_000), moveLead: false });
     await completeMeeting(db, f.actors.agent1, meetingId, { moveLead: true });
     expect((await moves(leadId))[0]).toMatchObject({ from: "contacted", to: "meeting_done" });
 
@@ -145,7 +145,7 @@ describe.skipIf(!hasTestDb)("FR-021: every stage change is on the timeline as fr
     const { unitId } = await createUnit(db, f.actors.superAdmin, { projectId: f.projectId, unitNo: `H-${unitCounter}`, areaSqft: "500", basePrice: "1000000" });
     const { bookingId } = await createBooking(db, f.actors.agent1, { projectId: f.projectId, leadId, unitId, ratePerSqft: "1000", tokenAmount: "1000" });
     expect((await moves(leadId))[0]).toMatchObject({ from: "meeting_done", to: "booking_in_process" });
-    for (const toStage of ["token_pending", "token_received", "provisional_receipt", "sales_order", "booking_form", "down_payment", "agreement_pending", "confirmed"]) await advanceBooking(db, f.actors.manager, bookingId, { toStage });
+    for (const toStage of ["down_payment", "agreement_pending", "confirmed"]) await advanceBooking(db, f.actors.manager, bookingId, { toStage });
     expect((await moves(leadId))[0]).toMatchObject({ from: "booking_in_process", to: "booked" });
     expect(await moves(leadId)).toHaveLength(4);
   });
