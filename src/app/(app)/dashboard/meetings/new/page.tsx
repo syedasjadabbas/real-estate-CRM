@@ -1,4 +1,5 @@
 import { ArrowLeft } from "lucide-react";
+import { FreshForm } from "@/components/ui/fresh-form";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader } from "@/components/shell/page-header";
@@ -34,11 +35,13 @@ export default async function NewMeetingPage({ searchParams }: PageProps<"/dashb
           </Link>
         }
       />
-      <MeetingForm
-        mode="create"
-        options={options}
-        initial={{ title: "", startsLocal: "", endsLocal: "", type: "", location: "", organizerId: actor.id, leadId: fromLead, notes: "" }}
-      />
+      <FreshForm>
+        <MeetingForm
+          mode="create"
+          options={options}
+          initial={{ title: "", startsLocal: "", endsLocal: "", type: "", location: "", organizerId: actor.id, leadId: fromLead, notes: "" }}
+        />
+      </FreshForm>
     </section>
   );
 }

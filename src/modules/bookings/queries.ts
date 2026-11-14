@@ -1,4 +1,8 @@
 import { and, asc, count, desc, eq, ilike, inArray, isNull, notInArray, or, sql, type SQL } from "drizzle-orm";
+import { resolvePaymentPlan } from "@/modules/projects/payment-plan";
+import { getProposalSettings } from "@/modules/tasks/settings";
+import { unitPricePerSqft } from "@/modules/tasks/plan";
+import { discountCap } from "@/modules/tasks/policy";
 import { alias } from "drizzle-orm/pg-core";
 import type { Database } from "@/server/db";
 import { bookingStageHistory, bookings, clients, leads, projects, units, users } from "@/server/db/schema";
@@ -229,7 +233,16 @@ export async function bookingFormOptions(db: Database, actor: Actor, projectId: 
       .where(and(eq(units.projectId, projectId), eq(units.status, "available"), eq(units.saleModel, "whole")))
       .orderBy(asc(sql`lower(${units.unitNo})`)),
   ]);
-  return { leads: leadRows, units: unitRows };
+  const priceSettings = await getProposalSettings(db);
+  const [project] = await db.select({ paymentPlan: projects.paymentPlan }).from(projects).where(eq(projects.id, projectId)).limit(1);
+  return {
+    /** The project's payment plan (owner, 14 Nov 2026), shown with the price. */
+    plan: resolvePaymentPlan(project?.paymentPlan, priceSettings),
+    leads: leadRows,
+    units: unitRows.map((u) => ({ ...u, listRate: unitPricePerSqft(u, priceSettings) })),
+    /** Highest discount this person may give (agents 5%, Admins any). */
+    discountCap: discountCap(actor.role, priceSettings),
+  };
 }
 
 /** Bookings shown on unit, lead and client pages, within the actor's booking scope. The client page leaves cancelled ones out. */

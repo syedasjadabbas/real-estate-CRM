@@ -75,6 +75,7 @@ export function EditClientForm({ detail, cities }: { detail: ClientDetail; citie
         cities={cities}
         currentCity={client.cityId ? { id: client.cityId, name: client.cityName } : null}
         disabled={pending || !detail.permissions.edit}
+        lockPhones={!detail.permissions.editPhones}
       />
       {detail.permissions.edit ? (
         <div className="flex flex-wrap items-center justify-end gap-2">

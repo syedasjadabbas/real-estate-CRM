@@ -80,7 +80,7 @@ test("a lost lead is counted by team and listed in the Lost list; the reason and
   await expect(page.getByRole("link", { name, exact: true }).first()).toBeVisible();
 });
 
-test("the menu's New leads link opens the leads list filtered to the New Lead stage", async ({ page }) => {
+test("the menu's New leads link opens the leads added in the last 24 hours", async ({ page }) => {
   const name = unique("E2E New Lead Menu");
   await createLeadFor("agent1", name);
   await selectTestProject(page.context());
@@ -88,13 +88,13 @@ test("the menu's New leads link opens the leads list filtered to the New Lead st
   await page.goto("/dashboard");
 
   await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "New leads", exact: true }).click();
-  await page.waitForURL(/\/dashboard\/leads\?stage=new_lead$/);
+  await page.waitForURL(/\/dashboard\/leads\?view=new$/);
   await expect(page.getByRole("link", { name, exact: true }).first()).toBeVisible();
 
   // The leads tab bar offers the same view.
   await expect(page.getByRole("navigation", { name: "Lead views" }).getByRole("link", { name: "New leads", exact: true })).toHaveAttribute(
     "href",
-    "/dashboard/leads?stage=new_lead",
+    "/dashboard/leads?view=new",
   );
 });
 

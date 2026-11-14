@@ -49,7 +49,9 @@ export const FOLLOW_UP_WINDOW_LABELS: Record<FollowUpWindow, string> = {
   after2d: "After 2 days",
 };
 
-export const LEAD_VIEWS = ["all", "won", "lost", "regenerated", "favorites", "duplicates"] as const;
+export const LEAD_VIEWS = ["all", "won", "lost", "regenerated", "favorites", "duplicates", "new"] as const;
+/** "New leads" = added in the last 24 hours, newest first, marked 🔥 in lists (owner, 14 Nov 2026). */
+export const NEW_LEAD_HOURS = 24;
 export type LeadView = (typeof LEAD_VIEWS)[number];
 
 export const SORTABLE_COLUMNS = [

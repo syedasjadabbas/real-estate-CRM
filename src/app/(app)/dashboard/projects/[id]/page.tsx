@@ -1,4 +1,7 @@
 import { ArrowLeft, Boxes } from "lucide-react";
+import { PaymentPlanPanel } from "@/features/projects/components/payment-plan-panel";
+import { resolvePaymentPlan } from "@/modules/projects/payment-plan";
+import { getProposalSettings } from "@/modules/tasks/settings";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -103,6 +106,10 @@ export default async function ProjectDetailPage({ params }: PageProps<"/dashboar
               clients={links.clients}
               canOpenLeads={selectable.some((p) => p.id === project.id)}
             />
+          </PanelCard>
+          <PanelCard title="Payment plan">
+            <p className="mb-3 text-[11px] text-zinc-500">Used for this project&apos;s bookings: the New booking page and the booking form.</p>
+            <PaymentPlanPanel projectId={project.id} plan={resolvePaymentPlan(project.paymentPlan, await getProposalSettings(getDb()))} canManage={permissions.manage} />
           </PanelCard>
           <PanelCard title="Inventory dimensions">
             <DimensionsPanel projectId={project.id} dimensions={project.dimensionConfig} canManage={permissions.manage} />

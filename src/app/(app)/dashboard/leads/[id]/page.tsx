@@ -18,6 +18,7 @@ import {
   StagePanel,
 } from "@/features/leads/components/detail-panels";
 import { VerificationBanner } from "@/features/leads/components/verification";
+import { CallUpdateCard } from "@/features/leads/components/call-update-card";
 import { withLeadsAccess } from "@/features/leads/components/list-view";
 import { FavoriteButton } from "@/features/leads/components/row-actions";
 import { Timeline } from "@/features/leads/components/timeline";
@@ -61,6 +62,8 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
       throw error;
     }
     const { lead } = detail;
+    // "Update after call" replaces the separate stage, note and schedule-follow-up forms (14 Nov 2026).
+    const callCard = detail.permissions.edit && detail.permissions.scheduleFollowUp;
     const [lookups, owners, clientStatus, leadBookings, leadMeetings, recordings, documents] = await Promise.all([
       leadLookups(db),
       assignableUsers(db, actor),
@@ -123,6 +126,9 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
           ) : null}
         </Card>
 
+        {/* One save for a call and what it decided (owner, 14 Nov 2026). */}
+        {callCard ? <CallUpdateCard leadId={lead.id} currentStage={lead.stage} /> : null}
+
         <Dialer status={getVoipStatus(actor)} telHref={telHref(lead.phoneCountryCode, lead.phoneNumber)} leadName={lead.name} phone={lead.phone} />
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
@@ -131,10 +137,10 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
             <Timeline activities={detail.activities} />
           </div>
           <div className="space-y-6">
-            <StagePanel detail={detail} lostReasons={lookups.lostReasons} />
+            <StagePanel detail={detail} lostReasons={lookups.lostReasons} showStage={!callCard} />
             {detail.permissions.assign ? <AssignPanel leadId={lead.id} ownerId={lead.ownerId} owners={owners} /> : null}
-            <FollowUpsPanel detail={detail} />
-            <NotePanel leadId={lead.id} canEdit={detail.permissions.edit} />
+            <FollowUpsPanel detail={detail} canSchedule={!callCard} />
+            {callCard ? null : <NotePanel leadId={lead.id} canEdit={detail.permissions.edit} />}
             <RecordingsPanel leadId={lead.id} recordings={recordings} canUpload={detail.permissions.edit} canDelete={actor.role === "super_admin"} canPlay={canPlayRecordings(actor)} />
             <DocumentsPanel leadId={lead.id} documents={documents} canUpload={detail.permissions.edit} />
             <ReviewsPanel detail={detail} />

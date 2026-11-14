@@ -21,6 +21,10 @@ function describeClient(a: TimelineActivity): { title: string; tag: string } {
       return { title: "Note", tag: "Note" };
     case "update": {
       const fields = (d.fields as string[] | undefined) ?? [];
+      if (d.nameFrom !== undefined) {
+        const others = fields.filter((x) => x !== "name");
+        return { title: `Name changed: ${String(d.nameFrom)} → ${String(d.nameTo)}${others.length ? ` (also ${others.join(", ")})` : ""}`, tag: "Update" };
+      }
       return { title: `Details updated (${fields.join(", ") || "fields"})`, tag: "Update" };
     }
     case "assignment":

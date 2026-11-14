@@ -1,0 +1,2 @@
+ALTER TABLE "files" ADD COLUMN "booking_id" uuid;--> statement-breakpoint
+ALTER TABLE "files" ADD CONSTRAINT "files_booking_id_bookings_id_fk" FOREIGN KEY ("booking_id") REFERENCES "public"."bookings"("id") ON DELETE restrict ON UPDATE no action;

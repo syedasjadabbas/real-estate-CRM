@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { DateTimeInput } from "@/components/ui/date-time-input";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
@@ -104,16 +105,16 @@ export function FollowUpForm({
         </Field>
         <Field label="Due (Pakistan time)" required error={errors.dueAt}>
           {(id, describedBy) => (
-            <input
+            <DateTimeInput
               id={id}
-              aria-describedby={describedBy}
-              type="datetime-local"
+              describedBy={describedBy}
+              invalid={Boolean(errors.dueAt)}
               value={due}
-              onChange={(e) => {
-                setDue(e.target.value);
+              quick={false}
+              onChange={(value) => {
+                setDue(value);
                 setWhen("custom");
               }}
-              className={textareaClass + " h-10"}
             />
           )}
         </Field>

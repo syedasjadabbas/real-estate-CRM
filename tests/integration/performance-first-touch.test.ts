@@ -83,15 +83,16 @@ describe.skipIf(!hasTestDb)("FR-028: first touch in the Performance report (Post
     expect(desc.slice(2).every((v) => v === null)).toBe(true);
   });
 
-  it("the CSV gives whole minutes in a new last column, and blank when there is none", async () => {
+  it("the CSV gives whole minutes in its own column, and blank when there is none", async () => {
     await lead(f.actors.agent1, INSIDE, 1.5);
     const r = await report();
     const [header, ...lines] = performanceCsv(r).trim().split("\n");
-    expect(header.endsWith(",CRM sign-outs,Avg first touch (min)")).toBe(true);
+    // Targets met and goals set follow it (14 Nov 2026).
+    expect(header.endsWith(",CRM sign-outs,Avg first touch (min),Targets met,Target goals set")).toBe(true);
     const index = r.allRows.findIndex((x) => x.userId === f.actors.agent1.id);
-    expect(lines[index].split(",").at(-1)).toBe("90");
+    expect(lines[index].split(",").at(-3)).toBe("90");
     const blank = r.allRows.findIndex((x) => x.userId === f.actors.agent2.id);
-    expect(lines[blank].split(",").at(-1)).toBe("");
+    expect(lines[blank].split(",").at(-3)).toBe("");
   });
 
   it("keeps report scope: an agent sees only their own row", async () => {

@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertCircle } from "lucide-react";
+import { DateTimeInput } from "@/components/ui/date-time-input";
 import { LeadPicker } from "@/features/leads/components/lead-picker";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -74,7 +75,16 @@ export function MeetingForm({ mode, meetingId, options, initial }: { mode: "crea
   const when = (key: "startsLocal" | "endsLocal", label: string, errorKey: string, required = false) => (
     <Field label={label} required={required} error={errors[errorKey]}>
       {(id, describedBy) => (
-        <Input id={id} aria-describedby={describedBy} invalid={Boolean(errors[errorKey])} type="datetime-local" value={v[key]} disabled={pending} onChange={(e) => set({ [key]: e.target.value })} />
+        <DateTimeInput
+          id={id}
+          describedBy={describedBy}
+          invalid={Boolean(errors[errorKey])}
+          value={v[key]}
+          disabled={pending}
+          onChange={(value) => set({ [key]: value })}
+          clearable={!required}
+          quick={required}
+        />
       )}
     </Field>
   );

@@ -31,6 +31,92 @@ async function scopedAgents(db: Database, actor: Actor) {
  * kind 'call_recording', a lead and no deleted_at, attributed to `uploaded_by_id`, counted by `created_at`.
  * Every recording counts, whatever its duration (definition in performance/calls.ts).
  */
+export type Achieved = { calls: number; meetings: number; soldSqft: number };
+const NOTHING: Achieved = { calls: 0, meetings: 0, soldSqft: 0 };
+export const TARGET_METRICS = [
+  { key: "calls", label: "Calls" },
+  { key: "meetings", label: "Meetings" },
+  { key: "soldSqft", label: "Sold (sq ft)" },
+] as const;
+export type TargetMetric = (typeof TARGET_METRICS)[number]["key"];
+
+/** Each agent's achievement in a window: calls (uploaded recordings), completed meetings, confirmed sq ft. */
+export async function achievementsFor(db: Database, ids: string[], window: { from: Date; to: Date }) {
+  const out = new Map<string, Achieved>();
+  if (ids.length === 0) return out;
+  const [meetingRows, sqftRows, callStats] = await Promise.all([
+    db
+      .select({ userId: meetings.organizerId, n: sql<number>`count(*)::int` })
+      .from(meetings)
+      .where(and(inArray(meetings.organizerId, ids), eq(meetings.status, "completed"), gte(meetings.startsAt, window.from), lt(meetings.startsAt, window.to)))
+      .groupBy(meetings.organizerId),
+    db
+      .select({ userId: bookings.agentId, sqft: sql<string>`coalesce(sum(${bookings.areaSqft}), 0)` })
+      .from(bookings)
+      .where(and(inArray(bookings.agentId, ids), eq(bookings.stage, "confirmed"), gte(bookings.confirmedAt, window.from), lt(bookings.confirmedAt, window.to)))
+      .groupBy(bookings.agentId),
+    callStatsByUser(db, ids, { start: window.from, end: window.to }),
+  ]);
+  for (const id of ids) {
+    out.set(id, {
+      calls: callStats.get(id)?.calls ?? 0,
+      meetings: meetingRows.find((r) => r.userId === id)?.n ?? 0,
+      soldSqft: Number(sqftRows.find((r) => r.userId === id)?.sqft ?? 0),
+    });
+  }
+  return out;
+}
+
+/** The goals of a target that are reached in full (a goal of 0 is not set, so never "met"). */
+export function metGoals(goals: Achieved, achieved: Achieved): TargetMetric[] {
+  return TARGET_METRICS.filter((m) => goals[m.key] > 0 && achieved[m.key] >= goals[m.key]).map((m) => m.key);
+}
+
+/** One agent's targets for today, this week and this month, with achievement so far. */
+export async function currentTargets(db: Database, userId: string, now = new Date()) {
+  const today = businessToday(now);
+  const rows = await db.select().from(targets).where(eq(targets.userId, userId));
+  return Promise.all(
+    (["daily", "weekly", "monthly"] as const).map(async (period) => {
+      const start = periodStart(period, today);
+      const t = rows.find((r) => r.period === period && r.periodStart === start) ?? null;
+      const got = (await achievementsFor(db, [userId], periodWindow(period, start))).get(userId) ?? NOTHING;
+      const goals = t ? { calls: t.calls, meetings: t.meetings, soldSqft: t.soldSqft } : null;
+      return { period, start, goals, achieved: got, met: goals ? metGoals(goals, got) : [] };
+    }),
+  );
+}
+
+/**
+ * Targets met per agent (Performance, owner 14 Nov 2026): over the targets whose period starts in the
+ * date range, how many goals were set and how many were reached in their own period.
+ */
+export async function targetsMetFor(db: Database, ids: string[], fromDate: string, toDate: string) {
+  const out = new Map<string, { met: number; set: number }>();
+  if (ids.length === 0) return out;
+  const rows = await db
+    .select()
+    .from(targets)
+    .where(and(inArray(targets.userId, ids), gte(targets.periodStart, fromDate), sql`${targets.periodStart} <= ${toDate}`));
+  const groups = new Map<string, typeof rows>();
+  for (const r of rows) {
+    const key = `${r.period}|${r.periodStart}`;
+    groups.set(key, [...(groups.get(key) ?? []), r]);
+  }
+  for (const group of groups.values()) {
+    const { period, periodStart: start } = group[0];
+    const got = await achievementsFor(db, group.map((r) => r.userId), periodWindow(period as TargetPeriod, start));
+    for (const r of group) {
+      const goals = { calls: r.calls, meetings: r.meetings, soldSqft: r.soldSqft };
+      const acc = out.get(r.userId) ?? { met: 0, set: 0 };
+      acc.set += TARGET_METRICS.filter((m) => goals[m.key] > 0).length;
+      acc.met += metGoals(goals, got.get(r.userId) ?? NOTHING).length;
+      out.set(r.userId, acc);
+    }
+  }
+  return out;
+}
+
 /** Agents per page on the Targets screen (FR-005). The CSV export always takes every agent. */
 export const TARGETS_PAGE_SIZE = 50;
 
@@ -47,34 +133,25 @@ export async function listTargets(db: Database, actor: Actor, rawQuery: unknown,
   const page = opts.all ? 1 : Math.min(Number.isInteger(rawPage) && rawPage >= 1 ? rawPage : 1, pageCount);
   const agents = opts.all ? everyone : everyone.slice((page - 1) * TARGETS_PAGE_SIZE, page * TARGETS_PAGE_SIZE);
   const ids = agents.map((a) => a.id);
-  const [targetRows, meetingRows, sqftRows, callStats] = ids.length
+  const [targetRows, achieved] = ids.length
     ? await Promise.all([
         db.select().from(targets).where(and(inArray(targets.userId, ids), eq(targets.period, q.period), eq(targets.periodStart, start))),
-        db
-          .select({ userId: meetings.organizerId, n: sql<number>`count(*)::int` })
-          .from(meetings)
-          .where(and(inArray(meetings.organizerId, ids), eq(meetings.status, "completed"), gte(meetings.startsAt, window.from), lt(meetings.startsAt, window.to)))
-          .groupBy(meetings.organizerId),
-        db
-          .select({ userId: bookings.agentId, sqft: sql<string>`coalesce(sum(${bookings.areaSqft}), 0)` })
-          .from(bookings)
-          .where(and(inArray(bookings.agentId, ids), eq(bookings.stage, "confirmed"), gte(bookings.confirmedAt, window.from), lt(bookings.confirmedAt, window.to)))
-          .groupBy(bookings.agentId),
-        callStatsByUser(db, ids, { start: window.from, end: window.to }),
+        achievementsFor(db, ids, window),
       ])
-    : [[], [], [], new Map()];
+    : [[], new Map<string, Achieved>()];
   const members = targetScope(actor.role) === "team" ? await teamMemberIds(db, actor) : [];
   const rows = agents.map((a) => {
     const t = targetRows.find((r) => r.userId === a.id) ?? null;
-    const meetingsDone = meetingRows.find((r) => r.userId === a.id)?.n ?? 0;
-    const sqft = Number(sqftRows.find((r) => r.userId === a.id)?.sqft ?? 0);
-    const calls = callStats.get(a.id)?.calls ?? 0;
+    const got = achieved.get(a.id) ?? NOTHING;
+    const goals = t ? { calls: t.calls, meetings: t.meetings, soldSqft: t.soldSqft } : null;
     return {
       userId: a.id,
       name: a.name,
-      target: t ? { calls: t.calls, meetings: t.meetings, soldSqft: t.soldSqft } : null,
-      achieved: { calls, meetings: meetingsDone, soldSqft: sqft },
-      percent: t ? { calls: percent(calls, t.calls), meetings: percent(meetingsDone, t.meetings), soldSqft: percent(sqft, t.soldSqft) } : null,
+      target: goals,
+      achieved: got,
+      percent: goals ? { calls: percent(got.calls, goals.calls), meetings: percent(got.meetings, goals.meetings), soldSqft: percent(got.soldSqft, goals.soldSqft) } : null,
+      /** Goals reached in full (owner, 14 Nov 2026): shown with a Met badge. */
+      met: goals ? metGoals(goals, got) : [],
       canEdit: canSetTargets(actor) && canSetTargetFor(actor, a.id, members),
     };
   });

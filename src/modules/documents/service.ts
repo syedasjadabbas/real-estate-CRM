@@ -7,6 +7,7 @@ import type { Actor } from "@/server/auth/types";
 import { AppError, notFound } from "@/server/errors";
 import { putObject, removeObject } from "@/server/storage/local";
 import { assertCanClient } from "@/modules/clients/policy";
+import { loadVisibleBooking } from "@/modules/bookings/signed-forms";
 import { auditClient, loadAccessibleClient, logClientActivity } from "@/modules/clients/support";
 import { assertCanUploadTo, listLeadFiles, openLeadFile, saveLeadFile } from "@/modules/files/lead-files";
 import { canDo } from "@/modules/leads/policy";
@@ -105,6 +106,13 @@ export async function openDocument(db: Database, actor: Actor, fileId: string) {
       assertCanClient(actor, "view");
       await loadAccessibleClient(db, actor, file.clientId).catch((error) => {
         throw error instanceof AppError && error.code === "NOT_FOUND" ? notFound("Document") : error;
+      });
+      return file;
+    }
+    // A signed booking form kept on the booking (14 Nov 2026): for anyone who may see the booking.
+    if (file?.bookingId) {
+      await loadVisibleBooking(db, actor, file.bookingId).catch((error) => {
+        throw error instanceof AppError && (error.code === "NOT_FOUND" || error.code === "FORBIDDEN") ? notFound("Document") : error;
       });
       return file;
     }

@@ -1,4 +1,5 @@
 import { ArrowLeft } from "lucide-react";
+import { FreshForm } from "@/components/ui/fresh-form";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader } from "@/components/shell/page-header";
@@ -37,12 +38,14 @@ export default async function NewBookingPage({ searchParams }: PageProps<"/dashb
         }
       />
       {projectId && options ? (
-        <BookingForm
-          key={projectId}
-          projectId={projectId}
-          defaultLeadId={typeof lead === "string" ? lead : ""}
-          options={{ projects, leads: options.leads, units: options.units }}
-        />
+        <FreshForm>
+          <BookingForm
+            key={projectId}
+            projectId={projectId}
+            defaultLeadId={typeof lead === "string" ? lead : ""}
+            options={{ projects, leads: options.leads, units: options.units, discountCap: options.discountCap, plan: options.plan }}
+          />
+        </FreshForm>
       ) : (
         <EmptyState className="bg-white">No active project is available for bookings.</EmptyState>
       )}

@@ -17,14 +17,17 @@ import { canDoMeeting } from "@/modules/meetings/policy";
 import { overdueMeetings } from "@/modules/meetings/queries";
 import { TASK_TYPE_LABELS } from "@/modules/tasks/constants";
 import { canDoTask } from "@/modules/tasks/policy";
-import { overdueTasks } from "@/modules/tasks/queries";
+import { assignableUsers, openTodos, overdueTasks, taskFormOptions } from "@/modules/tasks/queries";
+import { AddTodoForm, TodoList } from "@/features/tasks/components/todo-list";
 
 export const metadata: Metadata = { title: "To-dos & overdues" };
 
 /** Lead buckets plus FR-092 overdue tasks and FR-027 overdue meetings (shown to roles that work them). */
-type Bucket = TodoBucket | "tasks" | "meetings";
+type Bucket = TodoBucket | "tasks" | "meetings" | "mine";
 
 const GROUPS: { caption: string; buckets: { key: Bucket; label: string }[] }[] = [
+  // Personal to-dos (owner, 14 Nov 2026): what used to be "General" tasks.
+  { caption: "My list", buckets: [{ key: "mine", label: "My to-dos" }] },
   { caption: "Follow-ups", buckets: [{ key: "today", label: "Today" }, { key: "doneToday", label: "Done today" }] },
   {
     caption: "Upcoming",
@@ -50,6 +53,7 @@ const TITLES: Record<Bucket, string> = {
   unattended: "New leads unattended 24h+",
   tasks: "Overdue tasks",
   meetings: "Overdue meetings",
+  mine: "My to-dos",
 };
 
 export default function TodosPage({ searchParams }: PageProps<"/dashboard/leads/todos">) {
@@ -60,28 +64,35 @@ export default function TodosPage({ searchParams }: PageProps<"/dashboard/leads/
     const bucket: Bucket =
       showTasks && params.bucket === "tasks"
         ? "tasks"
-        : showMeetings && params.bucket === "meetings"
+        : showTasks && params.bucket === "mine"
+          ? "mine"
+          : showMeetings && params.bucket === "meetings"
           ? "meetings"
           : (TODO_BUCKETS as readonly string[]).includes(params.bucket)
             ? (params.bucket as TodoBucket)
             : "today";
     const listsTasks = bucket === "tasks";
     const listsMeetings = bucket === "meetings";
-    const [{ counts: leadCounts, items, page: leadPage, pageCount: leadPages }, overdue, lateMeetings] = await Promise.all([
-      leadTodos(db, actor, projectId, listsTasks || listsMeetings ? "overdue" : bucket, undefined, listsTasks || listsMeetings ? 1 : params.page),
+    const listsMine = bucket === "mine";
+    const other = listsTasks || listsMeetings || listsMine;
+    const [{ counts: leadCounts, items, page: leadPage, pageCount: leadPages }, overdue, lateMeetings, mine] = await Promise.all([
+      leadTodos(db, actor, projectId, other ? "overdue" : bucket, undefined, other ? 1 : params.page),
       overdueTasks(db, actor, undefined, listsTasks ? params.page : 1),
       overdueMeetings(db, actor, undefined, listsMeetings ? params.page : 1),
+      openTodos(db, actor, listsMine ? params.page : 1),
     ]);
-    const { page, pageCount } = listsTasks ? overdue : listsMeetings ? lateMeetings : { page: leadPage, pageCount: leadPages };
-    const counts: Record<Bucket, number> = { ...leadCounts, tasks: overdue.count, meetings: lateMeetings.count };
-    const groups = GROUPS.map((g) => ({ ...g, buckets: g.buckets.filter((b) => (b.key !== "tasks" || showTasks) && (b.key !== "meetings" || showMeetings)) }));
+    // The add form's choices: assignees (Admins: anyone; others: themselves) and the project's leads.
+    const addForm = listsMine && canDoTask(actor, "create") ? await Promise.all([assignableUsers(db, actor), taskFormOptions(db, actor, projectId)]) : null;
+    const { page, pageCount } = listsTasks ? overdue : listsMeetings ? lateMeetings : listsMine ? mine : { page: leadPage, pageCount: leadPages };
+    const counts: Record<Bucket, number> = { ...leadCounts, tasks: overdue.count, meetings: lateMeetings.count, mine: mine.count };
+    const groups = GROUPS.map((g) => ({ ...g, buckets: g.buckets.filter((b) => (b.key !== "tasks" && b.key !== "mine" ? true : showTasks) && (b.key !== "meetings" || showMeetings)) })).filter((g) => g.buckets.length > 0);
 
     return (
       <section className="space-y-6" aria-label="To-dos">
         <PageHeader
           as="h2"
           title="To-dos & overdues"
-          description="Today's lead follow-ups, follow-ups completed today, upcoming (tomorrow, 7 / 15 / 30 days), overdue lead follow-ups, tasks and meetings, and new leads unattended 24h+."
+          description="Your own to-dos, today's lead follow-ups, follow-ups completed today, upcoming (tomorrow, 7 / 15 / 30 days), overdue lead follow-ups, tasks and meetings, and new leads unattended 24h+."
           actions={
             <Link href={`/dashboard/leads/todos?bucket=${bucket}`} className={buttonClasses({ variant: "secondary", size: "lg" })}>
               <RefreshCw aria-hidden="true" className="size-4" />
@@ -131,7 +142,12 @@ export default function TodosPage({ searchParams }: PageProps<"/dashboard/leads/
               {counts[bucket]} in this view
             </span>
           </div>
-          {bucket === "meetings" ? (
+          {bucket === "mine" ? (
+            <div className="space-y-4 p-4">
+              {addForm ? <AddTodoForm meId={actor.id} assignees={addForm[0]} leads={addForm[1].leads} /> : null}
+              <TodoList rows={mine.rows} meId={actor.id} now={mine.generatedAt} />
+            </div>
+          ) : bucket === "meetings" ? (
             lateMeetings.rows.length === 0 ? (
               <div className="p-4">
                 <EmptyState>No overdue meetings. You&apos;re all caught up.</EmptyState>

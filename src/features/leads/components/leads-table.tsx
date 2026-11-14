@@ -1,4 +1,5 @@
 import { Phone } from "lucide-react";
+import { NEW_LEAD_HOURS } from "@/modules/leads/constants";
 import Link from "next/link";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/cn";
@@ -122,6 +123,11 @@ export function LeadsTable({
                     <Link href={`/dashboard/leads/${r.id}`} className="font-bold hover:text-brand hover:underline">
                       {r.name}
                     </Link>
+                    {now - new Date(r.createdAt).getTime() < NEW_LEAD_HOURS * 3_600_000 ? (
+                      <span role="img" aria-label="New: added in the last 24 hours" title="New: added in the last 24 hours" className="ml-1">
+                        🔥
+                      </span>
+                    ) : null}
                     {r.isRegenerated ? (
                       <span className="mt-1 block w-fit rounded-full bg-sky-50 px-2 py-0.5 text-[9px] font-black tracking-[0.05em] text-sky-700 uppercase">
                         Regenerated

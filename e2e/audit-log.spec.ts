@@ -14,15 +14,16 @@ test("a note added on a lead appears in the Admin's audit log; search, filters a
   const ag = await agentCtx.newPage();
   await login(ag, "agent1");
   await ag.goto(`/dashboard/leads/${leadId}`);
-  const box = ag.getByLabel("New note");
-  const add = ag.getByRole("button", { name: "Add note" });
-  // Refill if the page hydrated after typing (the button enables only once React has the text).
+  // Notes are added through "Update after call" with "No call" (14 Nov 2026).
+  const card = ag.getByRole("form", { name: "Update after call" });
   await expect(async () => {
-    await box.fill(note);
-    await expect(add).toBeEnabled({ timeout: 1_000 });
+    await card.getByRole("button", { name: "No call (update only)" }).click();
+    await card.getByLabel("What happened").fill(note);
+    await card.getByLabel("Next follow-up").uncheck();
+    await expect(card.getByLabel("What happened")).toHaveValue(note, { timeout: 1_000 });
   }).toPass();
-  await add.click();
-  await expect(ag.getByText("Note added.")).toBeVisible();
+  await card.getByRole("button", { name: "Save update" }).click();
+  await expect(ag.getByText("Done: note saved.")).toBeVisible();
   await agentCtx.close();
 
   // The Admin reaches the log from Security settings.

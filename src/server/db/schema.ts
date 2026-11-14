@@ -96,6 +96,7 @@ export const bookingStage = pgEnum("booking_stage", [
   "confirmed",
   "cancelled",
 ]);
+export const discountStatus = pgEnum("discount_status", ["none", "pending", "approved", "rejected"]);
 export const paymentDocsStatus = pgEnum("payment_docs_status", ["not_submitted", "submitted", "verified"]);
 export const bookingPaymentKind = pgEnum("booking_payment_kind", ["payment", "reversal"]);
 export const bookingPaymentType = pgEnum("booking_payment_type", ["token", "down_payment", "installment", "other"]);
@@ -197,6 +198,16 @@ export const teamMembers = pgTable(
 
 // ─── Projects & lookups ───────────────────────────────────────────────────────
 
+/** Per-project payment plan; any part left out uses the standard plan (Tasks settings and defaults). */
+export type ProjectPaymentPlan = Partial<{
+  downPaymentPct: number;
+  installmentCount: number;
+  /** Months between installments: 1 monthly, 3 quarterly, 6 half-yearly. */
+  everyMonths: number;
+  possessionPct: number;
+  balloonCount: number;
+  balloonPct: number;
+}>;
 export type ProjectDimensions = Partial<Record<"floors" | "blocks" | "categories" | "types" | "premiums", string[]>>;
 
 export const projects = pgTable(
@@ -211,6 +222,8 @@ export const projects = pgTable(
     description: text("description"),
     /** FR-061 per-project unit dimensions: allowed floors, blocks, categories, types, premiums. */
     dimensionConfig: jsonb("dimension_config").$type<ProjectDimensions>().notNull().default({}),
+    /** The project's payment plan (owner, 14 Nov 2026), used by New booking and the booking form. Empty = the standard plan. */
+    paymentPlan: jsonb("payment_plan").$type<ProjectPaymentPlan>().notNull().default({}),
     status: projectStatus("status").notNull().default("active"),
     ...timestamps,
   },
@@ -327,6 +340,8 @@ export const files = pgTable(
     financeEntryId: uuid("finance_entry_id").references((): AnyPgColumn => financeEntries.id, { onDelete: "restrict" }),
     /** For payment proofs (kind "receipt", questionnaire Q33): the payment the file belongs to. */
     paymentId: uuid("payment_id").references((): AnyPgColumn => bookingPayments.id, { onDelete: "restrict" }),
+    /** Transfer screenshots an agent attaches to a booking before Accounts posts the payment (kind "receipt", 14 Nov 2026). */
+    bookingId: uuid("booking_id").references((): AnyPgColumn => bookings.id, { onDelete: "restrict" }),
     /** For contracts and other documents kept on the client itself (kind "document", FR-052). */
     clientId: uuid("client_id").references((): AnyPgColumn => clients.id, { onDelete: "restrict" }),
     kind: fileKind("kind").notNull(),
@@ -514,6 +529,17 @@ export const bookings = pgTable(
     confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
     cancelledReason: text("cancelled_reason"),
+    /**
+     * Discount on the inventory price (owner, 14 Nov 2026). Agents give up to the cap (5%) themselves;
+     * more needs an Admin or Super Admin: the booking is held at the cap with the asked % pending, and
+     * a rejection keeps it at the cap.
+     */
+    discountPct: numeric("discount_pct", { precision: 5, scale: 2, mode: "number" }).notNull().default(0),
+    discountRequestedPct: numeric("discount_requested_pct", { precision: 5, scale: 2, mode: "number" }),
+    discountStatus: discountStatus("discount_status").notNull().default("none"),
+    discountDecidedById: uuid("discount_decided_by_id").references(() => users.id, { onDelete: "set null" }),
+    discountDecidedAt: timestamp("discount_decided_at", { withTimezone: true }),
+    discountNote: text("discount_note"),
     createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
     ...timestamps,
   },
@@ -1163,6 +1189,15 @@ export const notificationType = pgEnum("notification_type", [
   "follow_up_soon",
   "lead_verification_requested",
   "lead_verified",
+  // An agent reached a target goal (owner, 14 Nov 2026): the agent and their team admins.
+  "target_met",
+  // An agent renamed a lead or client (owner, 14 Nov 2026): Admins and Super Admins are told.
+  "name_changed",
+  // A booking discount above the agent's cap waits for an Admin or Super Admin, and its decision (14 Nov 2026).
+  "discount_requested",
+  "discount_decided",
+  // Finance found a booking's token payment not genuine and rejected the booking (14 Nov 2026).
+  "booking_rejected",
 ]);
 
 /** In-app notifications (DATA_MODEL.md "notifications"). One row per recipient and event key, never duplicated. */

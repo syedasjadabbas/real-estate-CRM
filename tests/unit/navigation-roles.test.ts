@@ -26,7 +26,7 @@ const shows = (href: string, role: Role) => {
 /** The access check each page makes before it shows anything (the page files' RestrictedState guards). */
 const pageAllows: Record<string, (actor: { role: Role }) => boolean> = {
   "/dashboard/leads": (a) => canDoLead(a, "view"),
-  "/dashboard/leads?stage=new_lead": (a) => canDoLead(a, "view"),
+  "/dashboard/leads?view=new": (a) => canDoLead(a, "view"),
   "/dashboard/leads/todos": (a) => canDoLead(a, "view"),
   "/dashboard/settings/assignment": (a) => canManageAssignment(a),
   "/dashboard/settings/access": (a) => canManageAccess(a),

@@ -18,6 +18,7 @@ import {
 import { completeNextFollowUp } from "@/modules/leads/follow-ups";
 import { claimLead } from "@/modules/leads/claims";
 import { resubmitLead, verifyLead } from "@/modules/leads/verification";
+import { logCallUpdate } from "@/modules/leads/call-update";
 import { requireActor } from "@/server/auth/current-user";
 import { getDb } from "@/server/db";
 import { toActionError, type ActionResult } from "@/server/errors";
@@ -98,4 +99,9 @@ export async function addReviewAction(leadId: string, body: string) {
 /** Claim an unassigned lead; the first successful claim wins. */
 export async function claimLeadAction(leadId: string) {
   return run((db, actor) => claimLead(db, actor, leadId));
+}
+
+/** "Update after call": note, stage, meeting and next follow-up in one save. */
+export async function logCallUpdateAction(leadId: string, input: Record<string, unknown>) {
+  return run((db, actor) => logCallUpdate(db, actor, leadId, input));
 }

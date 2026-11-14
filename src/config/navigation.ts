@@ -72,7 +72,7 @@ export const navigation: NavGroup[] = [
       },
       {
         label: "New leads",
-        href: "/dashboard/leads?stage=new_lead",
+        href: "/dashboard/leads?view=new",
         icon: UserPlus,
         description: "Leads still in the New Lead stage, in the leads list.",
         roles: LEAD_ROLES,

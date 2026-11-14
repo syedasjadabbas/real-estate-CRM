@@ -44,6 +44,7 @@ const COLUMNS: { label: string; sort: PerformanceSort; title?: string }[] = [
   { label: "Meetings", sort: "meetings", title: "Completed meetings the agent organized, starting in the range." },
   { label: "CRM sign-ins", sort: "signIns", title: "CRM sign-ins logged in the range (authentication activity, not attendance)." },
   { label: "CRM sign-outs", sort: "signOuts", title: "CRM sign-outs logged in the range (authentication activity, not attendance)." },
+  { label: "Targets met", sort: "targetsMet", title: "Target goals reached (calls, meetings, sold sq ft), of those set, for targets whose day, week or month starts in the range." },
   { label: "Avg first touch", sort: "avgFirstTouchMs", title: "Average time from creation to first touch, for leads assigned in the range that have been touched." },
 ];
 
@@ -223,6 +224,14 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
                         {v === null ? "—" : typeof v === "number" ? formatInt(v) : v}
                       </td>
                     ))}
+                    <td className={cn("px-3 py-2.5 text-right whitespace-nowrap tabular-nums", r.targetsSet === 0 && "text-zinc-400")}>
+                      {r.targetsSet === 0 ? "—" : (
+                        <>
+                          <span className={r.targetsMet > 0 ? "font-bold text-brand" : undefined}>{r.targetsMet}</span>
+                          <span className="text-zinc-400"> / {r.targetsSet}</span>
+                        </>
+                      )}
+                    </td>
                     <td className={cn("px-3 py-2.5 text-right whitespace-nowrap tabular-nums", r.avgFirstTouchMs === null && "text-zinc-400")}>{formatDuration(r.avgFirstTouchMs)}</td>
                   </tr>
                 ))}

@@ -4,11 +4,12 @@ import { createBooking } from "@/modules/bookings/commands";
 import { createUnit } from "@/modules/inventory/commands";
 import { createLead } from "@/modules/leads/commands";
 import { completeMeeting, createMeeting } from "@/modules/meetings/commands";
-import { listTargets, setTarget, targetsCsv } from "@/modules/targets/service";
+import { listTargets, setTarget, targetsCsv, targetsMetFor } from "@/modules/targets/service";
+import { syncTargetsMet } from "@/modules/notifications/service";
 import { createTeam, saveDailyReport, saveRoster, setTeamMembers, updateTeam } from "@/modules/teams/commands";
 import { getDailyReport, getRosterDay, getRosterMonth, listDailyReports, myRoster, teamDetail, teamTiles, visibleTeams } from "@/modules/teams/queries";
 import { loadActor } from "@/server/auth/session-store";
-import { auditLogs, bookings, dailyReports, files, rosterEntries, targets, teams, users } from "@/server/db/schema";
+import { auditLogs, bookings, dailyReports, files, notifications, rosterEntries, targets, teams, users } from "@/server/db/schema";
 import type { Database } from "@/server/db";
 import type { Actor } from "@/server/auth/types";
 import { AppError } from "@/server/errors";
@@ -204,7 +205,7 @@ describe.skipIf(!hasTestDb)("Teams & Targets (PostgreSQL integration)", () => {
       const nov = await createMeeting(db, f.actors.agent1, { title: "Next month", type: "company_office", startsAt: "2026-11-02T07:00:00Z", leadId: r.leadId, moveLead: false });
       await completeMeeting(db, f.actors.agent1, nov.meetingId, { moveLead: false });
       const unitId = (await createUnit(db, f.actors.superAdmin, { projectId: f.projectId, unitNo: "T-1", areaSqft: "500", basePrice: "1000000" })).unitId;
-      const { bookingId } = await createBooking(db, f.actors.agent1, { projectId: f.projectId, leadId: r.leadId, unitId, ratePerSqft: "2000", tokenAmount: "1000" });
+      const { bookingId } = await createBooking(db, f.actors.agent1, { projectId: f.projectId, leadId: r.leadId, unitId, ratePerSqft: "2000", tokenAmount: "20000" });
       await db.update(bookings).set({ stage: "confirmed", confirmedAt: new Date("2026-10-20T06:00:00Z") }).where(eq(bookings.id, bookingId));
       // Calls = call recordings linked to a lead, by uploader and upload date (client confirmation 10 Nov 2026).
       let k = 0;
@@ -226,6 +227,31 @@ describe.skipIf(!hasTestDb)("Teams & Targets (PostgreSQL integration)", () => {
       expect(csv).toContain("Agent A,monthly,2026-10-01,1300,2,20,1,350,500");
       const weekly = await listTargets(db, admin, { period: "weekly", anchor: "2026-10-21" }, NOW);
       expect(weekly.rows.find((x) => x.userId === f.actors.agent1.id)).toMatchObject({ target: null, achieved: { calls: 1, meetings: 0, soldSqft: 500 } });
+    });
+
+    it("a goal reached is marked Met, tells the agent and their team admin once, and counts on Performance", async () => {
+      // Owner, 14 Nov 2026. October's target: 2 calls (meetings and sq ft not set).
+      await set(admin, f.actors.agent1.id, { calls: "2", meetings: "0", soldSqft: "0" });
+      const r = await createLead(db, f.actors.agent1, leadInput(f));
+      if (r.outcome !== "created") throw new Error("setup");
+      const call = (n: number) =>
+        db.insert(files).values({ leadId: r.leadId, kind: "call_recording", storageKey: `recordings/met-${n}.mp3`, originalName: "c.mp3", mime: "audio/mpeg", sizeBytes: 1, sha256: "x", uploadedById: f.actors.agent1.id, createdAt: new Date("2026-10-21T07:00:00Z") });
+      await call(1);
+      expect(await syncTargetsMet(db, f.actors.agent1, NOW)).toBe(0);
+      await call(2);
+
+      const grid = await listTargets(db, admin, { period: "monthly", anchor: "2026-10-01" }, NOW);
+      expect(grid.rows.find((x) => x.userId === f.actors.agent1.id)?.met).toEqual(["calls"]);
+
+      const sent = await syncTargetsMet(db, f.actors.agent1, NOW);
+      expect(sent).toBeGreaterThanOrEqual(1);
+      const rows = await db.select().from(notifications).where(eq(notifications.type, "target_met"));
+      expect(rows.find((n) => n.userId === f.actors.agent1.id)?.title).toBe("Target met: Calls (monthly)");
+      expect(rows.some((n) => n.userId === f.actors.manager.id)).toBe(true);
+      expect(await syncTargetsMet(db, f.actors.agent1, NOW)).toBe(0); // once per goal and period
+      expect(await syncTargetsMet(db, admin, NOW)).toBe(0); // only agents' own reads check
+
+      expect((await targetsMetFor(db, [f.actors.agent1.id], "2026-10-01", "2026-10-31")).get(f.actors.agent1.id)).toEqual({ met: 1, set: 1 });
     });
 
     it("database constraints: weekly must start Monday, monthly the 1st, values non-negative, one per period", async () => {

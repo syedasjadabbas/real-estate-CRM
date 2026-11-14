@@ -439,7 +439,7 @@ describe.skipIf(!hasTestDb)("Leads module (PostgreSQL integration)", () => {
     it("a new, unused number is saved, normalized, audited and on the timeline", async () => {
       const a = await make();
       const before = await updates(a.leadId);
-      expect(await updateLead(db, f.actors.agent1, a.leadId, { phoneNumber: "0333-7654321" })).toEqual({ changed: ["phoneNumber", "phoneE164"] });
+      expect(await updateLead(db, f.actors.manager, a.leadId, { phoneNumber: "0333-7654321" })).toEqual({ changed: ["phoneNumber", "phoneE164"] });
       expect(await row(a.leadId)).toMatchObject({ phoneNumber: "3337654321", phoneE164: "+923337654321" });
       expect(await updates(a.leadId)).toBe(before + 1);
       const detail = await getLeadDetail(db, f.actors.agent1, a.leadId);
@@ -452,14 +452,14 @@ describe.skipIf(!hasTestDb)("Leads module (PostgreSQL integration)", () => {
       const stored = await row(b.leadId);
       const auditsBefore = await updates(b.leadId);
       for (const phoneNumber of ["03001112222", "0300-111 2222", "+92 300 1112222", "0092 3001112222", "3001112222"]) {
-        const e = await errorOf(updateLead(db, f.actors.agent1, b.leadId, { phoneNumber, name: "Should not save" }));
+        const e = await errorOf(updateLead(db, f.actors.manager, b.leadId, { phoneNumber, name: "Should not save" }));
         expect(e?.code, phoneNumber).toBe("CONFLICT");
         expect(e?.message).toBe("A lead with this phone number already exists in this project.");
         expect(e?.fields?.phoneNumber).toBe(`Already used by lead ${original.code}`);
         expect(e?.details).toMatchObject({ existingLeadId: original.leadId, existingCode: original.code });
       }
       // Country code given separately resolves to the same number.
-      expect((await errorOf(updateLead(db, f.actors.agent1, b.leadId, { phoneCountryCode: "+92", phoneNumber: "300 1112222" })))?.code).toBe("CONFLICT");
+      expect((await errorOf(updateLead(db, f.actors.manager, b.leadId, { phoneCountryCode: "+92", phoneNumber: "300 1112222" })))?.code).toBe("CONFLICT");
       expect(await row(b.leadId)).toEqual(stored);
       expect(await updates(b.leadId)).toBe(auditsBefore);
     });
@@ -473,13 +473,13 @@ describe.skipIf(!hasTestDb)("Leads module (PostgreSQL integration)", () => {
       const gone = await make(f.actors.agent1, "03006667777");
       await db.update(leads).set({ deletedAt: new Date() }).where(eq(leads.id, gone.leadId));
       const c = await make();
-      expect(await updateLead(db, f.actors.agent1, c.leadId, { phoneNumber: "03006667777" })).toEqual({ changed: ["phoneNumber", "phoneE164"] });
+      expect(await updateLead(db, f.actors.manager, c.leadId, { phoneNumber: "03006667777" })).toEqual({ changed: ["phoneNumber", "phoneE164"] });
     });
 
     it("doesn't reveal a lead the editor can't see; permissions are unchanged", async () => {
       const hidden = await make(f.actors.outsideAgent, "03008889999");
       const mine = await make(f.actors.agent1);
-      const e = await errorOf(updateLead(db, f.actors.agent1, mine.leadId, { phoneNumber: "03008889999" }));
+      const e = await errorOf(updateLead(db, f.actors.manager, mine.leadId, { phoneNumber: "03008889999" }));
       expect(e?.code).toBe("CONFLICT");
       expect(e?.details).toEqual({});
       expect(e?.fields?.phoneNumber).toBe("Already used by another lead in this project");
@@ -494,8 +494,8 @@ describe.skipIf(!hasTestDb)("Leads module (PostgreSQL integration)", () => {
         const target = `0345${String(1_000_000 + i)}`;
         const [b, c] = [await make(), await make()];
         const results = await Promise.allSettled([
-          updateLead(db, f.actors.agent1, b.leadId, { phoneNumber: target }),
-          updateLead(db, f.actors.agent1, c.leadId, { phoneNumber: target }),
+          updateLead(db, f.actors.manager, b.leadId, { phoneNumber: target }),
+          updateLead(db, f.actors.manager, c.leadId, { phoneNumber: target }),
         ]);
         expect(results.filter((r) => r.status === "fulfilled"), `round ${i}`).toHaveLength(1);
         const rejected = results.find((r) => r.status === "rejected") as PromiseRejectedResult;
@@ -510,7 +510,7 @@ describe.skipIf(!hasTestDb)("Leads module (PostgreSQL integration)", () => {
         const target = `0346${String(1_000_000 + i)}`;
         const b = await make();
         const results = await Promise.allSettled([
-          updateLead(db, f.actors.agent1, b.leadId, { phoneNumber: target }),
+          updateLead(db, f.actors.manager, b.leadId, { phoneNumber: target }),
           createLead(db, f.actors.agent1, leadInput(f, { phoneNumber: target })),
         ]);
         expect(results.filter((r) => r.status === "fulfilled"), `round ${i}`).toHaveLength(1);

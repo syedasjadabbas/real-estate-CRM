@@ -97,10 +97,10 @@ describe.skipIf(!hasTestDb)("Sprint P1–P2: phones, customers, ownership, claim
       await lead(f.actors.agent1, { phoneNumber: taken });
       // An agent's own new lead waits for Admin verification; one an Admin assigns them is workable.
       const mine = await lead(f.actors.superAdmin, { ownerId: f.actors.agent1.id });
-      await updateLead(db, f.actors.agent1, mine.leadId, { phones: [{ countryCode: "+92", number: phone() }] });
+      await updateLead(db, f.actors.manager, mine.leadId, { phones: [{ countryCode: "+92", number: phone() }] });
       expect(await db.select().from(leadPhones).where(eq(leadPhones.leadId, mine.leadId))).toHaveLength(1);
-      expect((await failure(updateLead(db, f.actors.agent1, mine.leadId, { phones: [{ countryCode: "+92", number: taken }] }))).code).toBe("CONFLICT");
-      await updateLead(db, f.actors.agent1, mine.leadId, { phones: [] });
+      expect((await failure(updateLead(db, f.actors.manager, mine.leadId, { phones: [{ countryCode: "+92", number: taken }] }))).code).toBe("CONFLICT");
+      await updateLead(db, f.actors.manager, mine.leadId, { phones: [] });
       expect(await db.select().from(leadPhones).where(eq(leadPhones.leadId, mine.leadId))).toEqual([]);
     });
   });

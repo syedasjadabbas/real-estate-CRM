@@ -47,7 +47,16 @@ function Status({ message, ok }: { message: string | null; ok?: boolean }) {
  * Pipeline stage (with optional remarks recorded on the timeline), then a separate Lost lead card:
  * the lost request or decision is its own step, not part of a stage move.
  */
-export function StagePanel({ detail, lostReasons }: { detail: LeadDetail; lostReasons: LeadLookups["lostReasons"] }) {
+export function StagePanel({
+  detail,
+  lostReasons,
+  showStage = true,
+}: {
+  detail: LeadDetail;
+  lostReasons: LeadLookups["lostReasons"];
+  /** False when the "Update after call" card already offers the stage (14 Nov 2026): only Lost lead shows. */
+  showStage?: boolean;
+}) {
   const { lead, permissions, pendingLostRequest } = detail;
   const [target, setTarget] = useState<string>("");
   const [remarks, setRemarks] = useState("");
@@ -81,6 +90,7 @@ export function StagePanel({ detail, lostReasons }: { detail: LeadDetail; lostRe
 
   return (
     <>
+    {showStage ? (
     <PanelCard title="Pipeline stage">
       <div className="space-y-4">
         {permissions.edit ? (
@@ -123,6 +133,7 @@ export function StagePanel({ detail, lostReasons }: { detail: LeadDetail; lostRe
         <Status message={msg?.text ?? null} ok={msg?.ok} />
       </div>
     </PanelCard>
+    ) : null}
 
     {showLost ? (
     <PanelCard title="Lost lead">
@@ -220,7 +231,8 @@ export function AssignPanel({ leadId, ownerId, owners }: { leadId: string; owner
   );
 }
 
-export function FollowUpsPanel({ detail }: { detail: LeadDetail }) {
+/** `canSchedule` false when the "Update after call" card schedules the next follow-up (14 Nov 2026). */
+export function FollowUpsPanel({ detail, canSchedule = true }: { detail: LeadDetail; canSchedule?: boolean }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const now = detail.generatedAt;
@@ -264,7 +276,7 @@ export function FollowUpsPanel({ detail }: { detail: LeadDetail }) {
           </ul>
         )}
         <Status message={error} />
-        {detail.permissions.scheduleFollowUp ? (
+        {canSchedule && detail.permissions.scheduleFollowUp ? (
           <div className="border-t border-zinc-100 pt-4">
             <FollowUpForm leadId={detail.lead.id} />
           </div>
@@ -404,7 +416,7 @@ export function EditDetailsForm({ detail, lookups }: { detail: LeadDetail; looku
       }}
       className="space-y-4"
     >
-      <LeadFields values={values} onChange={(p) => setValues((v) => ({ ...v, ...p }))} errors={errors} lookups={lookups} projectId={lead.projectId} currentCity={lead.cityId ? { id: lead.cityId, name: lead.cityName } : null} disabled={pending || !detail.permissions.editDetails} />
+      <LeadFields values={values} onChange={(p) => setValues((v) => ({ ...v, ...p }))} errors={errors} lookups={lookups} lockPhones={!detail.permissions.editPhones} projectId={lead.projectId} currentCity={lead.cityId ? { id: lead.cityId, name: lead.cityName } : null} disabled={pending || !detail.permissions.editDetails} />
       {detail.permissions.editDetails ? (
         <div className="flex flex-wrap items-center justify-end gap-2">
           <Status message={msg?.text ?? null} ok={msg?.ok} />

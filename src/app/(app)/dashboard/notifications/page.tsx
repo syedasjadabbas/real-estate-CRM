@@ -24,6 +24,11 @@ const TYPE_LABELS: Record<NotificationType, string> = {
   follow_up_soon: "Follow-up soon",
   lead_verification_requested: "To verify",
   lead_verified: "Verification",
+  discount_requested: "Discount to approve",
+  discount_decided: "Discount decision",
+  target_met: "Target met",
+  name_changed: "Name changed",
+  booking_rejected: "Booking rejected",
 };
 
 /** Notification history (FR-006): the user's own notifications only. */

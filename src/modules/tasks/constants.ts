@@ -1,5 +1,10 @@
 /** FR-090 task types and statuses, in the reference's order and wording. */
 export const TASK_TYPES = ["general", "payment_plan", "proposal"] as const;
+/**
+ * Tasks screen types (owner, 14 Nov 2026): printables only. "general" tasks are to-dos, added and
+ * listed on To-dos (and, for HR and Accountants, My workplace).
+ */
+export const PRINTABLE_TASK_TYPES = ["proposal", "payment_plan"] as const;
 export type TaskType = (typeof TASK_TYPES)[number];
 
 export const TASK_TYPE_LABELS: Record<TaskType, string> = {

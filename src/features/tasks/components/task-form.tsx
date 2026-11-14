@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertCircle, RotateCcw } from "lucide-react";
+import { DateTimeInput } from "@/components/ui/date-time-input";
 import { LeadPicker } from "@/features/leads/components/lead-picker";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -238,7 +239,7 @@ export function TaskForm({
         <Field label="Type" required error={errors.type}>
           {(id, describedBy) => (
             <select id={id} aria-describedby={describedBy} value={v.type} onChange={(e) => set({ type: e.target.value as TaskType })} className={selectClass} disabled={pending}>
-              {TASK_TYPES.map((t) => (
+              {TASK_TYPES.filter((t) => t !== "general" || initial.type === "general").map((t) => (
                 <option key={t} value={t}>
                   {TASK_TYPE_LABELS[t]}
                 </option>
@@ -248,7 +249,7 @@ export function TaskForm({
         </Field>
         <Field label="Due (Pakistan time)" error={errors.dueAt}>
           {(id, describedBy) => (
-            <Input id={id} aria-describedby={describedBy} type="datetime-local" value={v.dueLocal} disabled={pending} onChange={(e) => set({ dueLocal: e.target.value })} />
+            <DateTimeInput id={id} describedBy={describedBy} invalid={Boolean(errors.dueAt)} value={v.dueLocal} disabled={pending} onChange={(dueLocal) => set({ dueLocal })} clearable />
           )}
         </Field>
         <Field label="Assignee" required error={errors.assigneeId}>
@@ -268,7 +269,8 @@ export function TaskForm({
               id={id}
               describedBy={describedBy}
               value={v.leadId}
-              onChange={(leadId) => set({ leadId })}
+              // A booking of another lead is cleared, so a mismatched pair can't be picked (14 Nov 2026).
+              onChange={(leadId) => set({ leadId, ...(leadId && options.bookings.find((b) => b.id === v.bookingId)?.leadId !== leadId ? { bookingId: "" } : {}) })}
               options={options.leads.map((l) => ({ value: l.id, label: `${l.name} (${l.code})` }))}
               empty="No lead"
               disabled={pending}
@@ -278,8 +280,9 @@ export function TaskForm({
         <Field label="Booking" error={errors.bookingId} className="sm:col-span-2">
           {(id, describedBy) => (
             <select id={id} aria-describedby={describedBy} value={v.bookingId} onChange={(e) => set({ bookingId: e.target.value })} className={selectClass} disabled={pending}>
-              <option value="">No booking</option>
-              {options.bookings.map((b) => (
+              <option value="">{v.leadId && !options.bookings.some((b) => b.leadId === v.leadId) ? "This lead has no bookings" : "No booking"}</option>
+              {/* With a lead chosen, only that lead's bookings are offered. */}
+              {options.bookings.filter((b) => !v.leadId || b.leadId === v.leadId).map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.leadName} ({b.leadCode}) · Unit {b.unitNo} · {b.projectName}
                 </option>

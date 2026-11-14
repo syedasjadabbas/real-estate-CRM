@@ -282,7 +282,7 @@ export async function getClientDetail(db: Database, actor: Actor, clientId: stri
     interests: groupInterests(linked, canOpen),
     activities,
     followUps: followUpRows,
-    permissions: { edit: canEdit, assign: canDoClient(actor, "assign"), scheduleFollowUp: canEdit },
+    permissions: { edit: canEdit, assign: canDoClient(actor, "assign"), scheduleFollowUp: canEdit, /** Agents never change phone numbers (14 Nov 2026). */ editPhones: actor.role !== "agent" },
   };
 }
 export type ClientDetail = Awaited<ReturnType<typeof getClientDetail>>;

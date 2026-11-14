@@ -1,4 +1,4 @@
-import { Download } from "lucide-react";
+import { Download, Check } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
@@ -27,8 +27,17 @@ function Cell({ achieved, target, pct, unavailable }: { achieved: number | null;
   if (target === null) return <span className="text-zinc-500 tabular-nums">{achieved === null ? "—" : num.format(achieved)}</span>;
   return (
     <div className="min-w-[120px] space-y-1">
-      <p className="font-semibold tabular-nums">
-        {achieved === null ? "—" : num.format(achieved)} <span className="text-zinc-400">/ {num.format(target)}</span>
+      <p className="flex items-center gap-1.5 font-semibold tabular-nums">
+        <span>
+          {achieved === null ? "—" : num.format(achieved)} <span className="text-zinc-400">/ {num.format(target)}</span>
+        </span>
+        {/* Goal reached in full (owner, 14 Nov 2026). */}
+        {target > 0 && achieved !== null && achieved >= target ? (
+          <span className="inline-flex items-center gap-0.5 rounded-full bg-brand/10 px-1.5 py-0.5 text-[9px] font-black tracking-[0.05em] text-brand uppercase">
+            <Check aria-hidden="true" className="size-3" />
+            Met
+          </span>
+        ) : null}
       </p>
       {pct === null ? (
         <p className="text-[10px] text-zinc-500">{unavailable ?? "—"}</p>

@@ -28,6 +28,8 @@ type Props = {
   errors: Record<string, string>;
   cities: { id: string; name: string }[];
   disabled?: boolean;
+  /** Phone numbers read-only (agents editing a client, 14 Nov 2026). */
+  lockPhones?: boolean;
   /** Extra controls appended to the Profile section (owner on the create form). */
   profileExtra?: ReactNode;
   /** The record's saved list city, kept as an option if it has since been deactivated. */
@@ -35,8 +37,8 @@ type Props = {
 };
 
 /** Client fields shared by the create form and the detail page's edit form (Leads form sections). */
-export function ClientFields({ values, onChange, errors, cities, disabled, profileExtra, currentCity }: Props) {
-  const text = (key: TextKey, label: string, opts: { required?: boolean; type?: string; placeholder?: string } = {}) => (
+export function ClientFields({ values, onChange, errors, cities, disabled, lockPhones = false, profileExtra, currentCity }: Props) {
+  const text = (key: TextKey, label: string, opts: { required?: boolean; type?: string; placeholder?: string; lock?: boolean } = {}) => (
     <Field label={label} required={opts.required} error={errors[key]}>
       {(id, describedBy) => (
         <Input
@@ -47,7 +49,7 @@ export function ClientFields({ values, onChange, errors, cities, disabled, profi
           value={values[key]}
           placeholder={opts.placeholder}
           autoComplete="off"
-          disabled={disabled}
+          disabled={disabled || opts.lock}
           onChange={(e) => onChange({ [key]: e.target.value })}
         />
       )}
@@ -57,7 +59,7 @@ export function ClientFields({ values, onChange, errors, cities, disabled, profi
     key: TextKey,
     label: string,
     options: { value: string; label: string }[],
-    opts: { required?: boolean; empty?: string; hint?: string } = {},
+    opts: { required?: boolean; empty?: string; hint?: string; lock?: boolean } = {},
   ) => (
     <Field label={label} required={opts.required} error={errors[key]} hint={opts.hint}>
       {(id, describedBy) => (
@@ -66,7 +68,7 @@ export function ClientFields({ values, onChange, errors, cities, disabled, profi
           aria-describedby={describedBy}
           aria-invalid={Boolean(errors[key]) || undefined}
           value={values[key]}
-          disabled={disabled}
+          disabled={disabled || opts.lock}
           onChange={(e) => onChange({ [key]: e.target.value })}
           className={selectClass}
         >
@@ -86,10 +88,11 @@ export function ClientFields({ values, onChange, errors, cities, disabled, profi
       <FormSection title="Contact">
         {text("name", "Name", { required: true })}
         {text("email", "Email", { type: "email", placeholder: "Optional" })}
-        {select("phoneCountryCode", "Country code", COUNTRY_CODES, { required: true })}
-        {text("phoneNumber", "Mobile number", { required: true, type: "tel", placeholder: "3001234567 or 0300 1234567" })}
+        {select("phoneCountryCode", "Country code", COUNTRY_CODES, { required: true, lock: lockPhones })}
+        {text("phoneNumber", "Mobile number", { required: true, type: "tel", placeholder: "3001234567 or 0300 1234567", lock: lockPhones })}
       </FormSection>
-      <ExtraPhonesFields phones={values.phones} onChange={(phones) => onChange({ phones })} errors={errors} disabled={disabled} />
+      <ExtraPhonesFields phones={values.phones} onChange={(phones) => onChange({ phones })} errors={errors} disabled={disabled || lockPhones} />
+      {lockPhones ? <p className="-mt-2 text-[11px] text-zinc-500">Phone numbers can only be changed by an Admin.</p> : null}
       <FormSection title="Profile">
         {select(
           "relationship",

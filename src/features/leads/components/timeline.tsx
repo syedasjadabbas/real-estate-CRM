@@ -37,6 +37,7 @@ function describeLead(a: TimelineActivity): { title: string; tag: string } {
         tag: "Assignment",
       };
     case "update":
+      if (d.nameFrom !== undefined) return { title: `Name changed: ${String(d.nameFrom)} → ${String(d.nameTo)}${(d.fields as string[]).length > 1 ? ` (also ${(d.fields as string[]).filter((x) => x !== "name").join(", ")})` : ""}`, tag: "Update" };
       return { title: `Details updated (${(d.fields as string[] | undefined)?.join(", ") ?? "fields"})`, tag: "Update" };
     case "review":
       return { title: "Manager review", tag: "Review" };

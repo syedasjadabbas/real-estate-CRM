@@ -32,7 +32,7 @@ describe.skipIf(!hasTestDb)("Clients: latest investment and project filter (Post
     const ids: string[] = [];
     for (const unitNo of unitNos) {
       const { unitId } = await createUnit(db, f.actors.superAdmin, { projectId, unitNo, areaSqft: "500", basePrice: "1" });
-      const { bookingId } = await createBooking(db, owner, { projectId, leadId: lead.leadId, unitId, ratePerSqft: "1000", tokenAmount: "1000" });
+      const { bookingId } = await createBooking(db, owner, { projectId, leadId: lead.leadId, unitId, ratePerSqft: "1000", tokenAmount: "20000" });
       await db.update(bookings).set({ clientId }).where(eq(bookings.id, bookingId));
       ids.push(bookingId);
     }

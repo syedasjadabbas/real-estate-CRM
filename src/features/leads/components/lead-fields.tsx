@@ -62,6 +62,8 @@ type Props = {
   errors: Record<string, string>;
   lookups: LeadLookups;
   disabled?: boolean;
+  /** Phone numbers read-only (agents editing a lead, 14 Nov 2026). */
+  lockPhones?: boolean;
   /** Extra controls appended to the Interest section (project, owner). */
   interestExtra?: ReactNode;
   /** The record's saved list city, kept as an option if it has since been deactivated. */
@@ -83,11 +85,11 @@ function withCurrent(options: { value: string; label: string }[], current: strin
 }
 
 /** Lead fields shared by the create form and the detail page's edit form. */
-export function LeadFields({ values, onChange, errors, lookups, disabled, interestExtra, currentCity, projectId }: Props) {
+export function LeadFields({ values, onChange, errors, lookups, disabled, lockPhones = false, interestExtra, currentCity, projectId }: Props) {
   const sizeOptions = [...new Set(lookups.unitSizes.filter((u) => !projectId || u.projectId === projectId).map((u) => Number(u.areaSqft)))]
     .sort((a, b) => a - b)
     .map((a) => ({ value: sizeLabel(a), label: sizeLabel(a) }));
-  const text = (key: TextKey, label: string, opts: { required?: boolean; type?: string; placeholder?: string; autoComplete?: string } = {}) => (
+  const text = (key: TextKey, label: string, opts: { required?: boolean; type?: string; placeholder?: string; autoComplete?: string; lock?: boolean } = {}) => (
     <Field label={label} required={opts.required} error={errors[key]}>
       {(id, describedBy) => (
         <Input
@@ -98,13 +100,13 @@ export function LeadFields({ values, onChange, errors, lookups, disabled, intere
           value={values[key]}
           placeholder={opts.placeholder}
           autoComplete={opts.autoComplete}
-          disabled={disabled}
+          disabled={disabled || opts.lock}
           onChange={(e) => onChange({ [key]: e.target.value })}
         />
       )}
     </Field>
   );
-  const select = (key: TextKey, label: string, options: { value: string; label: string }[], opts: { required?: boolean; empty?: string } = {}) => (
+  const select = (key: TextKey, label: string, options: { value: string; label: string }[], opts: { required?: boolean; empty?: string; lock?: boolean } = {}) => (
     <Field label={label} required={opts.required} error={errors[key]}>
       {(id, describedBy) => (
         <select
@@ -112,7 +114,7 @@ export function LeadFields({ values, onChange, errors, lookups, disabled, intere
           aria-describedby={describedBy}
           aria-invalid={Boolean(errors[key]) || undefined}
           value={values[key]}
-          disabled={disabled}
+          disabled={disabled || opts.lock}
           onChange={(e) => onChange({ [key]: e.target.value })}
           className={selectClass}
         >
@@ -132,10 +134,11 @@ export function LeadFields({ values, onChange, errors, lookups, disabled, intere
       <FormSection title="Contact">
         {text("name", "Name", { required: true, autoComplete: "off" })}
         {text("email", "Email", { type: "email", placeholder: "Optional" })}
-        {select("phoneCountryCode", "Country code", COUNTRY_CODES, { required: true })}
-        {text("phoneNumber", "Mobile number", { required: true, type: "tel", placeholder: "3001234567 or 0300 1234567" })}
+        {select("phoneCountryCode", "Country code", COUNTRY_CODES, { required: true, lock: lockPhones })}
+        {text("phoneNumber", "Mobile number", { required: true, type: "tel", placeholder: "3001234567 or 0300 1234567", lock: lockPhones })}
       </FormSection>
-      <ExtraPhonesFields phones={values.phones} onChange={(phones) => onChange({ phones })} errors={errors} disabled={disabled} />
+      <ExtraPhonesFields phones={values.phones} onChange={(phones) => onChange({ phones })} errors={errors} disabled={disabled || lockPhones} />
+      {lockPhones ? <p className="-mt-2 text-[11px] text-zinc-500">Phone numbers can only be changed by an Admin.</p> : null}
       <FormSection title="Profile">
         {select("gender", "Gender", withCurrent(GENDERS, values.gender), { empty: "Not specified" })}
         {select("desiredSize", "Size", withCurrent(sizeOptions, values.desiredSize), { empty: sizeOptions.length ? "Not specified" : "No unit sizes in inventory yet" })}

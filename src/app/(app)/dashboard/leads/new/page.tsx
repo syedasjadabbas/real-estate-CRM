@@ -1,4 +1,5 @@
 import { ArrowLeft, FileUp } from "lucide-react";
+import { FreshForm } from "@/components/ui/fresh-form";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader } from "@/components/shell/page-header";
@@ -42,14 +43,16 @@ export default function NewLeadPage() {
             </>
           }
         />
-        <LeadCreateForm
-          lookups={lookups}
-          projects={projects}
-          // An admin may have an inactive project selected; new leads only go to active ones.
-          defaultProjectId={projects.some((p) => p.id === projectId) ? projectId : (projects[0]?.id ?? "")}
-          owners={owners}
-          canChooseOwner={canDo(actor, "assign")}
-        />
+        <FreshForm>
+          <LeadCreateForm
+            lookups={lookups}
+            projects={projects}
+            // An admin may have an inactive project selected; new leads only go to active ones.
+            defaultProjectId={projects.some((p) => p.id === projectId) ? projectId : (projects[0]?.id ?? "")}
+            owners={owners}
+            canChooseOwner={canDo(actor, "assign")}
+          />
+        </FreshForm>
       </section>
     );
   });

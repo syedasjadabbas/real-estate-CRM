@@ -39,7 +39,7 @@ export type InsightTotals = {
 
 export type MeetingFormat = { id: string; label: string; count: number; color: "sky" | "orange" };
 
-export type TargetLine = { label: string; actual: number; target: number | null };
+export type TargetLine = { label: string; actual: number; target: number | null; met?: boolean };
 export type TargetPeriods = { today: TargetLine[]; week: TargetLine[]; month: TargetLine[] };
 
 export type AgingRow = {

@@ -1,4 +1,5 @@
 import { and, eq, isNull, ne } from "drizzle-orm";
+import { assertPhoneEditable, notifyNameChange } from "@/modules/contacts/agent-edits";
 import type { Database } from "@/server/db";
 import { bookings, clientFollowUps, clients, leads, users } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
@@ -201,6 +202,16 @@ export async function updateClient(db: Database, actor: Actor, clientId: string,
   const data = parse(updateClientSchema, input);
   return db.transaction(async (tx) => {
     const { client } = await loadAccessibleClient(tx, actor, clientId, true);
+    // Agents never change a phone number (owner, 14 Nov 2026).
+    if (actor.role === "agent") {
+      const primaryChanged =
+        (data.phoneNumber !== undefined || data.phoneCountryCode !== undefined) &&
+        phoneOrThrow(data.phoneCountryCode ?? client.phoneCountryCode, data.phoneNumber ?? client.phoneNumber).e164 !== client.phoneE164;
+      const extraChanged =
+        data.phones !== undefined &&
+        JSON.stringify(normalizeExtraPhones(client.phoneE164, data.phones).map((p) => p.e164)) !== JSON.stringify((await clientPhonesOf(tx, clientId)).map((p) => p.e164));
+      assertPhoneEditable(actor, primaryChanged || extraChanged);
+    }
     const changes: Partial<typeof clients.$inferInsert> = {};
     if (data.name !== undefined) changes.name = data.name;
     if (data.phoneNumber !== undefined || data.phoneCountryCode !== undefined) {
@@ -246,7 +257,9 @@ export async function updateClient(db: Database, actor: Actor, clientId: string,
       }
       throw error;
     }
-    await logClientActivity(tx, { clientId, actorId: actor.id, type: "update", data: { fields: changed } });
+    const renamed = changed.includes("name") ? { nameFrom: client.name, nameTo: changes.name } : {};
+    await logClientActivity(tx, { clientId, actorId: actor.id, type: "update", data: { fields: changed, ...renamed } });
+    if (changed.includes("name")) await notifyNameChange(tx, actor, { kind: "client", id: clientId, from: client.name, to: changes.name! });
     await auditClient(
       tx,
       actor,

@@ -33,7 +33,10 @@ export const createBookingSchema = z.object({
   projectId: z.uuid("Choose a project"),
   leadId: z.uuid("Choose a lead"),
   unitId: z.uuid("Choose an available unit"),
-  ratePerSqft: money("Per sq ft rate", 10_000_000),
+  /** Optional since 14 Nov 2026: without it the unit's inventory rate, less `discountPct`, is used. */
+  ratePerSqft: money("Per sq ft rate", 10_000_000).optional(),
+  /** Discount on the unit's inventory price, within the role's cap (agents 5%, Admins any). */
+  discountPct: z.coerce.number("Enter a discount %").min(0, "Use 0 to 100").max(100, "Use 0 to 100").optional(),
   tokenAmount: money("Token amount", 1e12),
   reservedUntil: optionalDate,
   paymentInstructions: optionalText(2000),
@@ -43,6 +46,10 @@ export type CreateBookingInput = z.input<typeof createBookingSchema>;
 export const advanceSchema = z.object({
   toStage: z.enum(BOOKING_STAGES, "Choose a stage"),
   note: optionalText(1000),
+  /** The payment proof attached with this move (required for Partial Down Payment, 14 Nov 2026). */
+  proofFileId: z.uuid().optional().nullable(),
+  /** The amount received for this payment (down payment moves), declared with its proof; Accounts posts it. */
+  amount: z.coerce.number("Enter the amount received").positive("Enter the amount received").max(1e12).optional().nullable(),
 });
 
 export const cancelSchema = z.object({

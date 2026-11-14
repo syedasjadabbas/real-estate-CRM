@@ -196,7 +196,7 @@ describe.skipIf(!hasTestDb)("Clients module (PostgreSQL integration)", () => {
       await updateClient(db, f.actors.agent1, clientId, { relationship: "" });
       expect((await getClientDetail(db, f.actors.agent1, clientId)).client.relationship).toBeNull();
 
-      const clash = await errorOf(updateClient(db, f.actors.agent1, clientId, { phoneNumber: "0300-7770005" }));
+      const clash = await errorOf(updateClient(db, f.actors.manager, clientId, { phoneNumber: "0300-7770005" }));
       expect(clash?.code).toBe("CONFLICT");
       expect(clash?.fields).toHaveProperty("phoneNumber");
       const audit = await db.select().from(auditLogs).where(eq(auditLogs.entityId, clientId));

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { StageSteps, type StageFile } from "./stage-steps";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
 import { PanelCard } from "@/features/leads/components/detail-panels";
@@ -9,7 +10,7 @@ import { selectClass } from "@/features/leads/components/lead-fields";
 import { cn } from "@/lib/cn";
 import { BOOKING_STAGE_LABELS, PAYMENT_DOCS_LABELS, PAYMENT_DOCS_STATUSES, type BookingStage } from "@/modules/bookings/constants";
 import type { BookingDetail } from "@/modules/bookings/queries";
-import { advanceBookingAction, cancelBookingAction, updateBookingAction } from "../actions";
+import { cancelBookingAction, updateBookingAction } from "../actions";
 
 function Status({ msg }: { msg: { text: string; ok: boolean } | null }) {
   if (!msg) return null;
@@ -21,9 +22,8 @@ function Status({ msg }: { msg: { text: string; ok: boolean } | null }) {
 }
 
 /** Next-stage move (one step, optional note) and cancel with a required reason. */
-export function BookingStagePanel({ detail }: { detail: BookingDetail }) {
+export function BookingStagePanel({ detail, signedForms = [], proofs = [] }: { detail: BookingDetail; signedForms?: StageFile[]; proofs?: StageFile[] }) {
   const { booking, permissions } = detail;
-  const [note, setNote] = useState("");
   const [reason, setReason] = useState("");
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [cancelError, setCancelError] = useState<string | undefined>();
@@ -39,35 +39,18 @@ export function BookingStagePanel({ detail }: { detail: BookingDetail }) {
             This booking is {BOOKING_STAGE_LABELS[booking.stage].toLowerCase()}
             {booking.stage === "cancelled" && booking.cancelledReason ? `: ${booking.cancelledReason}` : "."}
           </p>
-        ) : permissions.advance && next ? (
-          <div className="space-y-2">
-            <p className="text-[11px] text-zinc-500">Bookings move one stage at a time.{next === "confirmed" ? " Closing as won books the unit and the lead, and creates or links the client." : ""}</p>
-            <label className="sr-only" htmlFor="stage-note">
-              Note
-            </label>
-            <textarea id="stage-note" rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)" className={textareaClass} disabled={pending} />
-            <Button
-              variant="primary"
-              size="lg"
-              disabled={pending}
-              onClick={() =>
-                startTransition(async () => {
-                  const result = await advanceBookingAction(booking.id, next, note);
-                  if (result.ok) {
-                    setNote("");
-                    setMsg({ text: `Moved to ${BOOKING_STAGE_LABELS[next]}.`, ok: true });
-                  } else setMsg({ text: result.message, ok: false });
-                })
-              }
-            >
-              {next === "confirmed" ? "Close as Won" : `Move to ${BOOKING_STAGE_LABELS[next]}`}
-            </Button>
-          </div>
-        ) : next ? (
-          <p className="text-xs text-zinc-600">
-            Next stage: {BOOKING_STAGE_LABELS[next]}. {next === "confirmed" ? "A manager or admin closes bookings as won." : "Your role can't move this booking further."}
-          </p>
-        ) : null}
+        ) : (
+          // Every open stage shows its steps; only the move itself depends on the role (owner, 14 Nov 2026).
+          <StageSteps
+            bookingId={booking.id}
+            stage={booking.stage}
+            next={next}
+            canAdvance={permissions.advance}
+            stageChangedAt={booking.stageChangedAt}
+            signedForms={signedForms}
+            proofs={proofs}
+          />
+        )}
 
         {permissions.cancel ? (
           <div className="space-y-2 border-t border-zinc-100 pt-4">

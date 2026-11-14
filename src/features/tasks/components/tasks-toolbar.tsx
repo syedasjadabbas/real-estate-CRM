@@ -10,7 +10,7 @@ import { selectClass } from "@/features/leads/components/lead-fields";
 import { withParams } from "@/features/leads/url";
 import { cn } from "@/lib/cn";
 import { formatInt } from "@/lib/format";
-import { TASK_STATUSES, TASK_STATUS_LABELS, TASK_TYPES, TASK_TYPE_LABELS } from "@/modules/tasks/constants";
+import { PRINTABLE_TASK_TYPES, TASK_STATUSES, TASK_STATUS_LABELS, TASK_TYPE_LABELS } from "@/modules/tasks/constants";
 import { activeTaskFilters, TASK_FILTER_KEYS } from "../url";
 
 /** Search + Filters drawer (Status, Type, Assignee, Overdue) + Clear + count pill, in the Leads toolbar style. */
@@ -108,7 +108,7 @@ export function TasksToolbar({ params, total, assignees }: { params: Record<stri
             {formatInt(total)} tasks
           </span>
           {select("status", "Status", TASK_STATUSES.map((s) => ({ value: s, label: TASK_STATUS_LABELS[s] })))}
-          {select("type", "Type", TASK_TYPES.map((t) => ({ value: t, label: TASK_TYPE_LABELS[t] })))}
+          {select("type", "Type", PRINTABLE_TASK_TYPES.map((t) => ({ value: t, label: TASK_TYPE_LABELS[t] })))}
           {select("assignee", "Assignee", [{ value: "me", label: "Assigned to me" }, ...assignees.map((a) => ({ value: a.id, label: a.name }))])}
           <button
             type="button"

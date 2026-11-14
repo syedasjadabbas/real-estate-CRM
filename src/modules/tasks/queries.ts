@@ -50,7 +50,8 @@ const SORTS = {
 export type TaskListRow = Awaited<ReturnType<typeof listTasks>>["rows"][number];
 
 /** FR-090 list: search (title, lead name / code), status, type, assignee, overdue; sortable columns; pages. */
-export async function listTasks(db: Database, actor: Actor, rawQuery: unknown, now = new Date()) {
+/** `printablesOnly`: the Tasks screen, which leaves to-dos ("general") to the To-dos page (14 Nov 2026). */
+export async function listTasks(db: Database, actor: Actor, rawQuery: unknown, now = new Date(), opts: { printablesOnly?: boolean } = {}) {
   if (!canDoTask(actor, "view")) throw forbidden();
   const query = taskListQuerySchema.parse(rawQuery ?? {});
   const members = await teamMemberIds(db, actor);
@@ -58,7 +59,7 @@ export async function listTasks(db: Database, actor: Actor, rawQuery: unknown, n
   const where = and(
     taskScopeFilter(actor, members),
     query.status ? eq(tasks.status, query.status) : undefined,
-    query.type ? eq(tasks.type, query.type) : undefined,
+    query.type ? eq(tasks.type, query.type) : opts.printablesOnly ? ne(tasks.type, "general") : undefined,
     query.assignee ? eq(tasks.assigneeId, query.assignee === "me" ? actor.id : query.assignee) : undefined,
     query.overdue ? overdueCondition(now) : undefined,
     term ? or(ilike(tasks.title, term), ilike(leads.name, term), ilike(leads.code, term)) : undefined,
@@ -292,3 +293,42 @@ export async function overdueTasks(db: Database, actor: Actor, now = new Date(),
     .offset((page - 1) * TASK_PAGE_SIZE);
   return { count: n, rows, page, pageCount };
 }
+
+/**
+ * To-dos (owner, 14 Nov 2026): "general" tasks the actor is given or wrote, still open, soonest due
+ * first (no due date last). Listed on To-dos; HR and Accountants see theirs in My workplace.
+ */
+export async function openTodos(db: Database, actor: Actor, requestedPage: unknown = 1, now = new Date()) {
+  if (!canDoTask(actor, "view")) return { count: 0, rows: [], page: 1, pageCount: 1, generatedAt: now.getTime() };
+  const where = and(
+    eq(tasks.type, "general"),
+    inArray(tasks.status, ACTIVE_TASK_STATUSES),
+    or(eq(tasks.assigneeId, actor.id), eq(tasks.createdById, actor.id)),
+  );
+  const [{ n }] = await db.select({ n: count() }).from(tasks).where(where);
+  const { page, pageCount } = pageWithin(requestedPage, n, TASK_PAGE_SIZE);
+  const rows = await db
+    .select({
+      id: tasks.id,
+      title: tasks.title,
+      description: tasks.description,
+      status: tasks.status,
+      dueAt: tasks.dueAt,
+      assigneeId: tasks.assigneeId,
+      assigneeName: assignee.name,
+      creatorName: creator.name,
+      leadId: tasks.leadId,
+      leadName: leads.name,
+      leadCode: leads.code,
+    })
+    .from(tasks)
+    .innerJoin(assignee, eq(assignee.id, tasks.assigneeId))
+    .leftJoin(creator, eq(creator.id, tasks.createdById))
+    .leftJoin(leads, eq(leads.id, tasks.leadId))
+    .where(where)
+    .orderBy(sql`${tasks.dueAt} asc nulls last`, asc(tasks.createdAt))
+    .limit(TASK_PAGE_SIZE)
+    .offset((page - 1) * TASK_PAGE_SIZE);
+  return { count: n, rows, page, pageCount, generatedAt: now.getTime() };
+}
+export type TodoRow = Awaited<ReturnType<typeof openTodos>>["rows"][number];

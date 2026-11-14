@@ -64,7 +64,14 @@ function TargetColumn({ title, lines }: { title: string; lines: TargetLine[] }) 
         {lines.map((line) => (
           <div key={line.label} className="rounded-xl border border-zinc-200/80 bg-white px-2.5 py-2 shadow-hairline">
             <div className="flex items-center justify-between gap-2 text-[11px] leading-4">
-              <span className="font-bold">{line.label}</span>
+              <span className="flex items-center gap-1 font-bold">
+                {line.label}
+                {line.met ? (
+                  <span className="rounded-full bg-brand/10 px-1.5 text-[9px] font-black tracking-[0.05em] text-brand uppercase" title="Target met">
+                    ✓ Met
+                  </span>
+                ) : null}
+              </span>
               <span className="font-black tabular-nums">
                 {formatInt(line.actual)}
                 <span className="font-semibold text-zinc-400">

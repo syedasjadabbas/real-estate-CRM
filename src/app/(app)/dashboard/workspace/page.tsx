@@ -1,4 +1,6 @@
 import { Circle } from "lucide-react";
+import { TodoList } from "@/features/tasks/components/todo-list";
+import { openTodos } from "@/modules/tasks/queries";
 import { MyLeavePanel } from "@/features/leave/components/my-leave-panel";
 import { businessToday } from "@/modules/bookings/today";
 import { myLeave } from "@/modules/leave/service";
@@ -42,7 +44,14 @@ export default async function WorkspacePage({ searchParams }: PageProps<"/dashbo
   // My leave by calendar year (C-11); anything out of range shows this year.
   const leaveYear = Number.isInteger(askedYear) && askedYear >= 2000 && askedYear <= thisYear + 1 ? askedYear : thisYear;
   const db = getDb();
-  const [{ holidays, signins }, retentionNote, leave] = await Promise.all([getMyWorkplace(db, actor, params), signinRetentionNote(db), myLeave(db, actor, leaveYear)]);
+  // HR and Accountants have no To-dos page: to-dos an Admin gives them are listed here (14 Nov 2026).
+  const showTodos = actor.role === "hr" || actor.role === "accountant";
+  const [{ holidays, signins }, retentionNote, leave, todos] = await Promise.all([
+    getMyWorkplace(db, actor, params),
+    signinRetentionNote(db),
+    myLeave(db, actor, leaveYear),
+    showTodos ? openTodos(db, actor) : null,
+  ]);
   const listParams: Record<string, string> = signins.query.event ? { event: signins.query.event } : {};
 
   return (
@@ -55,6 +64,12 @@ export default async function WorkspacePage({ searchParams }: PageProps<"/dashbo
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         <div className="min-w-0 space-y-6">
+          {todos ? (
+            <PanelCard title={`My to-dos · ${todos.count}`}>
+              <TodoList rows={todos.rows} meId={actor.id} now={todos.generatedAt} showLeads={false} />
+            </PanelCard>
+          ) : null}
+
           <MyLeavePanel
             balance={leave.balance}
             rows={leave.rows}

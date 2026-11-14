@@ -6,6 +6,8 @@ import type { Actor } from "@/server/auth/types";
 import { forbidden, notFound } from "@/server/errors";
 import { followUpLeadActive, type DbOrTx } from "@/modules/leads/support";
 import { parseTask } from "@/modules/tasks/support";
+import { currentTargets, TARGET_METRICS } from "@/modules/targets/service";
+import { TARGET_PERIOD_LABELS } from "@/modules/targets/period";
 
 /**
  * In-app notifications (FR-006). Only documented events raise them:
@@ -128,6 +130,34 @@ export async function updateReminderMinutes(db: Database, actor: Actor, input: u
   });
 }
 
+// ─── Targets met ──────────────────────────────────────────────────────────────
+
+/**
+ * target_met (owner, 14 Nov 2026): when an agent reaches a goal of today's, this week's or this
+ * month's target, the agent and their team admins are told once per goal and period. Checked when
+ * the agent's notifications are read (the app polls them), so no scheduler is needed.
+ */
+export async function syncTargetsMet(db: Database, actor: Actor, now = new Date()) {
+  if (actor.role !== "agent") return 0;
+  const periods = await currentTargets(db, actor.id, now);
+  const met = periods.flatMap((p) => p.met.map((key) => ({ p, metric: TARGET_METRICS.find((m) => m.key === key)! })));
+  if (met.length === 0) return 0;
+  const admins = await teamManagersOf(db, actor.id);
+  const items: NewNotification[] = [];
+  for (const { p, metric } of met) {
+    const period = TARGET_PERIOD_LABELS[p.period].toLowerCase();
+    const link = `/dashboard/targets?period=${p.period}&anchor=${p.start}`;
+    const figures = `${p.achieved[metric.key]} of ${p.goals![metric.key]}`;
+    const key = `target_met:${actor.id}:${p.period}:${p.start}:${metric.key}`;
+    items.push({ userId: actor.id, type: "target_met", title: `Target met: ${metric.label} (${period})`, body: `You reached ${figures}. Well done!`, link, dedupeKey: key });
+    for (const adminId of admins) {
+      items.push({ userId: adminId, type: "target_met", title: `${actor.name} met a ${period} target: ${metric.label}`, body: `Reached ${figures}.`, link, dedupeKey: key });
+    }
+  }
+  // actorId null: the agent is told about their own achievement too.
+  return notify(db, items, null);
+}
+
 // ─── Reading ──────────────────────────────────────────────────────────────────
 
 const listSchema = z.object({
@@ -139,6 +169,7 @@ const listSchema = z.object({
 export async function listNotifications(db: Database, actor: Actor, input: unknown = {}, now = new Date()) {
   const query = listSchema.parse(input ?? {});
   await syncFollowUpReminders(db, actor, now);
+  await syncTargetsMet(db, actor, now);
   const own = eq(notifications.userId, actor.id);
   const where = query.unread ? and(own, isNull(notifications.readAt)) : own;
   const [[{ total }], [{ unread }]] = await Promise.all([

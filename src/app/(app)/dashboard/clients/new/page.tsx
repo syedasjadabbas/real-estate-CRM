@@ -1,4 +1,5 @@
 import { ArrowLeft } from "lucide-react";
+import { FreshForm } from "@/components/ui/fresh-form";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader } from "@/components/shell/page-header";
@@ -28,7 +29,9 @@ export default async function NewClientPage() {
           </Link>
         }
       />
-      <ClientCreateForm cities={lookups.cities} owners={owners} defaultOwnerId={owners[0]?.id ?? ""} />
+      <FreshForm>
+        <ClientCreateForm cities={lookups.cities} owners={owners} defaultOwnerId={owners[0]?.id ?? ""} />
+      </FreshForm>
     </section>
   );
 }

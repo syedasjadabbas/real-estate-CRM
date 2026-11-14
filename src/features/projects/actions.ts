@@ -1,7 +1,7 @@
 "use server";
 
 import { refresh } from "next/cache";
-import { createProject, updateProject } from "@/modules/projects/commands";
+import { createProject, updateProject, updateProjectPaymentPlan } from "@/modules/projects/commands";
 import { requireActor } from "@/server/auth/current-user";
 import { getDb } from "@/server/db";
 import { toActionError, type ActionResult } from "@/server/errors";
@@ -27,4 +27,9 @@ export async function createProjectAction(input: Record<string, unknown>): Promi
 
 export async function updateProjectAction(projectId: string, input: Record<string, unknown>) {
   return run((db, actor) => updateProject(db, actor, projectId, input));
+}
+
+/** The project's payment plan (Admins and Super Admins). */
+export async function updateProjectPaymentPlanAction(projectId: string, input: Record<string, unknown>) {
+  return run((db, actor) => updateProjectPaymentPlan(db, actor, projectId, input));
 }

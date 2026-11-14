@@ -75,7 +75,7 @@ export default async function ProposalPrintPage({ params }: PageProps<"/print/pr
       <article className="mx-auto max-w-[794px] space-y-6 bg-white px-6 py-8 shadow-hairline sm:px-12 sm:py-10 print:max-w-none print:px-0 print:py-0 print:shadow-none">
         <header className="space-y-4 pb-2">
           <p className="text-xs font-black tracking-[0.2em] text-zinc-500 uppercase">{p.customHeader || brand.name}</p>
-          <h1 className="text-3xl leading-tight font-black tracking-[-0.025em]">Exclusive Investment Proposal</h1>
+          <h1 className="text-3xl leading-tight font-black tracking-[-0.025em]">{detail.task.type === "payment_plan" ? "Payment Plan" : "Exclusive Investment Proposal"}</h1>
           {project ? <p className="text-lg font-bold text-[#107c41]">{project}</p> : null}
           <div className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
             <Row label="Prepared for" value={p.clientName || p.customerName} />

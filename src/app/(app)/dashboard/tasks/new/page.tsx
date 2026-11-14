@@ -1,4 +1,5 @@
 import { ArrowLeft } from "lucide-react";
+import { FreshForm } from "@/components/ui/fresh-form";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader } from "@/components/shell/page-header";
@@ -6,7 +7,7 @@ import { buttonClasses } from "@/components/ui/button";
 import { RestrictedState } from "@/components/ui/empty-state";
 import { TaskForm } from "@/features/tasks/components/task-form";
 import { businessToday } from "@/modules/bookings/today";
-import { TASK_TYPES, type TaskType } from "@/modules/tasks/constants";
+import { PRINTABLE_TASK_TYPES, type TaskType } from "@/modules/tasks/constants";
 import { canDoTask } from "@/modules/tasks/policy";
 import { taskFormOptions } from "@/modules/tasks/queries";
 import { requirePageUser } from "@/server/auth/current-user";
@@ -36,22 +37,24 @@ export default async function NewTaskPage({ searchParams }: PageProps<"/dashboar
           </Link>
         }
       />
-      <TaskForm
-        mode="create"
-        options={options}
-        today={businessToday()}
-        initial={{
-          title: "",
-          type: (TASK_TYPES as readonly string[]).includes(String(type)) ? (type as TaskType) : "general",
-          dueLocal: "",
-          assigneeId: actor.id,
-          leadId: options.leads.some((l) => l.id === leadId) ? leadId : "",
-          bookingId: options.bookings.some((b) => b.id === bookingId) ? bookingId : "",
-          description: "",
-          proposal: null,
-          rows: [],
-        }}
-      />
+      <FreshForm>
+        <TaskForm
+          mode="create"
+          options={options}
+          today={businessToday()}
+          initial={{
+            title: "",
+            type: (PRINTABLE_TASK_TYPES as readonly string[]).includes(String(type)) ? (type as TaskType) : "proposal",
+            dueLocal: "",
+            assigneeId: actor.id,
+            leadId: options.leads.some((l) => l.id === leadId) ? leadId : "",
+            bookingId: options.bookings.some((b) => b.id === bookingId) ? bookingId : "",
+            description: "",
+            proposal: null,
+            rows: [],
+          }}
+        />
+      </FreshForm>
     </section>
   );
 }

@@ -42,7 +42,11 @@ test("a lead goes from reassignment to meeting, booking, payment, confirmation a
   const title = unique("V1 Meeting");
   await expect(async () => {
     await page.getByLabel("Title").fill(title);
-    await page.getByLabel("Starts (Pakistan time)").fill("2099-01-15T11:00");
+    // Date field plus hour / minute / AM-PM lists (14 Nov 2026).
+    await page.getByLabel("Starts (Pakistan time)").fill("2099-01-15");
+    await page.getByLabel("Hour").first().selectOption("11");
+    await page.getByLabel("Minute").first().selectOption("00");
+    await page.getByLabel("AM or PM").first().selectOption("AM");
     await choose(page, "Meeting type", "Site visit");
     await choose(page, "Lead", name);
     await page.getByRole("button", { name: "Schedule meeting" }).click();

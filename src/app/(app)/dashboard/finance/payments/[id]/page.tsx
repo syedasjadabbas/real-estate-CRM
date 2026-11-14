@@ -1,4 +1,5 @@
 import { ArrowLeft } from "lucide-react";
+import { listBookingProofs } from "@/modules/bookings/proofs";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -52,6 +53,8 @@ export default async function PaymentDetailPage({ params }: PageProps<"/dashboar
   }
   const { entry, original, reversal, booking, permissions } = detail;
   const proofs = await listPaymentProofs(getDb(), actor, original.id);
+  // The agent's transfer screenshots on the booking, to check against this payment (14 Nov 2026).
+  const bookingProofs = await listBookingProofs(getDb(), actor, booking.id).catch(() => []);
   const isReversal = entry.kind === "reversal";
   const back = canDoFinance(actor, "viewAll") ? "/dashboard/finance" : "/dashboard/finance/approvals";
 
@@ -129,6 +132,15 @@ export default async function PaymentDetailPage({ params }: PageProps<"/dashboar
             fileBase="/api/v1/finance/proofs"
             text={{ title: "Payment proof", empty: "No proof attached. Proof is optional.", field: "Attach a receipt or photo", button: "Attach proof", uploaded: "Proof attached.", noun: "Proofs" }}
           />
+          {bookingProofs.length ? (
+            <DocumentsPanel
+              documents={bookingProofs}
+              canUpload={false}
+              uploadUrl={`/api/v1/bookings/${booking.id}/proofs`}
+              fileBase="/api/v1/bookings/proofs"
+              text={{ title: "Proofs from the booking", empty: "", field: "", button: "", uploaded: "", noun: "Proofs" }}
+            />
+          ) : null}
           <PanelCard title="Reversal">
             <div className="space-y-4">
               {detail.requests.length === 0 ? <p className="text-xs text-zinc-600">No reversal has been requested.</p> : null}

@@ -23,7 +23,7 @@ import {
 } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
 import { forbidden } from "@/server/errors";
-import { BUSINESS_TIME_ZONE, LEAD_STAGES, PAGE_SIZE, UNATTENDED_HOURS, type LeadStage } from "./constants";
+import { BUSINESS_TIME_ZONE, LEAD_STAGES, PAGE_SIZE, UNATTENDED_HOURS, type LeadStage, NEW_LEAD_HOURS } from "./constants";
 import { formatPhone } from "./phone";
 import { leadPhonesOf } from "@/modules/contacts/phones";
 import { canAccessLead, canDo, leadScope } from "./policy";
@@ -121,6 +121,8 @@ function viewConditions(query: LeadListQuery): SQL[] {
       return [isNotNull(leads.duplicateOfId)];
     case "favorites":
       return [isNotNull(leadFavorites.leadId)];
+    case "new":
+      return [sql`${leads.createdAt} >= now() - make_interval(hours => ${NEW_LEAD_HOURS})`];
     default:
       return [];
   }
@@ -207,7 +209,9 @@ export async function listLeads(db: Database, actor: Actor, projectId: string, r
 
   const sortColumn = sortColumns[query.sort ?? "createdAt"];
   const orderBy =
-    query.view === "regenerated" && !query.sort
+    query.view === "new" && !query.sort
+      ? [desc(leads.createdAt)]
+      : query.view === "regenerated" && !query.sort
       ? [desc(sql`${leads.lastActivityAt} < ${leads.regeneratedAt}`), desc(leads.regeneratedAt)]
       : query.sort
         ? [query.dir === "asc" ? sql`${sortColumn} asc nulls last` : sql`${sortColumn} desc nulls last`, desc(leads.createdAt)]
@@ -399,6 +403,8 @@ export async function getLeadDetail(db: Database, actor: Actor, leadId: string) 
       edit: canDo(actor, "edit") && lead.stage !== "booked" && workable,
       /** The lead's details form: also open on a rejected lead so the agent can correct it. */
       editDetails: canDo(actor, "edit") && lead.stage !== "booked" && (workable || lead.verification === "rejected"),
+      /** Agents never change phone numbers (owner, 14 Nov 2026). */
+      editPhones: actor.role !== "agent",
       assign: canDo(actor, "assign"),
       markLostDirect: canDo(actor, "markLostDirect") && !closed && !openBooking && workable,
       requestLost: canDo(actor, "requestLost") && !closed && !openBooking && !pendingRequest[0] && workable,

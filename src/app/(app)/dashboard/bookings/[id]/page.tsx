@@ -1,11 +1,15 @@
 import { ArrowLeft } from "lucide-react";
+import { DiscountBanner } from "@/features/bookings/components/discount-decision";
+import { RejectPaymentPanel } from "@/features/bookings/components/reject-payment-panel";
+import { listSignedBookingForms } from "@/modules/bookings/signed-forms";
+import { listBookingProofs } from "@/modules/bookings/proofs";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/shell/page-header";
 import { buttonClasses } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { EmptyState, RestrictedState } from "@/components/ui/empty-state";
+import { RestrictedState } from "@/components/ui/empty-state";
 import { BookingDetailsPanel, BookingStagePanel } from "@/features/bookings/components/booking-panels";
 import { BookingStagePill, HoldChip } from "@/features/bookings/components/stage-pill";
 import { PaymentHistoryList } from "@/features/finance/components/payment-history";
@@ -45,7 +49,7 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
 export default async function BookingDetailPage({ params, searchParams }: PageProps<"/dashboard/bookings/[id]">) {
   const actor = await requirePageUser();
   if (!canDoBooking(actor, "view")) return <RestrictedState />;
-  const [{ id }, { tab }] = await Promise.all([params, searchParams]);
+  const [{ id }, { tab, proof }] = await Promise.all([params, searchParams]);
   const active = TABS.find((t) => t.key === tab)?.key ?? "overview";
   let detail;
   try {
@@ -56,6 +60,10 @@ export default async function BookingDetailPage({ params, searchParams }: PagePr
   }
   const { booking, lead, unit, client, money } = detail;
   const payments = await bookingPaymentHistory(getDb(), actor, booking.id);
+  // Transfer screenshots the agent attaches when the client pays (14 Nov 2026).
+  const proofs = await listBookingProofs(getDb(), actor, booking.id);
+  // The signed booking form, printed, signed by the client and uploaded back (14 Nov 2026).
+  const signedForms = await listSignedBookingForms(getDb(), actor, booking.id);
   // Overdue by the client's rule (FR-203): the payment plan's amounts past their grace period.
   const today = businessToday();
   const plan = (await scheduleDueByBooking(getDb(), [booking.id], today)).get(booking.id) ?? null;
@@ -72,6 +80,10 @@ export default async function BookingDetailPage({ params, searchParams }: PagePr
         actions={
           <>
             <BookingStagePill stage={booking.stage} />
+            {/* Demo printable booking form until the client sends its template (owner, 14 Nov 2026). */}
+            <Link href={`/print/booking/${booking.id}/form`} className={buttonClasses({ variant: "secondary", size: "lg" })}>
+              Booking form (demo)
+            </Link>
             <Link href="/dashboard/bookings" className={buttonClasses({ variant: "secondary", size: "lg" })}>
               <ArrowLeft aria-hidden="true" className="size-4" />
               Back to list
@@ -79,6 +91,22 @@ export default async function BookingDetailPage({ params, searchParams }: PagePr
           </>
         }
       />
+
+      <DiscountBanner
+        bookingId={booking.id}
+        status={booking.discountStatus}
+        requestedPct={booking.discountRequestedPct}
+        currentPct={booking.discountPct}
+        totalSale={booking.totalSale}
+        note={booking.discountNote}
+        canDecide={actor.role === "admin" || actor.role === "super_admin"}
+      />
+
+      {proof === "failed" ? (
+        <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-900">
+          The booking was created, but the token payment proof didn&apos;t upload. Attach it with the next stage move in the Stage card.
+        </p>
+      ) : null}
 
       <nav
         aria-label="Booking views"
@@ -101,10 +129,21 @@ export default async function BookingDetailPage({ params, searchParams }: PagePr
 
       {active !== "overview" ? (
         <PanelCard title={active === "provisional-receipt" ? "Provisional receipt" : "Sales order"}>
-          <EmptyState size="sm">
-            The printable {active === "provisional-receipt" ? "provisional receipt" : "sales order"} will be added when the client provides its template (Q-B5).
-            No document number has been issued.
-          </EmptyState>
+          {/* Demo layouts to review until the client sends the real templates (owner, 14 Nov 2026). */}
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+            <p className="text-xs font-semibold text-amber-900">
+              {active === "provisional-receipt"
+                ? "A demo receipt, filled from this booking, is ready to review and print. It issues no receipt number."
+                : "A demo sales order, filled from this booking and its project's payment plan, is ready to review and print. It issues no order number."}
+            </p>
+            <Link
+              href={`/print/booking/${booking.id}/${active === "provisional-receipt" ? "receipt" : "sales-order"}`}
+              className={buttonClasses({ variant: "primary", size: "lg" })}
+            >
+              {active === "provisional-receipt" ? "Open demo receipt" : "Open demo sales order"}
+            </Link>
+          </div>
+          <p className="mt-3 text-[11px] text-zinc-500">The final {active === "provisional-receipt" ? "provisional receipt" : "sales order"} follows the client&apos;s template (Q-B5) once it is provided.</p>
         </PanelCard>
       ) : (
         <>
@@ -190,7 +229,9 @@ export default async function BookingDetailPage({ params, searchParams }: PagePr
               </PanelCard>
             </div>
             <div className="space-y-6">
-              <BookingStagePanel detail={detail} />
+              <BookingStagePanel detail={detail} signedForms={signedForms} proofs={proofs} />
+              {/* Accounts verify the token: record it, or reject the booking (14 Nov 2026). */}
+              {canRecord && money.paid === 0 ? <RejectPaymentPanel bookingId={booking.id} /> : null}
               {payments ? (
                 <PanelCard title={`Payments · ${payments.length}`}>
                   <PaymentHistoryList rows={payments} empty="No payments posted yet." />

@@ -90,7 +90,7 @@ describe.skipIf(!hasTestDb)("F-16: column sorting on Inventory and Finance lists
     const { unitId } = await createUnit(db, f.actors.superAdmin, { projectId: f.projectId, unitNo: `S-${String(unitCounter).padStart(3, "0")}`, areaSqft: area, basePrice: "1000000" });
     const lead = await createLead(db, f.actors.superAdmin, leadInput(f, { ownerId: owner.id, name }));
     if (lead.outcome !== "created") throw new Error("lead");
-    const { bookingId } = await createBooking(db, f.actors.superAdmin, { projectId: f.projectId, leadId: lead.leadId, unitId, ratePerSqft: "1000", tokenAmount: "1000" });
+    const { bookingId } = await createBooking(db, f.actors.superAdmin, { projectId: f.projectId, leadId: lead.leadId, unitId, ratePerSqft: "1000", tokenAmount: "20000" });
     // Bookings start at Token (token_pending); retired stage names are skipped.
     for (const toStage of stages.filter((x) => !["token_pending", "token_received", "provisional_receipt", "sales_order", "booking_form"].includes(x))) {
       await advanceBooking(db, f.actors.superAdmin, bookingId, { toStage });

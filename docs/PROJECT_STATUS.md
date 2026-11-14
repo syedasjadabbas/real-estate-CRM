@@ -3753,3 +3753,54 @@ Typecheck and lint pass; performance and leads integration tests pass (47 / 47).
 ## 65. Users & access page for the Super Admin (14 Nov 2026)
 
 **Not committed.** Settings → Users & access (Super Admin only): every account grouped as Super Admins, Admins, Agents, HR and Accounts, with team, last sign-in and open leads, and **one switch each**. On = the role's normal access; off = no access (sign-in refused, open sessions ended at once, audited as user.deactivate / user.reactivate; same rule as HR → Employees). You can't switch yourself off, nor the last active Super Admin. Leads stay with the person until an Admin shifts them.
+
+## 66. Target met: badge, notification, Performance count (14 Nov 2026)
+
+**Not committed.** A goal (calls, meetings or sold sq ft) counts as met when its target is above 0 and the achievement reaches it.
+
+| Part | Detail |
+|---|---|
+| Badge | Green **Met** tick in the Targets grid and on the agent dashboard's **My Targets** card (now filled with the agent's real targets for today, this week and this month; it was always empty before) |
+| Notification | New type `target_met` (migration 0037). The agent and their team admins are told once per goal and period. Checked when the agent's notifications are read (the app polls them), like follow-up reminders |
+| Performance | **Targets met** column (met / set) for targets whose period starts in the range; sortable; in the CSV export |
+
+## 67. To-dos replace General tasks; Payment plan has its own printout (14 Nov 2026)
+
+**Not committed.** Owner's decisions: to-dos can be given by Admins to anyone (option A); the payment plan gets its own printout.
+
+| Change | Detail |
+|---|---|
+| Tasks screen | Lists **Proposals and Payment plans only**; the Create task form no longer offers General (an existing General task can still be edited). Default type: Proposal. The API list is unchanged |
+| To-dos page | New **My to-dos** view (first group): an **Add a to-do** box (what, when: Today / Tomorrow / In 3 days / Next week / no date / pick, optional lead, note; Admins and Super Admins choose who it is for) and the open list, soonest first, with Done. Stored as `general` tasks, so existing General tasks appear here |
+| My workplace | HR and Accountants see **My to-dos** (those an Admin gave them) with Done |
+| Printout | A payment plan prints as **"Payment Plan"**; a proposal keeps "Exclusive Investment Proposal" |
+
+## 68. Update after call, and a friendlier date-time picker (14 Nov 2026)
+
+**Not committed.**
+
+| Change | Detail |
+|---|---|
+| Update after call | New card at the top of the lead page (when the lead can be worked): call result (Talked, No answer, Busy, Switched off, Wrong number), minutes, what happened, stage (suggested from the result), optional meeting (type, date, time) and next follow-up (with suggestions). **Save update** does it all in one transaction through the usual commands: note on the timeline, stage change, meeting (moves the lead to Meeting scheduled), follow-ups due by now marked done, next follow-up scheduled. Any refusal saves nothing. Defaults: missed calls retry in 3 hours; a booked meeting is confirmed the day before at 10 AM |
+| Date-time picker | Every date-and-time field (meetings, tasks, follow-ups, to-dos) uses a date box, Hour / Minute / AM-PM lists (any minute) and Today / Tomorrow / In 2 days / Next week buttons; Clear on optional dates |
+
+## 69. Booking price from inventory, demo printables, signed booking form upload (14 Nov 2026)
+
+**Not committed.**
+
+| Change | Detail |
+|---|---|
+| Booking price | New booking: picking a unit shows its inventory price; **Discount %** within the role cap (agents 5%, Admins any) gives the total. The server recomputes from inventory and refuses a rate below inventory less the cap; the discount is recorded in history and audit. A unit with no price still takes a typed rate |
+| Demo printables | Booking page: **Booking form (demo)** and, under Provisional receipt, **Open demo receipt**: A4 sample layouts filled from the booking, watermarked DEMO, issuing no number and recording nothing, until the client's templates (Q-B5) |
+| Signed booking form | **Signed booking form** panel on the booking: anyone who can see the booking uploads the signed scan or photo (PDF, JPG, PNG, DOCX, XLSX up to 10 MB). Stored on the booking (files.booking_id, kind document) and its lead, so it also shows in the lead's Documents; audited as booking.signed_form_upload; not on cancelled bookings |
+
+## 70. Booking discounts above 5% need approval; token proof at booking (14 Nov 2026)
+
+**Not committed.** Owner: agents give up to 5% themselves; more (up to 100%) needs an Admin or Super Admin; a rejection keeps 5%.
+
+| Part | Detail |
+|---|---|
+| Price | Worked out from the unit's total inventory price (0% = exactly that price; the per sq ft rate is derived), fixing the .84 rounding |
+| Above the cap | Booking created at the cap (5%) with the asked % **pending** (migration 0040: bookings.discount_pct, discount_requested_pct, discount_status, decided by/at, note; notification types discount_requested / discount_decided). Admins and Super Admins are notified; the booking can't move stage until decided |
+| Decision | Booking page banner: Approve (price moves to the asked %, unless more is already paid) or Reject with a reason (stays at 5%). The agent is notified; history and audit record it |
+| Token proof | New booking form takes an optional transfer screenshot, uploaded to the booking's Payment proofs right after creation; the demo provisional receipt prints image proofs |

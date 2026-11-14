@@ -23,7 +23,7 @@ export default async function TasksPage({ searchParams }: PageProps<"/dashboard/
   if (!canDoTask(actor, "view")) return <RestrictedState />;
   const params = flattenParams(await searchParams);
   const db = getDb();
-  const [result, assignees] = await Promise.all([listTasks(db, actor, params), assigneeFilterUsers(db, actor)]);
+  const [result, assignees] = await Promise.all([listTasks(db, actor, params, undefined, { printablesOnly: true }), assigneeFilterUsers(db, actor)]);
   const filters = activeTaskFilters(params);
 
   return (

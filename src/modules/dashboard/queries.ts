@@ -1,4 +1,5 @@
 import { and, asc, count, desc, eq, gte, inArray, isNull, lt, notInArray, sql, type SQL } from "drizzle-orm";
+import { currentTargets, TARGET_METRICS } from "@/modules/targets/service";
 import { z } from "zod";
 import type { Database } from "@/server/db";
 import { leadSources, leads, meetings, projects, teamMembers, teams, users } from "@/server/db/schema";
@@ -179,6 +180,12 @@ export async function dashboardData(db: Database, actor: Actor, projectId: strin
   // Agents see only their own work: their own score, never a team average built from other agents'
   // scores (decided 11 Nov 2026). Managers keep their teams; Admins and Super Admins see every team.
   const ownScore = actor.role === "agent" ? (await agentScores(db, [actor.id], now)).get(actor.id)! : null;
+  // My Targets (agents): today, this week and this month, with a Met tick on goals reached (14 Nov 2026).
+  const myTargets = actor.role === "agent" ? await currentTargets(db, actor.id, now) : null;
+  const targetLines = (p: "daily" | "weekly" | "monthly") => {
+    const t = myTargets?.find((x) => x.period === p);
+    return TARGET_METRICS.map((m) => ({ label: m.label, actual: t?.achieved[m.key] ?? 0, target: t?.goals?.[m.key] || null, met: Boolean(t?.met.includes(m.key)) }));
+  };
   const scoredTeams = ownScore ? [] : await teamScores(db, actor, now);
   const data: DashboardData = {
     isSample: false,
@@ -208,7 +215,7 @@ export async function dashboardData(db: Database, actor: Actor, projectId: strin
     scoreScope: ownScore ? "own" : "team",
     teamOutput: [],
     meetingMix: [],
-    targets: null,
+    targets: myTargets ? { today: targetLines("daily"), week: targetLines("weekly"), month: targetLines("monthly") } : null,
     pipelineHealth: { stale: health.stale, noMeeting: health.noMeeting, meetingsDone: meetingsDone.n, rows: [] },
     leadSources: sources,
     inboundChannels: channels.map((c) => ({ id: c.channel, label: INBOUND_LABELS[c.channel], count: c.count })),

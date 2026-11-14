@@ -1,4 +1,5 @@
 import { leadLink, notify, teamManagersOf } from "@/modules/notifications/service";
+import { assertPhoneEditable, notifyNameChange } from "@/modules/contacts/agent-edits";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { auditClient, logClientActivity } from "@/modules/clients/support";
 import { copyLeadPhonesToClient, findCustomer, leadsWithAnyNumber, lockNumbers, normalizeExtraPhones, replaceLeadPhones, leadPhonesOf } from "@/modules/contacts/phones";
@@ -317,7 +318,15 @@ export async function updateLead(db: Database, actor: Actor, leadId: string, inp
   const phoneOf = (lead: typeof leads.$inferSelect) => phoneOrThrow(data.phoneCountryCode ?? lead.phoneCountryCode, data.phoneNumber ?? lead.phoneNumber);
   const phoneEdited = data.phoneNumber !== undefined || data.phoneCountryCode !== undefined;
   const phonesEdited = data.phones !== undefined;
+  // Agents never change a phone number (owner, 14 Nov 2026). Checked against the saved numbers below.
   return db.transaction(async (tx) => {
+    if (actor.role === "agent" && (phoneEdited || phonesEdited)) {
+      const { lead: saved } = await loadAccessibleLead(tx, actor, leadId);
+      const samePrimary = !phoneEdited || phoneOf(saved).e164 === saved.phoneE164;
+      const sameExtra =
+        !phonesEdited || JSON.stringify(normalizeExtraPhones(saved.phoneE164, data.phones).map((p) => p.e164)) === JSON.stringify((await leadPhonesOf(tx, leadId)).map((p) => p.e164));
+      assertPhoneEditable(actor, !(samePrimary && sameExtra));
+    }
     // F-3: a changed number is checked like a new lead's. The number lock is taken before the lead's
     // row lock (the order createLead uses when it regenerates an existing lead), so they can't deadlock.
     let extraPhones: ReturnType<typeof normalizeExtraPhones> | null = null;
@@ -379,7 +388,10 @@ export async function updateLead(db: Database, actor: Actor, leadId: string, inp
     const rowChanges = Object.keys(changes).length > 0;
     if (rowChanges) await tx.update(leads).set({ ...changes, updatedAt: now }).where(eq(leads.id, leadId));
     else await tx.update(leads).set({ updatedAt: now }).where(eq(leads.id, leadId));
-    await logActivity(tx, { leadId, actorId: actor.id, type: "update", data: { fields: changed } });
+    // A name change keeps the old and new name in the history; an agent's also tells the Admins.
+    const renamed = changed.includes("name") ? { nameFrom: lead.name, nameTo: changes.name } : {};
+    await logActivity(tx, { leadId, actorId: actor.id, type: "update", data: { fields: changed, ...renamed } });
+    if (changed.includes("name")) await notifyNameChange(tx, actor, { kind: "lead", id: leadId, code: lead.code, from: lead.name, to: changes.name! });
     await audit(
       tx,
       actor,

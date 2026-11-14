@@ -6,7 +6,7 @@ import { AppError, notFound } from "@/server/errors";
 import { parse } from "@/modules/clients/support";
 import { isUniqueViolation, type DbOrTx } from "@/modules/leads/support";
 import { assertCanProject } from "./policy";
-import { createProjectSchema, dimensionsSchema, updateProjectSchema } from "./validation";
+import { createProjectSchema, dimensionsSchema, paymentPlanSchema, updateProjectSchema } from "./validation";
 
 const NAME_TAKEN = "A project with this name already exists.";
 
@@ -95,6 +95,21 @@ export async function updateProject(db: Database, actor: Actor, projectId: strin
       Object.fromEntries(changed.map((k) => [k, changes[k as keyof typeof changes]])),
     );
     return { changed };
+  });
+}
+
+/** The project's payment plan (owner, 14 Nov 2026): Admins and Super Admins; audited. */
+export async function updateProjectPaymentPlan(db: Database, actor: Actor, projectId: string, input: unknown) {
+  assertCanProject(actor, "manage");
+  const plan = parse(paymentPlanSchema, input);
+  if (!/^[0-9a-f-]{36}$/i.test(projectId)) throw notFound("Project");
+  return db.transaction(async (tx) => {
+    const [project] = await tx.select().from(projects).where(eq(projects.id, projectId)).limit(1).for("update");
+    if (!project) throw notFound("Project");
+    if (JSON.stringify(plan) === JSON.stringify(project.paymentPlan)) return { changed: false };
+    await tx.update(projects).set({ paymentPlan: plan, updatedAt: new Date() }).where(eq(projects.id, projectId));
+    await auditProject(tx, actor, "project.payment_plan", projectId, project.paymentPlan, plan);
+    return { changed: true };
   });
 }
 
