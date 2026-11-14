@@ -100,8 +100,8 @@ describe.skipIf(!hasTestDb)("Performance calls from call recordings (PostgreSQL 
     expect(row(r, f.actors.agent2.id)).toMatchObject({ calls: 2, callsTimed: 0, callMin: null, callsVerified: 0, callsQualified: 0 });
     expect(r.rows.map((x) => [x.name, x.calls])).toEqual([["Agent B", 2], ["Agent A", 1], ["Agent Outside", 0]]);
     const csv = performanceCsv(r).split("\n");
-    expect(csv[1]).toBe("Agent B,2026-10-01,2026-10-29,0,0,0,,2,,0,0,,0,0,0,");
-    expect(csv[2]).toBe("Agent A,2026-10-01,2026-10-29,0,0,0,,1,2,0,0,,0,0,0,");
+    expect(csv[1]).toMatch(/^Agent B,\d+,2026-10-01,2026-10-29,0,0,0,,2,,0,0,,0,0,0,$/);
+    expect(csv[2]).toMatch(/^Agent A,\d+,2026-10-01,2026-10-29,0,0,0,,1,2,0,0,,0,0,0,$/);
     // Missing call minutes sort last either way.
     const byMin = await report(f.actors.superAdmin, { sort: "callMin", dir: "asc" });
     expect(byMin.rows.map((x) => x.callMin)).toEqual([2, null, null]);

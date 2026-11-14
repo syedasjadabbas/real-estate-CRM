@@ -3737,3 +3737,15 @@ Typecheck and lint pass. Tests not yet run (client conversion tests will need up
 | Agent dashboard | Agents see only their own figures: total leads, conversion rate, open pipeline, won / lost, regenerated (all from their own leads), their leads by project, their performance score and My Targets. Hidden from agents: Organization Health, team stats and team output, meeting mix and distribution, Aging vs Meetings (pipeline health), lead sources, inbound channels and lost leads by team |
 
 Typecheck and lint pass. Tests not yet run. Tests and browser specs still create Manager users (the database value remains), so they keep working; the dev seed's "manager" sign-in is now an Admin.
+
+## 64. Follow-up suggestions, agent score and pipeline by agent (14 Nov 2026)
+
+**Not committed.** From the owner's client-meeting notes (points 9, 12, 13; points 1 and 10 set aside).
+
+| Change | Detail |
+|---|---|
+| Follow-up form | **When** dropdown (In 1 hour, In 3 hours, Tomorrow, In 2 days, In 3 days, Next week, or pick a date) and **Follow-up for** suggestions (Call back, Send project details, Share price list and payment plan, Arrange a site visit, Confirm the meeting, Discuss token / payment, Collect documents, Ask for their decision). The comment box stays; a suggestion and a comment are saved together ("Call back: …") |
+| Performance: Score | New sortable Score column (the assignment score, 0–100, "prov." while history is small); also in the CSV export |
+| Performance: Pipeline by agent | One row per agent, one column per stage, for the project selected in the header, counting the leads each holds now (not limited to the date range). Each number opens those leads (new `owner` filter on the leads list). Agents see "Your pipeline" |
+
+Typecheck and lint pass; performance and leads integration tests pass (47 / 47).

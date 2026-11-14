@@ -69,6 +69,7 @@ function filterConditions(query: LeadListQuery, now: Date): SQL[] {
   }
   if (query.lostReason.length) out.push(inArray(leads.lostReasonId, query.lostReason));
   if (query.priority.length) out.push(inArray(leads.priority, query.priority));
+  if (query.owner) out.push(eq(leads.ownerId, query.owner));
   if (query.followUp) {
     // The follow-up window describes pending work, so Lost leads are not in it (F-2).
     out.push(followUpLeadActive());

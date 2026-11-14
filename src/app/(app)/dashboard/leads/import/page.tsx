@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import { Download } from "lucide-react";
 import Link from "next/link";
+import { buttonClasses } from "@/components/ui/button";
 import { PageHeader } from "@/components/shell/page-header";
 import { StatusTag } from "@/components/ui/badge";
 import { EmptyState, RestrictedState } from "@/components/ui/empty-state";
@@ -32,6 +34,15 @@ export default async function LeadImportsPage() {
           }
         />
         <PanelCard title="Submit a batch">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-200/80 bg-zinc-50/70 px-3 py-2.5">
+            <p className="text-xs text-zinc-600">
+              Fill in the sample file and upload it. <span className="font-bold text-zinc-800">name, phone and source</span> are required; the other columns can stay blank.
+            </p>
+            <a href="/api/v1/lead-imports/template" download className={buttonClasses({ variant: "secondary", className: "h-[33px] px-3 text-xs" })}>
+              <Download aria-hidden="true" className="size-3.5" />
+              Download sample CSV
+            </a>
+          </div>
           <ImportUploadForm projects={projects} defaultProjectId={projectId} />
         </PanelCard>
         <PanelCard title={canDecideImport(actor) ? "All batches" : "Your batches"}>

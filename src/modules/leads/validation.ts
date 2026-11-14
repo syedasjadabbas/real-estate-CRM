@@ -135,6 +135,8 @@ export const leadListQuerySchema = z.object({
   createdFrom: z.iso.datetime().optional().catch(undefined),
   createdTo: z.iso.datetime().optional().catch(undefined),
   team: z.uuid().optional().catch(undefined),
+  /** One owner's leads (Performance "Pipeline by agent" click-through); still inside the viewer's scope. */
+  owner: z.uuid().optional().catch(undefined),
   /** Empty unless a sort was chosen: the Regenerated view has its own order until then (FR-005). */
   sort: z.enum(SORTABLE_COLUMNS).optional().catch(undefined),
   dir: z.enum(["asc", "desc"]).catch("desc"),

@@ -3,6 +3,8 @@ import type { Database } from "@/server/db";
 import { followUps, leads, meetings, signinLogs, teamMembers, teams, users } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
 import { forbidden } from "@/server/errors";
+import { agentScores } from "@/modules/leads/assignment";
+import { LEAD_STAGES, type LeadStage } from "@/modules/leads/constants";
 import { callMinutes, callStatsByUser, NO_CALLS } from "./calls";
 import { PERFORMANCE_PAGE_SIZE, pct, performanceQuerySchema, resolveRange, type PerformanceSort } from "./range";
 
@@ -70,6 +72,10 @@ export type AgentMetrics = {
   signOuts: number;
   /** FR-028: mean time from creation to first touch, over the leads counted here that have one. Null if none do. */
   avgFirstTouchMs: number | null;
+  /** The assignment score (0–100: performance and conversion), as automatic assignment uses it today. */
+  score: number | null;
+  /** Too little history yet: the score leans on its neutral starting value. */
+  scoreProvisional: boolean;
 };
 
 const n = (v: unknown) => Number(v ?? 0);
@@ -155,6 +161,8 @@ async function agentMetrics(db: Database, agents: { id: string; name: string }[]
       signIns: n(s?.ins),
       signOuts: n(s?.outs),
       avgFirstTouchMs: l?.avgFirstTouchMs == null ? null : Math.round(Number(l.avgFirstTouchMs)),
+      score: null,
+      scoreProvisional: false,
     };
   });
 }
@@ -180,7 +188,12 @@ export async function performanceReport(db: Database, actor: Actor, rawQuery: un
   const range = resolveRange(q.from, q.to, now);
   const team = actor.role === "agent" ? undefined : q.team;
   const agents = await agentsInScope(db, actor, team);
-  const all = await agentMetrics(db, agents, range.window);
+  const [metrics, scores] = await Promise.all([agentMetrics(db, agents, range.window), agentScores(db, agents.map((a) => a.id), now)]);
+  // Admins see every agent's score beside their figures (client meeting note, 14 Nov 2026).
+  const all = metrics.map((m) => {
+    const sc = scores.get(m.userId);
+    return { ...m, score: sc ? sc.score : null, scoreProvisional: sc?.provisional ?? false };
+  });
 
   const sum = (k: keyof AgentMetrics) => all.reduce((acc, r) => acc + Number(r[k] ?? 0), 0);
   const count = all.length;
@@ -262,15 +275,35 @@ export async function performanceReport(db: Database, actor: Actor, rawQuery: un
 }
 export type PerformanceReport = Awaited<ReturnType<typeof performanceReport>>;
 
+/**
+ * Pipeline by agent (client meeting note, 14 Nov 2026): how many leads each agent holds in every stage
+ * right now, in one project. Not limited to the date range: it is the agent's current pipeline.
+ */
+export async function pipelineByAgent(db: Database, agentIds: string[], projectId: string) {
+  const out = new Map<string, Record<LeadStage, number>>();
+  for (const id of agentIds) out.set(id, Object.fromEntries(LEAD_STAGES.map((s) => [s, 0])) as Record<LeadStage, number>);
+  if (agentIds.length === 0) return out;
+  const rows = await db
+    .select({ ownerId: leads.ownerId, stage: leads.stage, n: sql<number>`count(*)::int` })
+    .from(leads)
+    .where(and(inArray(leads.ownerId, agentIds), eq(leads.projectId, projectId), isNull(leads.deletedAt)))
+    .groupBy(leads.ownerId, leads.stage);
+  for (const r of rows) {
+    const counts = r.ownerId ? out.get(r.ownerId) : undefined;
+    if (counts) counts[r.stage] = r.n;
+  }
+  return out;
+}
+
 /** Observed "Export CSV": every agent row in scope for the range (Call min blank when no call in the range has a duration). */
 export function performanceCsv(report: PerformanceReport) {
   const esc = (v: string | number | null) => {
     const s = v === null ? "" : String(v);
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  const header = ["Agent", "From", "To", "Open leads", "Booked", "Lost", "Win %", "Calls", "Call min", "F/U due", "F/U done", "F/U %", "Meetings", "CRM sign-ins", "CRM sign-outs", "Avg first touch (min)"];
+  const header = ["Agent", "Score", "From", "To", "Open leads", "Booked", "Lost", "Win %", "Calls", "Call min", "F/U due", "F/U done", "F/U %", "Meetings", "CRM sign-ins", "CRM sign-outs", "Avg first touch (min)"];
   const lines = report.allRows.map((r) =>
-    [r.name, report.range.from, report.range.to, r.open, r.booked, r.lost, r.winPct, r.calls, r.callMin, r.fuDue, r.fuDone, r.fuPct, r.meetings, r.signIns, r.signOuts, r.avgFirstTouchMs === null ? null : Math.round(r.avgFirstTouchMs / 60_000)].map(esc).join(","),
+    [r.name, r.score, report.range.from, report.range.to, r.open, r.booked, r.lost, r.winPct, r.calls, r.callMin, r.fuDue, r.fuDone, r.fuPct, r.meetings, r.signIns, r.signOuts, r.avgFirstTouchMs === null ? null : Math.round(r.avgFirstTouchMs / 60_000)].map(esc).join(","),
   );
   return [header.join(","), ...lines].join("\n") + "\n";
 }

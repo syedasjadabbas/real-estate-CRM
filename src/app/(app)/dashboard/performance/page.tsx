@@ -17,7 +17,9 @@ import { cn } from "@/lib/cn";
 import { formatInt } from "@/lib/format";
 import { businessToday } from "@/modules/bookings/today";
 import type { PerformanceSort } from "@/modules/performance/range";
-import { canViewPerformance, performanceContexts, performanceReport } from "@/modules/performance/service";
+import { canViewPerformance, performanceContexts, performanceReport, pipelineByAgent } from "@/modules/performance/service";
+import { LEAD_STAGES, STAGE_LABELS } from "@/modules/leads/constants";
+import { getProjectScope } from "@/server/project-scope";
 import { signinRetentionNote } from "@/modules/security/service";
 import { requirePageUser } from "@/server/auth/current-user";
 import { getDb } from "@/server/db";
@@ -29,6 +31,7 @@ const NO_CALL_DURATION = "No call recording in the range has a duration";
 /** Observed columns, in order. */
 const COLUMNS: { label: string; sort: PerformanceSort; title?: string }[] = [
   { label: "Name", sort: "agent" },
+  { label: "Score", sort: "score", title: "Assignment score, 0–100: follow-up performance and conversion, as automatic assignment uses it. \"prov.\" = too little history yet." },
   { label: "Open leads", sort: "open", title: "Leads assigned in the selected date range that are not booked or lost." },
   { label: "Booked", sort: "booked", title: "Leads assigned in the range that are now Booked." },
   { label: "Lost", sort: "lost", title: "Leads assigned in the range that are now Lost." },
@@ -64,7 +67,10 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
   const db = getDb();
   const isAgent = actor.role === "agent";
   const today = businessToday();
-  const [report, contexts, retentionNote] = await Promise.all([performanceReport(db, actor, params), performanceContexts(db, actor), signinRetentionNote(db)]);
+  const [report, contexts, retentionNote, scope] = await Promise.all([performanceReport(db, actor, params), performanceContexts(db, actor), signinRetentionNote(db), getProjectScope()]);
+  const project = scope.projects.find((p) => p.id === scope.activeProjectId) ?? null;
+  // Pipeline by agent: each agent's leads by stage right now, in the project selected in the header.
+  const pipeline = project ? await pipelineByAgent(db, report.allRows.map((r) => r.userId), project.id) : null;
   const s = report.summary;
   // An agent sees only themselves: personal wording, no per-agent averages, no ranking charts.
   const own = report.context === "own";
@@ -208,6 +214,10 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
                 {report.rows.map((r) => (
                   <tr key={r.userId} className="border-b border-zinc-100/80 last:border-b-0 hover:bg-zinc-50/60">
                     <td className="px-3 py-2.5 font-bold whitespace-nowrap">{r.name}</td>
+                    <td className={cn("px-3 py-2.5 text-right whitespace-nowrap tabular-nums", r.score === null && "text-zinc-400")}>
+                      {r.score === null ? "—" : r.score}
+                      {r.scoreProvisional ? <span className="ml-1 text-[10px] font-semibold text-zinc-400">prov.</span> : null}
+                    </td>
                     {[r.open, r.booked, r.lost, pctText(r.winPct), r.calls, r.callMin, r.fuDue, r.fuDone, pctText(r.fuPct), r.meetings, r.signIns, r.signOuts].map((v, i) => (
                       <td key={i} className={cn("px-3 py-2.5 text-right tabular-nums", v === null && "text-zinc-400")} title={v === null ? NO_CALL_DURATION : undefined}>
                         {v === null ? "—" : typeof v === "number" ? formatInt(v) : v}
@@ -232,6 +242,67 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
         </p>
       </Panel>
 
+      {pipeline && project ? (
+        <Panel
+          title={own ? "Your pipeline" : "Pipeline by agent"}
+          description={`Leads held right now in each stage · ${project.name} · not limited to the date range. Click a number to open those leads.`}
+          bodyClassName="space-y-3"
+        >
+          {report.allRows.length === 0 ? (
+            <EmptyState>No agents in this scope.</EmptyState>
+          ) : (
+            <div className="max-h-[540px] overflow-auto rounded-xl border border-zinc-200/80">
+              <table className="w-full min-w-max border-collapse text-left text-xs">
+                <thead className="sticky top-0 z-10 bg-zinc-100">
+                  <tr className="border-b border-zinc-200 text-[10px] font-black tracking-[0.05em] text-zinc-600 uppercase">
+                    <th scope="col" className="px-3 py-3.5 whitespace-nowrap">Name</th>
+                    {LEAD_STAGES.map((st) => (
+                      <th key={st} scope="col" className="px-3 py-3.5 text-right whitespace-nowrap">
+                        {STAGE_LABELS[st]}
+                      </th>
+                    ))}
+                    <th scope="col" className="px-3 py-3.5 text-right whitespace-nowrap">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.allRows.map((r) => {
+                    const counts = pipeline.get(r.userId);
+                    const total = counts ? LEAD_STAGES.reduce((a, st) => a + counts[st], 0) : 0;
+                    return (
+                      <tr key={r.userId} className="border-b border-zinc-100/80 last:border-b-0 hover:bg-zinc-50/60">
+                        <td className="px-3 py-2.5 font-bold whitespace-nowrap">{r.name}</td>
+                        {LEAD_STAGES.map((st) => {
+                          const n = counts?.[st] ?? 0;
+                          return (
+                            <td key={st} className={cn("px-3 py-2.5 text-right tabular-nums", n === 0 && "text-zinc-300")}>
+                              {n === 0 ? (
+                                "0"
+                              ) : (
+                                <Link href={`/dashboard/leads?owner=${r.userId}&stage=${st}`} className="font-semibold text-brand hover:underline">
+                                  {formatInt(n)}
+                                </Link>
+                              )}
+                            </td>
+                          );
+                        })}
+                        <td className="px-3 py-2.5 text-right font-black tabular-nums">
+                          {total ? (
+                            <Link href={`/dashboard/leads?owner=${r.userId}`} className="hover:text-brand hover:underline">
+                              {formatInt(total)}
+                            </Link>
+                          ) : (
+                            "0"
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Panel>
+      ) : null}
     </PageStack>
   );
 }
