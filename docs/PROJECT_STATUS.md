@@ -3749,3 +3749,7 @@ Typecheck and lint pass. Tests not yet run. Tests and browser specs still create
 | Performance: Pipeline by agent | One row per agent, one column per stage, for the project selected in the header, counting the leads each holds now (not limited to the date range). Each number opens those leads (new `owner` filter on the leads list). Agents see "Your pipeline" |
 
 Typecheck and lint pass; performance and leads integration tests pass (47 / 47).
+
+## 65. Users & access page for the Super Admin (14 Nov 2026)
+
+**Not committed.** Settings → Users & access (Super Admin only): every account grouped as Super Admins, Admins, Agents, HR and Accounts, with team, last sign-in and open leads, and **one switch each**. On = the role's normal access; off = no access (sign-in refused, open sessions ended at once, audited as user.deactivate / user.reactivate; same rule as HR → Employees). You can't switch yourself off, nor the last active Super Admin. Leads stay with the person until an Admin shifts them.

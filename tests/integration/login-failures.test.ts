@@ -54,14 +54,15 @@ describe.skipIf(!hasTestDb)("F-10: sign-in failures reveal nothing about the acc
     expect(await db.select().from(signinLogs).where(eq(signinLogs.userId, id))).toEqual([expect.objectContaining({ event: "sign_in", ip: "198.51.100.1" })]);
   });
 
-  it("wrong password, unknown email and an inactive account all fail identically", async () => {
+  it("a wrong password fails identically for every account; the right one is told access is off", async () => {
     const active = await account("active");
     const inactive = await account("inactive");
     const expected = { code: "UNAUTHENTICATED", message: "Incorrect email or password.", status: 401, fields: undefined, details: undefined };
     expect(await failure(signIn(active.email, WRONG))).toEqual(expected);
     expect(await failure(signIn("nobody@test.local", WRONG))).toEqual(expected);
     expect(await failure(signIn(inactive.email, WRONG))).toEqual(expected);
-    expect(await failure(signIn(inactive.email, PASSWORD))).toEqual(expected);
+    // Owner, 14 Nov 2026: only someone with the right password learns the account is switched off.
+    expect(await failure(signIn(inactive.email, PASSWORD))).toEqual({ ...expected, message: "Your access has been turned off. Please contact your administrator." });
   });
 
   it("a failed sign-in opens no session and logs no sign-in", async () => {
@@ -81,10 +82,10 @@ describe.skipIf(!hasTestDb)("F-10: sign-in failures reveal nothing about the acc
     }
   });
 
-  it("the right password on an inactive account counts as a failure too", async () => {
+  it("the right password on a switched-off account is not locked out: it keeps saying access is off", async () => {
     const { email } = await account("inactive");
     for (let i = 0; i < 5; i += 1) await failure(signIn(email, PASSWORD));
-    expect((await failure(signIn(email, PASSWORD)))?.code).toBe("RATE_LIMITED");
+    expect((await failure(signIn(email, PASSWORD)))?.message).toContain("Your access has been turned off");
   });
 
   it("a blocked email + address doesn't block the same email elsewhere, and success clears failures", async () => {
@@ -102,9 +103,11 @@ describe.skipIf(!hasTestDb)("F-10: sign-in failures reveal nothing about the acc
   it("deactivating and reactivating still work, and field validation is unchanged", async () => {
     const { id, email } = await account("active");
     await db.update(users).set({ status: "inactive" }).where(eq(users.id, id));
-    expect((await failure(signIn(email, PASSWORD)))?.message).toBe("Incorrect email or password.");
+    // With the right password, a switched-off account is told so (14 Nov 2026); a wrong one still isn't.
+    expect((await failure(signIn(email, PASSWORD)))?.message).toBe("Your access has been turned off. Please contact your administrator.");
+    expect((await failure(signIn(email, WRONG)))?.message).toBe("Incorrect email or password.");
     await db.update(users).set({ status: "active" }).where(eq(users.id, id));
-    // The failure above counted; a good sign-in from the same address still works and clears it.
+    // A good sign-in from the same address still works.
     expect(await failure(signIn(email, PASSWORD))).toBeNull();
     expect(await failure(authenticate(db, { email: "not-an-email", password: "" }))).toMatchObject({ code: "VALIDATION_FAILED" });
   });

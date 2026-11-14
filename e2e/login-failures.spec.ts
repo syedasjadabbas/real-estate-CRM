@@ -7,10 +7,14 @@ import { E2E_PASSWORD, expect, login, seed, unique } from "./support/seed";
 const MESSAGE = "Incorrect email or password.";
 const email = (label: string) => `${unique(label).replace(/\s/g, "-").toLowerCase()}@test.local`;
 
-test("the form says the same for an inactive account as for a wrong password @mobile", async ({ page }) => {
+test("a wrong password says the same for every account; only the right one learns access is off @mobile", async ({ page }) => {
   const inactive = await inactiveUserWithPassword(email("inactive"));
   await page.goto("/login");
-  for (const [address, password] of [[inactive, E2E_PASSWORD], [inactive, "not-the-password"], [email("nobody"), E2E_PASSWORD]]) {
+  await page.getByLabel("Email").fill(inactive);
+  await page.getByLabel("Password").fill(E2E_PASSWORD);
+  await page.getByRole("button", { name: /sign in/i }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "Your access has been turned off" })).toBeVisible();
+  for (const [address, password] of [[inactive, "not-the-password"], [email("nobody"), E2E_PASSWORD]]) {
     await page.getByLabel("Email").fill(address);
     await page.getByLabel("Password").fill(password);
     await page.getByRole("button", { name: /sign in/i }).click();
@@ -37,7 +41,11 @@ test("the API answers all failures with the same status and body, and active acc
   const unknown = await attempt(email("nobody"), E2E_PASSWORD);
   expect(unknown.status).toBe(401);
   expect(unknown.cookie).toBeNull();
-  expect(await attempt(inactive, E2E_PASSWORD)).toEqual(unknown);
+  // Only the right password learns the account is switched off (14 Nov 2026).
+  const off = await attempt(inactive, E2E_PASSWORD);
+  expect(off.status).toBe(401);
+  expect(off.cookie).toBeNull();
+  expect(JSON.stringify(off.body)).toContain("Your access has been turned off");
   expect(await attempt(inactive, "not-the-password")).toEqual(unknown);
 
   await login(page, "agent1");

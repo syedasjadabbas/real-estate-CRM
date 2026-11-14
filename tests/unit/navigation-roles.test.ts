@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { canManageAccess } from "@/modules/accounts/access";
 import { navigation } from "@/config/navigation";
 import { canDoBooking } from "@/modules/bookings/policy";
 import { canDoClient } from "@/modules/clients/policy";
@@ -28,6 +29,7 @@ const pageAllows: Record<string, (actor: { role: Role }) => boolean> = {
   "/dashboard/leads?stage=new_lead": (a) => canDoLead(a, "view"),
   "/dashboard/leads/todos": (a) => canDoLead(a, "view"),
   "/dashboard/settings/assignment": (a) => canManageAssignment(a),
+  "/dashboard/settings/access": (a) => canManageAccess(a),
   "/dashboard/clients": (a) => canDoClient(a, "view"),
   "/dashboard/projects": (a) => canDoProject(a, "view"),
   "/dashboard/inventory": (a) => canDoInventory(a, "view"),

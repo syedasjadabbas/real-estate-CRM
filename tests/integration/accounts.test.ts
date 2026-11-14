@@ -88,7 +88,7 @@ describe.skipIf(!hasTestDb)("Account management (PostgreSQL integration)", () =>
     const { token } = await signIn(db, "new.agent@test.local");
     expect(await setAccountStatus(db, admin, id, { status: "inactive" })).toEqual({ changed: true });
     expect(await findActorByToken(db, token)).toBeNull();
-    expect((await errorOf(signIn(db, "new.agent@test.local")))?.message).toBe("Incorrect email or password.");
+    expect((await errorOf(signIn(db, "new.agent@test.local")))?.message).toBe("Your access has been turned off. Please contact your administrator.");
     await setAccountStatus(db, admin, id, { status: "active" });
     expect((await findActorByToken(db, (await signIn(db, "new.agent@test.local")).token))?.id).toBe(id);
     const actions = (await db.select({ a: auditLogs.action }).from(auditLogs).where(eq(auditLogs.entityId, id))).map((r) => r.a);

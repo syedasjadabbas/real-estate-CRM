@@ -14,10 +14,13 @@ export const loginSchema = z.object({
 });
 
 const INVALID = "Incorrect email or password.";
+/** Shown only after the right password, so it tells nothing to someone guessing (owner, 14 Nov 2026). */
+export const ACCESS_OFF = "Your access has been turned off. Please contact your administrator.";
 
 /**
- * Verifies credentials and opens a session. Every failure looks the same, so sign-in never reveals
- * whether an account exists or is inactive: same error, and a password check in every case.
+ * Verifies credentials and opens a session. A wrong email or password always gets the same error, so
+ * sign-in never reveals whether an account exists. A switched-off account is named only to someone who
+ * gave its correct password.
  */
 export async function authenticate(db: Database, input: unknown, meta: RequestMeta = {}) {
   const parsed = loginSchema.safeParse(input);
@@ -41,10 +44,11 @@ export async function authenticate(db: Database, input: unknown, meta: RequestMe
     recordFailure(key);
     throw new AppError("UNAUTHENTICATED", INVALID);
   }
-  if (!(await verifyPassword(user.passwordHash, password)) || user.status !== "active") {
+  if (!(await verifyPassword(user.passwordHash, password))) {
     recordFailure(key);
     throw new AppError("UNAUTHENTICATED", INVALID);
   }
+  if (user.status !== "active") throw new AppError("UNAUTHENTICATED", ACCESS_OFF);
 
   clearFailures(key);
   const session = await createSession(db, user.id, meta);

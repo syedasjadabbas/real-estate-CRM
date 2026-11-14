@@ -1,6 +1,7 @@
 import {
   Activity,
   SlidersHorizontal,
+  ShieldCheck,
   BookText,
   Building,
   CalendarDays,
@@ -216,6 +217,14 @@ export const navigation: NavGroup[] = [
         description: "How new leads are shared out, and the weights behind agent and team scores.",
         // Same check as the page (leads/assignment.ts canManageAssignment).
         roles: ["super_admin", "admin"],
+      },
+      {
+        label: "Users & access",
+        href: "/dashboard/settings/access",
+        icon: ShieldCheck,
+        description: "Everyone with a CRM account, with one switch each: full access or no access.",
+        // Same check as the page (accounts/access.ts canManageAccess).
+        roles: ["super_admin"],
       },
     ],
   },
