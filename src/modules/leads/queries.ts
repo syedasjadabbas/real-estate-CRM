@@ -4,6 +4,7 @@ import { and, asc, count, desc, eq, gt, gte, ilike, inArray, isNotNull, isNull, 
 import { alias } from "drizzle-orm/pg-core";
 import type { Database } from "@/server/db";
 import {
+  files,
   approvals,
   budgetRanges,
   cities,
@@ -390,7 +391,7 @@ export async function getLeadDetail(db: Database, actor: Actor, leadId: string) 
       lostReason: lostReason[0]?.name ?? null,
       timeToFirstTouchMs: lead.firstTouchAt ? lead.firstTouchAt.getTime() - lead.createdAt.getTime() : null,
     },
-    activities,
+    activities: await withCallLengths(db, activities),
     /** Names of the people that assignment entries point to (owner ids are stored, not names). */
     activityPeople: await activityPeople(db, activities),
     /** When this was read, for "2 years ago" in the timeline. */
@@ -761,4 +762,23 @@ async function activityPeople(db: Database, activities: { type: string; data: un
   if (!ids.size) return {} as Record<string, string>;
   const rows = await db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, [...ids]));
   return Object.fromEntries(rows.map((r) => [r.id, r.name])) as Record<string, string>;
+}
+
+/**
+ * Recording uploads made before 15 Nov 2026 didn't store the call length on the timeline entry;
+ * fill it in from the recording itself so the history shows it.
+ */
+async function withCallLengths<T extends { type: string; data: unknown }>(db: Database, activities: T[]) {
+  const ids: string[] = [];
+  for (const a of activities) {
+    const d = (a.data ?? {}) as Record<string, unknown>;
+    if (a.type === "file_uploaded" && d.kind === "call_recording" && !("durationSec" in d) && typeof d.fileId === "string") ids.push(d.fileId);
+  }
+  if (!ids.length) return activities;
+  const rows = await db.select({ id: files.id, durationSec: files.durationSec }).from(files).where(inArray(files.id, ids));
+  const byId = new Map(rows.map((r) => [r.id, r.durationSec]));
+  return activities.map((a) => {
+    const d = (a.data ?? {}) as Record<string, unknown>;
+    return typeof d.fileId === "string" && byId.has(d.fileId) ? { ...a, data: { ...d, durationSec: byId.get(d.fileId) } } : a;
+  });
 }

@@ -61,7 +61,7 @@ export async function saveLeadFile(
         uploadedById: actor.id,
       });
       await tx.update(leads).set(touchValues(current, now)).where(eq(leads.id, lead.id));
-      await logActivity(tx, { leadId: lead.id, actorId: actor.id, type: "file_uploaded", body: file.name, data: { fileId: id, kind: file.kind } });
+      await logActivity(tx, { leadId: lead.id, actorId: actor.id, type: "file_uploaded", body: file.name, data: { fileId: id, kind: file.kind, ...(file.kind === "call_recording" ? { durationSec: file.durationSec ?? null } : {}) } });
       await audit(tx, actor, file.auditAction, lead.id, null, { fileId: id, name: file.name, sizeBytes: file.bytes.byteLength, sha256 });
       return { id, name: file.name, sizeBytes: file.bytes.byteLength, durationSec: file.durationSec ?? null };
     });

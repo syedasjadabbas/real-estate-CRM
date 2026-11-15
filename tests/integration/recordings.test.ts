@@ -4,6 +4,7 @@ import path from "node:path";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createLead } from "@/modules/leads/commands";
+import { getLeadDetail } from "@/modules/leads/queries";
 import { deleteRecording, listRecordings, openRecording, uploadRecording } from "@/modules/recordings/service";
 import { auditLogs, files, leadActivities, leads, users } from "@/server/db/schema";
 import { loadActor } from "@/server/auth/session-store";
@@ -93,7 +94,12 @@ describe.skipIf(!hasTestDb)("Call recordings (PostgreSQL integration)", () => {
       expect(new Uint8Array(await readFile(onDisk[0]))).toEqual(bytes);
       expect(onDisk[0].startsWith(storageDir)).toBe(true);
       const [activity] = await db.select().from(leadActivities).where(eq(leadActivities.type, "file_uploaded"));
-      expect(activity).toMatchObject({ leadId, actorId: f.actors.agent1.id, body: "Call 0300.mp3" });
+      // The call length is kept on the timeline entry (15 Nov 2026).
+      expect(activity).toMatchObject({ leadId, actorId: f.actors.agent1.id, body: "Call 0300.mp3", data: { kind: "call_recording", durationSec: 95 } });
+      // An entry from before that change gets the length from the recording when the lead is read.
+      await db.update(leadActivities).set({ data: { fileId: r.id, kind: "call_recording" } }).where(eq(leadActivities.id, activity.id));
+      const detail = await getLeadDetail(db, f.actors.agent1, leadId);
+      expect(detail.activities.find((x) => x.id === activity.id)?.data).toMatchObject({ durationSec: 95 });
       const [log] = await db.select().from(auditLogs).where(eq(auditLogs.action, "lead.recording_upload"));
       expect(log).toMatchObject({ actorId: f.actors.agent1.id, entity: "lead", entityId: leadId });
       const [lead] = await db.select().from(leads).where(eq(leads.id, leadId));

@@ -1,6 +1,7 @@
 import { EmptyState } from "@/components/ui/empty-state";
 import { BUSINESS_TIME_ZONE, PRIORITY_LABELS, STAGE_LABELS, type LeadPriority, type LeadStage } from "@/modules/leads/constants";
 import type { LeadDetail } from "@/modules/leads/queries";
+import { formatClock } from "@/modules/recordings/validation";
 import { ROLE_LABELS, type Role } from "@/server/auth/types";
 import { formatDateTime } from "../format";
 import { PanelCard } from "./detail-panels";
@@ -130,8 +131,12 @@ function describeLead(a: TimelineActivity, { people }: Context): TimelineDescrip
       if (d.startsAt) details.push({ label: "When", value: formatDateTime(String(d.startsAt)) });
       return { title: verb, tag: "Meeting", details };
     }
-    case "file_uploaded":
-      return { title: `${d.kind === "document" ? "Document" : "Call recording"} uploaded`, tag: "File", details: a.body ? [{ label: "File", value: a.body }] : [] };
+    case "file_uploaded": {
+      const details: TimelineDetail[] = a.body ? [{ label: "File", value: a.body }] : [];
+      if (d.kind === "call_recording" && "durationSec" in d) details.push({ label: "Call length", value: d.durationSec === null ? "unknown (couldn't be read from the file)" : formatClock(Number(d.durationSec)) });
+      const length = d.kind === "call_recording" && typeof d.durationSec === "number" ? ` · ${formatClock(d.durationSec)}` : "";
+      return { title: `${d.kind === "document" ? "Document" : "Call recording"} uploaded${length}`, tag: d.kind === "document" ? "File" : "Call", details };
+    }
     case "file_deleted":
       return { title: `${d.kind === "document" ? "Document" : "Call recording"} deleted`, tag: "File", details: a.body ? [{ label: "File", value: a.body }] : [] };
     case "client_linked":
