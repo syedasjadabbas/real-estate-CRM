@@ -9,7 +9,8 @@ import { resolveRange } from "@/modules/performance/range";
 import { currentTargets, TARGET_METRICS } from "@/modules/targets/service";
 import type { Actor } from "@/server/auth/types";
 import type { Database } from "@/server/db";
-import { bookings, employeeProfiles, files, followUps, leadActivities, leads, teamMembers, teams, users } from "@/server/db/schema";
+import { bookings, employeeNotes, employeeProfiles, files, followUps, leadActivities, leadSources, leads, lostReasons, meetings, teamMembers, teams, users } from "@/server/db/schema";
+import { addDays } from "@/modules/teams/dates";
 import { forbidden, notFound } from "@/server/errors";
 import { z } from "zod";
 
@@ -100,7 +101,7 @@ export async function employeeProfile(db: Database, actor: Actor, userId: string
     .innerJoin(leads, eq(leads.id, files.leadId))
     .where(and(eq(files.uploadedById, userId), eq(files.kind, "call_recording"), isNull(files.deletedAt), gte(files.createdAt, range.window.start), lt(files.createdAt, range.window.end)))
     .orderBy(desc(files.createdAt))
-    .limit(10);
+    .limit(200);
 
   const activity = await db
     .select({ id: leadActivities.id, type: leadActivities.type, data: leadActivities.data, createdAt: leadActivities.createdAt, leadId: leads.id, leadName: leads.name, leadCode: leads.code })
@@ -108,13 +109,103 @@ export async function employeeProfile(db: Database, actor: Actor, userId: string
     .innerJoin(leads, eq(leads.id, leadActivities.leadId))
     .where(and(eq(leadActivities.actorId, userId), isNull(leads.deletedAt)))
     .orderBy(desc(leadActivities.createdAt))
-    .limit(15);
+    .limit(200);
 
   const targetRows = await currentTargets(db, userId, now);
   const targetLines = (p: "daily" | "weekly" | "monthly") => {
     const t = targetRows.find((x) => x.period === p);
     return TARGET_METRICS.map((m) => ({ label: m.label, actual: t?.achieved[m.key] ?? 0, target: t?.goals?.[m.key] || null, met: Boolean(t?.met.includes(m.key)) }));
   };
+
+  // ── Extras (owner, 16 Nov 2026) ──
+  // The same length of time just before the chosen dates, for ↑ / ↓ on the top cards.
+  const spanDays = Math.round((range.window.end.getTime() - range.window.start.getTime()) / 86_400_000);
+  const prevWindow = { start: new Date(range.window.start.getTime() - spanDays * 86_400_000), end: range.window.start };
+  const [prevMetrics] = await agentMetrics(db, [{ id: person.id, name: person.name }], prevWindow);
+  const [prevBk] = await db
+    .select({ made: sql<number>`count(*)::int` })
+    .from(bookings)
+    .where(and(eq(bookings.agentId, userId), ne(bookings.stage, "cancelled"), gte(bookings.createdAt, prevWindow.start), lt(bookings.createdAt, prevWindow.end)));
+
+  // Team comparison: the active agents of the person's first team, same dates.
+  const team = teamRows.find((t) => t.isActive) ?? null;
+  let teamCompare: { team: string; size: number; avg: { calls: number; meetings: number; winPct: number | null; booked: number }; rank: number } | null = null;
+  if (team) {
+    const mates = await db
+      .select({ id: users.id, name: users.name })
+      .from(teamMembers)
+      .innerJoin(users, eq(users.id, teamMembers.userId))
+      .where(and(eq(teamMembers.teamId, team.id), eq(users.role, "agent"), eq(users.status, "active")));
+    if (mates.length > 1 && mates.some((x) => x.id === userId)) {
+      const all = await agentMetrics(db, mates, range.window);
+      const avg = (k: "calls" | "meetings" | "booked") => Math.round((all.reduce((n, r) => n + r[k], 0) / all.length) * 10) / 10;
+      const decided = all.reduce((n, r) => n + r.booked + r.lost, 0);
+      const ranked = [...all].sort((x, y) => y.booked - x.booked || y.meetings - x.meetings || y.calls - x.calls);
+      teamCompare = {
+        team: team.name,
+        size: all.length,
+        avg: { calls: avg("calls"), meetings: avg("meetings"), booked: avg("booked"), winPct: decided ? Math.round((all.reduce((n, r) => n + r.booked, 0) / decided) * 100) : null },
+        rank: ranked.findIndex((r) => r.userId === userId) + 1,
+      };
+    }
+  }
+
+  const overdueList = await db
+    .select({ id: followUps.id, dueAt: followUps.dueAt, note: followUps.note, leadId: leads.id, leadName: leads.name, leadCode: leads.code })
+    .from(followUps)
+    .innerJoin(leads, eq(leads.id, followUps.leadId))
+    .where(and(eq(followUps.assigneeId, userId), eq(followUps.status, "pending"), lt(followUps.dueAt, now), isNull(leads.deletedAt)))
+    .orderBy(asc(followUps.dueAt))
+    .limit(200);
+
+  const lostByReason = await db
+    .select({ reason: lostReasons.name, n: sql<number>`count(*)::int` })
+    .from(leads)
+    .leftJoin(lostReasons, eq(lostReasons.id, leads.lostReasonId))
+    .where(and(eq(leads.ownerId, userId), eq(leads.stage, "lost_lead"), isNull(leads.deletedAt), gte(leads.stageChangedAt, range.window.start), lt(leads.stageChangedAt, range.window.end)))
+    .groupBy(lostReasons.name)
+    .orderBy(desc(sql`count(*)`));
+
+  const bySource = await db
+    .select({
+      source: leadSources.name,
+      leads: sql<number>`count(*)::int`,
+      won: sql<number>`count(*) filter (where ${leads.stage} = 'booked')::int`,
+      lost: sql<number>`count(*) filter (where ${leads.stage} = 'lost_lead')::int`,
+    })
+    .from(leads)
+    .innerJoin(leadSources, eq(leadSources.id, leads.sourceId))
+    .where(and(eq(leads.ownerId, userId), isNull(leads.deletedAt), gte(leads.createdAt, range.window.start), lt(leads.createdAt, range.window.end)))
+    .groupBy(leadSources.name)
+    .orderBy(desc(sql`count(*)`));
+
+  // Calls and completed meetings per day (at most the last 31 days of the range).
+  const chartFrom = spanDays > 31 ? addDays(range.to, -30) : range.from;
+  const chartStart = new Date(`${chartFrom}T00:00:00+05:00`);
+  const day = (col: unknown) => sql<string>`to_char((${col} at time zone 'Asia/Karachi')::date, 'YYYY-MM-DD')`;
+  const [callDays, meetingDays] = await Promise.all([
+    db
+      .select({ d: day(files.createdAt), n: sql<number>`count(*)::int` })
+      .from(files)
+      .where(and(eq(files.uploadedById, userId), eq(files.kind, "call_recording"), isNull(files.deletedAt), gte(files.createdAt, chartStart), lt(files.createdAt, range.window.end)))
+      .groupBy(sql`1`),
+    db
+      .select({ d: day(meetings.startsAt), n: sql<number>`count(*)::int` })
+      .from(meetings)
+      .where(and(eq(meetings.organizerId, userId), eq(meetings.status, "completed"), gte(meetings.startsAt, chartStart), lt(meetings.startsAt, range.window.end)))
+      .groupBy(sql`1`),
+  ]);
+  const daily: { date: string; calls: number; meetings: number }[] = [];
+  for (let d = chartFrom; d <= range.to; d = addDays(d, 1)) daily.push({ date: d, calls: callDays.find((x) => x.d === d)?.n ?? 0, meetings: meetingDays.find((x) => x.d === d)?.n ?? 0 });
+
+  const author = users;
+  const notes = await db
+    .select({ id: employeeNotes.id, body: employeeNotes.body, createdAt: employeeNotes.createdAt, authorId: employeeNotes.authorId, authorName: author.name })
+    .from(employeeNotes)
+    .leftJoin(author, eq(author.id, employeeNotes.authorId))
+    .where(eq(employeeNotes.userId, userId))
+    .orderBy(desc(employeeNotes.createdAt))
+    .limit(30);
 
   const attendance = await myAttendance(db, { ...actor, id: userId } as Actor, now);
   const leave = await leaveBalance(db, userId, Number(today.slice(0, 4)));
@@ -136,6 +227,14 @@ export async function employeeProfile(db: Database, actor: Actor, userId: string
     targets: { today: targetLines("daily"), week: targetLines("weekly"), month: targetLines("monthly") },
     attendance: { status: attendance.status, checkIn: attendance.checkIn, checkOut: attendance.checkOut, month: attendance.month },
     leave,
+    previous: { from: addDays(range.from, -spanDays), to: addDays(range.from, -1), calls: prevMetrics.calls, callMin: prevMetrics.callMin, meetings: prevMetrics.meetings, bookingsMade: prevBk.made, winPct: prevMetrics.winPct },
+    teamCompare,
+    overdueList,
+    asOf: now,
+    lostByReason: lostByReason.map((r) => ({ reason: r.reason ?? "No reason given", count: r.n })),
+    bySource,
+    daily,
+    notes,
   };
 }
 

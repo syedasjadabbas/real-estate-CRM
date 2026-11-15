@@ -1,4 +1,4 @@
-import { CheckCircle2, UserRound } from "lucide-react";
+import { CheckCircle2, Download, UserRound } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -9,6 +9,8 @@ import { buttonClasses } from "@/components/ui/button";
 import { RestrictedState } from "@/components/ui/empty-state";
 import { MiniStat } from "@/components/ui/stat";
 import { STATUS_TONES } from "@/features/attendance/components/check-in-card";
+import { FilterList } from "@/features/people/components/filter-list";
+import { CoachingNotes, PrintButton } from "@/features/people/components/profile-client";
 import { formatListedOn, formatPrice } from "@/features/inventory/format";
 import { PanelCard } from "@/features/leads/components/detail-panels";
 import { formatDateTime } from "@/features/leads/format";
@@ -45,13 +47,70 @@ const ACTIVITY_LABELS: Record<string, string> = {
   verification: "Verification",
 };
 
-function Section({ title, children, className }: { title: string; children: ReactNode; className?: string }) {
+/** ↑ / ↓ against the previous period. */
+function Trend({ now, before, suffix = "" }: { now: number; before: number; suffix?: string }) {
+  if (now === before) return <span className="text-[11px] font-bold text-zinc-400">= before</span>;
+  const up = now > before;
   return (
-    <PanelCard title={title} className={className}>
-      {children}
-    </PanelCard>
+    <span className={cn("text-[11px] font-bold", up ? "text-brand" : "text-rose-600")} title={`Previous period: ${before}${suffix}`}>
+      {up ? "↑" : "↓"} from {before}
+      {suffix}
+    </span>
   );
 }
+
+/** Calls and meetings per day, as small bars (at most 31 days). */
+function DailyChart({ days }: { days: { date: string; calls: number; meetings: number }[] }) {
+  const max = Math.max(1, ...days.map((d) => Math.max(d.calls, d.meetings)));
+  return (
+    <div>
+      <div className="flex h-28 items-end gap-0.5" role="img" aria-label="Calls and meetings per day">
+        {days.map((d) => (
+          <div key={d.date} className="flex h-full flex-1 items-end justify-center gap-px" title={`${d.date}: ${d.calls} calls, ${d.meetings} meetings`}>
+            <div className="w-1/2 rounded-t bg-sky-500" style={{ height: `${(d.calls / max) * 100}%`, minHeight: d.calls ? 2 : 0 }} />
+            <div className="w-1/2 rounded-t bg-brand" style={{ height: `${(d.meetings / max) * 100}%`, minHeight: d.meetings ? 2 : 0 }} />
+          </div>
+        ))}
+      </div>
+      <div className="mt-1 flex justify-between text-[10px] text-zinc-500">
+        <span>{days[0]?.date.slice(5)}</span>
+        <span className="flex gap-3">
+          <span className="inline-flex items-center gap-1">
+            <span className="size-2 rounded-sm bg-sky-500" /> Calls
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span className="size-2 rounded-sm bg-brand" /> Meetings
+          </span>
+        </span>
+        <span>{days[days.length - 1]?.date.slice(5)}</span>
+      </div>
+    </div>
+  );
+}
+
+function Section({ title, children, className, id }: { title: string; children: ReactNode; className?: string; id?: string }) {
+  return (
+    <div id={id} className={cn("scroll-mt-20", className)}>
+      <PanelCard title={title} className="h-full">
+        {children}
+      </PanelCard>
+    </div>
+  );
+}
+
+/** Quick links to each part of the long profile (16 Nov 2026). */
+const JUMPS = [
+  ["compare", "Team"],
+  ["pipeline", "Pipeline"],
+  ["follow-ups", "Follow-ups"],
+  ["targets", "Targets"],
+  ["attendance", "Attendance"],
+  ["calls", "Calls"],
+  ["overdue", "Overdue"],
+  ["lost", "Lost & sources"],
+  ["notes", "Notes"],
+  ["activity", "Activity"],
+] as const;
 
 function Row({ label, value, tone }: { label: string; value: ReactNode; tone?: "amber" | "rose" | "brand" }) {
   return (
@@ -115,6 +174,8 @@ export default async function EmployeeProfilePage({ params, searchParams }: Page
 
   return (
     <PageStack>
+      {/* Printing / saving as PDF shows only the profile, not the menu and header (16 Nov 2026). */}
+      <style>{"@media print { aside, header, nav[aria-label], form[method=get] { display: none !important; } body { background: #fff !important; } }"}</style>
       <PageHeader
         title={p.person.name}
         icon={UserRound}
@@ -128,9 +189,17 @@ export default async function EmployeeProfilePage({ params, searchParams }: Page
           </>
         }
         actions={
-          <Link href={`/dashboard/hr/employees/${p.person.id}`} className={buttonClasses({ variant: "secondary", size: "md" })}>
-            HR record
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            {/* The whole record for the chosen dates (15 Nov 2026). */}
+            <a href={`/api/v1/people/${p.person.id}/export?from=${p.range.from}&to=${p.range.to}`} download className={buttonClasses({ variant: "primary", size: "md" })}>
+              <Download aria-hidden="true" className="size-4" />
+              Download record (CSV)
+            </a>
+            <PrintButton />
+            <Link href={`/dashboard/hr/employees/${p.person.id}`} className={buttonClasses({ variant: "secondary", size: "md" })}>
+              HR record
+            </Link>
+          </div>
         }
       />
 
@@ -168,16 +237,64 @@ export default async function EmployeeProfilePage({ params, searchParams }: Page
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <MiniStat label="Calls" value={String(m.calls)} caption={`${m.callsVerified} verified · ${m.callsQualified} qualified`} />
+        <MiniStat label="Calls" value={<>{m.calls} <Trend now={m.calls} before={p.previous.calls} /></>} caption={`${m.callsVerified} verified · ${m.callsQualified} qualified`} />
         <MiniStat label="Call minutes" value={m.callMin === null ? "—" : String(m.callMin)} caption={`${m.callsTimed} of ${m.calls} timed`} />
-        <MiniStat label="Meetings held" value={String(m.meetings)} caption="Completed in range" />
-        <MiniStat label="Bookings" value={String(p.bookings.made)} caption={p.bookings.made ? formatPrice(p.bookings.value) : "Made in range"} />
-        <MiniStat label="Win rate" value={m.winPct === null ? "—" : `${m.winPct}%`} caption={`${m.booked} won · ${m.lost} lost`} />
+        <MiniStat label="Meetings held" value={<>{m.meetings} <Trend now={m.meetings} before={p.previous.meetings} /></>} caption="Completed in range" />
+        <MiniStat label="Bookings" value={<>{p.bookings.made} <Trend now={p.bookings.made} before={p.previous.bookingsMade} /></>} caption={p.bookings.made ? formatPrice(p.bookings.value) : "Made in range"} />
+        <MiniStat label="Win rate" value={<>{m.winPct === null ? "—" : `${m.winPct}%`} {m.winPct !== null && p.previous.winPct !== null ? <Trend now={m.winPct} before={p.previous.winPct} suffix="%" /> : null}</>} caption={`${m.booked} won · ${m.lost} lost`} />
         <MiniStat label="Score" value={p.score ? String(Math.round(p.score.score)) : "—"} caption={p.score?.provisional ? "Provisional" : "Assignment score"} />
       </div>
 
+      <nav aria-label="Profile sections" className="-mx-1 flex gap-1.5 overflow-x-auto px-1 py-1 print:hidden">
+        {JUMPS.map(([id, label]) => (
+          <a key={id} href={`#${id}`} className="shrink-0 rounded-full border border-zinc-200 bg-white px-3 py-1 text-[11px] font-bold text-zinc-700 hover:border-brand hover:text-brand">
+            {label}
+          </a>
+        ))}
+      </nav>
+
+      <p className="-mt-3 text-[11px] text-zinc-500">
+        ↑ / ↓ compare with the same number of days just before: {formatListedOn(p.previous.from)}
+        {p.previous.from !== p.previous.to ? ` – ${formatListedOn(p.previous.to)}` : ""}.
+      </p>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <Section id="compare" title={p.teamCompare ? `Compared with ${p.teamCompare.team}` : "Compared with the team"}>
+          {p.teamCompare ? (
+            <>
+              <p className="mb-2 text-xs font-bold">
+                Rank {p.teamCompare.rank} of {p.teamCompare.size} agents <span className="font-normal text-zinc-500">(by leads won, then meetings, then calls)</span>
+              </p>
+              <div className="grid grid-cols-[1fr_auto_auto] gap-x-6 gap-y-1 text-xs">
+                <span className="text-[10px] font-black tracking-[0.1em] text-zinc-500 uppercase">Figure</span>
+                <span className="text-right text-[10px] font-black tracking-[0.1em] text-zinc-500 uppercase">This agent</span>
+                <span className="text-right text-[10px] font-black tracking-[0.1em] text-zinc-500 uppercase">Team avg</span>
+                {[
+                  ["Calls", m.calls, p.teamCompare.avg.calls],
+                  ["Meetings held", m.meetings, p.teamCompare.avg.meetings],
+                  ["Leads won", m.booked, p.teamCompare.avg.booked],
+                  ["Win rate", m.winPct === null ? "—" : `${m.winPct}%`, p.teamCompare.avg.winPct === null ? "—" : `${p.teamCompare.avg.winPct}%`],
+                ].map(([label, mine, avg]) => (
+                  <div key={String(label)} className="contents">
+                    <span className="border-t border-zinc-100 py-1 text-zinc-600">{label}</span>
+                    <span className="border-t border-zinc-100 py-1 text-right font-black tabular-nums">{mine}</span>
+                    <span className="border-t border-zinc-100 py-1 text-right text-zinc-600 tabular-nums">{avg}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <p className="text-xs text-zinc-500">Not in an active team with other agents.</p>
+          )}
+        </Section>
+
+        <Section title="Daily activity">
+          <DailyChart days={p.daily} />
+        </Section>
+      </div>
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
-        <Section title={`Pipeline now · ${openLeads} open`}>
+        <Section id="pipeline" title={`Pipeline now · ${openLeads} open`}>
           {p.pipeline.map((s) => (
             <Row key={s.stage} label={STAGE_LABELS[s.stage]} value={s.count} />
           ))}
@@ -187,7 +304,7 @@ export default async function EmployeeProfilePage({ params, searchParams }: Page
           </Link>
         </Section>
 
-        <Section title="Follow-ups">
+        <Section id="follow-ups" title="Follow-ups">
           <Row label="Overdue now" value={p.followUps.overdue} tone={p.followUps.overdue ? "rose" : undefined} />
           <Row label="Due later today" value={p.followUps.today} />
           <Row label="Upcoming" value={p.followUps.upcoming} />
@@ -209,7 +326,7 @@ export default async function EmployeeProfilePage({ params, searchParams }: Page
           <Row label="CRM sign-ins" value={m.signIns} />
         </Section>
 
-        <Section title="Targets">
+        <Section id="targets" title="Targets">
           <div className="space-y-3">
             <Targets title="Today" lines={p.targets.today} />
             <Targets title="This week" lines={p.targets.week} />
@@ -217,7 +334,7 @@ export default async function EmployeeProfilePage({ params, searchParams }: Page
           </div>
         </Section>
 
-        <Section title="Attendance and leave">
+        <Section id="attendance" title="Attendance and leave">
           <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
             <StatusTag tone={STATUS_TONES[p.attendance.status]}>{ATTENDANCE_STATUS_LABELS[p.attendance.status]}</StatusTag>
             <span className="text-zinc-600 tabular-nums">
@@ -238,38 +355,107 @@ export default async function EmployeeProfilePage({ params, searchParams }: Page
           <Row label="Taken · pending" value={`${p.leave.granted} · ${p.leave.pending}`} />
         </Section>
 
-        <Section title={`Call recordings in range · ${m.calls}`}>
-          {p.recordings.length === 0 ? (
-            <p className="text-xs text-zinc-500">No recordings in this range.</p>
-          ) : (
-            <ul className="divide-y divide-zinc-100">
-              {p.recordings.map((r) => (
-                <li key={r.id} className="flex items-center justify-between gap-3 py-2 text-xs">
+        <Section id="calls" title={`Call recordings in range · ${m.calls}`}>
+          <FilterList
+            empty="No recordings in this range."
+            tags={["Under 30s", "30s to 1 min", "Over 1 min"]}
+            tagLabel="Any length"
+            items={p.recordings.map((r) => ({
+              id: r.id,
+              text: `${r.leadName} ${r.leadCode}`,
+              tag: r.durationSec === null ? undefined : r.durationSec < 30 ? "Under 30s" : r.durationSec <= 60 ? "30s to 1 min" : "Over 1 min",
+              node: (
+                <div className="flex items-center justify-between gap-3 py-2 text-xs">
                   <Link href={`/dashboard/leads/${r.leadId}`} className="min-w-0 truncate font-semibold text-brand hover:underline">
                     {r.leadName} <span className="font-normal text-zinc-500">· {r.leadCode}</span>
                   </Link>
                   <span className="shrink-0 text-zinc-500 tabular-nums">
                     {r.durationSec === null ? "length unknown" : formatClock(r.durationSec)} · {formatDateTime(r.createdAt)}
                   </span>
-                </li>
-              ))}
-            </ul>
-          )}
-          {m.calls > p.recordings.length ? <p className="mt-2 text-[11px] text-zinc-500">Showing the latest {p.recordings.length}.</p> : null}
+                </div>
+              ),
+            }))}
+          />
+          {m.calls > p.recordings.length ? <p className="mt-1 text-[11px] text-zinc-500">Only the latest {p.recordings.length} can be searched here.</p> : null}
         </Section>
       </div>
 
-      <Section title="Recent activity">
-        {p.activity.length === 0 ? (
-          <p className="text-xs text-zinc-500">No activity recorded yet.</p>
-        ) : (
-          <ul className="divide-y divide-zinc-100">
-            {p.activity.map((a) => {
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <Section id="overdue" title={`Overdue follow-ups · ${p.followUps.overdue}`}>
+          <FilterList
+            empty="Nothing overdue."
+            step={5}
+            tags={["Over a week late", "1 to 7 days late", "Under a day late"]}
+            tagLabel="Any delay"
+            placeholder="Search lead, code or note"
+            items={p.overdueList.map((o) => {
+              const late = (p.asOf.getTime() - o.dueAt.getTime()) / 86_400_000;
+              return {
+                id: o.id,
+                text: `${o.leadName} ${o.leadCode} ${o.note ?? ""}`,
+                tag: late > 7 ? "Over a week late" : late >= 1 ? "1 to 7 days late" : "Under a day late",
+                node: (
+                <div className="py-2 text-xs">
+                  <Link href={`/dashboard/leads/${o.leadId}`} className="font-semibold text-brand hover:underline">
+                    {o.leadName}
+                  </Link>
+                  <span className="text-zinc-500"> · {o.leadCode}</span>
+                  <span className="block text-[11px] text-rose-700">Was due {formatDateTime(o.dueAt)}</span>
+                  {o.note ? <span className="block text-[11px] text-zinc-500">{o.note}</span> : null}
+                </div>
+                ),
+              };
+            })}
+          />
+          {p.followUps.overdue > p.overdueList.length ? <p className="mt-1 text-[11px] text-zinc-500">Only the oldest {p.overdueList.length} can be searched here.</p> : null}
+        </Section>
+
+        <Section id="lost" title="Why leads were lost">
+          {p.lostByReason.length === 0 ? <p className="text-xs text-zinc-500">No leads lost in this range.</p> : p.lostByReason.map((r) => <Row key={r.reason} label={r.reason} value={r.count} />)}
+        </Section>
+
+        <Section title="Lead sources (created in range)">
+          {p.bySource.length === 0 ? (
+            <p className="text-xs text-zinc-500">No leads in this range.</p>
+          ) : (
+            <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-4 gap-y-1 text-xs">
+              {["Source", "Leads", "Won", "Lost"].map((h, i) => (
+                <span key={h} className={cn("text-[10px] font-black tracking-[0.1em] text-zinc-500 uppercase", i > 0 && "text-right")}>
+                  {h}
+                </span>
+              ))}
+              {p.bySource.map((r) => (
+                <div key={r.source} className="contents">
+                  <span className="border-t border-zinc-100 py-1">{r.source}</span>
+                  <span className="border-t border-zinc-100 py-1 text-right tabular-nums">{r.leads}</span>
+                  <span className="border-t border-zinc-100 py-1 text-right font-bold text-brand tabular-nums">{r.won}</span>
+                  <span className="border-t border-zinc-100 py-1 text-right text-zinc-600 tabular-nums">{r.lost}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Section>
+      </div>
+
+      <Section id="notes" title={`Coaching notes · ${p.notes.length}`}>
+        <CoachingNotes userId={p.person.id} notes={p.notes} meId={actor.id} canDeleteAny={actor.role === "super_admin"} canWrite={actor.id !== p.person.id} />
+      </Section>
+
+      <Section id="activity" title="Recent activity">
+        <FilterList
+          empty="No activity recorded yet."
+          tags={[...new Set(p.activity.map((a) => ACTIVITY_LABELS[a.type] ?? a.type))]}
+          tagLabel="All activity"
+          items={p.activity.map((a) => {
               const d = (a.data ?? {}) as Record<string, unknown>;
               const detail =
                 a.type === "stage_change" && d.to ? ` to ${STAGE_LABELS[d.to as keyof typeof STAGE_LABELS] ?? String(d.to)}` : a.type === "file_uploaded" && d.kind === "call_recording" ? " (call recording)" : "";
-              return (
-                <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-xs">
+              return {
+                id: a.id,
+                text: `${a.leadName} ${a.leadCode}`,
+                tag: ACTIVITY_LABELS[a.type] ?? a.type,
+                node: (
+                <div className="flex flex-wrap items-center justify-between gap-2 py-2 text-xs">
                   <span>
                     <span className="font-semibold">{ACTIVITY_LABELS[a.type] ?? a.type}</span>
                     {detail} ·{" "}
@@ -278,11 +464,11 @@ export default async function EmployeeProfilePage({ params, searchParams }: Page
                     </Link>
                   </span>
                   <span className="text-zinc-500 tabular-nums">{formatDateTime(a.createdAt)}</span>
-                </li>
-              );
+                </div>
+                ),
+              };
             })}
-          </ul>
-        )}
+        />
       </Section>
     </PageStack>
   );

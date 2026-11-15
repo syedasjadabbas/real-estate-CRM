@@ -18,7 +18,7 @@ import { cn } from "@/lib/cn";
 import { formatInt } from "@/lib/format";
 import { businessToday } from "@/modules/bookings/today";
 import type { PerformanceSort } from "@/modules/performance/range";
-import { canViewPerformance, performanceContexts, performanceReport, pipelineByAgent } from "@/modules/performance/service";
+import { canViewPerformance, performanceContexts, performanceReport, pipelineByAgent, teamComparison } from "@/modules/performance/service";
 import { LEAD_STAGES, STAGE_LABELS } from "@/modules/leads/constants";
 import { getProjectScope } from "@/server/project-scope";
 import { signinRetentionNote } from "@/modules/security/service";
@@ -71,7 +71,13 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
   const db = getDb();
   const isAgent = actor.role === "agent";
   const today = businessToday();
-  const [report, contexts, retentionNote, scope] = await Promise.all([performanceReport(db, actor, params), performanceContexts(db, actor), signinRetentionNote(db), getProjectScope()]);
+  const [report, contexts, retentionNote, scope, teamRows] = await Promise.all([
+    performanceReport(db, actor, params),
+    performanceContexts(db, actor),
+    signinRetentionNote(db),
+    getProjectScope(),
+    teamComparison(db, actor, params),
+  ]);
   const project = scope.projects.find((p) => p.id === scope.activeProjectId) ?? null;
   // Pipeline by agent: each agent's leads by stage right now, in the project selected in the header.
   const pipeline = project ? await pipelineByAgent(db, report.allRows.map((r) => r.userId), project.id) : null;
@@ -160,6 +166,45 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
         {own ? null : <CallVolume rows={report.charts.callVolume} />}
         {own ? null : <CallsVsMeetings rows={report.charts.callsVsMeetings} />}
       </div>
+
+      {teamRows.length > 0 && !report.team ? (
+        <Panel
+          title="Teams compared"
+          description={`Each active team's agents added together · ${report.range.from} → ${report.range.to}. Click a team to see its agents.`}
+          bodyClassName="space-y-3"
+        >
+          <div className="overflow-auto rounded-xl border border-zinc-200/80">
+            <table className="w-full min-w-max border-collapse text-left text-xs">
+              <thead className="bg-zinc-100">
+                <tr className="border-b border-zinc-200 text-[10px] font-black tracking-[0.05em] text-zinc-600 uppercase">
+                  {["Team", "Agents", "Open leads", "Booked", "Lost", "Win %", "Calls", "Call min", "Qualified calls", "F/U %", "Meetings"].map((h, i) => (
+                    <th key={h} scope="col" className={cn("px-3 py-3.5 whitespace-nowrap", i > 0 && "text-right")}>
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {teamRows.map((t) => (
+                  <tr key={t.teamId} className="border-b border-zinc-100/80 last:border-b-0 hover:bg-zinc-50/60">
+                    <td className="px-3 py-2.5 font-bold whitespace-nowrap">
+                      <Link href={withParams("/dashboard/performance", params, { team: t.teamId, page: null })} className="hover:text-brand hover:underline">
+                        {t.name}
+                      </Link>
+                    </td>
+                    {[t.agents, t.open, t.booked, t.lost, pctText(t.winPct), t.calls, t.callMin, t.callsQualified, pctText(t.fuPct), t.meetings].map((v, i) => (
+                      <td key={i} className={cn("px-3 py-2.5 text-right tabular-nums", v === null && "text-zinc-400")}>
+                        {v === null ? "—" : typeof v === "number" ? formatInt(v) : v}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-[11px] text-zinc-500">An agent who belongs to two teams is counted in both. Admins who own leads but are in no team are not in any row.</p>
+        </Panel>
+      ) : null}
 
       <Panel
         title={own ? "Your figures & CRM sign-in activity" : "Performance & CRM sign-in activity"}

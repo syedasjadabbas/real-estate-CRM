@@ -39,9 +39,10 @@ describe("target periods (observed: monthly = 1st, weekly = Monday)", () => {
 });
 
 describe("locks and dates", () => {
-  it("daily reports are editable on their own date only", () => {
+  it("daily reports are editable on their date and the day after (15 Nov 2026)", () => {
     expect(dailyReportEditable("2026-10-29", before11)).toBe(true);
-    expect(dailyReportEditable("2026-10-28", before11)).toBe(false);
+    expect(dailyReportEditable("2026-10-28", before11)).toBe(true);
+    expect(dailyReportEditable("2026-10-27", before11)).toBe(false);
     expect(dailyReportEditable("2026-10-30", before11)).toBe(false);
   });
   it("roster: future days editable, today until 11:00, past days locked", () => {

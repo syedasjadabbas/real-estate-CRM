@@ -9,8 +9,10 @@ export function businessHour(now = new Date()) {
 }
 
 /** FR-121: a team's daily report is editable on its own date only (assumption T-A4). */
+/** The report date itself, or the next day for a late entry (owner, 15 Nov 2026). */
 export function dailyReportEditable(date: string, now = new Date()) {
-  return date === businessToday(now);
+  const today = businessToday(now);
+  return date === today || date === addDays(today, -1);
 }
 
 /** Observed: future days are editable; today until 11:00; earlier days are view-only (T-A6). */

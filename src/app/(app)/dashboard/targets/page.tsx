@@ -10,6 +10,7 @@ import { findNavItem } from "@/config/navigation";
 import { Pagination } from "@/features/leads/components/pagination";
 import { flattenParams } from "@/features/leads/url";
 import { TargetEditButton } from "@/features/targets/components/target-edit";
+import { CardFilter } from "@/features/leave/components/card-filter";
 import { DateParam, SegmentParam } from "@/features/teams/components/param-controls";
 import { formatInt } from "@/lib/format";
 import { TARGET_PERIODS, TARGET_PERIOD_LABELS } from "@/modules/targets/period";
@@ -57,21 +58,35 @@ export default async function TargetsPage({ searchParams }: PageProps<"/dashboar
   if (!canViewTargets(actor)) return <RestrictedState />;
   const params = flattenParams(await searchParams);
   const grid = await listTargets(getDb(), actor, params);
-  const query = new URLSearchParams({ period: grid.period, anchor: grid.anchor }).toString();
+  const query = new URLSearchParams({ period: grid.period, anchor: grid.anchor, ...(grid.periodEnd ? { to: grid.periodEnd } : {}), ...(grid.q ? { q: grid.q } : {}), ...(grid.team ? { team: grid.team } : {}) }).toString();
+  const custom = grid.period === "custom";
 
   return (
     <PageStack>
-      <PageHeader title="Targets" description="Goals set for your user for the selected period (daily / weekly / monthly)." icon={item.icon} />
+      <PageHeader title="Targets" description="Goals set for the selected period: daily, weekly, monthly, or any custom dates (e.g. a campaign)." icon={item.icon} />
       <div className="rounded-2xl border border-zinc-200/80 bg-white p-5 shadow-hairline">
-        <div className="grid grid-cols-1 items-end gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <SegmentParam params={params} name="period" label="Period" value={grid.period} options={TARGET_PERIODS.map((p) => ({ value: p, label: TARGET_PERIOD_LABELS[p] }))} />
-          <DateParam params={params} name="anchor" label="Anchor date" value={grid.anchor} />
-          <div>
-            <p className="mb-1.5 text-[10px] font-black tracking-[0.1em] text-zinc-500 uppercase">Period start</p>
-            <p className="flex h-10 items-center text-sm font-bold tabular-nums">{grid.periodStart}</p>
+        {/* The period switch takes the width it needs, so four options never spill into the date box. */}
+        <div className="grid grid-cols-1 items-end gap-4 sm:grid-cols-2 xl:grid-cols-[max-content_minmax(0,1fr)_minmax(0,1fr)_auto]">
+          <div className="min-w-0 overflow-x-auto sm:col-span-2 xl:col-span-1">
+            <SegmentParam params={params} name="period" label="Period" value={grid.period} options={TARGET_PERIODS.map((p) => ({ value: p, label: p === "custom" ? "Custom" : TARGET_PERIOD_LABELS[p] }))} />
           </div>
+          {custom ? (
+            <>
+              {/* Custom dates (owner, 15 Nov 2026): any From–To range, at most a year. */}
+              <DateParam params={params} name="anchor" label="From" value={grid.periodStart} />
+              <DateParam params={params} name="to" label="To" value={grid.periodEnd ?? grid.periodStart} />
+            </>
+          ) : (
+            <>
+              <DateParam params={params} name="anchor" label="Anchor date" value={grid.anchor} />
+              <div>
+                <p className="mb-1.5 text-[10px] font-black tracking-[0.1em] text-zinc-500 uppercase">Period start</p>
+                <p className="flex h-10 items-center text-sm font-bold tabular-nums">{grid.periodStart}</p>
+              </div>
+            </>
+          )}
           <div>
-            {params.period || params.anchor ? (
+            {params.period || params.anchor || params.to ? (
               <Link href="/dashboard/targets" className={buttonClasses({ variant: "secondary", size: "lg", className: "h-10 px-4 text-xs" })}>
                 Clear filters
               </Link>
@@ -85,7 +100,7 @@ export default async function TargetsPage({ searchParams }: PageProps<"/dashboar
           <div>
             <h2 className="text-sm leading-5 font-black">Agent targets</h2>
             <p className="text-[11px] font-semibold tracking-[0.05em] text-zinc-500 uppercase">
-              {TARGET_PERIOD_LABELS[grid.period]} · {grid.periodStart}
+              {TARGET_PERIOD_LABELS[grid.period]} · {custom && grid.periodEnd ? `${grid.periodStart} → ${grid.periodEnd}` : grid.periodStart}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -98,16 +113,28 @@ export default async function TargetsPage({ searchParams }: PageProps<"/dashboar
             </a>
           </div>
         </div>
+        {grid.teamOptions.length || grid.q ? (
+          // Find one agent among many (15 Nov 2026): name search and team filter.
+          <div className="border-b border-zinc-100 px-4 pt-3">
+            <CardFilter
+              path="/dashboard/targets"
+              params={params}
+              label="Find agents"
+              search={{ name: "q", placeholder: "Agent name" }}
+              selects={grid.teamOptions.length ? [{ name: "team", label: "Team", all: "All teams", options: grid.teamOptions.map((t) => ({ value: t.id, label: t.name })) }] : []}
+            />
+          </div>
+        ) : null}
         {grid.rows.length === 0 ? (
           <div className="p-4">
-            <EmptyState>No agents in your scope.</EmptyState>
+            <EmptyState>{grid.q || grid.team ? "No agents match this search." : "No agents in your scope."}</EmptyState>
           </div>
         ) : (
           <div className="max-h-[540px] overflow-auto">
             <table className="w-full min-w-max border-collapse text-left text-xs">
               <thead className="sticky top-0 z-10 bg-zinc-100">
                 <tr className="border-b border-zinc-200 text-[10px] font-black tracking-[0.05em] text-zinc-600 uppercase">
-                  {["Agent", "Calls", "Meetings", "Sold sqft", "Actions"].map((h) => (
+                  {["Agent", "Calls", "Meetings", "Sold sqft", "Custom goals", "Actions"].map((h) => (
                     <th key={h} scope="col" className="px-3 py-4 whitespace-nowrap">
                       {h}
                     </th>
@@ -128,7 +155,21 @@ export default async function TargetsPage({ searchParams }: PageProps<"/dashboar
                       <Cell achieved={r.achieved.soldSqft} target={r.target?.soldSqft ?? null} pct={r.percent?.soldSqft ?? null} />
                     </td>
                     <td className="px-3 py-3">
-                      {r.canEdit ? <TargetEditButton key={`${r.userId}-${grid.period}-${grid.periodStart}`} userId={r.userId} name={r.name} period={grid.period} periodStart={grid.periodStart} current={r.target} /> : "—"}
+                      {r.custom.length === 0 ? (
+                        <span className="text-zinc-400">—</span>
+                      ) : (
+                        <ul className="space-y-1.5">
+                          {r.custom.map((g) => (
+                            <li key={g.name} className="min-w-[140px]">
+                              <Cell achieved={g.achieved} target={g.goal} pct={Math.floor((g.achieved / g.goal) * 100)} unavailable={null} />
+                              <p className="text-[10px] font-semibold text-zinc-500">{g.name}</p>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </td>
+                    <td className="px-3 py-3">
+                      {r.canEdit ? <TargetEditButton key={`${r.userId}-${grid.period}-${grid.periodStart}-${grid.periodEnd ?? ""}`} userId={r.userId} name={r.name} period={grid.period} periodStart={grid.periodStart} periodEnd={grid.periodEnd} current={r.target} custom={r.custom} /> : "—"}
                     </td>
                   </tr>
                 ))}

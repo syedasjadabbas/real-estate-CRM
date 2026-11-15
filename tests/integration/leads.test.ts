@@ -190,7 +190,9 @@ describe.skipIf(!hasTestDb)("Leads module (PostgreSQL integration)", () => {
       expect(await errorCode(updateLead(db, f.actors.agent2, a1.leadId, { name: "Hijacked" }))).toBe("NOT_FOUND");
       expect(await errorCode(changeStage(db, f.actors.agent2, a1.leadId, { stage: "contacted" }))).toBe("NOT_FOUND");
       expect(await errorCode(assignLead(db, f.actors.agent1, a1.leadId, { ownerId: f.actors.agent2.id }))).toBe("FORBIDDEN");
-      expect(await errorCode(addReview(db, f.actors.agent1, a1.leadId, { body: "x" }))).toBe("FORBIDDEN");
+      expect(await errorCode(addReview(db, f.actors.agent2, a1.leadId, { body: "x" }))).toBe("NOT_FOUND");
+      // Agents add notes / reviews on their own leads (16 Nov 2026).
+      expect(await errorCode(addReview(db, f.actors.agent1, a1.leadId, { body: "Serious buyer, budget 2 crore" }))).toBe("ok");
     });
 
     it("lets a manager reassign within the team but not outside it", async () => {

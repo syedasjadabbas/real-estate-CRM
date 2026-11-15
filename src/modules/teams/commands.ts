@@ -155,7 +155,7 @@ export async function saveDailyReport(db: Database, actor: Actor, teamId: string
   return db.transaction(async (tx) => {
     const team = await loadTeam(tx, teamId);
     if (!canOperateTeam(actor, team.id)) throw forbidden();
-    if (!dailyReportEditable(date, now)) throw new AppError("BUSINESS_RULE", "Daily reports can only be entered or changed on the report date.");
+    if (!dailyReportEditable(date, now)) throw new AppError("BUSINESS_RULE", "A daily report can be entered or changed on its date and the day after.");
     const agents = await teamAgentIds(tx, team.id);
     const unknown = lines.find((l) => !agents.includes(l.agentId));
     if (unknown) throw fieldError("lines", "Every line must be for an agent in this team");

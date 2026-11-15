@@ -40,7 +40,13 @@ export type InsightTotals = {
 export type MeetingFormat = { id: string; label: string; count: number; color: "sky" | "orange" };
 
 export type TargetLine = { label: string; actual: number; target: number | null; met?: boolean };
-export type TargetPeriods = { today: TargetLine[]; week: TargetLine[]; month: TargetLine[] };
+export type TargetPeriods = {
+  today: TargetLine[];
+  week: TargetLine[];
+  month: TargetLine[];
+  /** Custom-period targets running today, e.g. a campaign (15 Nov 2026). */
+  custom?: { start: string; end: string; lines: TargetLine[] }[];
+};
 
 export type AgingRow = {
   age: string;

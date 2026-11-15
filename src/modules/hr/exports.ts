@@ -3,6 +3,7 @@ import { ATTENDANCE_STATUS_LABELS, formatMinutes } from "@/modules/attendance/ru
 import { dailySheet, monthlySummary, personAttendance } from "@/modules/attendance/service";
 import { businessToday } from "@/modules/bookings/today";
 import { listEmployees } from "@/modules/employees/service";
+import { filterBalances } from "@/modules/leave/card-filters";
 import { LEAVE_STATUS_LABELS, LEAVE_TYPE_LABELS } from "@/modules/leave/rules";
 import { leaveBalances, leaveDecisionHistory, leaveOverview } from "@/modules/leave/service";
 import { ROLE_LABELS, type Actor, type Role } from "@/server/auth/types";
@@ -66,7 +67,7 @@ export async function hrExport(db: Database, actor: Actor, rawKind: unknown, que
     } else {
       const data = await leaveBalances(db, actor, year);
       header = ["Employee", "Role", "Year", "Allowance", "Taken", "Pending", "Remaining", "Medical taken"];
-      rows = data.rows.map((r) => [r.name, role(r.role), r.year, r.allowance, r.granted, r.pending, r.remaining, r.medical]);
+      rows = filterBalances(data.rows, query).map((r) => [r.name, role(r.role), r.year, r.allowance, r.granted, r.pending, r.remaining, r.medical]);
       filename = `leave-balances-${year}.csv`;
     }
   } else if (kind === "attendance-month") {

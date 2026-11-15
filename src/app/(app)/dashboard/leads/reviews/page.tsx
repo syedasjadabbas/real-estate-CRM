@@ -9,6 +9,7 @@ import { formatDateTime } from "@/features/leads/format";
 import { Pagination } from "@/features/leads/components/pagination";
 import { flattenParams } from "@/features/leads/url";
 import { reviewsFeed } from "@/modules/leads/queries";
+import { ROLE_LABELS } from "@/server/auth/types";
 
 export const metadata: Metadata = { title: "Lead reviews" };
 
@@ -20,12 +21,12 @@ export default function ReviewsPage({ searchParams }: PageProps<"/dashboard/lead
       <section className="space-y-6" aria-label="Reviews">
         <PageHeader
           as="h2"
-          title="Reviews"
-          description={actor.role === "agent" ? "Reviews on leads assigned to you." : "Manager reviews on leads in your scope."}
+          title="Notes / reviews"
+          description={actor.role === "agent" ? "Notes and reviews on leads assigned to you, yours and your Admins'." : "Notes and reviews written by agents and Admins on leads in your scope, newest first."}
         />
         <ScopeNotice actor={actor} />
         {reviews.length === 0 ? (
-          <EmptyState>No reviews found. Manager reviews for leads in this scope will appear here.</EmptyState>
+          <EmptyState>No notes or reviews yet. Notes and reviews added on a lead&apos;s page appear here.</EmptyState>
         ) : (
           <div className="space-y-3">
             {reviews.map((r) => (
@@ -38,7 +39,7 @@ export default function ReviewsPage({ searchParams }: PageProps<"/dashboard/lead
                 </div>
                 <p className="mt-2 text-sm whitespace-pre-line text-zinc-800">{r.body}</p>
                 <p className="mt-2 text-[11px] text-zinc-500">
-                  {r.reviewerName} · {formatDateTime(r.createdAt)}
+                  {r.reviewerName} ({ROLE_LABELS[r.reviewerRole]}) · {formatDateTime(r.createdAt)}
                 </p>
               </Card>
             ))}

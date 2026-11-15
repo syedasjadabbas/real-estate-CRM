@@ -185,7 +185,11 @@ export async function dashboardData(db: Database, actor: Actor, projectId: strin
   const myTargets = actor.role === "agent" ? await currentTargets(db, actor.id, now) : null;
   const targetLines = (p: "daily" | "weekly" | "monthly") => {
     const t = myTargets?.find((x) => x.period === p);
-    return TARGET_METRICS.map((m) => ({ label: m.label, actual: t?.achieved[m.key] ?? 0, target: t?.goals?.[m.key] || null, met: Boolean(t?.met.includes(m.key)) }));
+    return [
+      ...TARGET_METRICS.map((m) => ({ label: m.label, actual: t?.achieved[m.key] ?? 0, target: t?.goals?.[m.key] || null, met: Boolean(t?.met.includes(m.key)) })),
+      // Custom goals, progress entered by an Admin (15 Nov 2026).
+      ...(t?.custom ?? []).map((g) => ({ label: g.name, actual: g.achieved, target: g.goal, met: g.met })),
+    ];
   };
   const scoredTeams = ownScore ? [] : await teamScores(db, actor, now);
   // Team panels (filled 15 Nov 2026); an agent's dashboard hides them, so they aren't computed.
@@ -231,7 +235,23 @@ export async function dashboardData(db: Database, actor: Actor, projectId: strin
     teamOutput: panels?.output ?? [],
     meetingMix: panels?.mixes["30d"] ?? [],
     meetingMixByRange: panels?.mixes,
-    targets: myTargets ? { today: targetLines("daily"), week: targetLines("weekly"), month: targetLines("monthly") } : null,
+    targets: myTargets
+      ? {
+          today: targetLines("daily"),
+          week: targetLines("weekly"),
+          month: targetLines("monthly"),
+          custom: myTargets
+            .filter((t) => t.period === "custom" && t.goals && t.end)
+            .map((t) => ({
+              start: t.start,
+              end: t.end!,
+              lines: [
+                ...TARGET_METRICS.map((m) => ({ label: m.label, actual: t.achieved[m.key], target: t.goals![m.key] || null, met: t.met.includes(m.key) })),
+                ...t.custom.map((g) => ({ label: g.name, actual: g.achieved, target: g.goal, met: g.met })),
+              ],
+            })),
+        }
+      : null,
     pipelineHealth: { stale: health.stale, noMeeting: health.noMeeting, meetingsDone: meetingsDone.n, rows: panels?.aging ?? [] },
     leadSources: sources,
     inboundChannels: channels.map((c) => ({ id: c.channel, label: INBOUND_LABELS[c.channel], count: c.count })),

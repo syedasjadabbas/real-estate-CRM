@@ -20,14 +20,15 @@ import {
   markLostAction,
   updateLeadAction,
 } from "../actions";
+import { ROLE_LABELS } from "@/server/auth/types";
 import { formatDateTime } from "../format";
 import { ApprovalActions } from "./approval-actions";
 import { FollowUpForm, textareaClass } from "./follow-up-dialog";
 import { LeadFields, selectClass, type LeadFormValues } from "./lead-fields";
 
-export function PanelCard({ title, children, className }: { title: string; children: ReactNode; className?: string }) {
+export function PanelCard({ title, children, className, id }: { title: string; children: ReactNode; className?: string; id?: string }) {
   return (
-    <Card className={cn("overflow-hidden", className)}>
+    <Card id={id} className={cn("overflow-hidden", className)}>
       <h3 className="border-b border-zinc-100 px-4 py-3.5 text-sm leading-5 font-black">{title}</h3>
       <div className="p-4">{children}</div>
     </Card>
@@ -334,23 +335,23 @@ export function ReviewsPanel({ detail }: { detail: LeadDetail }) {
   const [pending, startTransition] = useTransition();
   if (!detail.permissions.review && detail.reviews.length === 0) return null;
   return (
-    <PanelCard title="Manager reviews">
+    <PanelCard title="Notes / reviews">
       <div className="space-y-3">
         {detail.reviews.length === 0 ? <p className="text-xs text-zinc-500">No reviews yet.</p> : null}
         {detail.reviews.map((r) => (
           <div key={r.id} className="rounded-xl border border-zinc-200/80 px-3 py-2 text-xs shadow-hairline">
             <p className="whitespace-pre-line text-zinc-800">{r.body}</p>
             <p className="mt-1 text-[11px] text-zinc-500">
-              {r.reviewerName} · {formatDateTime(r.createdAt)}
+              {r.reviewerName} ({ROLE_LABELS[r.reviewerRole]}) · {formatDateTime(r.createdAt)}
             </p>
           </div>
         ))}
         {detail.permissions.review ? (
           <div className="space-y-2 border-t border-zinc-100 pt-3">
             <label className="sr-only" htmlFor="new-review">
-              Review
+              Note or review
             </label>
-            <textarea id="new-review" rows={2} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Feedback for the agent…" className={textareaClass} disabled={pending} />
+            <textarea id="new-review" rows={2} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Interest, budget, next step, or feedback…" className={textareaClass} disabled={pending} />
             <Button
               variant="secondary"
               size="lg"
@@ -360,12 +361,12 @@ export function ReviewsPanel({ detail }: { detail: LeadDetail }) {
                   const result = await addReviewAction(detail.lead.id, body);
                   if (result.ok) {
                     setBody("");
-                    setMsg({ text: "Review added.", ok: true });
+                    setMsg({ text: "Saved.", ok: true });
                   } else setMsg({ text: result.message, ok: false });
                 })
               }
             >
-              Add review
+              Add note / review
             </Button>
             <Status message={msg?.text ?? null} ok={msg?.ok} />
           </div>

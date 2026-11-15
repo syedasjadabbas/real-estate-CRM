@@ -16,6 +16,7 @@ import { ROLE_LABELS } from "@/server/auth/types";
 import type { listTeams } from "@/modules/teams/queries";
 import type { TeamSort } from "@/modules/teams/validation";
 import { createTeamAction, setTeamLeadAction, setTeamMembersAction, updateTeamAction } from "../actions";
+import { CardFilter } from "@/features/leave/components/card-filter";
 
 type Person = { id: string; name: string; role: string };
 type Detail = {
@@ -36,13 +37,13 @@ function Msg({ msg }: { msg: { text: string; ok: boolean } | null }) {
 const HISTORY: Record<string, string> = { "team.create": "Team created", "team.update": "Team details changed", "team.members": "Members changed", "team.lead": "Team Lead changed" };
 
 /** Team setup form (admins): name, manager, active. Used for "New team" and for editing. */
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 function TeamForm({ team, managers, onDone }: { team?: Detail["team"]; managers: Person[]; onDone?: () => void }) {
   const [name, setName] = useState(team?.name ?? "");
   const [managerId, setManagerId] = useState(team?.managerId ?? "");
   const [isActive, setIsActive] = useState(team?.isActive ?? true);
-  const [weekendDays, setWeekendDays] = useState<number[]>(team?.weekendDays ?? []);
+  // Kept as it was: weekly days off are now the one HR setting (15 Nov 2026).
+  const weekendDays = team?.weekendDays ?? [];
   const [region, setRegion] = useState(team?.region ?? "");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
@@ -92,25 +93,8 @@ function TeamForm({ team, managers, onDone }: { team?: Detail["team"]; managers:
       <Field label="Holiday region" error={errors.region} hint="Members see company holidays plus this region's holidays in My Workplace. Leave blank for none.">
         {(id, d) => <Input id={id} aria-describedby={d} invalid={Boolean(errors.region)} value={region} maxLength={80} disabled={pending} onChange={(e) => setRegion(e.target.value)} />}
       </Field>
-      <fieldset>
-        <legend className="text-xs font-semibold text-zinc-800">Weekend days</legend>
-        <p className="text-[11px] text-zinc-500">Shown on this team&apos;s duty roster. Leave days are counted in calendar days, so weekends don&apos;t change leave.</p>
-        <div className="mt-1.5 flex flex-wrap gap-3">
-          {WEEKDAYS.map((label, day) => (
-            <label key={label} className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-800">
-              <input
-                type="checkbox"
-                className="size-4 accent-[#107c41]"
-                checked={weekendDays.includes(day)}
-                disabled={pending}
-                onChange={(e) => setWeekendDays((d) => (e.target.checked ? [...d, day] : d.filter((x) => x !== day)))}
-              />
-              {label}
-            </label>
-          ))}
-        </div>
-        {errors.weekendDays ? <p className="mt-1 text-xs font-semibold text-rose-600">{errors.weekendDays}</p> : null}
-      </fieldset>
+      {/* Weekly days off are one company setting in HR → Attendance, used by the roster and attendance (15 Nov 2026). */}
+      <p className="text-[11px] text-zinc-500">Weekly days off are set once for everyone in HR → Attendance → Office hours and days off.</p>
       <label className="flex items-start gap-2 text-xs font-semibold text-zinc-800">
         <input type="checkbox" className="mt-0.5 size-4 accent-[#107c41]" checked={isActive} disabled={pending} onChange={(e) => setIsActive(e.target.checked)} />
         <span>
@@ -175,14 +159,32 @@ function MembersEditor({ teamId, members, candidates }: { teamId: string; member
   const [selected, setSelected] = useState<string[]>(members.map((m) => m.id));
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [pending, startTransition] = useTransition();
+  const [query, setQuery] = useState("");
+  const [onlySelected, setOnlySelected] = useState(false);
   // Former members who are no longer active agents / managers stay listed so they can be removed.
-  const options = [...candidates, ...members.filter((m) => !candidates.some((c) => c.id === m.id))];
+  // Agents first, then Admins (who can also be members, so their own leads count for the team).
+  const options = [...candidates, ...members.filter((m) => !candidates.some((c) => c.id === m.id))].sort(
+    (a, b) => Number(a.role !== "agent") - Number(b.role !== "agent") || a.name.localeCompare(b.name),
+  );
+  const term = query.trim().toLowerCase();
+  // Search and "selected only" help once there are many people (15 Nov 2026).
+  const shown = options.filter((p) => (!term || p.name.toLowerCase().includes(term) || (ROLE_LABELS[p.role as keyof typeof ROLE_LABELS] ?? p.role).toLowerCase().includes(term)) && (!onlySelected || selected.includes(p.id)));
   return (
     <div className="space-y-3">
       <fieldset>
-        <legend className="mb-1.5 text-[10px] font-black tracking-[0.1em] text-zinc-500 uppercase">Members</legend>
+        <legend className="mb-1.5 text-[10px] font-black tracking-[0.1em] text-zinc-500 uppercase">
+          Members · {selected.length} selected
+        </legend>
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <Input type="search" aria-label="Search people to add" placeholder="Search by name or role" value={query} onChange={(e) => setQuery(e.target.value)} className="min-w-0 flex-1" />
+          <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-700">
+            <input type="checkbox" className="size-4 accent-[#107c41]" checked={onlySelected} onChange={(e) => setOnlySelected(e.target.checked)} />
+            Selected only
+          </label>
+        </div>
         <ul className="max-h-72 space-y-1 overflow-auto rounded-xl border border-zinc-200/80 p-2">
-          {options.map((p) => (
+          {shown.length === 0 ? <li className="px-2 py-3 text-center text-xs text-zinc-500">{term ? `No one matches “${query}”.` : "No one selected yet."}</li> : null}
+          {shown.map((p) => (
             <li key={p.id}>
               <label className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-xs hover:bg-zinc-50">
                 <span className="flex items-center gap-2 font-semibold">
@@ -234,6 +236,48 @@ const SORT_COLUMNS: SortLinkColumn<TeamSort>[] = [
   { key: "status", label: "Status" },
 ];
 
+/**
+ * One team's settings in three short sections instead of one long scroll (15 Nov 2026):
+ * Members (opened first, the most used), Team Lead and Details. Scores and History sit below.
+ */
+function TeamSections({ details, lead, members }: { details: React.ReactNode; lead: React.ReactNode; members: React.ReactNode }) {
+  const [section, setSection] = useState<"members" | "lead" | "details">("members");
+  const tabs = [
+    { key: "members", label: "Members" },
+    { key: "lead", label: "Team Lead" },
+    { key: "details", label: "Details" },
+  ] as const;
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div role="tablist" aria-label="Team sections" className="inline-flex rounded-xl border border-zinc-200/80 bg-zinc-50/70 p-1 shadow-hairline">
+          {tabs.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              role="tab"
+              aria-selected={section === t.key}
+              onClick={() => setSection(t.key)}
+              className={cn("rounded-lg px-3 py-1.5 text-xs font-bold whitespace-nowrap transition-colors", section === t.key ? "bg-brand text-white shadow-hairline" : "text-zinc-700 hover:bg-white")}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <span className="flex gap-3 text-[11px] font-bold">
+          <a href="#agent-scores" className="text-brand hover:underline">
+            Scores ↓
+          </a>
+          <a href="#team-history" className="text-brand hover:underline">
+            History ↓
+          </a>
+        </span>
+      </div>
+      <div role="tabpanel">{section === "members" ? members : section === "lead" ? lead : details}</div>
+    </div>
+  );
+}
+
 /** Teams tab: team list (select a team) and its members; admins create / edit teams and membership. */
 export function TeamsPanel({
   list,
@@ -257,13 +301,21 @@ export function TeamsPanel({
       <div className="min-w-0 space-y-6">
         <PanelCard title="Teams">
           <p className="-mt-1 mb-3 text-[11px] text-zinc-500">Select a team to manage members.</p>
+          {/* Find a team among many (15 Nov 2026). */}
+          <CardFilter
+            path="/dashboard/teams"
+            params={params}
+            label="Find teams"
+            search={{ name: "tq", placeholder: "Team name" }}
+            selects={[{ name: "tstatus", label: "Status", all: "All", options: [{ value: "active", label: "Active" }, { value: "inactive", label: "Inactive" }] }]}
+          />
           {teams.length > 0 ? (
             <div className="mb-3">
               <SortLinks path="/dashboard/teams" params={params} name="Sort teams" columns={SORT_COLUMNS} sort={list.query.sort} dir={list.query.dir} />
             </div>
           ) : null}
           {teams.length === 0 ? (
-            <EmptyState size="sm">No teams found.</EmptyState>
+            <EmptyState size="sm">{params.tq || params.tstatus ? "No teams match this search." : "No teams found."}</EmptyState>
           ) : (
             <ul className="space-y-1.5">
               {teams.map((t) => {
@@ -308,11 +360,11 @@ export function TeamsPanel({
           {!detail ? (
             <EmptyState size="sm">Select a team to manage members.</EmptyState>
           ) : canManage ? (
-            <div className="space-y-6">
-              <TeamForm key={`${detail.team.id}-form`} team={detail.team} managers={managers} />
-              <TeamLeadPicker key={`${detail.team.id}-lead-${detail.team.teamLeadId ?? "none"}`} teamId={detail.team.id} teamLeadId={detail.team.teamLeadId} members={detail.members} />
-              <MembersEditor key={`${detail.team.id}-members`} teamId={detail.team.id} members={detail.members} candidates={candidates} />
-            </div>
+            <TeamSections
+              details={<TeamForm key={`${detail.team.id}-form`} team={detail.team} managers={managers} />}
+              lead={<TeamLeadPicker key={`${detail.team.id}-lead-${detail.team.teamLeadId ?? "none"}`} teamId={detail.team.id} teamLeadId={detail.team.teamLeadId} members={detail.members} />}
+              members={<MembersEditor key={`${detail.team.id}-members`} teamId={detail.team.id} members={detail.members} candidates={candidates} />}
+            />
           ) : detail.members.length === 0 ? (
             <EmptyState size="sm">No members yet.</EmptyState>
           ) : (
@@ -330,7 +382,7 @@ export function TeamsPanel({
           )}
         </PanelCard>
         {detail ? (
-          <PanelCard title="History">
+          <PanelCard title="History" className="scroll-mt-24" id="team-history">
             {detail.history.length === 0 ? (
               <EmptyState size="sm">No changes recorded yet.</EmptyState>
             ) : (

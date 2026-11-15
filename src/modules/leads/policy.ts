@@ -35,7 +35,8 @@ const ROLE_ACTIONS: Record<Role, LeadAction[]> = {
   super_admin: ["view", "create", "edit", "assign", "markLostDirect", "decideLost", "review"],
   admin: ["view", "create", "edit", "assign", "markLostDirect", "decideLost", "review"],
   manager: ["view", "create", "edit", "assign", "markLostDirect", "decideLost", "review"],
-  agent: ["view", "create", "edit", "requestLost"],
+  // Agents add notes / reviews on their own leads too (owner, 16 Nov 2026).
+  agent: ["view", "create", "edit", "requestLost", "review"],
   hr: [],
   accountant: [],
 };

@@ -1,12 +1,15 @@
 import { and, asc, count, desc, eq, gte, inArray, lte, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { Database } from "@/server/db";
-import { auditLogs, dailyReportLines, dailyReports, rosterEntries, teamMembers, teams, users } from "@/server/db/schema";
+import { attendanceRecords, auditLogs, dailyReportLines, dailyReports, holidays, rosterEntries, teamMembers, teams, users } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
 import { forbidden } from "@/server/errors";
 import { businessToday } from "@/modules/bookings/today";
 import { parseTask as parse } from "@/modules/tasks/support";
 import { loadTeam } from "./commands";
+import { crmDayFigures, NO_FIGURES } from "./daily-figures";
+import { getAttendanceSettings } from "@/modules/attendance/service";
+import { localTime } from "@/modules/attendance/rules";
 import { addDays, dailyReportEditable, monthDays, rosterEditable } from "./dates";
 import { canManageTeams, canOperateTeam, canViewOwnRoster, canViewTeam, canViewTeams, seesAllTeams } from "./policy";
 import { ROSTER_STATUSES, TEAM_PAGE_SIZE, dateParam, monthParam, reportRangeSchema, teamListQuerySchema, type RosterStatus, type TeamSort } from "./validation";
@@ -58,7 +61,12 @@ const TEAM_SORTS: Record<TeamSort, SQL> = {
 export async function listTeams(db: Database, actor: Actor, rawQuery: unknown = {}) {
   if (!canViewTeams(actor)) throw forbidden();
   const query = teamListQuerySchema.parse(rawQuery ?? {});
-  const where = visibleWhere(actor);
+  const term = query.tq ? `%${query.tq.replace(/[%_\\]/g, (c) => `\\${c}`)}%` : null;
+  const where = and(
+    visibleWhere(actor),
+    term ? sql`${teams.name} ilike ${term}` : undefined,
+    query.tstatus ? eq(teams.isActive, query.tstatus === "active") : undefined,
+  );
   const [{ total }] = await db.select({ total: count() }).from(teams).where(where);
   const pageCount = Math.max(1, Math.ceil(total / TEAM_PAGE_SIZE));
   const page = Math.min(query.page, pageCount);
@@ -152,9 +160,23 @@ export async function getDailyReport(db: Database, actor: Actor, teamId: string,
   // Agents who left the team keep their saved line in the report.
   const departed = lines.filter((l) => !agents.some((a) => a.id === l.agentId)).map((l) => l.agentId);
   const departedNames = departed.length ? await db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, departed)) : [];
+  // The CRM's own figures (15 Nov 2026): a new report starts from them; a saved one shows them beside the entries.
+  const crm = await crmDayFigures(db, [...agents, ...departedNames].map((a) => a.id), date);
   const rows = [...agents, ...departedNames].map((a) => {
     const l = lines.find((x) => x.agentId === a.id);
-    return { agentId: a.id, name: a.name, inTeam: agents.some((x) => x.id === a.id), leads: l?.leads ?? 0, calls: l?.calls ?? 0, meetings: l?.meetings ?? 0, tokens: l?.tokens ?? 0, bookings: l?.bookings ?? 0, remarks: l?.remarks ?? "" };
+    const c = crm.get(a.id) ?? NO_FIGURES;
+    return {
+      agentId: a.id,
+      name: a.name,
+      inTeam: agents.some((x) => x.id === a.id),
+      leads: l?.leads ?? c.leads,
+      calls: l?.calls ?? c.calls,
+      meetings: l?.meetings ?? c.meetings,
+      tokens: l?.tokens ?? c.tokens,
+      bookings: l?.bookings ?? c.bookings,
+      remarks: l?.remarks ?? "",
+      crm: c,
+    };
   });
   return {
     team: { id: team.id, name: team.name },
@@ -162,7 +184,7 @@ export async function getDailyReport(db: Database, actor: Actor, teamId: string,
     submitted: report ? { by: report.submittedBy, at: report.updatedAt } : null,
     rows,
     canEdit: canOperateTeam(actor, team.id) && dailyReportEditable(date, now),
-    lockedReason: dailyReportEditable(date, now) ? null : "Daily reports can only be entered or changed on the report date.",
+    lockedReason: dailyReportEditable(date, now) ? null : "A daily report can be entered or changed on its date and the day after.",
   };
 }
 
@@ -216,10 +238,24 @@ export async function getRosterDay(db: Database, actor: Actor, teamId: string, r
   const entries = members.length
     ? await db.select().from(rosterEntries).where(and(inArray(rosterEntries.userId, members.map((m) => m.id)), eq(rosterEntries.date, date)))
     : [];
-  const rows = members.map((m) => ({ ...m, status: (entries.find((e) => e.userId === m.id)?.status ?? null) as RosterStatus | null }));
+  // Check-ins fill the roster (15 Nov 2026): someone who checked in that day is suggested as In office;
+  // approved leave already writes On leave. Only exceptions (On site, Leads off) are marked by hand.
+  const checkIns = members.length
+    ? await db.select({ userId: attendanceRecords.userId, checkInAt: attendanceRecords.checkInAt }).from(attendanceRecords).where(and(inArray(attendanceRecords.userId, members.map((m) => m.id)), eq(attendanceRecords.date, date)))
+    : [];
+  const rows = members.map((m) => {
+    const status = (entries.find((e) => e.userId === m.id)?.status ?? null) as RosterStatus | null;
+    const checkIn = checkIns.find((c) => c.userId === m.id);
+    return { ...m, status, checkIn: checkIn ? localTime(checkIn.checkInAt) : null, suggested: (!status && checkIn ? "in_office" : null) as RosterStatus | null };
+  });
   const editable = rosterEditable(date, now);
+  const settings = await getAttendanceSettings(db);
+  // A company holiday on this day is shown on the roster (15 Nov 2026).
+  const [holiday] = await db.select({ name: holidays.name }).from(holidays).where(and(eq(holidays.date, date), eq(holidays.scope, "company"))).limit(1);
   return {
-    team: { id: team.id, name: team.name, weekendDays: team.weekendDays },
+    holiday: holiday?.name ?? null,
+    // Days off come from HR's attendance settings, so the roster and attendance agree (15 Nov 2026).
+    team: { id: team.id, name: team.name, weekendDays: settings.weekendDays },
     date,
     rows,
     counts: counts(rows.map((r) => r.status)),
@@ -247,7 +283,7 @@ export async function getRosterMonth(db: Database, actor: Actor, teamId: string,
         .where(and(inArray(rosterEntries.userId, members.map((m) => m.id)), gte(rosterEntries.date, days[0]), lte(rosterEntries.date, days[days.length - 1])))
     : [];
   return {
-    team: { id: team.id, name: team.name, weekendDays: team.weekendDays },
+    team: { id: team.id, name: team.name, weekendDays: (await getAttendanceSettings(db)).weekendDays },
     month,
     days,
     rows: members.map((m) => ({ ...m, byDay: Object.fromEntries(entries.filter((e) => e.userId === m.id).map((e) => [e.date, e.status])) as Record<string, RosterStatus> })),

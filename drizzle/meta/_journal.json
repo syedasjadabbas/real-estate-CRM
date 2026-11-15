@@ -337,6 +337,27 @@
       "when": 1794771443192,
       "tag": "0047_leave_for_records",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1794772915774,
+      "tag": "0048_custom_target_period",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1794773705792,
+      "tag": "0049_target_custom_goals",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1794775451616,
+      "tag": "0050_employee_notes",
+      "breakpoints": true
     }
   ]
 }

@@ -355,7 +355,7 @@ export async function getLeadDetail(db: Database, actor: Actor, leadId: string) 
       .where(and(eq(approvals.leadId, leadId), eq(approvals.status, "pending")))
       .limit(1),
     db
-      .select({ id: leadReviews.id, body: leadReviews.body, createdAt: leadReviews.createdAt, reviewerName: users.name })
+      .select({ id: leadReviews.id, body: leadReviews.body, createdAt: leadReviews.createdAt, reviewerName: users.name, reviewerRole: users.role })
       .from(leadReviews)
       .innerJoin(users, eq(users.id, leadReviews.reviewerId))
       .where(eq(leadReviews.leadId, leadId))
@@ -631,6 +631,7 @@ export async function reviewsFeed(db: Database, actor: Actor, projectId: string,
       body: leadReviews.body,
       createdAt: leadReviews.createdAt,
       reviewerName: users.name,
+      reviewerRole: users.role,
       leadId: leads.id,
       leadName: leads.name,
       leadCode: leads.code,

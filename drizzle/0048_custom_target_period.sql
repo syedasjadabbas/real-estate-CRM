@@ -1,0 +1,3 @@
+ALTER TYPE "public"."target_period" ADD VALUE 'custom';--> statement-breakpoint
+ALTER TABLE "targets" ADD COLUMN "period_end" date;--> statement-breakpoint
+ALTER TABLE "targets" ADD CONSTRAINT "targets_custom_end" CHECK (("targets"."period"::text = 'custom') = ("targets"."period_end" is not null) and ("targets"."period_end" is null or ("targets"."period_end" >= "targets"."period_start" and "targets"."period_end" - "targets"."period_start" <= 366)));

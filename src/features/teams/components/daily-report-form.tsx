@@ -6,11 +6,16 @@ import { formatDateTime } from "@/features/leads/format";
 import { cn } from "@/lib/cn";
 import { saveDailyReportAction } from "../actions";
 
-type Row = { agentId: string; name: string; inTeam: boolean; leads: number; calls: number; meetings: number; tokens: number; bookings: number; remarks: string };
+type Counts = { leads: number; calls: number; meetings: number; tokens: number; bookings: number };
+type Row = { agentId: string; name: string; inTeam: boolean; remarks: string; crm: Counts } & Counts;
 const COUNTS = ["leads", "calls", "meetings", "tokens", "bookings"] as const;
 const LABELS: Record<(typeof COUNTS)[number], string> = { leads: "Leads", calls: "Calls", meetings: "Meetings", tokens: "Tokens", bookings: "Bookings" };
 
-/** FR-121 agent entries (manual, Q-H3 default). Editable on the report date only (T-A4). */
+/**
+ * FR-121 agent entries. The numbers start from the CRM's own figures (15 Nov 2026); the team admin
+ * adds remarks, corrects a number if needed (the CRM figure stays shown beside it) and confirms.
+ * Editable on the report date and the day after.
+ */
 export function DailyReportForm({
   teamId,
   date,
@@ -28,8 +33,13 @@ export function DailyReportForm({
 }) {
   type EditRow = Omit<Row, (typeof COUNTS)[number]> & Record<(typeof COUNTS)[number], string>;
   const [values, setValues] = useState<EditRow[]>(() =>
-    rows.map((r) => ({ agentId: r.agentId, name: r.name, inTeam: r.inTeam, remarks: r.remarks, leads: String(r.leads), calls: String(r.calls), meetings: String(r.meetings), tokens: String(r.tokens), bookings: String(r.bookings) })),
+    rows.map((r) => ({ agentId: r.agentId, name: r.name, inTeam: r.inTeam, remarks: r.remarks, crm: r.crm, leads: String(r.leads), calls: String(r.calls), meetings: String(r.meetings), tokens: String(r.tokens), bookings: String(r.bookings) })),
   );
+  const useCrm = () => setValues((v) => v.map((r) => ({ ...r, ...Object.fromEntries(COUNTS.map((k) => [k, String(r.crm[k])])) })));
+  const corrected = values.some((r) => COUNTS.some((k) => Number(r[k]) !== r.crm[k]));
+  // Find an agent in a big team (15 Nov 2026); saving still covers everyone.
+  const [query, setQuery] = useState("");
+  const term = query.trim().toLowerCase();
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [pending, startTransition] = useTransition();
@@ -50,7 +60,7 @@ export function DailyReportForm({
           const result = await saveDailyReportAction(teamId, date, lines);
           if (result.ok) {
             setErrors({});
-            setMsg({ text: "Daily report saved.", ok: true });
+            setMsg({ text: "Daily report confirmed.", ok: true });
           } else {
             setErrors(result.fields ?? {});
             setMsg({ text: Object.values(result.fields ?? {})[0] ?? result.message, ok: false });
@@ -59,6 +69,27 @@ export function DailyReportForm({
       }}
     >
       {!canEdit && lockedReason ? <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">{lockedReason} View only.</p> : null}
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-sky-50 px-3 py-2 text-[11px] text-sky-900">
+        <span>
+          Numbers come from the CRM (leads assigned, call recordings, completed meetings, bookings opened = tokens, bookings closed as won). Add remarks, correct a number only
+          if the CRM missed something, then confirm.
+        </span>
+        {canEdit && corrected ? (
+          <button type="button" onClick={useCrm} disabled={pending} className="shrink-0 font-bold text-sky-800 underline">
+            Use CRM figures
+          </button>
+        ) : null}
+      </div>
+      {values.length > 5 || query ? (
+        <input
+          type="search"
+          aria-label="Search agents in this report"
+          placeholder="Search agents"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          className="h-9 w-full max-w-xs rounded-xl border border-zinc-200/80 bg-white px-3 text-xs font-semibold focus:border-brand/50 focus:outline-none"
+        />
+      ) : null}
       <div className="overflow-auto rounded-xl border border-zinc-200/80">
         <table className="w-full min-w-[720px] border-collapse text-left text-xs">
           <thead className="bg-zinc-100">
@@ -74,21 +105,25 @@ export function DailyReportForm({
           </thead>
           <tbody>
             {values.map((r, i) => (
-              <tr key={r.agentId} className="border-t border-zinc-100">
+              <tr key={r.agentId} className={cn("border-t border-zinc-100", term && !r.name.toLowerCase().includes(term) && "hidden")}>
                 <td className="px-3 py-1.5 font-semibold">
                   {r.name}
                   {!r.inTeam ? <span className="block text-[10px] font-medium text-zinc-500">No longer in team</span> : null}
                 </td>
                 {COUNTS.map((k) => (
-                  <td key={k} className="px-1 py-1">
+                  <td key={k} className="px-1 py-1 align-top">
                     <input
                       aria-label={`${r.name} ${LABELS[k]}`}
                       inputMode="numeric"
                       value={r[k]}
                       disabled={disabled}
                       onChange={(e) => edit(i, { [k]: e.target.value.replace(/[^\d]/g, "") })}
-                      className="h-8 w-full rounded-lg border border-zinc-200/80 bg-white px-2 text-right text-xs font-semibold tabular-nums focus:border-brand/50 focus:outline-none disabled:bg-zinc-50"
+                      className={cn(
+                        "h-8 w-full rounded-lg border bg-white px-2 text-right text-xs font-semibold tabular-nums focus:border-brand/50 focus:outline-none disabled:bg-zinc-50",
+                        Number(r[k]) !== r.crm[k] ? "border-amber-300" : "border-zinc-200/80",
+                      )}
                     />
+                    {Number(r[k]) !== r.crm[k] ? <span className="block pt-0.5 text-right text-[10px] font-semibold text-amber-700">CRM: {r.crm[k]}</span> : null}
                   </td>
                 ))}
                 <td className="px-1 py-1">
@@ -107,7 +142,7 @@ export function DailyReportForm({
         </table>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-[11px] text-zinc-500">{submitted ? `Last saved by ${submitted.by ?? "—"} · ${formatDateTime(submitted.at)}` : "Not submitted yet."}</p>
+        <p className="text-[11px] text-zinc-500">{submitted ? `Confirmed by ${submitted.by ?? "—"} · ${formatDateTime(submitted.at)}` : "Not confirmed yet."}</p>
         <div className="flex items-center gap-3">
           {msg ? (
             <p role={msg.ok ? "status" : "alert"} className={cn("text-xs font-semibold", msg.ok ? "text-brand" : "text-rose-600")}>
@@ -116,7 +151,7 @@ export function DailyReportForm({
           ) : null}
           {canEdit ? (
             <Button type="submit" variant="primary" disabled={pending} className="px-4">
-              {pending ? "Saving…" : "Save report"}
+              {pending ? "Saving…" : submitted ? "Update report" : "Confirm report"}
             </Button>
           ) : null}
         </div>

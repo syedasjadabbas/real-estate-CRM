@@ -15,10 +15,12 @@ import { Pagination } from "@/features/leads/components/pagination";
 import { flattenParams } from "@/features/leads/url";
 import { canViewEmployees } from "@/modules/employees/policy";
 import { canViewHolidays } from "@/modules/holidays/policy";
-import { CROSS_YEAR_HELD_NOTE, isCrossYear, LEAVE_TYPE_LABELS, STAFF_STEP_LABELS } from "@/modules/leave/rules";
+import { CROSS_YEAR_HELD_NOTE, isCrossYear, LEAVE_TYPE_LABELS, LEAVE_TYPES, STAFF_STEP_LABELS } from "@/modules/leave/rules";
 import { businessToday } from "@/modules/bookings/today";
 import { canCancelApprovedLeave, canManageLeaveSettings, canOpenLeaveAdmin, canRecordLeave, leaveBalances, leaveOverview, leavePeople, type LeaveRow } from "@/modules/leave/service";
 import { RecordLeaveForm } from "@/features/leave/components/record-leave-form";
+import { CardFilter } from "@/features/leave/components/card-filter";
+import { BALANCE_SHOWS, filterBalances, filterRequests } from "@/modules/leave/card-filters";
 import { requirePageUser } from "@/server/auth/current-user";
 import { ROLE_LABELS, type Role } from "@/server/auth/types";
 import { getDb } from "@/server/db";
@@ -39,6 +41,12 @@ export default async function LeavePage({ searchParams }: PageProps<"/dashboard/
   const year = Number.isInteger(asked) && asked >= 2000 && asked <= thisYear + 1 ? asked : thisYear;
   const db = getDb();
   const [data, balances, people] = await Promise.all([leaveOverview(db, actor, year, params), leaveBalances(db, actor, year), leavePeople(db, actor)]);
+  // Each card filters on its own (15 Nov 2026).
+  const decidable = filterRequests(data.decidable, params.dq, params.dtype);
+  const cancellations = filterRequests(data.cancellations, params.cq, params.ctype);
+  const balanceRows = filterBalances(balances.rows, params);
+  const typeSelect = (name: string) => ({ name, label: "Leave type", all: "All types", options: LEAVE_TYPES.map((t) => ({ value: t, label: LEAVE_TYPE_LABELS[t] })) });
+  const roles = [...new Set(balances.rows.map((r) => r.role).filter((r): r is NonNullable<typeof r> => Boolean(r)))];
   const sortHeader = (column: Parameters<typeof LeaveSortHeader>[0]["column"], label: string) => (
     <th scope="col" className="py-2 pr-3" aria-sort={data.query.sort === column ? (data.query.dir === "asc" ? "ascending" : "descending") : undefined}>
       <LeaveSortHeader path={PATH} params={params} column={column} label={label} sort={data.query.sort} dir={data.query.dir} />
@@ -55,12 +63,15 @@ export default async function LeavePage({ searchParams }: PageProps<"/dashboard/
       <PageHeader title="Leave" description={`Leave requests and balances for ${data.year}. Days are calendar days.`} icon={Plane} />
       <HrTabs showAttendance={canViewAttendance(actor)} active="leave" showEmployees={canViewEmployees(actor)} showHolidays={canViewHolidays(actor)} showLeave />
 
-      <PanelCard title={`Waiting for your decision · ${data.decidable.length}`}>
-        {data.decidable.length === 0 ? (
-          <EmptyState size="sm">Nothing waiting for you.</EmptyState>
+      <PanelCard title={`Waiting for your decision · ${decidable.length}${decidable.length !== data.decidable.length ? ` of ${data.decidable.length}` : ""}`}>
+        {data.decidable.length ? (
+          <CardFilter path={PATH} params={params} label="Filter requests waiting for your decision" search={{ name: "dq", placeholder: "Employee or reason" }} selects={[typeSelect("dtype")]} />
+        ) : null}
+        {decidable.length === 0 ? (
+          <EmptyState size="sm">{data.decidable.length ? "No requests match these filters." : "Nothing waiting for you."}</EmptyState>
         ) : (
           <ul className="divide-y divide-zinc-100" aria-label="Leave waiting for your decision">
-            {data.decidable.map((r) => (
+            {decidable.map((r) => (
               <li key={r.id} className="space-y-2 py-3 first:pt-0">
                 <p className="text-sm font-bold text-zinc-900">
                   {r.userName} · {LEAVE_TYPE_LABELS[r.type]} · {when(r)}
@@ -77,12 +88,15 @@ export default async function LeavePage({ searchParams }: PageProps<"/dashboard/
       </PanelCard>
 
       {canCancelApprovedLeave(actor) ? (
-        <PanelCard title={`Cancellation requests · ${data.cancellations.length}`}>
-          {data.cancellations.length === 0 ? (
-            <EmptyState size="sm">No cancellation requests.</EmptyState>
+        <PanelCard title={`Cancellation requests · ${cancellations.length}${cancellations.length !== data.cancellations.length ? ` of ${data.cancellations.length}` : ""}`}>
+          {data.cancellations.length ? (
+            <CardFilter path={PATH} params={params} label="Filter cancellation requests" search={{ name: "cq", placeholder: "Employee or reason" }} selects={[typeSelect("ctype")]} />
+          ) : null}
+          {cancellations.length === 0 ? (
+            <EmptyState size="sm">{data.cancellations.length ? "No requests match these filters." : "No cancellation requests."}</EmptyState>
           ) : (
             <ul className="divide-y divide-zinc-100">
-              {data.cancellations.map((r) => (
+              {cancellations.map((r) => (
                 <li key={r.id} className="space-y-2 py-3 first:pt-0">
                   <p className="text-sm font-bold text-zinc-900">
                     {r.userName} · {LEAVE_TYPE_LABELS[r.type]} · {when(r)}
@@ -161,14 +175,26 @@ export default async function LeavePage({ searchParams }: PageProps<"/dashboard/
         ) : null}
       </PanelCard>
 
-      <PanelCard title={`Balances · ${balances.year}`}>
-        {canDownloadHr(actor) ? (
-          <div className="mb-3 flex justify-end">
-            <CsvDownload kind="leave-balances" params={{ year: String(balances.year) }} />
-          </div>
-        ) : null}
-        {balances.rows.length === 0 ? (
-          <EmptyState size="sm">No one to show.</EmptyState>
+      <PanelCard title={`Balances · ${balances.year}${balanceRows.length !== balances.rows.length ? ` · ${balanceRows.length} of ${balances.rows.length}` : ""}`}>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <CardFilter
+            path={PATH}
+            params={params}
+            label="Filter leave balances"
+            search={{ name: "bq", placeholder: "Employee name" }}
+            selects={[
+              { name: "brole", label: "Role", all: "All roles", options: [...roles.map((r) => ({ value: r, label: ROLE_LABELS[r as Role] ?? r })), { value: "none", label: "No CRM login" }] },
+              { name: "bshow", label: "Show", all: "Everyone", options: Object.entries(BALANCE_SHOWS).map(([value, label]) => ({ value, label })) },
+            ]}
+          />
+          {canDownloadHr(actor) ? (
+            <div className="mb-3">
+              <CsvDownload kind="leave-balances" params={{ year: String(balances.year), bq: params.bq, brole: params.brole, bshow: params.bshow }} />
+            </div>
+          ) : null}
+        </div>
+        {balanceRows.length === 0 ? (
+          <EmptyState size="sm">{balances.rows.length ? "No one matches these filters." : "No one to show."}</EmptyState>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] border-collapse text-left text-xs" aria-label="Leave balances">
@@ -183,7 +209,7 @@ export default async function LeavePage({ searchParams }: PageProps<"/dashboard/
                 </tr>
               </thead>
               <tbody>
-                {balances.rows.map((b) => (
+                {balanceRows.map((b) => (
                   <tr key={b.id} className="border-b border-zinc-100 last:border-b-0">
                     <td className="py-2 pr-3">
                       <span className="font-bold">{b.name}</span>

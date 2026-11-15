@@ -147,9 +147,9 @@ export async function syncTargetsMet(db: Database, actor: Actor, now = new Date(
   const items: NewNotification[] = [];
   for (const { p, metric } of met) {
     const period = TARGET_PERIOD_LABELS[p.period].toLowerCase();
-    const link = `/dashboard/targets?period=${p.period}&anchor=${p.start}`;
+    const link = `/dashboard/targets?period=${p.period}&anchor=${p.start}${p.end ? `&to=${p.end}` : ""}`;
     const figures = `${p.achieved[metric.key]} of ${p.goals![metric.key]}`;
-    const key = `target_met:${actor.id}:${p.period}:${p.start}:${metric.key}`;
+    const key = `target_met:${actor.id}:${p.period}:${p.start}${p.end ? `:${p.end}` : ""}:${metric.key}`;
     items.push({ userId: actor.id, type: "target_met", title: `Target met: ${metric.label} (${period})`, body: `You reached ${figures}. Well done!`, link, dedupeKey: key });
     for (const adminId of admins) {
       items.push({ userId: adminId, type: "target_met", title: `${actor.name} met a ${period} target: ${metric.label}`, body: `Reached ${figures}.`, link, dedupeKey: key });

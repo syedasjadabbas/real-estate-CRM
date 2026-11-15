@@ -120,7 +120,7 @@ describe.skipIf(!hasTestDb)("Teams & Targets (PostgreSQL integration)", () => {
     });
 
     it("same-day lock, team scope, members only, read-only roles", async () => {
-      expect(await errorCode(saveDailyReport(db, f.actors.manager, team1, "2026-10-28", { lines: [] }, NOW))).toBe("BUSINESS_RULE");
+      expect(await errorCode(saveDailyReport(db, f.actors.manager, team1, "2026-10-27", { lines: [] }, NOW))).toBe("BUSINESS_RULE");
       expect(await errorCode(saveDailyReport(db, f.actors.manager, team2, TODAY, { lines: [] }, NOW))).toBe("FORBIDDEN");
       expect(await fieldOf(saveDailyReport(db, f.actors.manager, team1, TODAY, { lines: [line(f.actors.outsideAgent.id)] }, NOW))).toBe("lines");
       expect(await fieldOf(saveDailyReport(db, f.actors.manager, team1, TODAY, { lines: [line(f.actors.manager.id)] }, NOW))).toBe("lines");
@@ -129,7 +129,7 @@ describe.skipIf(!hasTestDb)("Teams & Targets (PostgreSQL integration)", () => {
       expect((await getDailyReport(db, f.actors.hr, team2, TODAY, NOW)).canEdit).toBe(false);
       expect((await listDailyReports(db, f.actors.manager, {}, NOW)).rows).toHaveLength(0);
       expect(await errorCode(listDailyReports(db, f.actors.agent1, {}, NOW))).toBe("FORBIDDEN");
-      expect((await getDailyReport(db, f.actors.manager, team1, "2026-10-28", NOW)).canEdit).toBe(false);
+      expect((await getDailyReport(db, f.actors.manager, team1, "2026-10-27", NOW)).canEdit).toBe(false);
     });
   });
 
@@ -224,7 +224,7 @@ describe.skipIf(!hasTestDb)("Teams & Targets (PostgreSQL integration)", () => {
       expect(grid.rows.find((x) => x.userId === f.actors.agent2.id)?.achieved.calls).toBe(1);
       const csv = targetsCsv(grid);
       expect(csv.split("\n")[0]).toContain("Calls achieved");
-      expect(csv).toContain("Agent A,monthly,2026-10-01,1300,2,20,1,350,500");
+      expect(csv).toContain("Agent A,monthly,2026-10-01,,1300,2,20,1,350,500");
       const weekly = await listTargets(db, admin, { period: "weekly", anchor: "2026-10-21" }, NOW);
       expect(weekly.rows.find((x) => x.userId === f.actors.agent1.id)).toMatchObject({ target: null, achieved: { calls: 1, meetings: 0, soldSqft: 500 } });
     });

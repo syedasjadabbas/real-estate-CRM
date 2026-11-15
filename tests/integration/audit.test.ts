@@ -120,7 +120,7 @@ describe.skipIf(!hasTestDb)("Audit log (FR-008, F-4, PostgreSQL integration)", (
       expect(await errorCode(addNote(db, outsider, leadId, { body: "x" }))).toBe("NOT_FOUND");
       expect(await errorCode(addNote(db, withIp(f.actors.agent1), leadId, { body: "" }))).toBe("VALIDATION_FAILED");
       expect(await errorCode(addNote(db, withIp(accountant), leadId, { body: "x" }))).toBe("FORBIDDEN");
-      expect(await errorCode(addReview(db, withIp(f.actors.agent1), leadId, { body: "x" }))).toBe("FORBIDDEN");
+      expect(await errorCode(addReview(db, withIp(accountant), leadId, { body: "x" }))).toBe("FORBIDDEN");
       expect(await errorCode(setFavorite(db, outsider, leadId, true))).toBe("NOT_FOUND");
       expect(await errorCode(scheduleFollowUp(db, withIp(f.actors.agent1), leadId, { dueAt: new Date(Date.now() - 86_400_000) }))).toBe("VALIDATION_FAILED");
       const { id } = await scheduleFollowUp(db, withIp(f.actors.agent1), leadId, { dueAt: soon() });

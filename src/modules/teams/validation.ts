@@ -8,6 +8,9 @@ export const teamListQuerySchema = z.object({
   sort: z.enum(TEAM_SORT_COLUMNS).optional().catch(undefined),
   dir: z.enum(["asc", "desc"]).catch("asc"),
   page: z.coerce.number().int().min(1).max(10_000).catch(1),
+  /** Team name search and Active / Inactive filter (15 Nov 2026). */
+  tq: z.string().trim().max(100).optional().catch(undefined),
+  tstatus: z.enum(["active", "inactive"]).optional().catch(undefined),
 });
 
 export const ROSTER_STATUSES = ["in_office", "on_site", "on_leave", "leads_off"] as const;

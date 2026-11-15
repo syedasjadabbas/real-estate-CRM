@@ -151,7 +151,7 @@ export const navigation: NavGroup[] = [
         label: "Teams",
         href: "/dashboard/teams",
         icon: Users,
-        description: "Manage sales teams, members, performance, and manager daily reports.",
+        description: "Manage sales teams, members and Team Leads, daily reports and the duty roster.",
         // Not shown to agents (13 Nov 2026) or HR (15 Nov 2026): sales team management isn't their work.
         // The page itself still lets an agent see their own roster if they open it directly.
         roles: ["super_admin", "admin", "manager"],

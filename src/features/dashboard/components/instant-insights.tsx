@@ -56,6 +56,11 @@ function Donut({ formats, centerLabel }: { formats: MeetingFormat[]; centerLabel
   );
 }
 
+/** "10 Nov" for "2026-11-10". */
+function shortDate(iso: string) {
+  return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }).format(new Date(`${iso}T00:00:00Z`));
+}
+
 function TargetColumn({ title, lines }: { title: string; lines: TargetLine[] }) {
   return (
     <div className="rounded-2xl border border-zinc-200/80 bg-zinc-50/50 p-2.5">
@@ -225,14 +230,23 @@ export function InstantInsights({ data, own = false }: { data: DashboardData; ow
         {own ? (
         <Card className="self-start p-4">
           <Eyebrow className="text-xs leading-4">My Targets</Eyebrow>
-          <p className="mt-0.5 text-[11px] text-zinc-600">Daily, weekly, and monthly goals vs your activity.</p>
+          <p className="mt-0.5 text-[11px] text-zinc-600">Daily, weekly, monthly and campaign goals vs your activity.</p>
           {data.targets ? (
             <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
               <TargetColumn title="Today" lines={data.targets.today} />
               <TargetColumn title="This week" lines={data.targets.week} />
               <TargetColumn title="This month" lines={data.targets.month} />
             </div>
-          ) : (
+          ) : null}
+          {data.targets?.custom?.length ? (
+            // Custom-period targets running today (15 Nov 2026).
+            <div className="mt-3 grid grid-cols-1 gap-3 border-t border-zinc-100 pt-3 sm:grid-cols-3">
+              {data.targets.custom.map((c) => (
+                <TargetColumn key={`${c.start}-${c.end}`} title={`${shortDate(c.start)} – ${shortDate(c.end)}`} lines={c.lines} />
+              ))}
+            </div>
+          ) : null}
+          {data.targets ? null : (
             <EmptyState size="sm" className="mt-3">
               No targets set for you yet.
             </EmptyState>

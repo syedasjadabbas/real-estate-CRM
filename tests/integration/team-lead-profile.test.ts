@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createLead } from "@/modules/leads/commands";
 import { employeeProfile } from "@/modules/people/profile";
+import { employeeProfileCsv } from "@/modules/people/export";
 import { setTeamLead, setTeamMembers } from "@/modules/teams/commands";
 import { myTeamView } from "@/modules/teams/my-team";
 import { loadActor } from "@/server/auth/session-store";
@@ -91,5 +92,14 @@ describe.skipIf(!hasTestDb)("Team Lead and employee profile (owner, 15 Nov 2026)
     expect(p.teams.map((t) => t.name)).toEqual(["Team 1"]);
     expect((await employeeProfile(db, f.actors.superAdmin, a1.id)).person.id).toBe(a1.id);
     expect((await errorOf(employeeProfile(db, admin, "00000000-0000-4000-8000-000000000000")))?.code).toBe("NOT_FOUND");
+
+    // The whole record downloads as CSV for Admins and Super Admins, and is audited (15 Nov 2026).
+    expect((await errorOf(employeeProfileCsv(db, a1, a1.id, {})))?.code).toBe("FORBIDDEN");
+    const file = await employeeProfileCsv(db, admin, a1.id, {});
+    expect(file.filename).toMatch(/^work-record-.+.csv$/);
+    expect(file.body).toContain("Calls,Calls (recordings),2");
+    expect(file.body).toContain("Calls,Qualified (60s+),1");
+    expect(file.body).toContain("Follow-ups,Overdue now,1");
+    expect((await db.select().from(auditLogs).where(eq(auditLogs.action, "people.export"))).length).toBe(1);
   });
 });

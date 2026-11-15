@@ -56,6 +56,8 @@ export function LeaveListFilters({ path, params, years, year }: { path: string; 
           ))}
         </select>
       </label>
+      {/* The other cards' filters stay as they are (15 Nov 2026). */}
+      {["dq", "dtype", "cq", "ctype", "bq", "brole", "bshow"].map((k) => (params[k] ? <input key={k} type="hidden" name={k} value={params[k]} /> : null))}
       {params.sort ? <input type="hidden" name="sort" value={params.sort} /> : null}
       {params.dir ? <input type="hidden" name="dir" value={params.dir} /> : null}
       <button type="submit" className="h-9 rounded-xl bg-brand px-3.5 text-xs font-bold text-white">

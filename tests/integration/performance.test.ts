@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createLead } from "@/modules/leads/commands";
-import { performanceContexts, performanceCsv, performanceReport } from "@/modules/performance/service";
+import { performanceContexts, performanceCsv, performanceReport, teamComparison } from "@/modules/performance/service";
 import { loadActor } from "@/server/auth/session-store";
 import { followUps, leadActivities, leads, meetings, signinLogs, teams, users } from "@/server/db/schema";
 import type { Database } from "@/server/db";
@@ -68,6 +68,20 @@ describe.skipIf(!hasTestDb)("Performance (PostgreSQL integration)", () => {
     });
   const signIn = (userId: string, at: Date, event: "sign_in" | "sign_out") => db.insert(signinLogs).values({ userId, at, event });
   const row = (report: Awaited<ReturnType<typeof performanceReport>>, userId: string) => report.allRows.find((r) => r.userId === userId)!;
+
+  it("compares teams side by side for Admins and Super Admins only (16 Nov 2026)", async () => {
+    await lead(f.actors.agent1, INSIDE, "booked");
+    await lead(f.actors.agent2, INSIDE, "lost_lead");
+    await lead(f.actors.outsideAgent, INSIDE, "booked");
+    await lead(f.actors.outsideAgent, INSIDE, "booked");
+    await lead(f.actors.outsideAgent, JUST_BEFORE, "booked");
+    const rows = await teamComparison(db, f.actors.superAdmin, RANGE, NOW);
+    expect(rows.map((r) => [r.name, r.agents, r.booked, r.lost, r.winPct])).toEqual([
+      ["Team 1", 2, 1, 1, 50],
+      ["Team 2", 1, 2, 0, 100],
+    ]);
+    expect(await teamComparison(db, f.actors.agent1, RANGE, NOW)).toEqual([]);
+  });
 
   it("computes every metric from records inside the range only (boundaries inclusive / exclusive)", async () => {
     const a = f.actors.agent1;

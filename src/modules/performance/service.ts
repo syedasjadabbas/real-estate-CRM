@@ -104,7 +104,8 @@ export async function agentMetrics(db: Database, agents: { id: string; name: str
         total: sql<number>`count(*)::int`,
         booked: sql<number>`count(*) filter (where ${leads.stage} = 'booked')::int`,
         lost: sql<number>`count(*) filter (where ${leads.stage} = 'lost_lead')::int`,
-        avgFirstTouchMs: sql<string | null>`avg(extract(epoch from (${leads.firstTouchAt} - ${leads.createdAt})) * 1000)`,
+        // Leads the agent added themselves are touched at once, so only leads given to them count (16 Nov 2026).
+        avgFirstTouchMs: sql<string | null>`avg(extract(epoch from (${leads.firstTouchAt} - ${leads.createdAt})) * 1000) filter (where ${leads.createdById} is distinct from ${leads.ownerId})`,
       })
       .from(leads)
       .where(and(inArray(leads.ownerId, ids), isNull(leads.deletedAt), sql`${assignedAt} >= ${window.start}`, sql`${assignedAt} < ${window.end}`))
@@ -285,6 +286,51 @@ export async function performanceReport(db: Database, actor: Actor, rawQuery: un
   };
 }
 export type PerformanceReport = Awaited<ReturnType<typeof performanceReport>>;
+
+/**
+ * Team comparison (owner, 16 Nov 2026): one row per active team with its agents' totals for the range,
+ * for Admins and Super Admins. An agent in two teams counts in both. Same metrics as the agent table.
+ */
+export async function teamComparison(db: Database, actor: Actor, rawQuery: unknown, now = new Date()) {
+  if (actor.role !== "admin" && actor.role !== "super_admin") return [];
+  const q = performanceQuerySchema.parse(rawQuery ?? {});
+  const range = resolveRange(q.from, q.to, now);
+  const [teamRows, agents] = await Promise.all([
+    db.select({ id: teams.id, name: teams.name }).from(teams).where(eq(teams.isActive, true)).orderBy(asc(sql`lower(${teams.name})`)),
+    agentsInScope(db, actor, undefined),
+  ]);
+  if (teamRows.length === 0 || agents.length === 0) return [];
+  const membership = await db
+    .select({ teamId: teamMembers.teamId, userId: teamMembers.userId })
+    .from(teamMembers)
+    .where(inArray(teamMembers.teamId, teamRows.map((t) => t.id)));
+  const metrics = new Map((await agentMetrics(db, agents, range.window)).map((m) => [m.userId, m]));
+  return teamRows.map((t) => {
+    const rows = membership.filter((m) => m.teamId === t.id).map((m) => metrics.get(m.userId)).filter((m): m is AgentMetrics => Boolean(m));
+    const sum = (k: keyof AgentMetrics) => rows.reduce((acc, r) => acc + Number(r[k] ?? 0), 0);
+    const booked = sum("booked");
+    const lost = sum("lost");
+    const fuDue = sum("fuDue");
+    const fuDone = sum("fuDone");
+    return {
+      teamId: t.id,
+      name: t.name,
+      agents: rows.length,
+      open: sum("open"),
+      booked,
+      lost,
+      winPct: pct(booked, booked + lost),
+      calls: sum("calls"),
+      callMin: callMinutes({ timed: sum("callsTimed"), seconds: sum("callSeconds") }),
+      callsQualified: sum("callsQualified"),
+      fuDue,
+      fuDone,
+      fuPct: pct(fuDone, fuDue),
+      meetings: sum("meetings"),
+    };
+  });
+}
+export type TeamComparisonRow = Awaited<ReturnType<typeof teamComparison>>[number];
 
 /**
  * Pipeline by agent (client meeting note, 14 Nov 2026): how many leads each agent holds in every stage

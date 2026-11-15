@@ -79,7 +79,7 @@ export function SegmentParam({ params, name, options, value, label }: { params: 
             aria-pressed={o.value === value}
             disabled={pending}
             onClick={() => go({ [name]: o.value })}
-            className={cn("rounded-lg px-3 py-1.5 text-xs font-bold transition-colors", o.value === value ? "bg-brand text-white shadow-hairline" : "text-zinc-700 hover:bg-white")}
+            className={cn("rounded-lg px-3 py-1.5 text-xs font-bold whitespace-nowrap transition-colors", o.value === value ? "bg-brand text-white shadow-hairline" : "text-zinc-700 hover:bg-white")}
           >
             {o.label}
           </button>

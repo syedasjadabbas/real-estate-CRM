@@ -101,7 +101,8 @@ export const paymentDocsStatus = pgEnum("payment_docs_status", ["not_submitted",
 export const bookingPaymentKind = pgEnum("booking_payment_kind", ["payment", "reversal"]);
 export const bookingPaymentType = pgEnum("booking_payment_type", ["token", "down_payment", "installment", "other"]);
 export const reversalRequestStatus = pgEnum("reversal_request_status", ["pending", "approved", "rejected"]);
-export const targetPeriod = pgEnum("target_period", ["daily", "weekly", "monthly"]);
+/** "custom": any From–To range, e.g. a campaign (owner, 15 Nov 2026). */
+export const targetPeriod = pgEnum("target_period", ["daily", "weekly", "monthly", "custom"]);
 export const rosterStatus = pgEnum("roster_status", ["in_office", "on_site", "on_leave", "leads_off"]);
 export const holidayScope = pgEnum("holiday_scope", ["company", "regional"]);
 /** Q10, Q11: "CPL" means medical leave and is taken from the annual allowance. */
@@ -846,6 +847,8 @@ export const targets = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     period: targetPeriod("period").notNull(),
     periodStart: date("period_start").notNull(),
+    /** Last day (inclusive) of a custom-period target; null for daily, weekly and monthly. */
+    periodEnd: date("period_end"),
     calls: integer("calls").notNull().default(0),
     meetings: integer("meetings").notNull().default(0),
     soldSqft: numeric("sold_sqft", { precision: 12, scale: 2, mode: "number" }).notNull().default(0),
@@ -858,7 +861,49 @@ export const targets = pgTable(
     check("targets_values_non_negative", sql`${t.calls} >= 0 and ${t.meetings} >= 0 and ${t.soldSqft} >= 0`),
     check("targets_weekly_monday", sql`${t.period} <> 'weekly' or extract(isodow from ${t.periodStart}) = 1`),
     check("targets_monthly_first", sql`${t.period} <> 'monthly' or extract(day from ${t.periodStart}) = 1`),
+    check("targets_custom_end", sql`(${t.period}::text = 'custom') = (${t.periodEnd} is not null) and (${t.periodEnd} is null or (${t.periodEnd} >= ${t.periodStart} and ${t.periodEnd} - ${t.periodStart} <= 366))`),
   ],
+);
+
+/**
+ * Custom goals on a target (owner, 15 Nov 2026): anything the CRM can't count, e.g. "Brochures
+ * delivered: 50". The Admin names the goal and sets the number; progress is entered by hand.
+ */
+export const targetCustomGoals = pgTable(
+  "target_custom_goals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    targetId: uuid("target_id")
+      .notNull()
+      .references(() => targets.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    goal: numeric("goal", { precision: 14, scale: 2, mode: "number" }).notNull(),
+    achieved: numeric("achieved", { precision: 14, scale: 2, mode: "number" }).notNull().default(0),
+    sortOrder: integer("sort_order").notNull().default(0),
+    updatedById: uuid("updated_by_id").references(() => users.id, { onDelete: "set null" }),
+    ...timestamps,
+  },
+  (t) => [
+    index("target_custom_goals_target_idx").on(t.targetId, t.sortOrder),
+    uniqueIndex("target_custom_goals_name_uq").on(t.targetId, sql`lower(${t.name})`),
+    check("target_custom_goals_values", sql`${t.goal} > 0 and ${t.achieved} >= 0`),
+    check("target_custom_goals_name", sql`length(btrim(${t.name})) between 1 and 60`),
+  ],
+);
+
+/** Private coaching notes Admins keep on an employee's work profile (owner, 16 Nov 2026). */
+export const employeeNotes = pgTable(
+  "employee_notes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    authorId: uuid("author_id").references(() => users.id, { onDelete: "set null" }),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("employee_notes_user_created_idx").on(t.userId, t.createdAt), check("employee_notes_body", sql`length(btrim(${t.body})) between 1 and 2000`)],
 );
 
 /** FR-121 manager daily report: one per team per date (manual entry, Q-H3 default). */
