@@ -151,8 +151,11 @@ describe.skipIf(!hasTestDb)("Account management (PostgreSQL integration)", () =>
     const [shift] = await db.select().from(auditLogs).where(and(eq(auditLogs.action, "user.leads_shift"), eq(auditLogs.entityId, f.actors.agent1.id)));
     expect(shift).toMatchObject({ actorId: admin.id, after: { toUserId: f.actors.agent2.id, moved: 1, matched: 1, open: true, lost: false, booked: false } });
 
-    // The receiver must be an active agent or manager.
+    // The receiver must be an active agent or Admin; HR can't hold leads.
     expect(await errorCode(reassignOwnedLeads(db, admin, f.actors.agent1.id, { toUserId: f.actors.hr.id, lost: true }))).toBe("VALIDATION_FAILED");
+    // An Admin can take a leaving agent's leads (15 Nov 2026).
+    expect(await reassignOwnedLeads(db, admin, f.actors.agent2.id, { toUserId: admin.id, open: true })).toEqual({ moved: 1 });
+    expect((await db.select({ owner: leads.ownerId }).from(leads).where(eq(leads.id, open)))[0].owner).toBe(admin.id);
     expect(await errorCode(reassignOwnedLeads(db, f.actors.manager, f.actors.agent1.id, { toUserId: f.actors.agent2.id, lost: true }))).toBe("FORBIDDEN");
   });
 

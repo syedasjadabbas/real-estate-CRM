@@ -54,6 +54,17 @@ export function instantOf(date: string, hhmm: string) {
 /** Day of the week (0 = Sunday) of a YYYY-MM-DD date. */
 export const weekdayOf = (date: string) => new Date(`${date}T00:00:00Z`).getUTCDay();
 
+/** "November 2026" for "2026-11". */
+export function monthLabel(month: string) {
+  return new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${month}-01T00:00:00Z`));
+}
+
+/** The month `by` months before or after "YYYY-MM". */
+export function shiftMonth(month: string, by: number) {
+  const [y, m] = month.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1 + by, 1)).toISOString().slice(0, 7);
+}
+
 /** Every date of a month ("YYYY-MM"), as YYYY-MM-DD. */
 export function datesOfMonth(month: string) {
   const [y, m] = month.split("-").map(Number);

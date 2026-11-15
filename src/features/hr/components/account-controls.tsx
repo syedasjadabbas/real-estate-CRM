@@ -179,7 +179,7 @@ export function AccountControls({
             <Field label="Move to" error={shiftErr.toUserId}>
               {(id, d) => (
                 <select id={id} aria-describedby={d} className={selectClass} value={shift.toUserId} disabled={pending} onChange={(e) => setShift((v) => ({ ...v, toUserId: e.target.value }))}>
-                  <option value="">Choose an agent or manager</option>
+                  <option value="">Choose the agent or Admin who takes them over</option>
                   {receivers.map((r) => (
                     <option key={r.id} value={r.id}>
                       {r.name} · {ROLE_LABELS[r.role]}
@@ -205,6 +205,12 @@ export function AccountControls({
         {account.status === "active" ? (
           <>
             <p className="text-xs text-zinc-600">Deactivating signs the person out everywhere and stops them signing in. Their records are kept.</p>
+            {leads.open > 0 ? (
+              // A warning, not a block (owner, 15 Nov 2026): move the leads first so no customer is left waiting.
+              <p role="note" className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
+                Still owns {leads.open} open lead{leads.open === 1 ? "" : "s"}. Move them to another agent or an Admin above first, so no customer is left waiting.
+              </p>
+            ) : null}
             <div className="flex flex-wrap items-center justify-end gap-3">
               <Status msg={statusMsg} />
               <Button variant="secondary" size="lg" disabled={pending || isSelf} onClick={() => setConfirming(true)}>

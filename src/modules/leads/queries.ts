@@ -723,7 +723,8 @@ export type LeadLookups = Awaited<ReturnType<typeof leadLookups>>;
 export async function assignableUsers(db: Database, actor: Actor) {
   if (!canDo(actor, "assign")) return [];
   const scope = leadScope(actor.role);
-  const base = and(eq(users.status, "active"), inArray(users.role, ["agent", "manager"]));
+  // Agents and Admins can own leads (Admins since 15 Nov 2026).
+  const base = and(eq(users.status, "active"), inArray(users.role, ["agent", "manager", "admin"]));
   if (scope === "all") {
     return db.select({ id: users.id, name: users.name, role: users.role }).from(users).where(base).orderBy(asc(users.name));
   }

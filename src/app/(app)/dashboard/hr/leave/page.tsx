@@ -1,4 +1,6 @@
 import { Plane } from "lucide-react";
+import { CsvDownload } from "@/features/hr/components/csv-download";
+import { canDownloadHr } from "@/modules/hr/exports";
 import type { Metadata } from "next";
 import { PageHeader, PageStack } from "@/components/shell/page-header";
 import { EmptyState, RestrictedState } from "@/components/ui/empty-state";
@@ -93,8 +95,9 @@ export default async function LeavePage({ searchParams }: PageProps<"/dashboard/
       ) : null}
 
       <PanelCard title={`All requests · ${data.year} · ${data.total}`}>
-        <div className="mb-3">
+        <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
           <LeaveListFilters path={PATH} params={params} years={data.years} year={data.year} />
+          {canDownloadHr(actor) ? <CsvDownload kind="leave" params={{ ...params, year: String(data.year) }} /> : null}
         </div>
         {data.rows.length === 0 ? (
           <EmptyState size="sm">{params.q || params.status || params.type ? "No leave requests match these filters." : `No leave requests in ${data.year}.`}</EmptyState>
@@ -140,6 +143,11 @@ export default async function LeavePage({ searchParams }: PageProps<"/dashboard/
       </PanelCard>
 
       <PanelCard title={`Balances · ${balances.year}`}>
+        {canDownloadHr(actor) ? (
+          <div className="mb-3 flex justify-end">
+            <CsvDownload kind="leave-balances" params={{ year: String(balances.year) }} />
+          </div>
+        ) : null}
         {balances.rows.length === 0 ? (
           <EmptyState size="sm">No one to show.</EmptyState>
         ) : (

@@ -48,9 +48,9 @@ async function assertOwner(tx: Tx, actor: Actor, ownerId: string, members: strin
     .from(users)
     .where(eq(users.id, ownerId))
     .limit(1);
-  if (!owner || owner.status !== "active" || !["agent", "manager"].includes(owner.role)) {
+  if (!owner || owner.status !== "active" || !["agent", "manager", "admin"].includes(owner.role)) {
     throw new AppError("VALIDATION_FAILED", "Check the highlighted fields.", {
-      fields: { ownerId: "Choose an active agent or manager" },
+      fields: { ownerId: "Choose an active agent or Admin" },
     });
   }
   if (!canAssignTo(actor, ownerId, members)) throw forbidden("You cannot assign clients to that user.");

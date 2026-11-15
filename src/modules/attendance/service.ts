@@ -315,6 +315,49 @@ export async function monthlySummary(db: Database, actor: Actor, month: string, 
   return { month: m, today, rows };
 }
 
+export type PersonDay = {
+  date: string;
+  status: AttendanceStatus;
+  checkIn: string | null;
+  checkOut: string | null;
+  minutes: number | null;
+  correctedBy: string | null;
+  correctionNote: string | null;
+};
+
+/**
+ * One person's attendance history for a month (owner, 15 Nov 2026): every day with its status, times
+ * and hours, any correction and who made it, and the month's totals. HR, Admins and Super Admins.
+ */
+export async function personAttendance(db: Database, actor: Actor, userId: string, month: string, today = businessToday()) {
+  if (!canViewAttendance(actor)) throw forbidden();
+  if (!/^[0-9a-f-]{36}$/i.test(userId)) throw notFound("Person");
+  const [person] = await db.select({ id: users.id, name: users.name, role: users.role, status: users.status }).from(users).where(eq(users.id, userId)).limit(1);
+  if (!person) throw notFound("Person");
+  const m = MONTH.test(month) ? month : today.slice(0, 7);
+  const settings = await getAttendanceSettings(db);
+  const dates = datesOfMonth(m);
+  const data = await loadRange(db, [userId], dates[0], dates[dates.length - 1], today);
+  const byKey = new Map(data.records.map((r) => [`${r.userId}|${r.date}`, r]));
+  const correctorIds = [...new Set(data.records.map((r) => r.correctedById).filter((x): x is string => Boolean(x)))];
+  const correctors = new Map(correctorIds.length ? (await db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, correctorIds))).map((u) => [u.id, u.name]) : []);
+  const days: PersonDay[] = dates.map((date) => {
+    const { status, record } = statusFor(userId, date, today, settings, data, byKey);
+    return {
+      date,
+      status,
+      checkIn: record ? localTime(record.checkInAt) : null,
+      checkOut: record?.checkOutAt ? localTime(record.checkOutAt) : null,
+      minutes: record ? workedMinutes(record.checkInAt, record.checkOutAt) : null,
+      correctedBy: record?.correctedById ? (correctors.get(record.correctedById) ?? null) : null,
+      correctionNote: record?.correctionNote ?? null,
+    };
+  });
+  return { person, month: m, today, settings, days, totals: summarise(userId, dates, today, settings, data, byKey) };
+}
+
+export type PersonAttendance = Awaited<ReturnType<typeof personAttendance>>;
+
 /** My workplace: today's record and this month's tally for the signed-in person. */
 export async function myAttendance(db: Database, actor: Actor, now = new Date()) {
   const today = localDate(now);

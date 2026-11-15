@@ -48,7 +48,7 @@ export async function employeeSuggestions(db: Database) {
  * Employees directory (FR-140): every CRM account with its HR profile, plus HR records for staff
  * without a CRM login (questionnaire Q1).
  */
-export async function listEmployees(db: Database, actor: Actor, input: unknown = {}) {
+export async function listEmployees(db: Database, actor: Actor, input: unknown = {}, opts: { all?: boolean } = {}) {
   assertCanViewEmployees(actor);
   const query = employeeListQuerySchema.parse(input ?? {});
   const term = query.q ? `%${query.q.replace(/[%_\\]/g, (c) => `\\${c}`)}%` : null;
@@ -95,8 +95,9 @@ export async function listEmployees(db: Database, actor: Actor, input: unknown =
     .fullJoin(employeeProfiles, eq(employeeProfiles.userId, users.id))
     .where(where)
     .orderBy(order, asc(sql`lower(${empName})`), asc(empId))
-    .limit(EMPLOYEE_PAGE_SIZE)
-    .offset((page - 1) * EMPLOYEE_PAGE_SIZE);
+    // A CSV download takes every matching row (15 Nov 2026); the page shows one page.
+    .limit(opts.all ? 100_000 : EMPLOYEE_PAGE_SIZE)
+    .offset(opts.all ? 0 : (page - 1) * EMPLOYEE_PAGE_SIZE);
   return {
     query: { ...query, page },
     total,

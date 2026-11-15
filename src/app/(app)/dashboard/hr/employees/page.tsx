@@ -3,6 +3,8 @@ import { canOpenLeaveAdmin } from "@/modules/leave/service";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { canViewProfiles } from "@/modules/people/profile";
+import { CsvDownload } from "@/features/hr/components/csv-download";
+import { canDownloadHr } from "@/modules/hr/exports";
 import { PageHeader, PageStack } from "@/components/shell/page-header";
 import { StatusTag } from "@/components/ui/badge";
 import { buttonClasses } from "@/components/ui/button";
@@ -67,6 +69,7 @@ export default async function EmployeesPage({ searchParams }: PageProps<"/dashbo
         actions={
           canEdit ? (
             <div className="flex flex-wrap gap-2">
+              {canDownloadHr(actor) ? <CsvDownload kind="employees" params={params} /> : null}
               <Link href="/dashboard/hr/employees/new-record" className={buttonClasses({ variant: "secondary", size: "lg" })}>
                 <UserRoundPlus aria-hidden="true" className="size-4" />
                 Add employee (no login)

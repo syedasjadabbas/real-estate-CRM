@@ -1,4 +1,7 @@
 import { Clock } from "lucide-react";
+import { CsvDownload } from "@/features/hr/components/csv-download";
+import { DayPicker } from "@/features/attendance/components/day-picker";
+import { canDownloadHr } from "@/modules/hr/exports";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader, PageStack } from "@/components/shell/page-header";
@@ -13,7 +16,7 @@ import { PanelCard } from "@/features/leads/components/detail-panels";
 import { formatListedOn } from "@/features/inventory/format";
 import { flattenParams } from "@/features/leads/url";
 import { cn } from "@/lib/cn";
-import { ATTENDANCE_STATUS_LABELS, formatMinutes, WEEKDAY_LABELS } from "@/modules/attendance/rules";
+import { ATTENDANCE_STATUS_LABELS, formatMinutes, monthLabel, shiftMonth, WEEKDAY_LABELS } from "@/modules/attendance/rules";
 import { canManageAttendance, canViewAttendance, dailySheet, getAttendanceSettings, monthlySummary } from "@/modules/attendance/service";
 import { addDays, businessToday } from "@/modules/bookings/today";
 import { canViewEmployees } from "@/modules/employees/policy";
@@ -29,14 +32,7 @@ const PATH = "/dashboard/hr/attendance";
 const th = "px-3 py-3";
 const td = "px-3 py-2.5 whitespace-nowrap";
 
-function monthLabel(month: string) {
-  return new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${month}-01T00:00:00Z`));
-}
-function shiftMonth(month: string, by: number) {
-  const [y, m] = month.split("-").map(Number);
-  const d = new Date(Date.UTC(y, m - 1 + by, 1));
-  return d.toISOString().slice(0, 7);
-}
+
 
 /** HR → Attendance (owner, 15 Nov 2026): the daily check-in sheet, a monthly summary and office hours. */
 export default async function AttendancePage({ searchParams }: PageProps<"/dashboard/hr/attendance">) {
@@ -75,12 +71,7 @@ export default async function AttendancePage({ searchParams }: PageProps<"/dashb
           <Link href={`${PATH}?date=${addDays(sheet.date, -1)}`} className={buttonClasses({ variant: "secondary", size: "md" })}>
             ← Previous day
           </Link>
-          <form method="get" action={PATH} className="flex items-center gap-2">
-            <input type="date" name="date" defaultValue={sheet.date} max={today} aria-label="Day" className="h-9 rounded-lg border border-zinc-200/80 bg-white px-2 text-xs font-semibold" />
-            <button type="submit" className={buttonClasses({ variant: "secondary", size: "md" })}>
-              Show
-            </button>
-          </form>
+          <DayPicker key={sheet.date} path={PATH} value={sheet.date} max={today} />
           {sheet.date < today ? (
             <Link href={`${PATH}?date=${addDays(sheet.date, 1)}`} className={buttonClasses({ variant: "secondary", size: "md" })}>
               Next day →
@@ -90,6 +81,7 @@ export default async function AttendancePage({ searchParams }: PageProps<"/dashb
             {WEEKDAY_LABELS[new Date(`${sheet.date}T00:00:00Z`).getUTCDay()]}, {formatListedOn(sheet.date)}
             {sheet.date === today ? " · Today" : ""}
           </p>
+          {canDownloadHr(actor) ? <CsvDownload kind="attendance-day" params={{ date: sheet.date }} label="Download this day (CSV)" /> : null}
         </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
           <MiniStat label="Present" value={String(sheet.counts.present + sheet.counts.late)} caption={`${sheet.counts.late} late`} />
@@ -116,7 +108,7 @@ export default async function AttendancePage({ searchParams }: PageProps<"/dashb
                 {sheet.rows.map((r) => (
                   <tr key={r.userId} className="border-b border-zinc-100/80 align-top last:border-b-0 hover:bg-zinc-50/60">
                     <td className={td}>
-                      <p className="font-bold">{r.name}</p>
+                      <Link href={`${PATH}/${r.userId}?month=${sheet.date.slice(0, 7)}`} className="font-bold hover:text-brand hover:underline">{r.name}</Link>
                       <p className="text-[11px] text-zinc-500">{ROLE_LABELS[r.role as Role] ?? r.role}</p>
                     </td>
                     <td className={td}>
@@ -159,6 +151,7 @@ export default async function AttendancePage({ searchParams }: PageProps<"/dashb
             {monthLabel(summary.month)}
             {summary.month === thisMonth ? " · up to today" : ""}
           </p>
+          {canDownloadHr(actor) ? <CsvDownload kind="attendance-month" params={{ month: summary.month }} label="Download this month (CSV)" /> : null}
         </div>
         <PanelCard title={`Monthly summary · ${monthLabel(summary.month)}`}>
           <div className="overflow-x-auto rounded-xl border border-zinc-200/80">
@@ -180,7 +173,7 @@ export default async function AttendancePage({ searchParams }: PageProps<"/dashb
                 {summary.rows.map((r) => (
                   <tr key={r.userId} className="border-b border-zinc-100/80 last:border-b-0 hover:bg-zinc-50/60">
                     <td className={td}>
-                      <p className="font-bold">{r.name}</p>
+                      <Link href={`${PATH}/${r.userId}?month=${summary.month}`} className="font-bold hover:text-brand hover:underline">{r.name}</Link>
                       <p className="text-[11px] text-zinc-500">{ROLE_LABELS[r.role as Role] ?? r.role}</p>
                     </td>
                     <td className={cn(td, "tabular-nums")}>{r.workingDays}</td>

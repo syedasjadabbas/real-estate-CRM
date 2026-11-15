@@ -2,7 +2,8 @@ import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { dayStatus, DEFAULT_ATTENDANCE_SETTINGS, instantOf, localTime } from "@/modules/attendance/rules";
 import { hrDashboard } from "@/modules/attendance/hr-dashboard";
-import { checkIn, checkOut, correctAttendance, dailySheet, monthlySummary, myAttendance, updateAttendanceSettings } from "@/modules/attendance/service";
+import { checkIn, checkOut, correctAttendance, dailySheet, monthlySummary, myAttendance, personAttendance, updateAttendanceSettings } from "@/modules/attendance/service";
+import { hrExport } from "@/modules/hr/exports";
 import { holidays, leaveRequests, auditLogs, users } from "@/server/db/schema";
 import type { Database } from "@/server/db";
 import { AppError } from "@/server/errors";
@@ -85,6 +86,29 @@ describe.skipIf(!hasTestDb)("Attendance (PostgreSQL integration)", () => {
     expect(ma).toMatchObject({ present: 1, holiday: 1, workingDays: 14, minutes: 480 });
     expect(ma.absent).toBe(12); // 18th is today: not yet absent
     expect(month.rows.find((r) => r.userId === b.id)).toMatchObject({ onLeave: 1 });
+  });
+
+  it("shows one person's month day by day, with corrections, and downloads it (15 Nov 2026)", async () => {
+    const a = f.actors.agent1;
+    await checkIn(db, f.actors.outsideAgent, instantOf("2026-11-02", "09:00")); // attendance began on the 2nd
+    await checkIn(db, a, instantOf("2026-11-03", "09:40"));
+    await checkOut(db, a, instantOf("2026-11-03", "18:00"));
+    await correctAttendance(db, f.actors.hr, { userId: a.id, date: "2026-11-04", checkIn: "09:00", checkOut: "17:00", note: "Forgot to check in" });
+
+    expect((await errorOf(personAttendance(db, a, a.id, "2026-11", "2026-11-05")))?.code).toBe("FORBIDDEN");
+    const v = await personAttendance(db, f.actors.hr, a.id, "2026-11", "2026-11-05");
+    expect(v.days).toHaveLength(30);
+    const day = (d: string) => v.days.find((x) => x.date === d)!;
+    expect(day("2026-11-01").status).toBe("not_tracked"); // before attendance began
+    expect(day("2026-11-02").status).toBe("absent");
+    expect(day("2026-11-03")).toMatchObject({ status: "late", checkIn: "09:40", checkOut: "18:00", minutes: 500 });
+    expect(day("2026-11-04")).toMatchObject({ status: "present", correctedBy: f.actors.hr.name, correctionNote: "Forgot to check in" });
+    expect(day("2026-11-05").status).toBe("not_yet");
+    expect(v.totals).toMatchObject({ present: 1, late: 1, absent: 1, minutes: 980 });
+
+    const file = await hrExport(db, f.actors.hr, "attendance-person", { user: a.id, month: "2026-11" });
+    expect(file.filename).toBe(`attendance-${a.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-2026-11.csv`);
+    expect(file.body).toContain(`${a.name},2026-11-04,Wednesday,Present,09:00,17:00,8h 00m,${f.actors.hr.name},Forgot to check in`);
   });
 
   it("never counts days before attendance started, or before the person joined, as absences", async () => {

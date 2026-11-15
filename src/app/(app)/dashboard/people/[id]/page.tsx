@@ -230,6 +230,9 @@ export default async function EmployeeProfilePage({ params, searchParams }: Page
           <Row label="Late" value={p.attendance.month.late} tone={p.attendance.month.late ? "amber" : undefined} />
           <Row label="Absent" value={p.attendance.month.absent} tone={p.attendance.month.absent ? "rose" : undefined} />
           <Row label="Hours worked" value={formatMinutes(p.attendance.month.minutes)} />
+          <Link href={`/dashboard/hr/attendance/${p.person.id}`} className="mt-2 inline-block text-xs font-bold text-brand hover:underline">
+            Day-by-day attendance →
+          </Link>
           <p className="mt-3 mb-1 text-[10px] font-black tracking-[0.1em] text-zinc-500 uppercase">Leave {p.leave.year}</p>
           <Row label="Remaining / allowance" value={`${p.leave.remaining} / ${p.leave.allowance}`} />
           <Row label="Taken · pending" value={`${p.leave.granted} · ${p.leave.pending}`} />

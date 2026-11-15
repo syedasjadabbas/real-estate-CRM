@@ -421,7 +421,7 @@ async function leaveYears(db: Database, scope: SQL) {
  * - "Waiting for your decision" and cancellation requests (Admin / Super Admin) cover every year and
  *   ignore the list filters, so nothing that needs a decision is hidden by them.
  */
-export async function leaveOverview(db: Database, actor: Actor, year = yearOf(businessToday()), rawQuery: unknown = {}) {
+export async function leaveOverview(db: Database, actor: Actor, year = yearOf(businessToday()), rawQuery: unknown = {}, opts: { all?: boolean } = {}) {
   if (!canOpenLeaveAdmin(actor)) throw forbidden();
   const query = leaveListQuery.parse(rawQuery ?? {});
   const settings = await getLeaveSettings(db);
@@ -450,8 +450,9 @@ export async function leaveOverview(db: Database, actor: Actor, year = yearOf(bu
     .innerJoin(requester, eq(requester.id, leaveRequests.userId))
     .where(where)
     .orderBy(query.dir === "asc" ? sql`${column} asc` : sql`${column} desc`, desc(leaveRequests.createdAt), desc(leaveRequests.id))
-    .limit(LEAVE_PAGE_SIZE)
-    .offset((page - 1) * LEAVE_PAGE_SIZE)) as LeaveRow[];
+    // A CSV download takes every matching request (15 Nov 2026).
+    .limit(opts.all ? 100_000 : LEAVE_PAGE_SIZE)
+    .offset(opts.all ? 0 : (page - 1) * LEAVE_PAGE_SIZE)) as LeaveRow[];
 
   const open = (await db
     .select(listSelect)

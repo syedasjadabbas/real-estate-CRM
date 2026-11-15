@@ -84,9 +84,10 @@ async function assertAssignable(tx: Tx, actor: Actor, ownerId: string) {
     .from(users)
     .where(eq(users.id, ownerId))
     .limit(1);
-  if (!owner || owner.status !== "active" || !["agent", "manager"].includes(owner.role)) {
+  // Admins can hold leads too (15 Nov 2026), e.g. a resigned agent's leads until they're shared out again.
+  if (!owner || owner.status !== "active" || !["agent", "manager", "admin"].includes(owner.role)) {
     throw new AppError("VALIDATION_FAILED", "Check the highlighted fields.", {
-      fields: { ownerId: "Choose an active agent or manager" },
+      fields: { ownerId: "Choose an active agent or Admin" },
     });
   }
   const members = leadScope(actor.role) === "team" ? await teamMemberIds(tx, { ...actor, managedTeamIds: (await lockManagedTeams(tx, actor)).map((t) => t.id) }) : [];

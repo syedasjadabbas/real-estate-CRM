@@ -207,13 +207,13 @@ export async function reassignOwnedLeads(db: Database, actor: Actor, fromUserId:
   return { moved };
 }
 
-/** Active agents and managers who can receive leads, for the lead shift dialog. */
+/** Active agents and Admins who can receive a leaving person's leads (Admins since 15 Nov 2026). */
 export async function leadReceivers(db: Database, actor: Actor, excludeUserId: string) {
   assertCanManageAccounts(actor);
   const rows = await db
     .select({ id: users.id, name: users.name, role: users.role })
     .from(users)
-    .where(and(eq(users.status, "active"), inArray(users.role, ["agent", "manager"])))
+    .where(and(eq(users.status, "active"), inArray(users.role, ["agent", "manager", "admin"])))
     .orderBy(asc(sql`lower(${users.name})`));
   return rows.filter((r) => r.id !== excludeUserId);
 }
