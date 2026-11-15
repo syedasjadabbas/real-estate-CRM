@@ -16,6 +16,7 @@ const noteSchema = z.object({ body: z.string().trim().min(1, "Write a note").max
 export async function addEmployeeNote(db: Database, actor: Actor, userId: string, input: unknown) {
   if (!canViewProfiles(actor)) throw forbidden();
   const { body } = parse(noteSchema, input);
+  if (!/^[0-9a-f-]{36}$/i.test(userId)) throw notFound("Person");
   if (userId === actor.id) throw forbidden("You can't keep notes on yourself.");
   const [person] = await db.select({ id: users.id }).from(users).where(eq(users.id, userId)).limit(1);
   if (!person) throw notFound("Person");

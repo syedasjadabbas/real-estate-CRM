@@ -76,7 +76,12 @@ export function CoachingNotes({ userId, notes, meId, canDeleteAny, canWrite }: {
                   type="button"
                   aria-label="Delete note"
                   disabled={pending}
-                  onClick={() => startTransition(async () => void (await deleteEmployeeNoteAction(n.id)))}
+                  onClick={() =>
+                    startTransition(async () => {
+                      const r = await deleteEmployeeNoteAction(n.id);
+                      setMsg(r.ok ? { text: "Note deleted.", ok: true } : { text: r.message, ok: false });
+                    })
+                  }
                   className="shrink-0 text-zinc-400 hover:text-rose-600 print:hidden"
                 >
                   <Trash2 aria-hidden="true" className="size-3.5" />

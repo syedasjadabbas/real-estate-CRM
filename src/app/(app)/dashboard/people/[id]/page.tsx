@@ -246,7 +246,7 @@ export default async function EmployeeProfilePage({ params, searchParams }: Page
       </div>
 
       <nav aria-label="Profile sections" className="-mx-1 flex gap-1.5 overflow-x-auto px-1 py-1 print:hidden">
-        {JUMPS.map(([id, label]) => (
+        {JUMPS.filter(([id]) => id !== "notes" || actor.id !== p.person.id).map(([id, label]) => (
           <a key={id} href={`#${id}`} className="shrink-0 rounded-full border border-zinc-200 bg-white px-3 py-1 text-[11px] font-bold text-zinc-700 hover:border-brand hover:text-brand">
             {label}
           </a>
@@ -437,9 +437,11 @@ export default async function EmployeeProfilePage({ params, searchParams }: Page
         </Section>
       </div>
 
-      <Section id="notes" title={`Coaching notes · ${p.notes.length}`}>
-        <CoachingNotes userId={p.person.id} notes={p.notes} meId={actor.id} canDeleteAny={actor.role === "super_admin"} canWrite={actor.id !== p.person.id} />
-      </Section>
+      {actor.id !== p.person.id ? (
+        <Section id="notes" title={`Coaching notes · ${p.notes.length}`}>
+          <CoachingNotes userId={p.person.id} notes={p.notes} meId={actor.id} canDeleteAny={actor.role === "super_admin"} canWrite />
+        </Section>
+      ) : null}
 
       <Section id="activity" title="Recent activity">
         <FilterList

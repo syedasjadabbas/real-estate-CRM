@@ -199,7 +199,8 @@ export async function employeeProfile(db: Database, actor: Actor, userId: string
   for (let d = chartFrom; d <= range.to; d = addDays(d, 1)) daily.push({ date: d, calls: callDays.find((x) => x.d === d)?.n ?? 0, meetings: meetingDays.find((x) => x.d === d)?.n ?? 0 });
 
   const author = users;
-  const notes = await db
+  // Private coaching notes are never shown to the person they are about (an Admin opening their own profile).
+  const notes = userId === actor.id ? [] : await db
     .select({ id: employeeNotes.id, body: employeeNotes.body, createdAt: employeeNotes.createdAt, authorId: employeeNotes.authorId, authorName: author.name })
     .from(employeeNotes)
     .leftJoin(author, eq(author.id, employeeNotes.authorId))
