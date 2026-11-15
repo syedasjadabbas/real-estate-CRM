@@ -4,10 +4,10 @@ import { and, eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { addClientNote, completeClientFollowUp, createClient, scheduleClientFollowUp } from "@/modules/clients/commands";
 import { addNote, addReview, completeFollowUp, createLead, markLost, scheduleFollowUp, setFavorite } from "@/modules/leads/commands";
-import { AUDIT_PAGE_SIZE, listAuditLogs, REDACTED } from "@/modules/audit/service";
+import { AUDIT_PAGE_SIZE, auditLogCsv, listAuditLogs, REDACTED } from "@/modules/audit/service";
 import { loadActor } from "@/server/auth/session-store";
 import { readProxyConfig, resolveClientIp } from "@/server/auth/client-ip";
-import { auditLogs, users } from "@/server/db/schema";
+import { auditLogs, leads, users } from "@/server/db/schema";
 import type { Database } from "@/server/db";
 import type { Actor } from "@/server/auth/types";
 import { AppError } from "@/server/errors";
@@ -185,6 +185,26 @@ describe.skipIf(!hasTestDb)("Audit log (FR-008, F-4, PostgreSQL integration)", (
       expect((await listAuditLogs(db, f.actors.superAdmin)).total).toBeGreaterThan(0);
       expect((await listAuditLogs(db, admin)).total).toBeGreaterThan(0);
       for (const who of [f.actors.manager, f.actors.agent1, f.actors.hr, accountant]) expect(await errorCode(listAuditLogs(db, who))).toBe("FORBIDDEN");
+    });
+
+    it("names records, finds plain-English actions and downloads as CSV (16 Nov 2026)", async () => {
+      const leadId = await newLead(f.actors.agent2);
+      await addNote(db, withIp(f.actors.agent2), leadId, { body: "Needle for the CSV" });
+      const [{ name, code }] = await db.select({ name: leads.name, code: leads.code }).from(leads).where(eq(leads.id, leadId));
+      const noted = (await listAuditLogs(db, admin, { action: "lead.note" })).rows[0];
+      expect(noted.record).toEqual({ name: `${name} (${code})`, href: `/dashboard/leads/${leadId}` });
+      // "Added a note / review" is the label of lead.note, which isn't in the stored text.
+      expect((await listAuditLogs(db, admin, { q: "added a note" })).rows.map((r) => r.action)).toEqual(["lead.note"]);
+
+      const out = await auditLogCsv(db, withIp(admin), { action: "lead.note" });
+      const lines = out.body.replace(/^﻿/, "").trim().split("\r\n");
+      expect(lines[0]).toBe("Time (Pakistan),User,Role,Action,Action code,Record type,Record,Record ID,Before,After,IP");
+      expect(lines).toHaveLength(2);
+      expect(lines[1]).toContain(",Added a note / review,lead.note,Lead,");
+      expect(lines[1]).toContain(leadId);
+      // The download is itself logged; other roles can't download.
+      expect((await listAuditLogs(db, admin, { action: "audit.export" })).rows[0]).toMatchObject({ actorId: admin.id, after: { rows: 1 } });
+      expect(await errorCode(auditLogCsv(db, f.actors.agent1, {}))).toBe("FORBIDDEN");
     });
 
     it("filters by user, record type, action, Pakistan date and search, and sorts", async () => {

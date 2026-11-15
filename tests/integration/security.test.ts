@@ -4,6 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { pruneSigninLogs } from "../../scripts/jobs/prune-signin-logs.mjs";
 import { getRetentionSettings, getRetentionStatus, updateRetentionSettings } from "@/modules/security/service";
 import { CLEANUP_ENABLED_KEY, LAST_RUN_KEY, RETENTION_MONTHS_KEY } from "@/modules/security/retention";
+import { listSignins } from "@/modules/security/signins";
 import { readProxyConfig, resolveClientIp } from "@/server/auth/client-ip";
 import { authenticate } from "@/server/auth/login";
 import { createSession, loadActor } from "@/server/auth/session-store";
@@ -196,6 +197,39 @@ describe.skipIf(!hasTestDb)("Production readiness (PostgreSQL integration)", () 
       const s = await getRetentionStatus(db, admin);
       expect(s).toMatchObject({ retentionMonths: 12, cleanupEnabled: true, eligible: 2, total: 4 });
       expect(Math.abs(s.cutoff.getTime() - monthsAgo(12).getTime())).toBeLessThan(2 * 86_400_000);
+    });
+
+    it("warns when the daily cleanup hasn't run for over two days (16 Nov 2026)", async () => {
+      expect((await getRetentionStatus(db, admin)).lastRunStale).toBe(true); // never run
+      const lastRun = (at: Date) => JSON.stringify({ at: at.toISOString(), status: "disabled", eligible: 0, deleted: 0, retentionMonths: 12, cutoff: at.toISOString() });
+      await db.insert(appSettings).values({ key: LAST_RUN_KEY, value: lastRun(new Date(Date.now() - 3_600_000)) });
+      expect((await getRetentionStatus(db, admin)).lastRunStale).toBe(false);
+      await db.update(appSettings).set({ value: lastRun(new Date(Date.now() - 3 * 86_400_000)) }).where(eq(appSettings.key, LAST_RUN_KEY));
+      expect((await getRetentionStatus(db, admin)).lastRunStale).toBe(true);
+    });
+  });
+
+  describe("sign-in history viewer (16 Nov 2026)", () => {
+    it("lists newest first and filters by person, event and Pakistan dates; admins only", async () => {
+      await db.insert(signinLogs).values([
+        { userId: f.actors.agent1.id, event: "sign_in", ip: "203.0.113.7", userAgent: "Mozilla/5.0 (Windows NT 10.0) Chrome/130.0 Safari/537.36", at: new Date("2026-11-10T09:00:00+05:00") },
+        { userId: f.actors.agent1.id, event: "sign_out", at: new Date("2026-11-10T18:00:00+05:00") },
+        { userId: f.actors.agent2.id, event: "sign_in", userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0) Safari/604.1", at: new Date("2026-11-12T23:50:00+05:00") },
+      ]);
+      const all = await listSignins(db, admin);
+      expect(all.total).toBe(3);
+      expect(all.rows.map((r) => r.event)).toEqual(["sign_in", "sign_out", "sign_in"]);
+      expect(all.rows[2]).toMatchObject({ name: f.actors.agent1.name, ip: "203.0.113.7", device: "Chrome on Windows" });
+      expect(all.rows[0].device).toBe("Safari on iPhone / iPad");
+
+      expect((await listSignins(db, admin, { sq: f.actors.agent1.email })).total).toBe(2);
+      expect((await listSignins(db, admin, { sq: "203.0.113" })).total).toBe(1);
+      expect((await listSignins(db, admin, { sevent: "sign_out" })).rows.map((r) => r.userId)).toEqual([f.actors.agent1.id]);
+      // 23:50 Pakistan time on the 12th belongs to the 12th, not the 13th.
+      expect((await listSignins(db, admin, { sfrom: "2026-11-12", sto: "2026-11-12" })).total).toBe(1);
+      expect((await listSignins(db, admin, { sfrom: "2026-11-13" })).total).toBe(0);
+      expect((await listSignins(db, f.actors.superAdmin)).total).toBe(3);
+      for (const actor of [f.actors.manager, f.actors.agent1, f.actors.hr, accountant]) expect(await errorCode(listSignins(db, actor))).toBe("FORBIDDEN");
     });
   });
 

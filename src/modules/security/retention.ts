@@ -7,7 +7,7 @@ import { z } from "zod";
 export const RETENTION_MONTHS_KEY = "security.signin_log_retention_months";
 export const CLEANUP_ENABLED_KEY = "security.signin_log_cleanup_enabled";
 export const LAST_RUN_KEY = "security.signin_log_cleanup_last_run";
-/** Proposed default (C2), pending client confirmation. */
+/** Agreed with the owner on 16 Nov 2026 (was the proposed default C2). */
 export const DEFAULT_RETENTION_MONTHS = 12;
 export const MIN_RETENTION_MONTHS = 3;
 export const MAX_RETENTION_MONTHS = 120;

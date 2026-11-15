@@ -37,14 +37,14 @@ export function RetentionForm({ retentionMonths, cleanupEnabled }: { retentionMo
         aria-label="Retention period"
         onSubmit={(e) => {
           e.preventDefault();
-          save({ retentionMonths: months }, "Retention period saved.");
+          save({ retentionMonths: months }, "Period saved.");
         }}
         className="space-y-4"
       >
-        <FormSection title="Retention period">
+        <FormSection title="Period">
           <Field
             label="Keep sign-in history for (months)"
-            hint={`${MIN_RETENTION_MONTHS}–${MAX_RETENTION_MONTHS} months. 12 is the proposed default, pending client confirmation.`}
+            hint={`Between ${MIN_RETENTION_MONTHS} and ${MAX_RETENTION_MONTHS} months. The agreed period is 12 months.`}
             error={errors.retentionMonths}
           >
             {(id, describedBy) => (
@@ -72,8 +72,8 @@ export function RetentionForm({ retentionMonths, cleanupEnabled }: { retentionMo
         <p className="text-sm font-bold text-zinc-900">{cleanupEnabled ? "On — old sign-in history is deleted daily" : "Off — nothing is deleted"}</p>
         <p className="mt-1 text-xs text-zinc-600">
           {cleanupEnabled
-            ? "The daily cleanup job permanently deletes sign-in history older than the retention period. Audit logs are never deleted."
-            : "Keep this off until the client confirms the retention policy. While it is off, the cleanup job only reports how many entries would be eligible."}
+            ? "Every day, sign-in history older than the period is permanently deleted. The audit log and all other records are never deleted."
+            : "While this is off, sign-in history is kept for good; the daily check only counts how many entries are older than the period. Turn it on to delete those automatically."}
         </p>
         {errors.cleanupEnabled ? <p className="mt-2 text-xs font-semibold text-rose-600">{errors.cleanupEnabled}</p> : null}
         <div className="mt-3 flex justify-end">
@@ -99,7 +99,7 @@ export function RetentionForm({ retentionMonths, cleanupEnabled }: { retentionMo
         open={confirming}
         onClose={() => setConfirming(false)}
         title="Turn on automatic deletion?"
-        description={`Sign-in history older than ${retentionMonths} months will be permanently deleted by the daily cleanup job. This cannot be undone.`}
+        description={`Every day, sign-in history older than ${retentionMonths} months will be permanently deleted. This cannot be undone.`}
         footer={
           <>
             <Button variant="secondary" size="lg" disabled={pending} onClick={() => setConfirming(false)}>
@@ -111,7 +111,7 @@ export function RetentionForm({ retentionMonths, cleanupEnabled }: { retentionMo
           </>
         }
       >
-        <p className="text-sm text-zinc-700">Only turn this on after the client has approved the retention policy. Audit logs and all other records are not affected.</p>
+        <p className="text-sm text-zinc-700">Only the sign-in and sign-out history is affected. The audit log, leads, bookings and all other records are never deleted.</p>
       </Modal>
     </div>
   );

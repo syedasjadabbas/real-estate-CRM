@@ -2,8 +2,12 @@ import { and, asc, desc, eq, gte, ilike, isNotNull, lt, or, sql, type SQL } from
 import { z } from "zod";
 import type { Database } from "@/server/db";
 import { auditLogs, users } from "@/server/db/schema";
-import type { Actor } from "@/server/auth/types";
+import { ROLE_LABELS, type Actor, type Role } from "@/server/auth/types";
 import { forbidden } from "@/server/errors";
+import { toCsv } from "@/server/csv";
+import { ACTION_LABELS, ENTITY_LABELS, actionLabel, entityLabel } from "./labels";
+import { recordNames, type RecordRef } from "./records";
+import { inArray } from "drizzle-orm";
 
 /**
  * Audit-log viewer (FR-008, SECURITY_AND_PRIVACY §3: "Admins can view audit logs. Nobody can edit or
@@ -58,6 +62,8 @@ export type AuditRow = {
   before: unknown;
   after: unknown;
   ip: string | null;
+  /** The record's name and page, when it still exists (16 Nov 2026). */
+  record: RecordRef | null;
 };
 
 const SORTS: Record<AuditSortColumn, SQL> = {
@@ -67,12 +73,13 @@ const SORTS: Record<AuditSortColumn, SQL> = {
   entity: sql`${auditLogs.entity}`,
 };
 
-/** Filtered, sorted, 50-per-page audit rows, plus the values the filters offer. */
-export async function listAuditLogs(db: Database, actor: Actor, rawQuery: unknown = {}) {
-  if (!canViewAuditLog(actor)) throw forbidden();
-  const query = auditQuery.parse(rawQuery ?? {});
+/** The WHERE clause for the filters; shared by the page and the CSV download. */
+function auditWhere(query: AuditQuery) {
   const term = query.q ? `%${query.q.replace(/[%_\\]/g, (c) => `\\${c}`)}%` : null;
-  const where = and(
+  const needle = query.q?.toLowerCase() ?? "";
+  const labelActions = needle ? Object.entries(ACTION_LABELS).filter(([, l]) => l.toLowerCase().includes(needle)).map(([code]) => code) : [];
+  const labelEntities = needle ? Object.entries(ENTITY_LABELS).filter(([, l]) => l.toLowerCase().includes(needle)).map(([code]) => code) : [];
+  return and(
     query.actor ? eq(auditLogs.actorId, query.actor) : undefined,
     query.entity ? eq(auditLogs.entity, query.entity) : undefined,
     query.action ? eq(auditLogs.action, query.action) : undefined,
@@ -87,9 +94,18 @@ export async function listAuditLogs(db: Database, actor: Actor, rawQuery: unknow
           ilike(users.name, term),
           sql`${auditLogs.before}::text ilike ${term}`,
           sql`${auditLogs.after}::text ilike ${term}`,
+          labelActions.length ? inArray(auditLogs.action, labelActions) : undefined,
+          labelEntities.length ? inArray(auditLogs.entity, labelEntities) : undefined,
         )
       : undefined,
   );
+}
+
+/** Filtered, sorted, 50-per-page audit rows, plus the values the filters offer. */
+export async function listAuditLogs(db: Database, actor: Actor, rawQuery: unknown = {}) {
+  if (!canViewAuditLog(actor)) throw forbidden();
+  const query = auditQuery.parse(rawQuery ?? {});
+  const where = auditWhere(query);
   // Sequential on purpose: small queries, and one connection is enough.
   const [{ total }] = await db.select({ total: sql<number>`count(*)::int` }).from(auditLogs).leftJoin(users, eq(users.id, auditLogs.actorId)).where(where);
   const pageCount = Math.max(1, Math.ceil(total / AUDIT_PAGE_SIZE));
@@ -136,7 +152,76 @@ export async function listAuditLogs(db: Database, actor: Actor, rawQuery: unknow
     total,
     page,
     pageCount,
-    rows: rows.map((r) => ({ ...r, before: redactSecrets(r.before), after: redactSecrets(r.after) })) as AuditRow[],
+    rows: await withRecords(db, rows),
     options: { entities, actions, actors },
   };
+}
+
+type RawAuditRow = Omit<AuditRow, "record">;
+
+/** Secrets hidden, and each row's record named (one lookup per record type). */
+async function withRecords(db: Database, rows: RawAuditRow[]): Promise<AuditRow[]> {
+  const names = await recordNames(db, rows);
+  return rows.map((r) => ({ ...r, before: redactSecrets(r.before), after: redactSecrets(r.after), record: names.get(r.entity, r.entityId) }));
+}
+
+export const AUDIT_EXPORT_LIMIT = 20_000;
+const karachi = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Karachi", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+const pkTime = (d: Date) => karachi.format(d).replace(",", "");
+const json = (v: unknown) => (v === null || v === undefined ? "" : JSON.stringify(v));
+
+/**
+ * Audit log download (owner review, 16 Nov 2026): every entry matching the page's filters, newest
+ * first, up to 20,000 rows, with plain labels beside the codes. Downloading it is itself logged.
+ */
+export async function auditLogCsv(db: Database, actor: Actor & { ip?: string | null }, rawQuery: unknown = {}) {
+  if (!canViewAuditLog(actor)) throw forbidden();
+  const query = auditQuery.parse(rawQuery ?? {});
+  const raw = await db
+    .select({
+      id: auditLogs.id,
+      createdAt: auditLogs.createdAt,
+      actorId: auditLogs.actorId,
+      actorName: users.name,
+      actorRole: users.role,
+      action: auditLogs.action,
+      entity: auditLogs.entity,
+      entityId: auditLogs.entityId,
+      before: auditLogs.before,
+      after: auditLogs.after,
+      ip: auditLogs.ip,
+    })
+    .from(auditLogs)
+    .leftJoin(users, eq(users.id, auditLogs.actorId))
+    .where(auditWhere(query))
+    .orderBy(desc(auditLogs.createdAt), desc(auditLogs.id))
+    .limit(AUDIT_EXPORT_LIMIT);
+  const rows = await withRecords(db, raw);
+  const body = toCsv(
+    ["Time (Pakistan)", "User", "Role", "Action", "Action code", "Record type", "Record", "Record ID", "Before", "After", "IP"],
+    rows.map((r) => [
+      pkTime(r.createdAt),
+      r.actorName ?? "System",
+      r.actorRole ? (ROLE_LABELS[r.actorRole as Role] ?? r.actorRole) : "",
+      actionLabel(r.action),
+      r.action,
+      entityLabel(r.entity),
+      r.record?.name ?? "",
+      r.entityId ?? "",
+      json(r.before),
+      json(r.after),
+      r.ip ?? "",
+    ]),
+  );
+  const filename = `audit-log-${query.from ?? "start"}-to-${query.to ?? pkTime(new Date()).slice(0, 10)}.csv`;
+  await db.insert(auditLogs).values({
+    actorId: actor.id,
+    ip: actor.ip ?? null,
+    action: "audit.export",
+    entity: "audit_log",
+    entityId: null,
+    before: null,
+    after: { file: filename, rows: rows.length, filters: Object.fromEntries(Object.entries({ q: query.q, actor: query.actor, entity: query.entity, action: query.action, from: query.from, to: query.to }).filter(([, v]) => v)) },
+  });
+  return { filename, body, rows: rows.length };
 }

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { withParams } from "@/features/leads/url";
 import { cn } from "@/lib/cn";
+import { entityLabel, groupActions } from "@/modules/audit/labels";
 import type { AuditSortColumn } from "@/modules/audit/service";
 
 const field = "mt-1 block h-9 rounded-xl border border-zinc-200/80 bg-white px-2 text-xs font-semibold";
@@ -59,7 +60,7 @@ export function AuditFilters({
     <form method="get" action={path} className="flex flex-wrap items-end gap-2" aria-label="Filter audit log">
       <label className={labelClass}>
         Search
-        <input type="search" name="q" aria-label="Search" defaultValue={params.q ?? ""} placeholder="Action, record, user, value or IP" maxLength={100} className={cn(field, "w-60 max-w-full")} />
+        <input type="search" name="q" aria-label="Search" defaultValue={params.q ?? ""} placeholder="e.g. booking, Ahmed, stage, or an IP" maxLength={100} className={cn(field, "w-60 max-w-full")} />
       </label>
       <label className={labelClass}>
         User
@@ -76,21 +77,27 @@ export function AuditFilters({
         Record type
         <select name="entity" aria-label="Record type" defaultValue={params.entity ?? ""} className={field}>
           <option value="">All types</option>
-          {options.entities.map((e) => (
-            <option key={e} value={e}>
-              {e}
-            </option>
-          ))}
+          {[...options.entities]
+            .sort((a, b) => entityLabel(a).localeCompare(entityLabel(b)))
+            .map((e) => (
+              <option key={e} value={e}>
+                {entityLabel(e)}
+              </option>
+            ))}
         </select>
       </label>
       <label className={labelClass}>
         Action
         <select name="action" aria-label="Action" defaultValue={params.action ?? ""} className={cn(field, "max-w-56")}>
           <option value="">All actions</option>
-          {options.actions.map((a) => (
-            <option key={a} value={a}>
-              {a}
-            </option>
+          {groupActions(options.actions).map(([group, items]) => (
+            <optgroup key={group} label={group}>
+              {items.map((a) => (
+                <option key={a.value} value={a.value}>
+                  {a.label}
+                </option>
+              ))}
+            </optgroup>
           ))}
         </select>
       </label>

@@ -1,4 +1,6 @@
-import { ScrollText } from "lucide-react";
+import { Download, ScrollText } from "lucide-react";
+import { buttonClasses } from "@/components/ui/button";
+import { actionLabel, entityLabel } from "@/modules/audit/labels";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader, PageStack } from "@/components/shell/page-header";
@@ -17,11 +19,6 @@ import { getDb } from "@/server/db";
 export const metadata: Metadata = { title: "Audit log" };
 
 const PATH = "/dashboard/settings/audit-log";
-/** Record pages that exist for an audited entity; other entities show their id only. */
-const RECORD_LINKS: Record<string, (id: string) => string> = {
-  lead: (id) => `/dashboard/leads/${id}`,
-  client: (id) => `/dashboard/clients/${id}`,
-};
 
 function Change({ label, value }: { label: string; value: unknown }) {
   if (value === null || value === undefined) return null;
@@ -33,19 +30,26 @@ function Change({ label, value }: { label: string; value: unknown }) {
   );
 }
 
+/** Record type, then its name linked to its page (16 Nov 2026); the id only when the record is gone. */
 function RecordCell({ row }: { row: AuditRow }) {
-  const link = row.entityId && RECORD_LINKS[row.entity] && /^[0-9a-f-]{36}$/i.test(row.entityId) ? RECORD_LINKS[row.entity](row.entityId) : null;
+  const rec = row.record;
   return (
     <>
-      <span className="font-semibold">{row.entity}</span>
-      {row.entityId ? (
-        link ? (
-          <Link href={link} className="block truncate font-mono text-[11px] text-brand hover:underline">
-            {row.entityId}
+      <span className="block text-[10px] font-bold tracking-[0.05em] text-zinc-500 uppercase">{entityLabel(row.entity)}</span>
+      {rec ? (
+        rec.href ? (
+          <Link href={rec.href} className="block truncate font-semibold text-brand hover:underline" title={rec.name}>
+            {rec.name}
           </Link>
         ) : (
-          <span className="block truncate font-mono text-[11px] text-zinc-500">{row.entityId}</span>
+          <span className="block truncate font-semibold" title={rec.name}>
+            {rec.name}
+          </span>
         )
+      ) : row.entityId ? (
+        <span className="block truncate font-mono text-[11px] text-zinc-400" title="This record no longer exists, or has no name">
+          {row.entityId}
+        </span>
       ) : null}
     </>
   );
@@ -68,11 +72,22 @@ export default async function AuditLogPage({ searchParams }: PageProps<"/dashboa
     <PageStack>
       <PageHeader
         title="Audit log"
-        description="Who changed what, and when. Read-only: entries can't be edited or deleted. Times are Pakistan time; IP addresses appear only when a trusted proxy supplies them."
+        description="Who did what, and when. Nobody can edit or delete these entries. Times are Pakistan time. Click a record to open it, or View changes to see what changed."
         icon={ScrollText}
       />
       <SettingsTabs active="audit" showBackups={canViewBackups(actor)} />
       <PanelCard title={`Entries · ${data.total}`}>
+        <div className="mb-3 flex justify-end">
+          <a
+            href={`/api/v1/audit/export?${new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([k, v]) => v && ["q", "actor", "entity", "action", "from", "to"].includes(k))))}`}
+            className={buttonClasses({ variant: "secondary", className: "h-[33px] px-3 text-xs" })}
+            download
+            title="Every entry matching the filters below, newest first (up to 20,000)"
+          >
+            <Download aria-hidden="true" className="size-3.5" />
+            Export CSV{filtered ? " (filtered)" : ""}
+          </a>
+        </div>
         <div className="mb-3">
           <AuditFilters path={PATH} params={params} options={data.options} />
         </div>
@@ -99,7 +114,10 @@ export default async function AuditLogPage({ searchParams }: PageProps<"/dashboa
                       <span className="font-bold">{r.actorName ?? "System"}</span>
                       {r.actorRole ? <span className="block text-[11px] text-zinc-500">{ROLE_LABELS[r.actorRole as Role]}</span> : null}
                     </td>
-                    <td className="py-2 pr-3 font-mono text-[11px] font-semibold">{r.action}</td>
+                    <td className="py-2 pr-3">
+                      <span className="block font-semibold">{actionLabel(r.action)}</span>
+                      <span className="block font-mono text-[10px] text-zinc-400">{r.action}</span>
+                    </td>
                     <td className="max-w-[220px] py-2 pr-3">
                       <RecordCell row={r} />
                     </td>

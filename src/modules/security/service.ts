@@ -17,7 +17,7 @@ import {
   retentionSettingsSchema,
 } from "./retention";
 
-/** Current retention settings. Absent keys mean the proposed defaults: 12 months, deletion off. */
+/** Current retention settings. Absent keys mean the defaults: 12 months (agreed 16 Nov 2026), deletion off. */
 export async function getRetentionSettings(db: DbOrTx) {
   const rows = await db.select().from(appSettings).where(inArray(appSettings.key, [RETENTION_MONTHS_KEY, CLEANUP_ENABLED_KEY, LAST_RUN_KEY]));
   const map = new Map(rows.map((r) => [r.key, r.value]));
@@ -36,7 +36,10 @@ export async function getRetentionSettings(db: DbOrTx) {
 export type RetentionSettings = Awaited<ReturnType<typeof getRetentionSettings>>;
 
 /** Settings plus the current cutoff and how many sign-in logs are past it (admins only). */
-export async function getRetentionStatus(db: Database, actor: Actor) {
+/** The cleanup should run daily; when the last run is older than this, the page warns (16 Nov 2026). */
+export const STALE_CLEANUP_MS = 2 * 86_400_000;
+
+export async function getRetentionStatus(db: Database, actor: Actor, now = new Date()) {
   assertCanManageSecurity(actor);
   const settings = await getRetentionSettings(db);
   const [row] = await db
@@ -47,7 +50,8 @@ export async function getRetentionStatus(db: Database, actor: Actor) {
       oldest: sql<Date | null>`min(${signinLogs.at})`,
     })
     .from(signinLogs);
-  return { ...settings, cutoff: new Date(row.cutoff), eligible: row.eligible, total: row.total, oldest: row.oldest ? new Date(row.oldest) : null };
+  const lastRunStale = !settings.lastRun || now.getTime() - new Date(settings.lastRun.at).getTime() > STALE_CLEANUP_MS;
+  return { ...settings, lastRunStale, cutoff: new Date(row.cutoff), eligible: row.eligible, total: row.total, oldest: row.oldest ? new Date(row.oldest) : null };
 }
 
 /**
@@ -89,6 +93,6 @@ export async function signinRetentionNote(db: DbOrTx) {
   const s = await getRetentionSettings(db);
   return s.cleanupEnabled
     ? `Sign-in history older than ${s.retentionMonths} months is deleted automatically.`
-    : `Sign-in history is currently kept indefinitely; a ${s.retentionMonths}-month retention period is proposed and automatic deletion is off.`;
+    : `Sign-in history is kept for ${s.retentionMonths} months; automatic deletion of older entries is currently off, so nothing is removed yet.`;
 }
 

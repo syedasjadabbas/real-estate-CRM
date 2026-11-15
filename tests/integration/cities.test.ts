@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { addCity, listCities, updateCity } from "@/modules/cities/service";
+import { addCity, addTypedCity, listCities, typedOtherCities, updateCity } from "@/modules/cities/service";
 import { cityOptions, OTHER_CITY } from "@/modules/cities/constants";
 import { cityNameSchema } from "@/modules/cities/validation";
 import { convertLeadToClient, createClient, updateClient } from "@/modules/clients/commands";
@@ -99,6 +99,33 @@ describe.skipIf(!hasTestDb)("FR-042: city administration and the Other city (Pos
         expect((await failure(updateCity(db, who, f.cityId, { isActive: false }))).code).toBe("FORBIDDEN");
       }
       expect((await db.select().from(cities)).map((c) => [c.name, c.isActive])).toEqual([["Islamabad", true]]);
+    });
+  });
+
+  describe("cities typed under Other (16 Nov 2026)", () => {
+    it("are grouped ignoring case and spaces, and Add to list links their records", async () => {
+      const a = await newLead({ cityId: OTHER_CITY, cityOther: "Murree" });
+      const b = await newLead({ cityId: OTHER_CITY, cityOther: "  murree " });
+      await newLead({ cityId: OTHER_CITY, cityOther: "Bahawalpur" });
+      const c = await newClient({ cityId: OTHER_CITY, cityOther: "MURREE" });
+
+      // A new lead brings its own client record with the same typed city, so count clients from the data.
+      const murreeClients = (await db.select({ other: clients.cityOther }).from(clients)).filter((r) => r.other?.trim().toLowerCase() === "murree").length;
+      expect(murreeClients).toBeGreaterThanOrEqual(1);
+      const typed = await typedOtherCities(db, admin);
+      expect(typed[0]).toMatchObject({ leads: 2, clients: murreeClients });
+      expect(typed[0].name.toLowerCase()).toBe("murree");
+      expect(typed.map((t) => t.name)).toContain("Bahawalpur");
+      expect((await failure(typedOtherCities(db, f.actors.agent1))).code).toBe("FORBIDDEN");
+
+      const added = await addTypedCity(db, admin, { name: "Murree" });
+      expect(added).toMatchObject({ linkedLeads: 2, linkedClients: murreeClients });
+      for (const id of [a, b]) expect(await leadRow(id)).toMatchObject({ cityId: added.cityId, cityOther: null });
+      expect(await clientRow(c as string)).toMatchObject({ cityId: added.cityId, cityOther: null });
+      expect((await typedOtherCities(db, admin)).map((t) => t.name)).toEqual(["Bahawalpur"]);
+      expect((await audits("city.add_from_other"))[0].after).toEqual({ name: "Murree", linkedLeads: 2, linkedClients: murreeClients });
+      // Already on the list now, in any letter case.
+      expect((await failure(addTypedCity(db, admin, { name: "MURREE" }))).fields?.name).toBe("This city is already on the list");
     });
   });
 

@@ -1,4 +1,4 @@
-import { asc, count, eq, isNotNull, sql } from "drizzle-orm";
+import { and, asc, count, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { parse } from "@/modules/clients/support";
 import { isUniqueViolation } from "@/modules/leads/support";
 import type { Actor } from "@/server/auth/types";
@@ -71,6 +71,56 @@ export async function updateCity(db: Database, actor: Actor, cityId: string, inp
       if (name !== row.name) await log("city.rename", { name: row.name }, { name });
       if (isActive !== row.isActive) await log(isActive ? "city.activate" : "city.deactivate", { name, isActive: row.isActive }, { name, isActive });
       return { changed: true };
+    });
+  } catch (error) {
+    throw duplicateOr(error);
+  }
+}
+
+/**
+ * Cities people typed under "Other" (owner review, 16 Nov 2026): grouped ignoring case and extra
+ * spaces, most used first, showing one of the spellings used. Records that picked a list city are
+ * not counted. Feeds the "Typed under Other" panel so common ones can be added to the list.
+ */
+export async function typedOtherCities(db: Database, actor: Actor, limit = 50) {
+  assertCanManageCities(actor);
+  const rows = await db.execute<{ name: string; leads: number; clients: number }>(sql`
+    with typed as (
+      select ${leads.cityOther} as raw, 1 as is_lead, 0 as is_client from ${leads} where ${leads.cityId} is null and ${leads.cityOther} is not null and ${leads.deletedAt} is null
+      union all
+      select ${clients.cityOther}, 0, 1 from ${clients} where ${clients.cityId} is null and ${clients.cityOther} is not null
+    ), keyed as (
+      select lower(regexp_replace(btrim(raw), '[[:space:]]+', ' ', 'g')) as k, btrim(raw) as raw, is_lead, is_client from typed where btrim(raw) <> ''
+    )
+    select (array_agg(raw order by raw))[1] as name, sum(is_lead)::int as leads, sum(is_client)::int as clients
+    from keyed group by k order by count(*) desc, k limit ${limit}`);
+  return (Array.isArray(rows) ? rows : rows.rows).map((r) => ({ name: r.name, leads: Number(r.leads), clients: Number(r.clients) }));
+}
+export type TypedOtherCity = Awaited<ReturnType<typeof typedOtherCities>>[number];
+
+/**
+ * "Add to list" for a typed city: creates the city and points every lead and client that typed the
+ * same name (ignoring case and extra spaces) at it, in one transaction. Audited with the counts.
+ */
+export async function addTypedCity(db: Database, actor: Actor, input: unknown) {
+  assertCanManageCities(actor);
+  const { name } = parse(createCitySchema, input);
+  const sameName = (column: typeof leads.cityOther | typeof clients.cityOther) => sql`lower(regexp_replace(btrim(${column}), '[[:space:]]+', ' ', 'g')) = ${name.toLowerCase()}`;
+  try {
+    return await db.transaction(async (tx) => {
+      const [{ next }] = await tx.select({ next: sql<number>`coalesce(max(${cities.sortOrder}), -1) + 1` }).from(cities);
+      const [row] = await tx.insert(cities).values({ name, sortOrder: next }).returning({ id: cities.id });
+      const linkedLeads = await tx.update(leads).set({ cityId: row.id, cityOther: null }).where(and(isNull(leads.cityId), sameName(leads.cityOther))).returning({ id: leads.id });
+      const linkedClients = await tx.update(clients).set({ cityId: row.id, cityOther: null }).where(and(isNull(clients.cityId), sameName(clients.cityOther))).returning({ id: clients.id });
+      await tx.insert(auditLogs).values({
+        actorId: actor.id,
+        ip: actor.ip ?? null,
+        action: "city.add_from_other",
+        entity: "city",
+        entityId: row.id,
+        after: { name, linkedLeads: linkedLeads.length, linkedClients: linkedClients.length },
+      });
+      return { cityId: row.id, linkedLeads: linkedLeads.length, linkedClients: linkedClients.length };
     });
   } catch (error) {
     throw duplicateOr(error);

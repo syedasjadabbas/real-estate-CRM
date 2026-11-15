@@ -1,7 +1,7 @@
 "use server";
 
 import { refresh } from "next/cache";
-import { addCity, updateCity } from "@/modules/cities/service";
+import { addCity, addTypedCity, updateCity } from "@/modules/cities/service";
 import { requireActor } from "@/server/auth/current-user";
 import { getDb } from "@/server/db";
 import { toActionError, type ActionResult } from "@/server/errors";
@@ -24,4 +24,8 @@ export async function addCityAction(input: Record<string, unknown>) {
 
 export async function updateCityAction(cityId: string, input: Record<string, unknown>) {
   return run((db, actor) => updateCity(db, actor, cityId, input));
+}
+
+export async function addTypedCityAction(name: string) {
+  return run((db, actor) => addTypedCity(db, actor, { name }));
 }
