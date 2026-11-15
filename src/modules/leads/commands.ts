@@ -21,6 +21,7 @@ import {
 import type { Actor } from "@/server/auth/types";
 import { AppError, forbidden, notFound } from "@/server/errors";
 import { generateLeadCode } from "./code";
+import { creationSummary, describeChanges, lostReasonName } from "./history";
 import { STAGE_LABELS } from "./constants";
 import { normalizePhone } from "./phone";
 import { assertCan, canAccessLead, canAssignTo, canDo, leadScope } from "./policy";
@@ -255,7 +256,8 @@ export async function createLead(db: Database, actor: Actor, input: unknown): Pr
       leadId: created.id,
       actorId: actor.id,
       type: "created",
-      data: { duplicateOf: values.duplicateOfId ? existing?.code ?? null : null },
+      // What the lead was on arrival, in words, so the history reads on its own years later.
+      data: { duplicateOf: values.duplicateOfId ? existing?.code ?? null : null, ...(await creationSummary(tx, data.projectId, values)) },
     });
     await replaceLeadPhones(tx, created.id, extraPhones);
     if (joinClientId) {
@@ -390,7 +392,9 @@ export async function updateLead(db: Database, actor: Actor, leadId: string, inp
     else await tx.update(leads).set({ updatedAt: now }).where(eq(leads.id, leadId));
     // A name change keeps the old and new name in the history; an agent's also tells the Admins.
     const renamed = changed.includes("name") ? { nameFrom: lead.name, nameTo: changes.name } : {};
-    await logActivity(tx, { leadId, actorId: actor.id, type: "update", data: { fields: changed, ...renamed } });
+    // Old and new values in words (owner, 15 Nov 2026), so the entry still reads after list values change.
+    const fieldChanges = await describeChanges(tx, lead, { ...lead, ...changes } as typeof lead, extraPhones ? { phonesBefore, phonesAfter: extraPhones.map((p) => p.e164) } : undefined);
+    await logActivity(tx, { leadId, actorId: actor.id, type: "update", data: { fields: changed, ...renamed, changes: fieldChanges } });
     if (changed.includes("name")) await notifyNameChange(tx, actor, { kind: "lead", id: leadId, code: lead.code, from: lead.name, to: changes.name! });
     await audit(
       tx,
@@ -661,7 +665,7 @@ export async function decideLostRequest(db: Database, actor: Actor, approvalId: 
       actorId: actor.id,
       type: "lost_decided",
       body: comment ?? null,
-      data: { approved: approve, from: lead.stage },
+      data: { approved: approve, from: lead.stage, reason: await lostReasonName(tx, request.lostReasonId) },
     });
     await audit(tx, actor, approve ? "lead.lost_approved" : "lead.lost_rejected", lead.id, { stage: lead.stage }, { approvalId, stage: moved ? "lost_lead" : lead.stage });
     if (!approve) {

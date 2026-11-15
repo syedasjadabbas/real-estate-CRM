@@ -444,6 +444,9 @@ describe.skipIf(!hasTestDb)("Leads module (PostgreSQL integration)", () => {
       expect(await updates(a.leadId)).toBe(before + 1);
       const detail = await getLeadDetail(db, f.actors.agent1, a.leadId);
       expect(detail.activities.find((x) => x.type === "update")?.data).toMatchObject({ fields: ["phoneNumber", "phoneE164"] });
+      // The old and new number in words, so the history reads on its own years later.
+      expect((detail.activities.find((x) => x.type === "update")?.data as { changes: unknown }).changes).toEqual([{ field: "Phone", from: expect.stringMatching(/^\+92 /), to: "+92 333 7654321" }]);
+      expect(detail.activities.find((x) => x.type === "created")?.data).toMatchObject({ project: expect.any(String), source: expect.any(String) });
     });
 
     it("a number another lead in the project already uses is refused, in any format; nothing is written", async () => {

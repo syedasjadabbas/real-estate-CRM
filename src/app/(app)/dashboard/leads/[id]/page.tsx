@@ -134,7 +134,7 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
           <div className="min-w-0 space-y-6">
             <EditDetailsForm detail={detail} lookups={lookups} />
-            <Timeline activities={detail.activities} />
+            <Timeline activities={detail.activities} people={detail.activityPeople} asOf={detail.asOf} />
           </div>
           <div className="space-y-6">
             <StagePanel detail={detail} lostReasons={lookups.lostReasons} showStage={!callCard} />

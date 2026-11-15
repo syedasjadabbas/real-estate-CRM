@@ -330,6 +330,7 @@ export async function getLeadDetail(db: Database, actor: Actor, leadId: string) 
         data: leadActivities.data,
         createdAt: leadActivities.createdAt,
         actorName: actorUser.name,
+        actorRole: actorUser.role,
       })
       .from(leadActivities)
       .leftJoin(actorUser, eq(actorUser.id, leadActivities.actorId))
@@ -390,6 +391,10 @@ export async function getLeadDetail(db: Database, actor: Actor, leadId: string) 
       timeToFirstTouchMs: lead.firstTouchAt ? lead.firstTouchAt.getTime() - lead.createdAt.getTime() : null,
     },
     activities,
+    /** Names of the people that assignment entries point to (owner ids are stored, not names). */
+    activityPeople: await activityPeople(db, activities),
+    /** When this was read, for "2 years ago" in the timeline. */
+    asOf: new Date(),
     followUps: followUpRows,
     pendingLostRequest: pendingRequest[0] ?? null,
     reviews,
@@ -743,4 +748,17 @@ export async function isLeadVisible(db: Database, actor: Actor, leadId: string) 
   const [lead] = await db.select({ ownerId: leads.ownerId }).from(leads).where(eq(leads.id, leadId));
   if (!lead) return false;
   return canAccessLead(actor, lead.ownerId, await teamMemberIds(db, actor));
+}
+
+/** Names of users referenced by timeline entries (assignment "from" / "to"). */
+async function activityPeople(db: Database, activities: { type: string; data: unknown }[]) {
+  const ids = new Set<string>();
+  for (const a of activities) {
+    if (a.type !== "assignment") continue;
+    const d = (a.data ?? {}) as Record<string, unknown>;
+    for (const k of ["ownerId", "from", "to"]) if (typeof d[k] === "string") ids.add(d[k] as string);
+  }
+  if (!ids.size) return {} as Record<string, string>;
+  const rows = await db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, [...ids]));
+  return Object.fromEntries(rows.map((r) => [r.id, r.name])) as Record<string, string>;
 }

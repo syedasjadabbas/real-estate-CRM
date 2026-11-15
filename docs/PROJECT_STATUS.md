@@ -1,5 +1,7 @@
 # Project status and completion checklist
 
+> **HR, 15 Nov 2026:** the owner answered C-4 (staff leave goes HR, then Admin), C-5 (a Super Admin's own leave is approved automatically, audited), the allowance (30 days) and attendance (check in / check out, built). Older sections that say staff leave can't be approved or attendance isn't built are superseded.
+>
 > **Latest: §57 (11 Nov 2026).** Built the client's 10 Nov rules: calls from recordings, token hold release, overdue and aging, reversal date, receipt format, proposal rules, paging, recording playback (68 implemented, 8 partial, 5 blocked, 4 excluded). Not committed. Previously, **§56 (11 Nov 2026).** The client's completed confirmations (10 Nov) answer several open decisions; matrix updated (60 implemented, 16 partial, 5 blocked, 4 excluded). Requirements spec written. Previously, **§54 (10 Nov 2026).** Pre-presentation cleanup on top of §53: phone numbers typed "92 300…" now match, the Teams tile shows a real average score, and HR and accountants no longer see menu links they can't open. Requirements unchanged at 60 implemented, 14 partial, 7 blocked, 4 excluded. The §53 sprint is committed as 3819bbf; §54 is not committed, and nothing is deployed. §1 – §23 are the 31 Oct baseline.
 
 Updated **31 Oct 2026 (final read-only audit, §9)**. Everything below was checked against the code and by running the checks named here.
@@ -99,7 +101,7 @@ The full ordered list is in `PRODUCTION_HANDOVER_CHECKLIST.md`; client-provided 
 Counting the quoted FR items by verified code, not effort:
 - **Built and verified:** every core module plus notifications, recordings, documents, finance reports (collections / outstanding), the dashboard (except FR-014) and drag-and-drop.
 - **Independent and open:** none. The Playwright suite (test tooling, not a feature) was added in round 4.
-- **Client-blocked:** leave and approvals, employee account management, attendance, Finance F3 / F5 (income, expenses, receipts), booking rules, imports, email, merge, FR-014 and the open notification rules.
+- **Client-blocked:** leave cross-year rule and proration method (C-13, C-10), employee account management, Finance F3 / F5 (income, expenses, receipts), booking rules, imports, email, merge, FR-014 and the open notification rules.
 
 Estimate: **about 82–85% of the quoted scope is built and verified; about 15% waits on client answers.** This is unchanged from round 2: rounds 3 and 4 added verification and fixes, not new scope. It is a judgement from counting requirements, not a measured figure.
 
@@ -508,7 +510,7 @@ All 17 migrations apply cleanly to an empty test database (`e2e` global setup, e
 | Q7 | Leave of Managers, HR, Admins and Super Admins is approved by a **Super Admin**. Admins can't. **Nobody approves their own leave**; a Super Admin's own leave is **approved automatically** on submission, with an audit entry (owner, 15 Nov 2026) |
 | Q6 | Agents' and accountants' leave needs **two steps**: **HR, then Admin** by default (owner, 15 Nov 2026). Admins can change the order in Leave settings. Two different people approve, and a rejection at either step ends the request |
 | Q15 | Cancelling approved leave: the employee requests it and an Admin or Super Admin decides, or an Admin / Super Admin cancels directly with a reason. Cancelled days return to the balance |
-| Q17 | **Isolated:** a request spanning two calendar years is refused with a message ("submit one request per year") until C-13. A database check enforces it too |
+| Q17 | **Held:** a request spanning two calendar years is recorded but counts against neither year, can't be approved, still blocks overlapping days and can be withdrawn, until C-13 (see the Q17 change below) |
 | Q18 | On final approval, each day is written to the roster as "On leave" on the person's first active team. **A day a manager already set is not replaced** (C-14). Cancelling removes only the days written by that leave |
 | Q19 | Automatic lead rotation skips agents whose approved leave covers today (Pakistan date). "Leads off" and manual assignment are unchanged (C-15) |
 | Q9 | Team weekends were done in round 1; under calendar-day counting they don't change leave |
@@ -604,7 +606,7 @@ Migrations 0017–0019 are additive and applied to the development and test data
 - **Undefined:** receipt format (C-21), PDP / CDP (C-24), refunds (C-22, CR-3), floor prices and ROI (C-28), task statuses (C-30), Critical (C-17), Pipeline pressure (C-20), aging matrix (M-Q1–M-Q5).
 - **No events specified:** notifications (N2–N6).
 - **Commercial decision:** attendance (CR-1, C-16).
-- **Leave decisions:** staff step order (C-4), cross-year deduction (C-13), proration method (C-10).
+- **Leave decisions:** cross-year deduction (C-13), proration method (C-10). Staff step order (C-4) answered 15 Nov: HR, then Admin.
 - **Waiting on the signature (S-1):** Q31, Q36, Q45 (removal half), Q52, Q50.
 
 ### 13.4 Verification (3 Nov 2026, end of round 3)
@@ -660,7 +662,7 @@ Migrations 0017–0019 are additive and applied to the development and test data
 ### 14.4 Still not built (no defined rule; current behaviour kept)
 - Refund deductions; receipt numbering; PDP / CDP; Critical agent rule; Pipeline pressure; ROI rate and floor prices; attendance policy; task status definitions; aging matrix.
 - New notification events (N2–N6, including leave).
-- Staff leave approval order (C-4); cross-year deduction (C-13); proration method (C-10).
+- Cross-year deduction (C-13); proration method (C-10). (C-4 answered 15 Nov.)
 - Access removals waiting for the signed questionnaire (S-1).
 
 ### 14.5 Verification (3 Nov 2026, end of round 4)
@@ -698,7 +700,7 @@ Migrations 0017–0019 are additive and applied to the development and test data
 ### 15.3 Still not built (no defined rule; current behaviour kept)
 - Lead import format (FR-043, Q-P5); receipt / sales-order layout (FR-084, "to be provided by client"); merging shared-phone leads and deleting leads (no rule given).
 - Refund deductions; receipt numbering; PDP / CDP; Critical agent rule; Pipeline pressure; ROI rate and floor prices; attendance policy; task status definitions; aging matrix.
-- New notification events (N2–N6); staff leave approval order (C-4); cross-year deduction (C-13); proration method (C-10).
+- New notification events (N2–N6); cross-year deduction (C-13); proration method (C-10).
 - Access removals waiting for the signed questionnaire (S-1).
 
 ### 15.4 Verification (3 Nov 2026, end of round 5)
@@ -1074,8 +1076,8 @@ Unchanged from §15.3:
 | C-1 | May an Admin manage a Super Admin account? | Today only a Super Admin can | Q2 |
 | C-2 | Which leads (and follow-ups, tasks, meetings) move on deactivation | Defines the shift | Q3 |
 | C-3 | Region and weekend for a person in several teams | Two teams can give two answers | Q5, Q9, FR-141 |
-| C-4 | Who approves leave first and second; what happens without a manager | No staff request can be approved until set | Q6, FR-142 |
-| C-5 | Senior leave: one step? Who approves a Super Admin's own leave? | Self-approval is blocked | Q7 |
+| C-4 | Who approves leave first and second; what happens without a manager | **Answered 15 Nov:** HR, then Admin (Admins can change it) | Q6, FR-142 |
+| C-5 | Senior leave: one step? Who approves a Super Admin's own leave? | **Answered 15 Nov:** one step by a Super Admin; a Super Admin's own leave is approved automatically, audited | Q7 |
 | C-6 | Leave for staff without a login | They can't submit | Q1, FR-142 |
 | C-7 | Confirm 30 days | Allowance value | Q4 |
 | C-8 | What team weekends are used for | Roster only vs attendance | Q9 |
@@ -1087,7 +1089,7 @@ Unchanged from §15.3:
 | C-14 | Leave vs a manager's roster entry; several teams | Roster writing | Q18 |
 | C-15 | Does "Leads off" skip rotation? Block or warn when assigning to someone on leave? | Rotation rules | Q19, FR-122 |
 | C-16 | Attendance capture, hours, lateness, breaks, absence, self-view | Attendance can't be designed | Q20–Q22, FR-143 |
-| CR-1 | Commercial decision on attendance (quoted as one Performance line; the answers describe a full module, 6–9 d) | Scope and price | FR-143 |
+| CR-1 | Commercial decision on attendance (quoted as one Performance line; the answers describe a full module, 6–9 d) | **Built 15 Nov** as check in / check out with daily sheet, monthly summary and corrections | FR-143 |
 | C-17 | Critical: an agent or a lead, and the thresholds | No rule | Q23, FR-153 |
 | C-18 | Original assignment: is the original assignee credited? | Performance attribution | Q25 |
 | C-19 | Does each uploaded recording count as a call? | Calls in performance, targets and call quality | Q27, FR-111, FR-150 – 152 |
@@ -1365,7 +1367,7 @@ Requested as "F-4"; in the §17 findings table this is **F-6** (F-4 there is the
 - **Concurrency.** Decisions still lock the request row first. A second simultaneous attempt by the same person waits, then sees step 1 already recorded as theirs and is refused. If anything bypassed the service, the index would refuse it.
 
 **Unchanged:**
-- **Approval rules.** The step roles and order (still unset, waiting for C-4, so staff requests stay pending with the notice) and senior leave (one step, Super Admin only; Admins can't).
+- **Approval rules.** The step roles and order (HR, then Admin since 15 Nov; Admins can change it) and senior leave (one step, Super Admin only; Admins can't).
 - **Refusals.** Self-approval, and decided or held cross-year requests.
 - **Balances, roster and audit.** Balances; roster writing on final approval; cancellation; the `leave.approve_step` / `leave.approve` / `leave.reject` audit rows.
 - **No new rules.** No staff approval order was invented, and the settings form still accepts the same role for both steps. Two different people in that role are now required.
@@ -1622,7 +1624,7 @@ Requested as "F-4"; in the §17 findings table this is **F-6** (F-4 there is the
   - **Attendance:** nothing is built (needs client rules and a commercial decision).
   - **Calls:** all call metrics, targets and charts are empty (one client answer, C-19, unblocks them).
   - **Token & unit hold:** holds never expire (Q-B2).
-  - **Leave approvals:** agents' and accountants' leave cannot be approved until C-4 is answered.
+  - **Leave approvals:** answered 15 Nov; agents' and accountants' leave goes HR, then Admin.
 - **This audit found new defects** that earlier rounds missed (table in §24.A.1). The most important: an existing client's open bookings and payments are missing from their client page (F-13).
 - **F-1 to F-6 are all confirmed fixed** in code. F-7 to F-12 are still open.
 - **Handover is not possible yet.** It needs agreed development, client decisions, the production preparation and deployment on a server that doesn't exist yet. The 10 Nov presentation of Version 1 is achievable; acceptance and handover by then are not.
@@ -1750,8 +1752,8 @@ FR-005 reads: "List pages support search, a filter panel, column sorting and pag
 | FR-130 | My Workplace | IV | Leave, holidays, sign-ins | `workplace/service.ts:25` | workplace | T | — | Yes |
 | FR-140 | Employee directory, Admin / HR only | PI | Fields done; managers can read it (matrix says R, requirement says no) | `employees/policy.ts:9` | employees | T | D-H1 | Yes |
 | FR-141 | Holidays | IV | Company and regional | `holidays/service.ts:56` | holidays, workplace | T | C-3 region rule | Yes |
-| FR-142 | Leave, balance, approvals | PI | Balance, overlap, cancel, senior path done. **Staff leave can't be approved until set** | `leave/service.ts:49,212` | leave, leave.spec, leave-two-step | T | Partly answered 10 Nov (§56): two-step, Super Admin for senior staff. First approver for staff and the annual allowance still needed (C-4) | Yes* |
-| FR-143 | Attendance | BC | **Nothing built**, by design; sign-ins are not attendance | `app/.../hr/page.tsx:83` | None | – | Client asked on 10 Nov for a separate attendance module and for Zeploy Tech to confirm its scope (CR-1, §56). Commercial answer due from Zeploy Tech | Yes* (extent is CR-1) |
+| FR-142 | Leave, balance, approvals | PI | Balance, overlap, cancel, senior path, HR → Admin staff steps (15 Nov) and Super Admin auto-approval done. Cross-year and proration rules still provisional | `leave/service.ts:49,212` | leave, leave.spec, leave-two-step | T | Partly answered 10 Nov (§56): two-step, Super Admin for senior staff. First approver for staff and the annual allowance still needed (C-4) | Yes* |
+| FR-143 | Attendance | IV | Built 15 Nov: check in / out, daily sheet, monthly summary, corrections, office hours; sign-ins are still not attendance | `modules/attendance/service.ts` | attendance | – | Client asked on 10 Nov for a separate attendance module and for Zeploy Tech to confirm its scope (CR-1, §56). Commercial answer due from Zeploy Tech | Yes* (extent is CR-1) |
 | FR-150 | Agent KPI table | IV | Calls and call minutes from uploaded recordings; sortable; in the CSV (§57) | `performance/calls.ts`, `performance/service.ts` | performance, performance-calls | T | — | Yes* |
 | FR-151 | Performance charts | IV | Outcome mix, top closers, call volume, calls vs meetings, all from data (§57) | `performance/service.ts`, `features/performance/components/charts.tsx` | performance-calls, performance-page.spec | T | — | Yes* |
 | FR-152 | Call quality buckets | IV | Verified (30 s or more) and qualified (60 s or more) from recording durations; recordings without a duration counted as calls, in no bucket (§57) | `performance/calls.ts` | performance-calls, performance-rules | T | — | Yes* |
@@ -1817,8 +1819,8 @@ The complete decision register stays in §17.D (S-1, C-1 – C-33, CR-1 – CR-3
 | Decision | Why it matters | Blocks |
 |---|---|---|
 | **S-1** sign the questionnaire | Answers aren't approved until then | Q31, Q36, Q45, Q50, Q52 access changes; sign-in deletion; every answer's standing |
-| **C-4** leave approval order, no-manager fallback | Agents' and accountants' leave can't be approved. An accountant can't pass a "team manager" step at all, as they have no team | FR-142, Q6 |
-| **C-5, C-13, C-10** senior leave, cross-year, proration | Super Admin's own leave; held requests; provisional balances | FR-142 |
+| **C-4** leave approval order, no-manager fallback | **Answered 15 Nov:** HR, then Admin, so accountants are no longer stuck on a team-manager step | FR-142, Q6 |
+| **C-13, C-10** cross-year, proration | Held requests; provisional balances. (C-5 answered 15 Nov: Super Admin leave auto-approved.) | FR-142 |
 | **Q-B5, C-21** receipt and sales order templates, code format | Legal documents; a quoted line with nothing built | FR-084, FR-204 |
 | **C-19** does a recording count as a call? | One answer unblocks calls everywhere | FR-111, 150, 151, 152 |
 | **Q-B2** token → hold duration | Holds never expire | FR-081 |
@@ -1830,7 +1832,7 @@ The complete decision register stays in §17.D (S-1, C-1 – C-33, CR-1 – CR-3
 | **C-15** Leads off and rotation | Roster has no effect | FR-122, 009 |
 | **C-24** PDP / CDP | Undefined; no code exists | Q34 |
 | **D-F1, D-F2** reversal date; income | Financial figures | FR-205 |
-| **C-16 + CR-1** attendance rules and commercial position | **Zeploy Tech's decision too:** the quotation lists "Attendance", so some is owed | FR-143 |
+| **C-16 + CR-1** attendance rules and commercial position | **Built 15 Nov** (check in / out; HR sets hours and late cut-off). Only the commercial position remains | FR-143 |
 | **C-22 / CR-3** refunds | Paid bookings can't be cancelled | FR-082, Q32 |
 
 ### E. Excluded Scope
@@ -3196,7 +3198,7 @@ No new code defect was found in this audit. These quoted lines are incomplete. E
 | Bookings · Booking status | Paid or confirmed bookings can't be cancelled (Q-B3, CR-3) | Needs a manual route | No | Agree the rule |
 | Tasks · Proposal printing | Works; final layout waits on Q36, C-25, C-27 | Layout may change | No | Yes |
 | Teams · Duty roster | Works; Leads off doesn't affect rotation (C-15) | Rule missing | No | Agree the rule |
-| HR · Leave approvals | **Staff leave can't be approved until approvers are set** | A setup step for the client | No | Yes, as setup |
+| HR · Leave approvals | Staff leave goes HR, then Admin by default (15 Nov) | None | No | No |
 | Finance · Outstanding | Balance right; overdue understated (F-14, C-27) | Don't rely on overdue figures | No | Yes |
 | Finance · Financial reports | Work; F-7 and F-18 affect some figures (D-F1, D-F2) | Definitions undecided | No | Yes |
 
@@ -3264,7 +3266,7 @@ Not in the quotation; each needs a separate quote: CR-2 (floor map on proposals)
 1. Run from the **production build**, not the dev server (`V1_PRESENTATION_RUNBOOK.md`). The dev server shows developer badges.
 2. Keep the laptop on mains with the lid open. It read as on battery at the end of this audit.
 3. Book **VERIFY-B202** only. It is the one unit left, confirmed Available, Whole and offered in the dropdown.
-4. Tell the client up front that receipts and sales order printing, and attendance, are not built.
+4. Tell the client up front that receipts and sales order printing are demo layouts until their templates arrive. Attendance is built (15 Nov).
 
 **Presentation data:**
 - VERIFY-A102 is now Booked, as the rehearsal intended. VERIFY-B202 is untouched.
@@ -3280,7 +3282,7 @@ Not in the quotation; each needs a separate quote: CR-2 (floor map on proposals)
 1. **Before presenting:** plug in, start the production build, and sign in once with each account.
 2. **At the presentation:** disclose the two unbuilt lines, and ask for Q-B5, C-21, C-16 and S-1.
 3. **Confirm the date** (7 or 10 November) and what counts as "completion of Version 1" for the second payment.
-4. **After the presentation:** build the receipt and sales order once the templates arrive, and resolve the attendance decision.
+4. **After the presentation:** build the receipt and sales order once the templates arrive.
 5. **When a server exists:** deploy, run `scripts/perf/nfr-load.mjs`, and complete `PRODUCTION_HANDOVER_CHECKLIST.md`.
 
 **Completion counts (recounted from the §24 matrix rows):** **57 implemented and verified, 16 partial, 0 not implemented, 7 blocked, 5 excluded** (85). **Remaining agreed development:** about 1.25 developer-days, plus about 2 days for receipts and the sales order once the client provides the templates. **Baseline:** Vitest 707 / 707, Playwright 169 / 169, build 105 / 105, 28 migrations.
@@ -3507,8 +3509,8 @@ Nothing below was built. Each row waits on the client decision named, except whe
 | FR-091 | Proposal print layout and editing rules | Q36 / C-25 (who may edit before printing), C-27, C-28 (floor prices, ROI) | Yes* | depends on answers |
 | FR-111, FR-150, FR-151, FR-152 | Call counts, call minutes and call quality are empty | C-19: does each uploaded recording count as a call? A VoIP provider could also supply call logs, but no provider is chosen | Yes* | 1 – 2 d after C-19 |
 | FR-140 | Managers can read the employee directory | D-H1: should managers see it? | Yes | small |
-| FR-142 | Staff leave can't be approved | C-4 (first and second approver), C-5, C-10, C-13 | Yes* | small after C-4 |
-| FR-143 | Attendance | C-16 (how attendance is captured, hours, lateness) and CR-1 (commercial: the quotation lists one line; the answers describe a 6 – 9 d module) | Yes* (extent is CR-1) | 6 – 9 d |
+| FR-142 | Cross-year and proration rules provisional | C-10, C-13 (C-4 and C-5 answered 15 Nov) | Yes* | small |
+| FR-143 | Attendance | Built 15 Nov (check in / out). Only the commercial position (CR-1) remains | No | done |
 | FR-153 | Critical flag | C-17: critical agent or lead, and the thresholds | Yes* | small |
 | FR-203 | Overdue understated; not shown on the booking | C-27 (first installment month, down-payment due date). Showing the balance on the booking page is **decision-free**, not built | Yes* | 0.5 d |
 | FR-204 | Receipt number format | C-21 | Yes* | small |
@@ -3594,7 +3596,7 @@ Name notes (kept exactly as written): 13 names end in "Lhr" (rows 1–6, 15, 20,
 
 ### Partly answered, still open
 
-- **Leave (FR-142):** two-step approval and Super Admin approval for Managers, HR, Admins and Super Admins confirmed. Still needed: the first approver for other staff (C-4) and the annual allowance in days.
+- **Leave (FR-142):** two-step approval and Super Admin approval for Managers, HR, Admins and Super Admins confirmed. Answered 15 Nov: HR, then Admin for other staff (C-4), and 30 days a year.
 - **Critical flag (FR-153):** defined as new leads or meeting-commitment leads; thresholds still needed (C-17).
 - **Reversals (FR-206):** "Reversals by Admin and Super Admin". The build has Accountant or Super Admin request and Manager (own team), Admin or Super Admin approve. Ask whether the rule covers requesting, approving or both.
 - **Refunds:** "refund after a variable deduction" confirmed as the policy; refunds remain a change request (CR-3).
@@ -3642,7 +3644,7 @@ A Software Requirements Specification for the client's technical reviewer was wr
 
 ### 57.3 Not built (waiting on the client)
 
-Receipt and sales order printing (templates), the unit map on proposal prints (floor plans), staff leave approval and allowance, the Critical thresholds, the Sold rule, share bookings, reversal roles (requesting vs approving), attendance scope.
+Receipt and sales order printing (templates), the unit map on proposal prints (floor plans), the Critical thresholds, the Sold rule, share bookings, reversal roles (requesting vs approving).
 
 ### 57.4 Verification (11 Nov 2026)
 

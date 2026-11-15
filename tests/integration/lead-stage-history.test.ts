@@ -72,7 +72,7 @@ describe.skipIf(!hasTestDb)("FR-021: every stage change is on the timeline as fr
     const { leadId, approvalId } = await pendingRequest();
     await decideLostRequest(db, f.actors.manager, approvalId, { approve: true, comment: "Agreed" });
     const entries = await db.select().from(leadActivities).where(eq(leadActivities.leadId, leadId));
-    expect(entries.filter((a) => a.type === "lost_decided")).toEqual([expect.objectContaining({ actorId: f.actors.manager.id, body: "Agreed", data: { approved: true, from: "new_lead" } })]);
+    expect(entries.filter((a) => a.type === "lost_decided")).toEqual([expect.objectContaining({ actorId: f.actors.manager.id, body: "Agreed", data: { approved: true, from: "new_lead", reason: expect.any(String) } })]);
     expect(entries.filter((a) => a.type === "stage_change")).toEqual([expect.objectContaining({ actorId: f.actors.manager.id })]);
     const { activities } = await getLeadDetail(db, f.actors.manager, leadId);
     expect(activities.map((a) => a.type)).toEqual(expect.arrayContaining(["stage_change", "lost_decided", "lost_requested"]));
