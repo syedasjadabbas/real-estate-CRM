@@ -89,11 +89,11 @@ export function LeaveSettingsForm({
   prorationMethod,
 }: {
   annualDays: number;
-  staffStep1: StaffStepApprover | null;
+  staffStep1: StaffStepApprover;
   staffStep2: StaffStepApprover | null;
   prorationMethod: ProrationMethod;
 }) {
-  const [v, setV] = useState({ annualDays: String(annualDays), staffStep1: staffStep1 ?? "", staffStep2: staffStep2 ?? "", prorationMethod: prorationMethod as string });
+  const [v, setV] = useState({ annualDays: String(annualDays), staffStep1: staffStep1 as string, staffStep2: staffStep2 as string, prorationMethod: prorationMethod as string });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState<Msg>(null);
   const [pending, startTransition] = useTransition();
@@ -101,7 +101,6 @@ export function LeaveSettingsForm({
     <Field label={label} error={errors[key]}>
       {(id, d) => (
         <select id={id} aria-describedby={d} className={selectClass} value={v[key]} disabled={pending} onChange={(e) => setV((s) => ({ ...s, [key]: e.target.value }))}>
-          <option value="">Not set</option>
           {STAFF_STEP_APPROVERS.map((a) => (
             <option key={a} value={a}>
               {STAFF_STEP_LABELS[a]}
@@ -119,7 +118,7 @@ export function LeaveSettingsForm({
       onSubmit={(e) => {
         e.preventDefault();
         startTransition(async () => {
-          const r = await updateLeaveSettingsAction({ annualDays: v.annualDays, staffStep1: v.staffStep1 || null, staffStep2: v.staffStep2 || null, prorationMethod: v.prorationMethod });
+          const r = await updateLeaveSettingsAction({ annualDays: v.annualDays, staffStep1: v.staffStep1, staffStep2: v.staffStep2, prorationMethod: v.prorationMethod });
           if (r.ok) {
             setErrors({});
             setMsg({ text: r.data.changed.length ? "Leave settings saved." : "No changes to save.", ok: true });

@@ -1,4 +1,6 @@
 import { Circle } from "lucide-react";
+import { CheckInCard } from "@/features/attendance/components/check-in-card";
+import { myAttendance } from "@/modules/attendance/service";
 import { TodoList } from "@/features/tasks/components/todo-list";
 import { openTodos } from "@/modules/tasks/queries";
 import { MyLeavePanel } from "@/features/leave/components/my-leave-panel";
@@ -31,7 +33,7 @@ const EVENT_FILTERS: { label: string; value: SigninEvent | null }[] = [
   { label: "Sign-outs", value: "sign_out" },
 ];
 
-/** My Workplace (FR-130): my leave and the user's own sign-in log. Upcoming holidays removed (owner, 13 Nov 2026). */
+/** My Workplace (FR-130): check in / out (15 Nov 2026), my leave and the user's own sign-in log. Upcoming holidays removed (owner, 13 Nov 2026). */
 export default async function WorkspacePage({ searchParams }: PageProps<"/dashboard/workspace">) {
   const actor = await requirePageUser();
   const all = flattenParams(await searchParams);
@@ -46,17 +48,18 @@ export default async function WorkspacePage({ searchParams }: PageProps<"/dashbo
   const db = getDb();
   // HR and Accountants have no To-dos page: to-dos an Admin gives them are listed here (14 Nov 2026).
   const showTodos = actor.role === "hr" || actor.role === "accountant";
-  const [{ holidays, signins }, retentionNote, leave, todos] = await Promise.all([
+  const [{ holidays, signins }, retentionNote, leave, todos, attendance] = await Promise.all([
     getMyWorkplace(db, actor, params),
     signinRetentionNote(db),
     myLeave(db, actor, leaveYear),
     showTodos ? openTodos(db, actor) : null,
+    myAttendance(db, actor),
   ]);
   const listParams: Record<string, string> = signins.query.event ? { event: signins.query.event } : {};
 
   return (
     <PageStack>
-      <PageHeader title="My workplace" description="Your leave and CRM sign-in history (web sessions)." icon={Circle} />
+      <PageHeader title="My workplace" description="Check in and out, your leave, and CRM sign-in history." icon={Circle} />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <MiniStat label={`Leave · ${leave.year}`} value={`${leave.balance.remaining} / ${leave.balance.allowance}`} caption="Days remaining / allowance" />
         <MiniStat label="Sign-ins logged" value={formatInt(signins.recentSignins)} caption={`Last ${SIGNIN_COUNT_DAYS} days · not attendance`} />
@@ -64,6 +67,16 @@ export default async function WorkspacePage({ searchParams }: PageProps<"/dashbo
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         <div className="min-w-0 space-y-6">
+          <CheckInCard
+            status={attendance.status}
+            checkIn={attendance.checkIn}
+            checkOut={attendance.checkOut}
+            minutes={attendance.minutes}
+            officeStart={attendance.settings.officeStart}
+            lateAfter={attendance.settings.lateAfter}
+            officeEnd={attendance.settings.officeEnd}
+            month={attendance.month}
+          />
           {todos ? (
             <PanelCard title={`My to-dos · ${todos.count}`}>
               <TodoList rows={todos.rows} meId={actor.id} now={todos.generatedAt} showLeads={false} />

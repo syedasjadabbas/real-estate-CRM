@@ -7,6 +7,7 @@ import { buttonClasses } from "@/components/ui/button";
 import { RestrictedState } from "@/components/ui/empty-state";
 import { AccountCreateForm } from "@/features/hr/components/account-create-form";
 import { HrTabs } from "@/features/hr/components/hr-tabs";
+import { canViewAttendance } from "@/modules/attendance/service";
 import { PanelCard } from "@/features/leads/components/detail-panels";
 import { canManageAccounts, grantableRoles } from "@/modules/accounts/policy";
 import { linkableRecords } from "@/modules/accounts/service";
@@ -35,7 +36,7 @@ export default async function NewAccountPage({ searchParams }: PageProps<"/dashb
           </Link>
         }
       />
-      <HrTabs active="employees" showEmployees showHolidays={canViewHolidays(actor)} showLeave={canOpenLeaveAdmin(actor)} />
+      <HrTabs showAttendance={canViewAttendance(actor)} active="employees" showEmployees showHolidays={canViewHolidays(actor)} showLeave={canOpenLeaveAdmin(actor)} />
       <PanelCard title="Account" className="max-w-3xl">
         <AccountCreateForm roles={grantableRoles(actor)} records={records} recordId={typeof record === "string" ? record : ""} />
       </PanelCard>

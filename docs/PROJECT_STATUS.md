@@ -19,7 +19,7 @@ Updated **31 Oct 2026 (final read-only audit, §9)**. Everything below was check
 | Clients | List (with the investment filter and latest-investment column), detail, convert, follow-ups, investments, payment history | `CLIENTS_MODULE_PLAN.md` |
 | Projects, Inventory, Bookings, Tasks / proposals, Meetings, Teams, Targets, Performance | Built (bookings on proposed defaults; call metrics "not available") | Plans |
 | Accounts & Finance | F1 payments, F2 screens, **F4 reports: collections by project, outstanding by project / agent, audited CSV** | `FINANCE_MODULE_PLAN.md` §11 |
-| HR, My Workplace | Employees, holidays, upcoming holidays, CRM sign-in history; leave pending; attendance "not available" | `HR_MODULE_PLAN.md`, `MY_WORKPLACE_MODULE_PLAN.md` |
+| HR, My Workplace | Employees, holidays, leave (HR → Admin for staff), attendance check-in / check-out with daily sheet and monthly summary, CRM sign-in history | `HR_MODULE_PLAN.md`, `MY_WORKPLACE_MODULE_PLAN.md` |
 | File storage | Private storage, content checks, size limits, access through lead permissions, byte ranges; reviewed and hardened in round 3 | `FILE_STORAGE_REVIEW.md` |
 
 ## 2. Verified tests and checks (final run, round 4)
@@ -62,7 +62,7 @@ Updated **31 Oct 2026 (final read-only audit, §9)**. Everything below was check
 | Shared-phone merge (FR-032) | Six rule questions (`LEADS_MODULE_PLAN.md` §13) | Not built |
 | Leave, My leave | Q3, Q3b, Q5, Q6 (+ Q4, Q8, Q14, Q15) | Not built |
 | Employee accounts | Q1, Q2, Q16 | Read-only |
-| Attendance | Q-H2 | "Not available" |
+| Attendance | Q-H2 | Built 15 Nov 2026: check in / out, daily sheet, monthly summary, office hours |
 | Regional holidays | Q9 | All shown, labelled |
 | Sign-in log deletion | C2 | Built, **off** |
 | CDN / load balancer | C3 | Caddy only documented |
@@ -505,8 +505,8 @@ All 17 migrations apply cleanly to an empty test database (`e2e` global setup, e
 | Q13 | Joiners are prorated from the joining date. **Provisional method** (calendar-day share, nearest half day), isolated in `proratedAllowance` until C-10 |
 | Q14 | No carry-forward: each calendar year starts again (leave year to confirm, C-11) |
 | Q16 | Past dates allowed. Overlapping requests refused (FR-142) |
-| Q7 | Leave of Managers, HR, Admins and Super Admins is approved by a **Super Admin**. Admins can't. **Nobody approves their own leave**, so a Super Admin's own leave needs another Super Admin (C-5 pending) |
-| Q6 | Agents' and accountants' leave needs **two steps**. Who approves each step is an **Admin setting** (Team manager / HR / Admin), **left unset** until the client confirms the order (C-4). Until then those requests stay pending, with a notice. Once set, the steps run in order, and a rejection at either step ends the request |
+| Q7 | Leave of Managers, HR, Admins and Super Admins is approved by a **Super Admin**. Admins can't. **Nobody approves their own leave**; a Super Admin's own leave is **approved automatically** on submission, with an audit entry (owner, 15 Nov 2026) |
+| Q6 | Agents' and accountants' leave needs **two steps**: **HR, then Admin** by default (owner, 15 Nov 2026). Admins can change the order in Leave settings. Two different people approve, and a rejection at either step ends the request |
 | Q15 | Cancelling approved leave: the employee requests it and an Admin or Super Admin decides, or an Admin / Super Admin cancels directly with a reason. Cancelled days return to the balance |
 | Q17 | **Isolated:** a request spanning two calendar years is refused with a message ("submit one request per year") until C-13. A database check enforces it too |
 | Q18 | On final approval, each day is written to the roster as "On leave" on the person's first active team. **A day a manager already set is not replaced** (C-14). Cancelling removes only the days written by that leave |
@@ -918,8 +918,8 @@ Unchanged from §15.3:
 | FR-130 | My Workplace: leave, holidays, sign-ins | Implemented | Own data only, year selector | workspace/page.tsx | workplace.test.ts, leave.test.ts | — | — | — |
 | FR-140 | Employee directory | Implemented | Records with or without login | employees/service.ts | employees.test.ts, questionnaire-screens.spec.ts | — | — | Q12 (fixed lists, low) |
 | FR-141 | Holiday calendar, company and regional | Implemented | Team region filter in My Workplace | holidays/service.ts | holidays.test.ts, workplace.test.ts | — | — | C-3 (multi-team) |
-| FR-142 | Leave: types, balance, approvals | Partially Implemented | Calendar days, medical from annual, over-balance blocked, overlap refused, balances, cancellation | leave/service.ts | leave.test.ts, leave.spec.ts | Staff requests can't be approved until approvers set; same person can approve both steps (F-6) | Require two different approvers | C-4, C-5, C-6, C-13 |
-| FR-143 | Attendance | Blocked | Not built; screens say 'not available' | hr/page.tsx | none | — | Whole module | CR-1 (commercial) + C-16 |
+| FR-142 | Leave: types, balance, approvals | Implemented | Calendar days, 30-day allowance, medical from annual, over-balance blocked, overlap refused, HR → Admin staff steps by two people, Super Admin leave auto-approved, cancellation | leave/service.ts | leave.test.ts, leave.spec.ts | Cross-year requests still held | Cross-year rule | C-13 |
+| FR-143 | Attendance | Implemented | Check in / out from My Workplace; HR daily sheet (present, late, absent, on leave, holiday, day off, hours), monthly summary, HR corrections with reason, office hours / late cut-off / days off settings | attendance/service.ts, hr/attendance/page.tsx | attendance.test.ts | No location or device checks | — | — |
 | FR-150 | Agent KPI table | Partially Implemented | All columns except calls / call minutes ('—') | performance/service.ts | performance.test.ts | — | Calls if recordings count | C-19 |
 | FR-151 | Performance charts | Partially Implemented | Outcome mix, top closers; call charts are placeholders | performance/page.tsx | performance.test.ts | — | Call charts | C-19 |
 | FR-152 | Call quality buckets | Blocked | Duration stored, not aggregated | performance/page.tsx | none | — | Buckets | C-19 |
@@ -951,8 +951,8 @@ Unchanged from §15.3:
 | Q3 | Manual disable with lead shift | Implemented | Admin chooses open / lost / booked groups | accounts/service.ts | accounts.test.ts | — | — | C-2 (confirm) |
 | Q4 | Same allowance for all | Implemented | One setting, default 30 | leave/service.ts | leave.test.ts | — | — | C-7 (confirm 30) |
 | Q5 | Holidays by team region | Partially Implemented | Team region filter | workplace/service.ts | workplace.test.ts | Multi-team rule open | — | C-3 |
-| Q6 | 2-step approval | Blocked | Mechanism built; approvers not set | leave/service.ts | leave.test.ts | Requests stay pending | Set order; distinct approvers | C-4 |
-| Q7 | Senior leave by Super Admin | Partially Implemented | Super Admin decides; no self-approval | leave/service.ts | leave.test.ts | — | One or two steps; SA's own leave | C-5 |
+| Q6 | 2-step approval | Implemented | HR then Admin by default; two different people | leave/service.ts | leave.test.ts | — | — | — |
+| Q7 | Senior leave by Super Admin | Implemented | Super Admin decides; a Super Admin's own leave is auto-approved and audited | leave/service.ts | leave.test.ts | — | — | — |
 | Q8 | Calendar days | Implemented | Inclusive calendar days | leave/rules.ts | leave-rules.test.ts | — | — | — |
 | Q9 | Team weekends | Implemented | Per-team weekend days on roster | teams | teams-targets.test.ts, questionnaire-screens.spec.ts | — | Attendance use (CR-1) | C-8 |
 | Q10 | CPL = medical | Implemented | Label 'Medical (CPL)' | leave/rules.ts | leave.test.ts | — | — | C-9 (label, certificate) |
@@ -965,9 +965,9 @@ Unchanged from §15.3:
 | Q17 | Cross-year deduction | Blocked | Held: recorded, not counted, not approvable | leave/service.ts, drizzle/0020 | leave.test.ts | — | Deduction rule | C-13 |
 | Q18 | Approved leave on roster | Partially Implemented | First active team; never overwrites a manager entry | leave/service.ts | leave.test.ts | Bypasses the 11:00 lock for past days | Multi-team, overwrite rule | C-14 |
 | Q19 | Rotation skips agents on leave | Implemented | Approved leave today excluded | leads/commands.ts | leave.test.ts | — | — | C-15 (Leads off, manual assign) |
-| Q20 | Attendance wanted | Blocked | Not built | — | none | — | Module | CR-1 commercial |
+| Q20 | Attendance wanted | Implemented | Check in / check out (15 Nov 2026) | attendance/service.ts | attendance.test.ts | — | — | — |
 | Q21 | Check-in / out, late, absences, hours, breaks | Blocked | Not built | — | none | — | Module | C-16 |
-| Q22 | HR and Super Admin manage attendance | Blocked | Not built | — | none | — | Module | CR-1, C-16 |
+| Q22 | HR and Super Admin manage attendance | Implemented | HR, Admin and Super Admin see the sheets, correct days and set office hours | attendance/service.ts | attendance.test.ts | — | — | — |
 | Q23 | Critical | Blocked | Not built | — | none | — | — | C-17 |
 | Q24 | Open leads definition | Implemented | Open stages | leads/constants.ts | performance.test.ts | — | — | — |
 | Q25 | Original assignment date | Partially Implemented | Date = original assignment; credit goes to current owner | performance/service.ts | performance.test.ts | Page footnote outdated | Attribute to the original assignee if confirmed | C-18 |

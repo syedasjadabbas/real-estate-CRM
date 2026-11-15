@@ -15,6 +15,8 @@ import {
   CROSS_YEAR_HELD_NOTE,
   DEFAULT_ANNUAL_DAYS,
   DEFAULT_PRORATION_METHOD,
+  DEFAULT_STAFF_STEP1,
+  DEFAULT_STAFF_STEP2,
   PRORATION_METHODS,
   type ProrationMethod,
   isCrossYear,
@@ -47,7 +49,7 @@ export const canCancelApprovedLeave = (actor: Pick<Actor, "role">) => actor.role
 
 // ─── Settings ────────────────────────────────────────────────────────────────
 
-export type LeaveSettings = { annualDays: number; staffStep1: StaffStepApprover | null; staffStep2: StaffStepApprover | null; prorationMethod: ProrationMethod };
+export type LeaveSettings = { annualDays: number; staffStep1: StaffStepApprover; staffStep2: StaffStepApprover; prorationMethod: ProrationMethod };
 
 export async function getLeaveSettings(db: DbOrTx): Promise<LeaveSettings> {
   const rows = await db.select().from(appSettings).where(inArray(appSettings.key, Object.values(KEYS)));
@@ -57,8 +59,8 @@ export async function getLeaveSettings(db: DbOrTx): Promise<LeaveSettings> {
   const method = get(KEYS.prorationMethod);
   return {
     annualDays: Number.isFinite(annual) && annual > 0 ? annual : DEFAULT_ANNUAL_DAYS,
-    staffStep1: step(get(KEYS.staffStep1)),
-    staffStep2: step(get(KEYS.staffStep2)),
+    staffStep1: step(get(KEYS.staffStep1)) ?? DEFAULT_STAFF_STEP1,
+    staffStep2: step(get(KEYS.staffStep2)) ?? DEFAULT_STAFF_STEP2,
     prorationMethod: method && method in PRORATION_METHODS ? (method as ProrationMethod) : DEFAULT_PRORATION_METHOD,
   };
 }
@@ -66,14 +68,13 @@ export async function getLeaveSettings(db: DbOrTx): Promise<LeaveSettings> {
 const settingsSchema = z
   .object({
     annualDays: z.coerce.number("Enter a number").int("Use whole days").min(1, "At least 1 day").max(366, "At most 366 days"),
-    staffStep1: z.enum(STAFF_STEP_APPROVERS).nullable().optional().transform((v) => v ?? null),
-    staffStep2: z.enum(STAFF_STEP_APPROVERS).nullable().optional().transform((v) => v ?? null),
+    staffStep1: z.enum(STAFF_STEP_APPROVERS, "Choose the first approver").optional().default(DEFAULT_STAFF_STEP1),
+    staffStep2: z.enum(STAFF_STEP_APPROVERS, "Choose the second approver").optional().default(DEFAULT_STAFF_STEP2),
     prorationMethod: z.enum(Object.keys(PRORATION_METHODS) as [ProrationMethod, ...ProrationMethod[]]).optional().default(DEFAULT_PRORATION_METHOD),
   })
-  .strict()
-  .refine((v) => (v.staffStep1 === null) === (v.staffStep2 === null), { path: ["staffStep2"], message: "Set both approval steps, or neither (Q6: two-step approval)" });
+  .strict();
 
-/** Admins only. The two staff steps stay unset until the client says who approves first and second (C-4). */
+/** Admins only. Staff steps default to HR then Admin (owner, 15 Nov 2026). */
 export async function updateLeaveSettings(db: Database, actor: Actor, input: unknown) {
   if (!canManageLeaveSettings(actor)) throw forbidden();
   const data = parse(settingsSchema, input);
@@ -82,9 +83,7 @@ export async function updateLeaveSettings(db: Database, actor: Actor, input: unk
     const changed = (Object.keys(KEYS) as (keyof typeof KEYS)[]).filter((k) => before[k] !== data[k]);
     for (const k of changed) {
       const value = data[k];
-      if (value === null) await tx.delete(appSettings).where(eq(appSettings.key, KEYS[k]));
-      else
-        await tx
+      await tx
           .insert(appSettings)
           .values({ key: KEYS[k], value: String(value), updatedById: actor.id })
           .onConflictDoUpdate({ target: appSettings.key, set: { value: String(value), updatedById: actor.id, updatedAt: new Date() } });
@@ -172,7 +171,16 @@ export async function submitLeave(db: Database, actor: Actor, input: unknown) {
       .values({ userId: actor.id, type: data.type, startDate: data.startDate, endDate: data.endDate, days, reason: data.reason, approvalPath: approvalPathFor(actor.role) })
       .returning({ id: leaveRequests.id });
     await audit(tx, actor, "leave.request", row.id, { type: data.type, startDate: data.startDate, endDate: data.endDate, days, held });
-    return { id: row.id, days, held };
+    // A Super Admin has nobody above them: their own leave is approved on submission, with an audit entry
+    // (owner, 15 Nov 2026). A held cross-year request still waits for the rule (Q17).
+    if (actor.role === "super_admin" && !held) {
+      const now = new Date();
+      await tx.update(leaveRequests).set({ status: "approved", decidedAt: now, updatedAt: now }).where(eq(leaveRequests.id, row.id));
+      const rosterDays = await writeRoster(tx, actor, { id: row.id, userId: actor.id, startDate: data.startDate, endDate: data.endDate });
+      await audit(tx, actor, "leave.auto_approve", row.id, { reason: "Super Admin leave is approved automatically", rosterDays });
+      return { id: row.id, days, held, status: "approved" as const };
+    }
+    return { id: row.id, days, held, status: "pending" as const };
   });
 }
 
@@ -216,7 +224,6 @@ export async function canDecideStep(db: DbOrTx, actor: Actor, request: { id: str
   if (isCrossYear(request)) return false;
   if (request.approvalPath === "senior") return actor.role === "super_admin";
   const approver = request.currentStep === 1 ? settings.staffStep1 : settings.staffStep2;
-  if (approver === null) return false;
   if (request.currentStep === 2 && (await stepOneApproverId(db, request.id)) === actor.id) return false;
   if (approver === "hr") return actor.role === "hr";
   if (approver === "admin") return actor.role === "admin" || actor.role === "super_admin";
@@ -251,7 +258,6 @@ export async function decideLeave(db: Database, actor: Actor, id: string, input:
     if (request.status !== "pending") throw new AppError("BUSINESS_RULE", "This request has already been decided.");
     if (isCrossYear(request)) throw new AppError("BUSINESS_RULE", CROSS_YEAR_HELD_NOTE);
     if (!(await canDecideStep(tx, actor, request, settings))) {
-      if (request.approvalPath === "staff" && !settings.staffStep1) throw new AppError("BUSINESS_RULE", "Staff leave approval steps are not set yet (awaiting the company's approval order).");
       if (request.approvalPath === "staff" && request.currentStep === 2 && (await stepOneApproverId(tx, id)) === actor.id) throw forbidden(SAME_APPROVER_MESSAGE);
       throw forbidden(actor.id === request.userId ? "You can't decide your own leave." : "You can't decide this step.");
     }

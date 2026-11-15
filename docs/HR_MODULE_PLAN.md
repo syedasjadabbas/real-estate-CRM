@@ -561,3 +561,15 @@ At the time of writing, nothing for Employee Records was implemented (A and B we
 | Region on the profile (for regional holidays) | Q9 |
 | Fixed department / designation lists | Q12 (free text in use) |
 | Salary, CNIC, documents | Outside the quotation |
+
+## Update, 15 Nov 2026 (owner decisions)
+
+- **Staff leave approval:** agents' and accountants' leave goes **HR first, then Admin**. This is the default; Admins can change it in Leave settings. The two steps need two different people.
+- **Super Admin leave:** approved automatically on submission, with an `leave.auto_approve` audit entry and the roster days written.
+- **Annual allowance:** 30 days, the same for everyone.
+- **Attendance:** everyone checks in and out from My Workplace, once per business day (Asia/Karachi).
+  - HR → Attendance shows a **daily sheet**: present, late, absent, on leave, holiday, day off, check-in and check-out times, and hours worked.
+  - It also shows a **monthly summary** per person: working days, present, late, absent, leave, holidays, hours worked and missing check-outs.
+  - HR, Admins and Super Admins set the office start, the late cut-off, the office end and the weekly days off (default 09:00, 09:15, 18:00, Sunday off).
+  - They can correct someone else's day (a forgotten check-in or check-out) with a reason. The correction is shown on the sheet and audited. Nobody corrects their own day.
+  - Status is worked out, not stored. A check-in always counts. Without one, the day is on leave, then holiday, then day off, then absent (or "not checked in" for today).

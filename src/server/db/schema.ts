@@ -999,6 +999,38 @@ export const holidays = pgTable(
   ],
 );
 
+// ─── HR: attendance ───────────────────────────────────────────────────────────
+
+/**
+ * Daily attendance (owner, 15 Nov 2026): each person checks in and out from My workplace, once per
+ * business day. HR may correct a day; the correction and its reason are audited. Status (present,
+ * late, absent, on leave, holiday, weekend) is worked out from this row, leave, holidays and the
+ * office hours in app settings, not stored.
+ */
+export const attendanceRecords = pgTable(
+  "attendance_records",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** The business day (Asia/Karachi). */
+    date: date("date").notNull(),
+    checkInAt: timestamp("check_in_at", { withTimezone: true }).notNull(),
+    checkOutAt: timestamp("check_out_at", { withTimezone: true }),
+    /** Set when HR corrected the times. */
+    correctedById: uuid("corrected_by_id").references(() => users.id, { onDelete: "set null" }),
+    correctionNote: text("correction_note"),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("attendance_records_user_date_uq").on(t.userId, t.date),
+    index("attendance_records_date_idx").on(t.date),
+    check("attendance_records_out_after_in", sql`${t.checkOutAt} is null or ${t.checkOutAt} >= ${t.checkInAt}`),
+    check("attendance_records_note_length", sql`coalesce(length(${t.correctionNote}), 0) <= 300`),
+  ],
+);
+
 // ─── HR: employee profiles ────────────────────────────────────────────────────
 
 /**

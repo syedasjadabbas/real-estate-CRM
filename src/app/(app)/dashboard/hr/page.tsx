@@ -9,6 +9,7 @@ import { Panel } from "@/components/ui/card";
 import { RestrictedState } from "@/components/ui/empty-state";
 import { findNavItem } from "@/config/navigation";
 import { HrTabs } from "@/features/hr/components/hr-tabs";
+import { canViewAttendance } from "@/modules/attendance/service";
 import { canViewEmployees } from "@/modules/employees/policy";
 import { canViewHolidays } from "@/modules/holidays/policy";
 import { requirePageUser } from "@/server/auth/current-user";
@@ -49,7 +50,7 @@ function ModuleCard({ m }: { m: Module }) {
   );
 }
 
-/** Reference "People & time off" overview: module cards. Employees, Holidays and Leave are built; attendance is not available (Q-H2 / CR-1). */
+/** Reference "People & time off" overview: module cards. Employees, Holidays, Leave and Attendance (15 Nov 2026). */
 export default async function HrPage() {
   const actor = await requirePageUser();
   const item = findNavItem("/dashboard/hr")!;
@@ -84,17 +85,17 @@ export default async function HrPage() {
     },
     {
       eyebrow: "Attendance",
-      title: "Attendance — not available",
-      description: "CRM sign-ins are authentication activity, not attendance. Attendance tracking waits on the client's requirements (Q-H2).",
+      title: "Attendance",
+      description: "Daily check-in sheet, monthly summary and office hours. Everyone checks in from My Workplace.",
       icon: Clock,
-      href: null,
-      note: "Pending client decision",
+      href: canViewAttendance(actor) ? "/dashboard/hr/attendance" : "/dashboard/workspace",
+      note: "HR and admins",
     },
   ];
   return (
     <PageStack>
       <PageHeader title="People & time off" description="Employee records, holiday calendar, leave requests, and activity. Payroll is managed under Finance." icon={item.icon} />
-      <HrTabs active="overview" showEmployees={employees} showHolidays={holidays} showLeave={canOpenLeaveAdmin(actor)} />
+      <HrTabs showAttendance={canViewAttendance(actor)} active="overview" showEmployees={employees} showHolidays={holidays} showLeave={canOpenLeaveAdmin(actor)} />
       <Panel title="Modules" description="Open a section to manage people and time off.">
         <div className="grid grid-cols-1 gap-3 py-2 sm:grid-cols-2 xl:grid-cols-4">
           {modules.map((m) => (

@@ -7,17 +7,20 @@ export function HrTabs({
   showEmployees,
   showHolidays,
   showLeave = false,
+  showAttendance = false,
 }: {
-  active: "overview" | "employees" | "holidays" | "leave";
+  active: "overview" | "employees" | "holidays" | "leave" | "attendance";
   showEmployees: boolean;
   showHolidays: boolean;
   showLeave?: boolean;
+  showAttendance?: boolean;
 }) {
   const tabs = [
     { key: "overview", label: "Overview", href: "/dashboard/hr" },
     ...(showEmployees ? [{ key: "employees", label: "Employees", href: "/dashboard/hr/employees" }] : []),
     ...(showHolidays ? [{ key: "holidays", label: "Holidays", href: "/dashboard/hr/holidays" }] : []),
     ...(showLeave ? [{ key: "leave", label: "Leave", href: "/dashboard/hr/leave" }] : []),
+    ...(showAttendance ? [{ key: "attendance", label: "Attendance", href: "/dashboard/hr/attendance" }] : []),
   ];
   return (
     <nav

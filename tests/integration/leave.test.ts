@@ -6,6 +6,7 @@ import {
   decideLeave,
   decideLeaveCancellation,
   employeeLeaveBalance,
+  getLeaveSettings,
   leaveBalance,
   leaveBalances,
   leaveOverview,
@@ -110,10 +111,12 @@ describe.skipIf(!hasTestDb)("Leave (questionnaire Q4–Q19, PostgreSQL integrati
     ]);
     expect((await leaveBalance(db, m.id, YEAR)).granted).toBe(3);
 
-    // A Super Admin's own leave needs another Super Admin (C-5 pending: no self-approval).
+    // A Super Admin's own leave is approved on submission, with an audit entry (owner, 15 Nov 2026).
     const sa = f.actors.superAdmin;
     const own = await req(sa, "08-01", "08-01");
-    expect((await errorOf(decideLeave(db, sa, own.id, { approve: true })))?.message).toMatch(/own leave/);
+    expect(own.status).toBe("approved");
+    expect((await leaveBalance(db, sa.id, YEAR)).granted).toBe(1);
+    expect(await db.select({ a: auditLogs.action }).from(auditLogs).where(eq(auditLogs.entityId, own.id))).toEqual(expect.arrayContaining([{ a: "leave.auto_approve" }]));
   });
 
   it("Q15: cancelling approved leave is decided by an Admin or Super Admin; the days return and only leave-written roster days go", async () => {
@@ -136,12 +139,12 @@ describe.skipIf(!hasTestDb)("Leave (questionnaire Q4–Q19, PostgreSQL integrati
     expect(actions).toEqual(expect.arrayContaining(["leave.request", "leave.approve", "leave.cancel_request", "leave.cancel"]));
   });
 
-  it("Q6: staff requests wait until both approval steps are set, then follow them in order", async () => {
+  it("Q6: staff requests go HR then Admin by default; Admins can change the order", async () => {
+    expect(await getLeaveSettings(db)).toMatchObject({ staffStep1: "hr", staffStep2: "admin" });
     const a = f.actors.agent1;
     const { id } = await req(a, "09-01", "09-02");
-    expect((await errorOf(decideLeave(db, f.actors.manager, id, { approve: true })))?.message).toMatch(/not set yet/);
+    expect(await errorCode(decideLeave(db, f.actors.manager, id, { approve: true }))).toBe("FORBIDDEN");
     expect(await errorCode(updateLeaveSettings(db, f.actors.hr, { annualDays: 30, staffStep1: "team_manager", staffStep2: "hr" }))).toBe("FORBIDDEN");
-    expect((await errorOf(updateLeaveSettings(db, admin, { annualDays: 30, staffStep1: "team_manager", staffStep2: null })))?.fields?.staffStep2).toMatch(/both/);
     await updateLeaveSettings(db, admin, { annualDays: 30, staffStep1: "team_manager", staffStep2: "hr" });
 
     // Step 1: only the agent's team manager; HR can't jump ahead.
@@ -405,7 +408,7 @@ describe.skipIf(!hasTestDb)("Leave (questionnaire Q4–Q19, PostgreSQL integrati
       expect(await decideLeave(db, f.actors.superAdmin, id, { approve: true })).toMatchObject({ status: "approved" });
       expect(await approvals(id)).toHaveLength(1);
       const own = await req(f.actors.superAdmin, "10-28", "10-28");
-      expect((await errorOf(decideLeave(db, f.actors.superAdmin, own.id, { approve: true })))?.message).toMatch(/own leave/);
+      expect(own.status).toBe("approved"); // a Super Admin's own leave is approved on submission (15 Nov 2026)
     });
 
     it("the database refuses a second approval by the same person on one request", async () => {

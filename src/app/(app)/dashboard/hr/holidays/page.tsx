@@ -10,6 +10,7 @@ import { HolidayCalendar } from "@/features/hr/components/holiday-calendar";
 import { AddHolidayButton, HolidayNotices, HolidayRowActions } from "@/features/hr/components/holiday-editor";
 import { HolidaysToolbar } from "@/features/hr/components/holidays-toolbar";
 import { HrTabs } from "@/features/hr/components/hr-tabs";
+import { canViewAttendance } from "@/modules/attendance/service";
 import { formatListedOn } from "@/features/inventory/format";
 import { formatDateTime } from "@/features/leads/format";
 import { flattenParams, withParams } from "@/features/leads/url";
@@ -55,7 +56,7 @@ export default async function HolidaysPage({ searchParams }: PageProps<"/dashboa
         description={canManage ? "Company-wide and regional holidays. Add, edit or remove dates for the calendar." : "Company-wide and regional holidays (view only)."}
         icon={CalendarDays}
       />
-      <HrTabs active="holidays" showEmployees={canViewEmployees(actor)} showHolidays showLeave={canOpenLeaveAdmin(actor)} />
+      <HrTabs showAttendance={canViewAttendance(actor)} active="holidays" showEmployees={canViewEmployees(actor)} showHolidays showLeave={canOpenLeaveAdmin(actor)} />
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <MiniStat label={`Holidays ${year}`} value={formatInt(tiles.total)} caption={`${formatInt(tiles.upcoming)} still ahead`} />
         <MiniStat label="Company-wide" value={formatInt(tiles.company)} caption="Apply to everyone" />

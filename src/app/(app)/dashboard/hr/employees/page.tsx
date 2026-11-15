@@ -9,6 +9,7 @@ import { EmptyState, RestrictedState } from "@/components/ui/empty-state";
 import { MiniStat } from "@/components/ui/stat";
 import { EmployeesToolbar } from "@/features/hr/components/employees-toolbar";
 import { HrTabs } from "@/features/hr/components/hr-tabs";
+import { canViewAttendance } from "@/modules/attendance/service";
 import { formatListedOn } from "@/features/inventory/format";
 import { Pagination } from "@/features/leads/components/pagination";
 import { flattenParams, withParams } from "@/features/leads/url";
@@ -79,7 +80,7 @@ export default async function EmployeesPage({ searchParams }: PageProps<"/dashbo
           ) : null
         }
       />
-      <HrTabs active="employees" showEmployees showHolidays={canViewHolidays(actor)} showLeave={canOpenLeaveAdmin(actor)} />
+      <HrTabs showAttendance={canViewAttendance(actor)} active="employees" showEmployees showHolidays={canViewHolidays(actor)} showLeave={canOpenLeaveAdmin(actor)} />
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <MiniStat label="Accounts" value={formatInt(tiles.accounts)} caption="CRM logins" />
         <MiniStat label="No CRM login" value={formatInt(tiles.noLogin)} caption="HR records only" />

@@ -55,7 +55,7 @@ export default async function TasksPage({ searchParams }: PageProps<"/dashboard/
         <MiniStat label="On this page" value={formatInt(result.rows.length)} caption="Loaded rows" />
       </div>
       <TasksToolbar params={params} total={result.total} assignees={assignees} />
-      <TasksTable rows={result.rows} params={params} emptyMessage={filters || params.q ? "No tasks match your search or filters." : "No tasks yet. Create one to get started."} />
+      <TasksTable rows={result.rows} params={params} emptyMessage={filters || params.q ? "No tasks match your search or filters." : canDoTask(actor, "create") ? "No tasks yet. Create one to get started." : "No tasks yet. Tasks assigned to you will appear here."} />
       <Pagination page={result.page} pageCount={result.pageCount} total={result.total} params={params} />
     </section>
   );

@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { PageHeader, PageStack } from "@/components/shell/page-header";
 import { EmptyState, RestrictedState } from "@/components/ui/empty-state";
 import { HrTabs } from "@/features/hr/components/hr-tabs";
+import { canViewAttendance } from "@/modules/attendance/service";
 import { formatListedOn } from "@/features/inventory/format";
 import { PanelCard } from "@/features/leads/components/detail-panels";
 import { CancelApprovedLeave, LeaveDecision, LeaveSettingsForm } from "@/features/leave/components/leave-admin";
@@ -44,17 +45,12 @@ export default async function LeavePage({ searchParams }: PageProps<"/dashboard/
   const stepNote = (r: LeaveRow) =>
     r.approvalPath === "senior"
       ? "Super Admin approval"
-      : `Step ${r.currentStep} of 2 · ${(r.currentStep === 1 ? settings.staffStep1 : settings.staffStep2) ? STAFF_STEP_LABELS[(r.currentStep === 1 ? settings.staffStep1 : settings.staffStep2)!] : "approver not set"}`;
+      : `Step ${r.currentStep} of 2 · ${STAFF_STEP_LABELS[r.currentStep === 1 ? settings.staffStep1 : settings.staffStep2]}`;
 
   return (
     <PageStack>
       <PageHeader title="Leave" description={`Leave requests and balances for ${data.year}. Days are calendar days.`} icon={Plane} />
-      <HrTabs active="leave" showEmployees={canViewEmployees(actor)} showHolidays={canViewHolidays(actor)} showLeave />
-      {!settings.staffStep1 ? (
-        <p role="note" className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
-          Staff leave approval steps are not set yet: agents&apos; and accountants&apos; requests stay pending until the company confirms who approves first and second.
-        </p>
-      ) : null}
+      <HrTabs showAttendance={canViewAttendance(actor)} active="leave" showEmployees={canViewEmployees(actor)} showHolidays={canViewHolidays(actor)} showLeave />
 
       <PanelCard title={`Waiting for your decision · ${data.decidable.length}`}>
         {data.decidable.length === 0 ? (

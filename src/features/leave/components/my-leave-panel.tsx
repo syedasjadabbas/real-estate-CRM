@@ -80,7 +80,8 @@ export function MyLeavePanel({ balance, rows, today, years = [] }: { balance: Ba
             const r = await submitLeaveAction(v);
             if (r.ok) {
               setErrors({});
-              setMsg({ text: r.data.held ? `Leave requested: ${r.data.days} days, held (two calendar years).` : `Leave requested: ${r.data.days} day${r.data.days === 1 ? "" : "s"}.`, ok: true });
+              const n = `${r.data.days} day${r.data.days === 1 ? "" : "s"}`;
+              setMsg({ text: r.data.held ? `Leave requested: ${n}, held (two calendar years).` : r.data.status === "approved" ? `Leave approved: ${n}.` : `Leave requested: ${n}.`, ok: true });
               setV((s) => ({ ...s, reason: "" }));
             } else {
               setErrors(r.fields ?? {});

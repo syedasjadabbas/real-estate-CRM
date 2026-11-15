@@ -11,6 +11,7 @@ import { EmptyState, RestrictedState } from "@/components/ui/empty-state";
 import { AccountControls } from "@/features/hr/components/account-controls";
 import { EmployeeProfileForm } from "@/features/hr/components/employee-profile-form";
 import { HrTabs } from "@/features/hr/components/hr-tabs";
+import { canViewAttendance } from "@/modules/attendance/service";
 import { formatListedOn } from "@/features/inventory/format";
 import { PanelCard } from "@/features/leads/components/detail-panels";
 import { formatDateTime } from "@/features/leads/format";
@@ -88,7 +89,7 @@ export default async function EmployeePage({ params }: PageProps<"/dashboard/hr/
           </Link>
         }
       />
-      <HrTabs active="employees" showEmployees showHolidays={canViewHolidays(actor)} showLeave={canOpenLeaveAdmin(actor)} />
+      <HrTabs showAttendance={canViewAttendance(actor)} active="employees" showEmployees showHolidays={canViewHolidays(actor)} showLeave={canOpenLeaveAdmin(actor)} />
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <div className="min-w-0 space-y-6">
           <PanelCard title="CRM account">
