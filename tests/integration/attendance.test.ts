@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { dayStatus, DEFAULT_ATTENDANCE_SETTINGS, instantOf, localTime } from "@/modules/attendance/rules";
+import { hrDashboard } from "@/modules/attendance/hr-dashboard";
 import { checkIn, checkOut, correctAttendance, dailySheet, monthlySummary, myAttendance, updateAttendanceSettings } from "@/modules/attendance/service";
 import { holidays, leaveRequests, auditLogs } from "@/server/db/schema";
 import type { Database } from "@/server/db";
@@ -97,5 +98,25 @@ describe.skipIf(!hasTestDb)("Attendance (PostgreSQL integration)", () => {
     expect(await updateAttendanceSettings(db, f.actors.hr, { officeStart: "10:00", lateAfter: "10:15", officeEnd: "19:00", weekendDays: [0, 6] })).toEqual({ changed: ["officeStart", "lateAfter", "officeEnd", "weekendDays"] });
     const after = await dailySheet(db, f.actors.hr, "2026-11-14", "2026-11-18"); // a Saturday, now a day off
     expect(after.rows.find((r) => r.userId === a.id)?.status).toBe("weekend");
+  });
+
+  it("gives HR a people dashboard: today's attendance, leave to decide, missing check-outs, who is away", async () => {
+    const a = f.actors.agent1;
+    const b = f.actors.agent2;
+    // Monday 16 Nov 2026 as "today"; the agent forgot to check out on Friday the 13th.
+    await checkIn(db, a, instantOf("2026-11-13", "09:00"));
+    await checkIn(db, a, instantOf("2026-11-16", "09:30"));
+    await db.insert(leaveRequests).values({ userId: b.id, type: "annual", startDate: "2026-11-18", endDate: "2026-11-19", days: 2, status: "approved", approvalPath: "staff" });
+    await db.insert(leaveRequests).values({ userId: f.actors.manager.id, type: "annual", startDate: "2026-11-25", endDate: "2026-11-25", days: 1, approvalPath: "senior" });
+
+    expect((await errorOf(hrDashboard(db, a, "2026-11-16")))?.code).toBe("FORBIDDEN");
+    const d = await hrDashboard(db, f.actors.hr, "2026-11-16");
+    expect(d.attendance.late).toEqual([{ userId: a.id, name: expect.any(String), checkIn: "09:30" }]);
+    expect(d.attendance.notCheckedIn.map((p) => p.userId)).toContain(b.id);
+    expect(d.missingCheckOuts).toEqual([expect.objectContaining({ userId: a.id, date: "2026-11-13", checkIn: "09:00" })]);
+    expect(d.away.map((l) => l.userId)).toEqual([b.id]);
+    // Senior leave is decided by a Super Admin, so HR has nothing to decide here.
+    expect(d.pendingLeaveTotal).toBe(0);
+    expect((await hrDashboard(db, f.actors.superAdmin, "2026-11-16")).pendingLeaveTotal).toBe(1);
   });
 });
