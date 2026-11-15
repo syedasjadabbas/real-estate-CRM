@@ -119,6 +119,8 @@ export function Sidebar({
         ...group,
         items: group.items
           .filter((item) => !item.roles || (user ? item.roles.includes(user.role) : false))
+          // "My team" is for Team Leads only (15 Nov 2026).
+          .filter((item) => !item.teamLeadOnly || Boolean(user?.isTeamLead))
           .map((item) => (user && item.labels?.[user.role] ? { ...item, label: item.labels[user.role] } : item)),
       }))
       .filter((group) => group.items.length > 0);

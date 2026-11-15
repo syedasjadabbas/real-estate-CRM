@@ -12,6 +12,7 @@ import { canManageTeams, canOperateTeam, canViewOwnRoster, canViewTeam, canViewT
 import { ROSTER_STATUSES, TEAM_PAGE_SIZE, dateParam, monthParam, reportRangeSchema, teamListQuerySchema, type RosterStatus, type TeamSort } from "./validation";
 
 const manager = alias(users, "manager");
+const lead = alias(users, "team_lead");
 const submitter = alias(users, "submitter");
 
 const visibleWhere = (actor: Actor) => (seesAllTeams(actor) ? undefined : actor.managedTeamIds.length ? inArray(teams.id, actor.managedTeamIds) : sql`false`);
@@ -24,6 +25,8 @@ const teamSelection = {
   region: teams.region,
   managerId: teams.managerId,
   managerName: manager.name,
+  teamLeadId: teams.teamLeadId,
+  teamLeadName: lead.name,
   members: memberCount,
   updatedAt: teams.updatedAt,
 };
@@ -36,6 +39,7 @@ export async function visibleTeams(db: Database, actor: Actor) {
     .select(teamSelection)
     .from(teams)
     .leftJoin(manager, eq(manager.id, teams.managerId))
+    .leftJoin(lead, eq(lead.id, teams.teamLeadId))
     .where(where)
     .orderBy(desc(teams.isActive), asc(sql`lower(${teams.name})`));
   return rows;
@@ -67,6 +71,7 @@ export async function listTeams(db: Database, actor: Actor, rawQuery: unknown = 
     .select(teamSelection)
     .from(teams)
     .leftJoin(manager, eq(manager.id, teams.managerId))
+    .leftJoin(lead, eq(lead.id, teams.teamLeadId))
     .where(where)
     .orderBy(...order)
     .limit(TEAM_PAGE_SIZE)

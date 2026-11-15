@@ -97,8 +97,11 @@ export function InstantInsights({ data, own = false }: { data: DashboardData; ow
   const [range, setRange] = useState<RangeKey>("mtd");
   const { insights } = data;
   const mixTotal = data.meetingMix.reduce((sum, f) => sum + f.count, 0);
-  const topFormat = [...data.meetingMix].sort((a, b) => b.count - a.count)[0];
-  const activeFormats = data.meetingMix.filter((f) => f.count > 0).length;
+  // The Meetings Distribution card follows its own range picker.
+  const dist = data.meetingMixByRange?.[range] ?? data.meetingMix;
+  const distTotal = dist.reduce((sum, f) => sum + f.count, 0);
+  const topFormat = distTotal ? [...dist].sort((a, b) => b.count - a.count)[0] : undefined;
+  const activeFormats = dist.filter((f) => f.count > 0).length;
 
   return (
     <div className="space-y-3.5">
@@ -245,24 +248,24 @@ export function InstantInsights({ data, own = false }: { data: DashboardData; ow
           />
           <div className="p-4">
             <div className="grid grid-cols-3 gap-2">
-              <SummaryTile label="Total" value={mixTotal ? formatInt(mixTotal) : NO_VALUE} className="rounded-xl border border-zinc-200/80 bg-white" />
+              <SummaryTile label="Total" value={distTotal ? formatInt(distTotal) : NO_VALUE} className="rounded-xl border border-zinc-200/80 bg-white" />
               <SummaryTile label="Top format" value={topFormat?.label ?? NO_VALUE} accent className="rounded-xl border border-zinc-200/80 bg-white" />
               <SummaryTile
                 label="Active"
                 value={
                   <>
-                    {mixTotal ? activeFormats : NO_VALUE}
-                    <span className="text-xs font-medium text-zinc-400">/{data.meetingMix.length || NO_VALUE}</span>
+                    {distTotal ? activeFormats : NO_VALUE}
+                    <span className="text-xs font-medium text-zinc-400">/{dist.length || NO_VALUE}</span>
                   </>
                 }
                 className="rounded-xl border border-zinc-200/80 bg-white"
               />
             </div>
             <div className="mt-3 space-y-2">
-              {mixTotal === 0 ? (
+              {distTotal === 0 ? (
                 <EmptyState size="sm">No meetings in this range.</EmptyState>
               ) : (
-                data.meetingMix.map((f) => {
+                dist.map((f) => {
                   const Icon = f.color === "sky" ? Video : MapPin;
                   return (
                     <div key={f.id} className="rounded-xl border border-zinc-200/80 px-2.5 py-2 shadow-hairline">
@@ -274,11 +277,11 @@ export function InstantInsights({ data, own = false }: { data: DashboardData; ow
                         <span className="flex items-center gap-1.5 font-black tabular-nums">
                           {f.count}
                           <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-bold text-zinc-600">
-                            {percentOf(f.count, mixTotal)}%
+                            {percentOf(f.count, distTotal)}%
                           </span>
                         </span>
                       </div>
-                      <ProgressBar className="mt-1.5" size="xs" value={f.count} max={mixTotal} label={f.label} />
+                      <ProgressBar className="mt-1.5" size="xs" value={f.count} max={distTotal} label={f.label} />
                     </div>
                   );
                 })

@@ -78,6 +78,8 @@ export type DashboardData = {
   scoreScope: "own" | "team";
   teamOutput: { id: string; label: string; meetings: number; bookings: number }[];
   meetingMix: MeetingFormat[];
+  /** The Meetings Distribution card's own range picker (24h / 7d / 30d / MTD / 6m). */
+  meetingMixByRange?: Partial<Record<RangeKey, MeetingFormat[]>>;
   targets: TargetPeriods | null;
   pipelineHealth: PipelineHealth | null;
   leadSources: NamedCount[];

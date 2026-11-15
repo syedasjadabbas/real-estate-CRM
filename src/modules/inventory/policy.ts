@@ -2,15 +2,15 @@ import type { Actor, Role } from "@/server/auth/types";
 import { forbidden } from "@/server/errors";
 
 /**
- * Inventory authorization (USER_ROLES_AND_PERMISSIONS.md): view F/F/R/R/—/R,
- * edit / import F/F/—/—/—/—. Units are company-wide, so there is no record scope.
+ * Inventory authorization: view F/F/R/R/—/R. Adding, editing and importing units is the Super Admin's
+ * alone (owner, 15 Nov 2026); Admins see everything read-only. Units are company-wide, so there is no record scope.
  * Manual status changes are an admin override until Bookings drives status (decision 29 Oct 2026).
  */
 export type InventoryAction = "view" | "manage";
 
 const ROLE_ACTIONS: Record<Role, InventoryAction[]> = {
   super_admin: ["view", "manage"],
-  admin: ["view", "manage"],
+  admin: ["view"],
   manager: ["view"],
   agent: ["view"],
   hr: [],

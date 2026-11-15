@@ -75,7 +75,11 @@ export async function loadActor(
     user.role === "manager"
       ? await db.select({ id: teams.id }).from(teams).where(eq(teams.managerId, user.id))
       : [];
-  return { ...user, managedTeamIds: managed.map((t) => t.id) };
+  const led =
+    user.role === "agent"
+      ? await db.select({ id: teams.id }).from(teams).where(and(eq(teams.teamLeadId, user.id), eq(teams.isActive, true)))
+      : [];
+  return { ...user, managedTeamIds: managed.map((t) => t.id), ledTeamIds: led.map((t) => t.id) };
 }
 
 export async function revokeSession(db: Database, token: string, meta: RequestMeta = {}) {

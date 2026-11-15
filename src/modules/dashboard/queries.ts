@@ -8,6 +8,7 @@ import { INBOUND_LABELS } from "@/modules/leads/constants";
 import { agentScores, teamScoreSummary, teamScores } from "@/modules/leads/assignment";
 import { leadScope } from "@/modules/leads/policy";
 import { scopeFilter, teamMemberIds } from "@/modules/leads/support";
+import { agingRows, meetingMixes, meetingTotals, teamOutput } from "./insights";
 import type { DashboardData, LostBreakdown, LostTeam, RangeKey } from "@/features/dashboard/types";
 
 /**
@@ -187,6 +188,18 @@ export async function dashboardData(db: Database, actor: Actor, projectId: strin
     return TARGET_METRICS.map((m) => ({ label: m.label, actual: t?.achieved[m.key] ?? 0, target: t?.goals?.[m.key] || null, met: Boolean(t?.met.includes(m.key)) }));
   };
   const scoredTeams = ownScore ? [] : await teamScores(db, actor, now);
+  // Team panels (filled 15 Nov 2026); an agent's dashboard hides them, so they aren't computed.
+  const monthStart = rangeBounds({ range: "mtd" }, now).start;
+  const panels = ownScore
+    ? null
+    : await (async () => {
+        const mixes = await meetingMixes(db, inProject, now, monthStart);
+        const output = await teamOutput(db, inProject, team ? options.filter((t) => t.id === team) : options, start, end);
+        const totals = await meetingTotals(db, inProject, now, monthStart);
+        const aging = await agingRows(db, and(inProject, open), now);
+        return { mixes, output, totals, aging };
+      })();
+  const summary = ownScore ? null : teamScoreSummary(scoredTeams);
   const data: DashboardData = {
     isSample: false,
     snapshotAt: now.toISOString(),
@@ -208,15 +221,18 @@ export async function dashboardData(db: Database, actor: Actor, projectId: strin
     teams: options,
     activeProjects: activeProjects.n,
     topProjects: top,
-    insights: null,
-    insightsUpdatedAt: null,
+    insights: panels
+      ? { teams: summary?.teams ?? 0, avgScore: summary?.avgScore ?? 0, meetings30d: panels.totals.d30, meetings6m: panels.totals.m6, teamMeetings: panels.totals.team, bookings: panels.output.reduce((n, t) => n + t.bookings, 0) }
+      : null,
+    insightsUpdatedAt: panels ? now.toISOString() : null,
     teamScores: ownScore ? [{ id: actor.id, label: "Your score", count: Math.round(ownScore.score), provisional: ownScore.provisional }] : scoredTeams,
-    teamSummary: ownScore ? null : teamScoreSummary(scoredTeams),
+    teamSummary: summary,
     scoreScope: ownScore ? "own" : "team",
-    teamOutput: [],
-    meetingMix: [],
+    teamOutput: panels?.output ?? [],
+    meetingMix: panels?.mixes["30d"] ?? [],
+    meetingMixByRange: panels?.mixes,
     targets: myTargets ? { today: targetLines("daily"), week: targetLines("weekly"), month: targetLines("monthly") } : null,
-    pipelineHealth: { stale: health.stale, noMeeting: health.noMeeting, meetingsDone: meetingsDone.n, rows: [] },
+    pipelineHealth: { stale: health.stale, noMeeting: health.noMeeting, meetingsDone: meetingsDone.n, rows: panels?.aging ?? [] },
     leadSources: sources,
     inboundChannels: channels.map((c) => ({ id: c.channel, label: INBOUND_LABELS[c.channel], count: c.count })),
     lost: lostBreakdown(lostTeamRows),

@@ -9,7 +9,7 @@ const PROJECT = "6f1c2a64-0a52-4b9b-9a0e-6f0d2b1c9e11";
 describe("inventory policy", () => {
   it("follows the matrix: view F/F/R/R/—/R, edit by admins only", () => {
     expect(roles.filter((role) => canDoInventory({ role }, "view"))).toEqual(["super_admin", "admin", "manager", "agent", "accountant"]);
-    expect(roles.filter((role) => canDoInventory({ role }, "manage"))).toEqual(["super_admin", "admin"]);
+    expect(roles.filter((role) => canDoInventory({ role }, "manage"))).toEqual(["super_admin"]);
   });
 });
 

@@ -2,14 +2,14 @@ import type { Actor, Role } from "@/server/auth/types";
 import { forbidden } from "@/server/errors";
 
 /**
- * Projects authorization (USER_ROLES_AND_PERMISSIONS.md): view F/F/R/R/—/R,
- * create / edit F/F/—/—/—/—. Projects are company-wide, so there is no record scope.
+ * Projects authorization: view F/F/R/R/—/R. Adding and editing projects is the Super Admin's alone
+ * (owner, 15 Nov 2026); Admins see everything read-only. Projects are company-wide, so there is no record scope.
  */
 export type ProjectAction = "view" | "manage";
 
 const ROLE_ACTIONS: Record<Role, ProjectAction[]> = {
   super_admin: ["view", "manage"],
-  admin: ["view", "manage"],
+  admin: ["view"],
   manager: ["view"],
   agent: ["view"],
   hr: [],
@@ -26,5 +26,5 @@ export function assertCanProject(actor: Pick<Actor, "role">, action: ProjectActi
 
 /** FR-060: inactive projects are hidden from the project selector except for admins (decision 29 Oct 2026). */
 export function seesInactiveInSelector(actor: Pick<Actor, "role">) {
-  return canDoProject(actor, "manage");
+  return actor.role === "super_admin" || actor.role === "admin";
 }

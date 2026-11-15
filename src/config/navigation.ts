@@ -32,6 +32,8 @@ export type NavItem = {
   roles?: string[];
   /** A different menu label for some roles (e.g. agents see Performance as "My performance"). */
   labels?: Record<string, string>;
+  /** Shown only to Team Leads (agents who lead an active team, 15 Nov 2026). */
+  teamLeadOnly?: boolean;
 };
 
 /** Roles with any lead access (leads/policy.ts: HR and accountants have none). */
@@ -153,6 +155,14 @@ export const navigation: NavGroup[] = [
         // Not shown to agents (13 Nov 2026) or HR (15 Nov 2026): sales team management isn't their work.
         // The page itself still lets an agent see their own roster if they open it directly.
         roles: ["super_admin", "admin", "manager"],
+      },
+      {
+        label: "My team",
+        href: "/dashboard/my-team",
+        icon: Users,
+        description: "Your team's members, pipeline, performance and roster (read-only, for Team Leads).",
+        roles: ["agent"],
+        teamLeadOnly: true,
       },
       {
         label: "Bookings",

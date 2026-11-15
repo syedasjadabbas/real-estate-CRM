@@ -33,7 +33,9 @@ const LOST_REASONS = ["Not interested", "Budget mismatch", "Not responding", "Bo
 
 const DEV_USERS = [
   { name: "Dev Super Admin", email: "superadmin@mz.local", role: "super_admin" },
-  { name: "Dev Manager", email: "manager@mz.local", role: "manager" },
+  // Manager was merged into Admin (13 Nov 2026): the demo team's leader is an Admin, shown as "Team admin".
+  // The email stays the same so existing dev sign-ins keep working.
+  { name: "Dev Team Admin", email: "manager@mz.local", role: "admin" },
   { name: "Dev Agent One", email: "agent1@mz.local", role: "agent" },
   { name: "Dev Agent Two", email: "agent2@mz.local", role: "agent" },
   { name: "Dev HR", email: "hr@mz.local", role: "hr" },
@@ -66,6 +68,8 @@ try {
     const existing = await client.query("SELECT id FROM users WHERE lower(email) = lower($1)", [u.email]);
     if (existing.rows[0]) {
       ids[u.email] = existing.rows[0].id;
+      // Bring an older dev account in line (the dev Manager became an Admin; the password is kept).
+      await client.query("UPDATE users SET name = $2, role = $3, updated_at = now() WHERE id = $1 AND role = 'manager'", [existing.rows[0].id, u.name, u.role]);
       continue;
     }
     const password = randomBytes(9).toString("base64url");

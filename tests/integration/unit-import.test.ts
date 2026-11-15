@@ -159,16 +159,16 @@ describe.skipIf(!hasTestDb)("Unit import (FR-075)", () => {
     expect(await createdAudits()).toBe(before);
   });
 
-  it("allows the roles that add units by hand (super admin, admin) and refuses the accountant", async () => {
+  it("lets only the Super Admin import units (15 Nov 2026); Admins and accountants are refused", async () => {
     const make = async (email: string, role: Role) => {
       const [u] = await db.insert(users).values({ name: role, email, role, passwordHash: await hashPassword("x-y-z-w-v") }).returning();
       return loadActor(db, { id: u.id, name: u.name, email: u.email, role: u.role });
     };
     const admin = await make("admin@test.local", "admin");
     const accountant = await make("acc@test.local", "accountant");
-    expect(await errorCode(importUnits(db, admin, { projectId: f.projectId, csv: csv("P-1,1,500,1,"), apply: true }))).toBe("ok");
+    expect(await errorCode(importUnits(db, f.actors.superAdmin, { projectId: f.projectId, csv: csv("P-1,1,500,1,"), apply: true }))).toBe("ok");
     expect(await count()).toBe(1);
-    for (const actor of [accountant, f.actors.outsideAgent]) {
+    for (const actor of [admin, accountant, f.actors.outsideAgent]) {
       expect(await errorCode(importUnits(db, actor, { projectId: f.projectId, csv: csv("P-2,1,500,1,"), apply: true })), actor.role).toBe("FORBIDDEN");
     }
     expect(await count()).toBe(1);

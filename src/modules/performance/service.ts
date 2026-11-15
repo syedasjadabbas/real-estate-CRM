@@ -94,7 +94,7 @@ const assignedAt = sql`coalesce(
   "leads"."created_at")`;
 
 /** Per-agent metrics for the window (definitions P2–P9; calls: ./calls.ts). */
-async function agentMetrics(db: Database, agents: { id: string; name: string }[], window: { start: Date; end: Date }): Promise<AgentMetrics[]> {
+export async function agentMetrics(db: Database, agents: { id: string; name: string }[], window: { start: Date; end: Date }): Promise<AgentMetrics[]> {
   const ids = agents.map((a) => a.id);
   if (ids.length === 0) return [];
   const [leadRows, fuRows, meetingRows, signRows, callStats] = await Promise.all([

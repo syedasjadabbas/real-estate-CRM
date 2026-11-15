@@ -158,7 +158,25 @@ describe.skipIf(!hasTestDb)("Dashboard analytics (PostgreSQL integration)", () =
     // a1 had a meeting; the others did not (the old lead's meeting was cancelled).
     expect(health.noMeeting).toBe(3);
     expect(health.meetingsDone).toBe(1);
-    expect(health.rows).toEqual([]);
+    // Aging vs meetings (15 Nov 2026): open leads touched at least once, so the untouched ones are left out.
+    // a1 (1 completed meeting) and the outside agent's lead, both new this week, two owners.
+    expect(health.rows).toEqual([{ age: "0–7 days", buckets: [2, 0, 0, 0, 0], leads: 2, meetings: 1, avgPerOwner: 1 }]);
+  });
+
+  it("fills meeting mix, meetings vs bookings and the insight tiles (15 Nov 2026)", async () => {
+    await db.update(meetings).set({ type: "site_visit" }).where(eq(meetings.title, "Visit"));
+    const d = (await dashboardData(db, admin, f.projectId, { range: "30d" }, now)).data!;
+    // The cancelled meeting doesn't count; the completed site visit does.
+    expect(d.meetingMix.find((m) => m.id === "site_visit")?.count).toBe(1);
+    expect(d.meetingMix.reduce((n, m) => n + m.count, 0)).toBe(1);
+    expect(d.meetingMixByRange?.["24h"]?.reduce((n, m) => n + m.count, 0)).toBe(0);
+    expect(d.meetingMixByRange?.["7d"]?.find((m) => m.id === "site_visit")?.count).toBe(1);
+    // Under the team of the lead's owner (agent1's team); teams with nothing are left out.
+    expect(d.teamOutput).toEqual([expect.objectContaining({ meetings: 1, bookings: 0 })]);
+    expect(d.insights).toMatchObject({ meetings30d: 1, meetings6m: 1, bookings: 0 });
+    expect(d.insightsUpdatedAt).not.toBeNull();
+    // An agent's dashboard doesn't compute the team panels.
+    expect((await dashboardData(db, f.actors.agent1, f.projectId, { range: "30d" }, now)).data!.teamOutput).toEqual([]);
   });
 
   it("works out range bounds in Pakistan time", () => {

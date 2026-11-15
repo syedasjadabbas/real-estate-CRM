@@ -50,6 +50,9 @@ export const createTeamSchema = z.object({
 });
 export const updateTeamSchema = createTeamSchema.partial();
 
+/** Appoint (or clear, with null) the team's Team Lead (owner, 15 Nov 2026). */
+export const teamLeadSchema = z.object({ userId: z.uuid("Choose an agent from the team").nullable() }).strict();
+
 export const membersSchema = z.object({
   userIds: z.array(z.uuid("Invalid member")).max(200, "Too many members"),
 });

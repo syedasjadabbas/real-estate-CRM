@@ -18,6 +18,8 @@ export type Actor = {
   role: Role;
   /** Teams this user manages (manager scope). */
   managedTeamIds: string[];
+  /** Active teams this agent is the Team Lead of (owner, 15 Nov 2026): a read-only team view. */
+  ledTeamIds?: string[];
   /**
    * Verified client IP of the current request (trusted proxy only, see client-ip.ts), written on
    * audit rows. Null or absent when it can't be trusted, and outside a web request (jobs, tests).

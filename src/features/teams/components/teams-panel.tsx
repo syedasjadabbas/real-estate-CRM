@@ -15,11 +15,11 @@ import { cn } from "@/lib/cn";
 import { ROLE_LABELS } from "@/server/auth/types";
 import type { listTeams } from "@/modules/teams/queries";
 import type { TeamSort } from "@/modules/teams/validation";
-import { createTeamAction, setTeamMembersAction, updateTeamAction } from "../actions";
+import { createTeamAction, setTeamLeadAction, setTeamMembersAction, updateTeamAction } from "../actions";
 
 type Person = { id: string; name: string; role: string };
 type Detail = {
-  team: { id: string; name: string; managerId: string | null; isActive: boolean; weekendDays: number[]; region: string | null };
+  team: { id: string; name: string; managerId: string | null; teamLeadId: string | null; isActive: boolean; weekendDays: number[]; region: string | null };
   members: { id: string; name: string; role: string; status: string }[];
   history: { id: string; action: string; createdAt: Date; actorName: string | null }[];
 };
@@ -33,7 +33,7 @@ function Msg({ msg }: { msg: { text: string; ok: boolean } | null }) {
   );
 }
 
-const HISTORY: Record<string, string> = { "team.create": "Team created", "team.update": "Team details changed", "team.members": "Members changed" };
+const HISTORY: Record<string, string> = { "team.create": "Team created", "team.update": "Team details changed", "team.members": "Members changed", "team.lead": "Team Lead changed" };
 
 /** Team setup form (admins): name, manager, active. Used for "New team" and for editing. */
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -128,6 +128,49 @@ function TeamForm({ team, managers, onDone }: { team?: Detail["team"]; managers:
   );
 }
 
+/**
+ * Appoint the team's Team Lead (owner, 15 Nov 2026): one of its active agents, or none. The Team Lead
+ * keeps working as an agent and gets a read-only view of the team.
+ */
+function TeamLeadPicker({ teamId, teamLeadId, members }: { teamId: string; teamLeadId: string | null; members: Detail["members"] }) {
+  const agents = members.filter((m) => m.role === "agent" && m.status === "active");
+  const [value, setValue] = useState(teamLeadId ?? "");
+  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [pending, startTransition] = useTransition();
+  return (
+    <div className="space-y-2">
+      <Field label="Team Lead" hint="One of this team's agents. Optional. Add the agent as a member first.">
+        {(id, d) => (
+          <select id={id} aria-describedby={d} value={value} onChange={(e) => setValue(e.target.value)} className={selectClass} disabled={pending}>
+            <option value="">No team lead</option>
+            {agents.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </select>
+        )}
+      </Field>
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        <Msg msg={msg} />
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={pending || value === (teamLeadId ?? "")}
+          onClick={() =>
+            startTransition(async () => {
+              const result = await setTeamLeadAction(teamId, value || null);
+              setMsg(result.ok ? { text: value ? "Team Lead appointed." : "Team Lead removed.", ok: true } : { text: result.message, ok: false });
+            })
+          }
+        >
+          {pending ? "Saving…" : "Save Team Lead"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function MembersEditor({ teamId, members, candidates }: { teamId: string; members: Detail["members"]; candidates: Person[] }) {
   const [selected, setSelected] = useState<string[]>(members.map((m) => m.id));
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
@@ -152,7 +195,12 @@ function MembersEditor({ teamId, members, candidates }: { teamId: string; member
                   />
                   {p.name}
                 </span>
-                <span className="text-[11px] text-zinc-500">{ROLE_LABELS[p.role as keyof typeof ROLE_LABELS] ?? p.role}</span>
+                <span className="flex items-center gap-2 text-[11px] text-zinc-500">
+                  {ROLE_LABELS[p.role as keyof typeof ROLE_LABELS] ?? p.role}
+                  <Link href={`/dashboard/people/${p.id}`} className="font-bold text-brand hover:underline">
+                    Profile
+                  </Link>
+                </span>
               </label>
             </li>
           ))}
@@ -233,7 +281,7 @@ export function TeamsPanel({
                       <span className="min-w-0">
                         <span className="block font-bold break-words">{t.name}</span>
                         <span className="block text-[11px] text-zinc-500">
-                          {t.managerName ? `Team admin: ${t.managerName}` : "No team admin"} · {t.members} {t.members === 1 ? "member" : "members"}
+                          {t.managerName ? `Team admin: ${t.managerName}` : "No team admin"} · {t.teamLeadName ? `Team Lead: ${t.teamLeadName}` : "No team lead"} · {t.members} {t.members === 1 ? "member" : "members"}
                         </span>
                       </span>
                       <StatusTag tone={t.isActive ? "brand" : "neutral"}>{t.isActive ? "Active" : "Inactive"}</StatusTag>
@@ -262,6 +310,7 @@ export function TeamsPanel({
           ) : canManage ? (
             <div className="space-y-6">
               <TeamForm key={`${detail.team.id}-form`} team={detail.team} managers={managers} />
+              <TeamLeadPicker key={`${detail.team.id}-lead-${detail.team.teamLeadId ?? "none"}`} teamId={detail.team.id} teamLeadId={detail.team.teamLeadId} members={detail.members} />
               <MembersEditor key={`${detail.team.id}-members`} teamId={detail.team.id} members={detail.members} candidates={candidates} />
             </div>
           ) : detail.members.length === 0 ? (
@@ -271,7 +320,10 @@ export function TeamsPanel({
               {detail.members.map((m) => (
                 <li key={m.id} className="flex items-center justify-between gap-2 rounded-xl border border-zinc-200/80 px-3 py-2 text-xs shadow-hairline">
                   <span className="font-semibold">{m.name}</span>
-                  <span className="text-[11px] text-zinc-500">{ROLE_LABELS[m.role as keyof typeof ROLE_LABELS] ?? m.role}</span>
+                  <span className="text-[11px] text-zinc-500">
+                    {m.id === detail.team.teamLeadId ? "Team Lead · " : ""}
+                    {ROLE_LABELS[m.role as keyof typeof ROLE_LABELS] ?? m.role}
+                  </span>
                 </li>
               ))}
             </ul>

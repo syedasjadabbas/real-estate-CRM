@@ -1,7 +1,7 @@
 "use server";
 
 import { refresh } from "next/cache";
-import { createTeam, saveDailyReport, saveRoster, setTeamMembers, updateTeam } from "@/modules/teams/commands";
+import { createTeam, saveDailyReport, saveRoster, setTeamLead, setTeamMembers, updateTeam } from "@/modules/teams/commands";
 import { setTarget } from "@/modules/targets/service";
 import { requireActor } from "@/server/auth/current-user";
 import { getDb } from "@/server/db";
@@ -25,6 +25,10 @@ export async function createTeamAction(input: Record<string, unknown>) {
 
 export async function updateTeamAction(teamId: string, input: Record<string, unknown>) {
   return run((db, actor) => updateTeam(db, actor, teamId, input));
+}
+
+export async function setTeamLeadAction(teamId: string, userId: string | null) {
+  return run((db, actor) => setTeamLead(db, actor, teamId, { userId }));
 }
 
 export async function setTeamMembersAction(teamId: string, userIds: string[]) {

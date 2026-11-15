@@ -8,7 +8,7 @@ const roles: Role[] = ["super_admin", "admin", "manager", "agent", "hr", "accoun
 describe("projects policy", () => {
   it("follows the matrix: view F/F/R/R/—/R, create and edit by admins only", () => {
     expect(roles.filter((role) => canDoProject({ role }, "view"))).toEqual(["super_admin", "admin", "manager", "agent", "accountant"]);
-    expect(roles.filter((role) => canDoProject({ role }, "manage"))).toEqual(["super_admin", "admin"]);
+    expect(roles.filter((role) => canDoProject({ role }, "manage"))).toEqual(["super_admin"]);
   });
 
   it("shows inactive projects in the selector to admins only", () => {

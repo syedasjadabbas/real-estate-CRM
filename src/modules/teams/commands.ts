@@ -7,7 +7,7 @@ import type { DbOrTx } from "@/modules/leads/support";
 import { parseTask as parse, taskFieldError as fieldError } from "@/modules/tasks/support";
 import { dailyReportEditable, rosterEditable } from "./dates";
 import { assertCanManageTeams, canOperateTeam } from "./policy";
-import { createTeamSchema, dailyReportSchema, dateParam, membersSchema, rosterSchema, updateTeamSchema } from "./validation";
+import { createTeamSchema, dailyReportSchema, dateParam, membersSchema, rosterSchema, teamLeadSchema, updateTeamSchema } from "./validation";
 
 async function audit(tx: DbOrTx, actor: Actor, action: string, entity: string, entityId: string, before: unknown, after: unknown) {
   await tx.insert(auditLogs).values({ actorId: actor.id, ip: actor.ip ?? null, action, entity, entityId, before: before ?? null, after: after ?? null });
@@ -97,10 +97,41 @@ export async function setTeamMembers(db: Database, actor: Actor, teamId: string,
     const removed = current.filter((id) => !wanted.includes(id));
     if (added.length === 0 && removed.length === 0) return { added, removed };
     if (removed.length) await tx.delete(teamMembers).where(and(eq(teamMembers.teamId, team.id), inArray(teamMembers.userId, removed)));
+    // A Team Lead who leaves the team stops leading it.
+    if (team.teamLeadId && removed.includes(team.teamLeadId)) {
+      await tx.update(teams).set({ teamLeadId: null }).where(eq(teams.id, team.id));
+      await audit(tx, actor, "team.lead", "team", team.id, { teamLeadId: team.teamLeadId }, { teamLeadId: null, reason: "left the team" });
+    }
     if (added.length) await tx.insert(teamMembers).values(added.map((userId) => ({ teamId: team.id, userId })));
     await tx.update(teams).set({ updatedAt: new Date() }).where(eq(teams.id, team.id));
     await audit(tx, actor, "team.members", "team", team.id, { members: current }, { members: wanted, added, removed });
     return { added, removed };
+  });
+}
+
+/**
+ * Appoints the team's Team Lead (owner, 15 Nov 2026): an active agent who is a member of the team.
+ * Admins and Super Admins only; null clears it. A Team Lead keeps working as an agent and gets a
+ * read-only view of the team (see teams/policy.ts).
+ */
+export async function setTeamLead(db: Database, actor: Actor, teamId: string, input: unknown) {
+  assertCanManageTeams(actor);
+  const { userId } = parse(teamLeadSchema, input);
+  return db.transaction(async (tx) => {
+    const team = await loadTeam(tx, teamId, true);
+    if (userId === team.teamLeadId) return { changed: false };
+    if (userId) {
+      const [member] = await tx
+        .select({ role: users.role, status: users.status })
+        .from(teamMembers)
+        .innerJoin(users, eq(users.id, teamMembers.userId))
+        .where(and(eq(teamMembers.teamId, team.id), eq(teamMembers.userId, userId)))
+        .limit(1);
+      if (!member || member.role !== "agent" || member.status !== "active") throw fieldError("userId", "Choose an active agent who is in this team");
+    }
+    await tx.update(teams).set({ teamLeadId: userId, updatedAt: new Date() }).where(eq(teams.id, team.id));
+    await audit(tx, actor, "team.lead", "team", team.id, { teamLeadId: team.teamLeadId }, { teamLeadId: userId });
+    return { changed: true };
   });
 }
 

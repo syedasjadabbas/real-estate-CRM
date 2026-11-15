@@ -86,8 +86,10 @@ describe.skipIf(!hasTestDb)("Projects module (PostgreSQL integration)", () => {
       expect(await errorCode(updateProject(db, f.actors.superAdmin, "00000000-0000-4000-8000-000000000000", { city: "X" }))).toBe("NOT_FOUND");
     });
 
-    it("lets only admins create or edit", async () => {
-      for (const actor of [f.actors.manager, f.actors.agent1, accountant, f.actors.hr]) {
+    it("lets only the Super Admin create or edit (15 Nov 2026)", async () => {
+      const [a] = await db.insert(users).values({ name: "Admin", email: "admin-only@test.local", role: "admin", passwordHash: "x" }).returning();
+      const admin = await loadActor(db, { id: a.id, name: a.name, email: a.email, role: a.role });
+      for (const actor of [admin, f.actors.manager, f.actors.agent1, accountant, f.actors.hr]) {
         expect(await errorCode(createProject(db, actor, { name: "Not allowed" }))).toBe("FORBIDDEN");
         expect(await errorCode(updateProject(db, actor, f.projectId, { city: "X" }))).toBe("FORBIDDEN");
       }

@@ -95,9 +95,12 @@ describe.skipIf(!hasTestDb)("Inventory module (PostgreSQL integration)", () => {
       expect(audit).toMatchObject({ before: { basePrice: 12_500_000, comment: "Corner" }, after: { basePrice: 13_000_000, comment: null } });
     });
 
-    it("lets only admins create, edit or change status; HR cannot view", async () => {
+    it("lets only the Super Admin create, edit or change status (15 Nov 2026); Admins view; HR cannot view", async () => {
       const { unitId } = await unit();
-      for (const actor of [f.actors.manager, f.actors.agent1, accountant, f.actors.hr]) {
+      const [a] = await db.insert(users).values({ name: "Admin", email: "admin-only@test.local", role: "admin", passwordHash: "x" }).returning();
+      const admin = await loadActor(db, { id: a.id, name: a.name, email: a.email, role: a.role });
+      expect((await getUnitDetail(db, admin, unitId)).permissions.manage).toBe(false);
+      for (const actor of [admin, f.actors.manager, f.actors.agent1, accountant, f.actors.hr]) {
         expect(await errorCode(createUnit(db, actor, { projectId: f.projectId, unitNo: "X", areaSqft: "1", basePrice: "1" }))).toBe("FORBIDDEN");
         expect(await errorCode(updateUnit(db, actor, unitId, { comment: "x" }))).toBe("FORBIDDEN");
         expect(await errorCode(setUnitStatus(db, actor, unitId, { status: "sold", reason: "test" }))).toBe("FORBIDDEN");

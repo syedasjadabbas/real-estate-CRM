@@ -30,7 +30,7 @@ This exact sale is covered by `e2e/v1-critical-path.spec.ts`, so each step below
 
 | Who | Account | Used for |
 |---|---|---|
-| Manager | `manager@mz.local` | The sale, stages, confirmation |
+| Team admin (Admin) | `manager@mz.local` | The sale, stages, confirmation |
 | Agent | `agent1@mz.local` | What an agent can and can't see |
 | Accountant | `verify.accountant@mz.local` | Posting the payment, reports |
 | Super Admin | `superadmin@mz.local` | Settings, Cities, audit log |
@@ -40,15 +40,15 @@ This exact sale is covered by `e2e/v1-critical-path.spec.ts`, so each step below
 | # | As | Do | Point out |
 |---|---|---|---|
 | 1 | Super Admin | Open the Dashboard, then click a tile | Tiles open the exact leads they count |
-| 2 | Manager | **Leads → Add lead**, choose City → **Other**, type a phone number, then a real town | Numbers are refused as a city |
-| 3 | Manager | Open the lead, reassign it to an agent | The timeline records it |
-| 4 | Manager | **Meetings → New**, choose the lead | The lead's history shows it |
-| 5 | Manager | **Tasks → New** | Tasks appear in the list |
-| 6 | Manager | **Bookings → New booking**: lead, unit, rate, token | The total calculates; the unit becomes Reserved and leaves the list |
-| 7 | Manager | Move the booking to **Token pending** | Payments open at this stage |
+| 2 | Team admin | **Leads → Add lead**, choose City → **Other**, type a phone number, then a real town | Numbers are refused as a city |
+| 3 | Team admin | Open the lead, reassign it to an agent | The timeline records it |
+| 4 | Team admin | **Meetings → New**, choose the lead | The lead's history shows it |
+| 5 | Team admin | **Tasks → New** | Tasks appear in the list |
+| 6 | Team admin | **Bookings → New booking**: lead, unit, rate, token | The total calculates; the unit becomes Reserved and leaves the list |
+| 7 | Team admin | Move the booking to **Token pending** | Payments open at this stage |
 | 8 | Accountant | **Finance → Record payment** | A receipt number is issued; paid and outstanding update |
-| 9 | Manager | Move through each stage, then **Confirm booking** | The lead becomes Booked and a client is created |
-| 10 | Manager | Open the lead's timeline | The whole history, including the client link |
+| 9 | Team admin | Move through each stage, then **Confirm booking** | The lead becomes Booked and a client is created |
+| 10 | Team admin | Open the lead's timeline | The whole history, including the client link |
 | 11 | Agent | Open Leads, then try Settings → Cities | Agents see their own leads and are refused the screen |
 | 12 | Accountant | **Finance → Reports**, download a CSV | Figures match the ledger |
 | 13 | Super Admin | **Settings → Cities**, then **Audit log** | Every change is recorded |

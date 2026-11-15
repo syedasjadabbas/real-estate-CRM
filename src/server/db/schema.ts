@@ -175,6 +175,11 @@ export const teams = pgTable("teams", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull().unique(),
   managerId: uuid("manager_id").references(() => users.id, { onDelete: "set null" }),
+  /**
+   * The team's Team Lead (owner, 15 Nov 2026): one of its agents, appointed by an Admin or Super Admin.
+   * Optional. A Team Lead works as an agent and also sees the team read-only.
+   */
+  teamLeadId: uuid("team_lead_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
   isActive: boolean("is_active").notNull().default(true),
   /** Holiday region of the team's members (questionnaire Q5); matches `holidays.region` ignoring case. */
   region: text("region"),

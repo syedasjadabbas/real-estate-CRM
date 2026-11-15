@@ -2,6 +2,7 @@ import { formatDuration } from "@/features/leads/format";
 import { Download } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { canViewProfiles } from "@/modules/people/profile";
 import type { ReactNode } from "react";
 import { PageHeader, PageStack } from "@/components/shell/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -62,6 +63,8 @@ function Glance({ label, value, caption, muted }: { label: string; value: ReactN
 
 export default async function PerformancePage({ searchParams }: PageProps<"/dashboard/performance">) {
   const actor = await requirePageUser();
+  // Admins and Super Admins open an agent's full profile from their name (15 Nov 2026).
+  const profileLinks = canViewProfiles(actor);
   const item = findNavItem("/dashboard/performance")!;
   if (!canViewPerformance(actor)) return <RestrictedState />;
   const params = flattenParams(await searchParams);
@@ -214,7 +217,7 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
               <tbody>
                 {report.rows.map((r) => (
                   <tr key={r.userId} className="border-b border-zinc-100/80 last:border-b-0 hover:bg-zinc-50/60">
-                    <td className="px-3 py-2.5 font-bold whitespace-nowrap">{r.name}</td>
+                    <td className="px-3 py-2.5 font-bold whitespace-nowrap">{profileLinks ? <Link href={`/dashboard/people/${r.userId}`} className="hover:text-brand hover:underline">{r.name}</Link> : r.name}</td>
                     <td className={cn("px-3 py-2.5 text-right whitespace-nowrap tabular-nums", r.score === null && "text-zinc-400")}>
                       {r.score === null ? "—" : r.score}
                       {r.scoreProvisional ? <span className="ml-1 text-[10px] font-semibold text-zinc-400">prov.</span> : null}
@@ -279,7 +282,7 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
                     const total = counts ? LEAD_STAGES.reduce((a, st) => a + counts[st], 0) : 0;
                     return (
                       <tr key={r.userId} className="border-b border-zinc-100/80 last:border-b-0 hover:bg-zinc-50/60">
-                        <td className="px-3 py-2.5 font-bold whitespace-nowrap">{r.name}</td>
+                        <td className="px-3 py-2.5 font-bold whitespace-nowrap">{profileLinks ? <Link href={`/dashboard/people/${r.userId}`} className="hover:text-brand hover:underline">{r.name}</Link> : r.name}</td>
                         {LEAD_STAGES.map((st) => {
                           const n = counts?.[st] ?? 0;
                           return (

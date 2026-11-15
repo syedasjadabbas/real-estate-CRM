@@ -61,9 +61,9 @@ Legend: **F** full · **T** own team · **O** own records · **R** read-only · 
 | Leads: merge duplicates | F | F | T | — | — | — |
 | Clients | F | F | T | O | — | R |
 | Projects: view | F | F | R | R | — | R |
-| Projects: create / edit | F | F | — | — | — | — |
+| Projects: create / edit (Super Admin only since 15 Nov 2026) | F | — | — | — | — | — |
 | Inventory: view | F | F | R | R | — | R |
-| Inventory: edit / import | F | F | — | — | — | — |
+| Inventory: edit / import (Super Admin only since 15 Nov 2026) | F | — | — | — | — | — |
 | Bookings: create | F | F | T | O | — | — |
 | Bookings: change stage | F | F | T | O (up to Sales order) | — | R |
 | Bookings: confirm / cancel | F | F | T | — | — | — |
@@ -87,6 +87,9 @@ Legend: **F** full · **T** own team · **O** own records · **R** read-only · 
 | Lead import batches: submit (Admin and Super Admin only since 13 Nov 2026) | F | F | — | — | — | — |
 | Lead import batches: approve / reject | F | — | — | — | — | — |
 | Claim an unassigned lead | — | — | F | F | — | — |
+| Appoint a team's Team Lead (15 Nov 2026) | F | F | — | — | — | — |
+| Team Lead's read-only team view ("My team"; an agent who leads a team) | — | — | — | Team Lead only | — | — |
+| Employee work profile (calls, minutes, pipeline, follow-ups, targets, attendance; 15 Nov 2026) | F | F | — | — | — | — |
 | Assignment weights and thresholds | F | F | — | — | — | — |
 | Backups page (read-only; restore only on the server) | F | — | — | — | — | — |
 

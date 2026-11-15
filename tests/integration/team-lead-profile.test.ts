@@ -1,0 +1,95 @@
+import { eq } from "drizzle-orm";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { createLead } from "@/modules/leads/commands";
+import { employeeProfile } from "@/modules/people/profile";
+import { setTeamLead, setTeamMembers } from "@/modules/teams/commands";
+import { myTeamView } from "@/modules/teams/my-team";
+import { loadActor } from "@/server/auth/session-store";
+import type { Actor } from "@/server/auth/types";
+import type { Database } from "@/server/db";
+import { auditLogs, files, followUps, teamMembers, teams, users } from "@/server/db/schema";
+import { AppError } from "@/server/errors";
+import { connectTestDb, hasTestDb, leadInput, resetDb, seedFixture, type Fixture } from "../support/db";
+
+const errorOf = async (p: Promise<unknown>) => {
+  try {
+    await p;
+    return null;
+  } catch (e) {
+    if (e instanceof AppError) return e;
+    throw e;
+  }
+};
+
+describe.skipIf(!hasTestDb)("Team Lead and employee profile (owner, 15 Nov 2026)", () => {
+  let db: Database;
+  let close: () => Promise<void>;
+  let f: Fixture;
+  let admin: Actor;
+  let teamId: string;
+  const reload = (a: Actor) => loadActor(db, { id: a.id, name: a.name, email: a.email, role: a.role });
+
+  beforeAll(() => {
+    ({ db, close } = connectTestDb());
+  });
+  afterAll(async () => close());
+  beforeEach(async () => {
+    await resetDb(db);
+    f = await seedFixture(db);
+    const [u] = await db.insert(users).values({ name: "Zed Admin", email: "admin@test.local", role: "admin", passwordHash: "x" }).returning();
+    admin = await loadActor(db, { id: u.id, name: u.name, email: u.email, role: u.role });
+    [{ id: teamId }] = await db.select({ id: teams.id }).from(teams).where(eq(teams.name, "Team 1"));
+  });
+
+  it("Admins appoint a Team Lead from the team's active agents; leaving the team clears it", async () => {
+    expect((await errorOf(setTeamLead(db, f.actors.agent1, teamId, { userId: f.actors.agent1.id })))?.code).toBe("FORBIDDEN");
+    expect((await errorOf(setTeamLead(db, admin, teamId, { userId: f.actors.outsideAgent.id })))?.fields?.userId).toMatch(/in this team/);
+    expect((await errorOf(setTeamLead(db, admin, teamId, { userId: f.actors.manager.id })))?.fields?.userId).toMatch(/agent/);
+    expect(await setTeamLead(db, admin, teamId, { userId: f.actors.agent1.id })).toEqual({ changed: true });
+    expect((await reload(f.actors.agent1)).ledTeamIds).toEqual([teamId]);
+    expect((await reload(f.actors.agent2)).ledTeamIds).toEqual([]);
+    expect(await db.select({ a: auditLogs.action }).from(auditLogs).where(eq(auditLogs.action, "team.lead"))).toHaveLength(1);
+
+    const keep = (await db.select({ id: teamMembers.userId }).from(teamMembers).where(eq(teamMembers.teamId, teamId))).map((r) => r.id).filter((id) => id !== f.actors.agent1.id);
+    await setTeamMembers(db, admin, teamId, { userIds: keep });
+    const [team] = await db.select({ lead: teams.teamLeadId }).from(teams).where(eq(teams.id, teamId));
+    expect(team.lead).toBeNull();
+  });
+
+  it("a Team Lead sees the team read-only; other agents have no team view", async () => {
+    await setTeamLead(db, admin, teamId, { userId: f.actors.agent1.id });
+    const lead = await reload(f.actors.agent1);
+    const mine = await createLead(db, lead, leadInput(f));
+    const theirs = await createLead(db, f.actors.agent2, leadInput(f, { phoneNumber: "0300-7777777" }));
+    if (mine.outcome !== "created" || theirs.outcome !== "created") throw new Error("setup");
+
+    const v = await myTeamView(db, lead, undefined);
+    expect(v.team.id).toBe(teamId);
+    expect(v.members.map((m) => m.id).sort()).toEqual([f.actors.agent1.id, f.actors.agent2.id].sort());
+    expect(v.openLeads.map((l) => [l.id, l.mine]).sort()).toEqual([[mine.leadId, true], [theirs.leadId, false]].sort());
+    expect((await errorOf(myTeamView(db, await reload(f.actors.agent2), undefined)))?.code).toBe("FORBIDDEN");
+    expect((await errorOf(myTeamView(db, admin, undefined)))?.code).toBe("FORBIDDEN");
+  });
+
+  it("Admins and Super Admins open an agent's full profile: calls, minutes, pipeline, follow-ups", async () => {
+    const a1 = f.actors.agent1;
+    const created = await createLead(db, a1, leadInput(f));
+    if (created.outcome !== "created") throw new Error("setup");
+    await db.insert(files).values([
+      { leadId: created.leadId, kind: "call_recording", storageKey: "k1", originalName: "a.mp3", mime: "audio/mpeg", sizeBytes: 1, durationSec: 95, sha256: "a".repeat(64), uploadedById: a1.id },
+      { leadId: created.leadId, kind: "call_recording", storageKey: "k2", originalName: "b.mp3", mime: "audio/mpeg", sizeBytes: 1, durationSec: 20, sha256: "b".repeat(64), uploadedById: a1.id },
+    ]);
+    await db.insert(followUps).values({ leadId: created.leadId, assigneeId: a1.id, dueAt: new Date(Date.now() - 86_400_000), createdById: a1.id });
+
+    for (const actor of [a1, f.actors.hr, f.actors.manager]) expect((await errorOf(employeeProfile(db, actor, a1.id)))?.code).toBe("FORBIDDEN");
+    const p = await employeeProfile(db, admin, a1.id);
+    expect(p.person.name).toBe(a1.name);
+    expect(p.metrics).toMatchObject({ calls: 2, callsVerified: 1, callsQualified: 1, callMin: 2 });
+    expect(p.recordings).toHaveLength(2);
+    expect(p.pipeline.find((s) => s.stage === "new_lead")?.count).toBe(1);
+    expect(p.followUps.overdue).toBe(1);
+    expect(p.teams.map((t) => t.name)).toEqual(["Team 1"]);
+    expect((await employeeProfile(db, f.actors.superAdmin, a1.id)).person.id).toBe(a1.id);
+    expect((await errorOf(employeeProfile(db, admin, "00000000-0000-4000-8000-000000000000")))?.code).toBe("NOT_FOUND");
+  });
+});

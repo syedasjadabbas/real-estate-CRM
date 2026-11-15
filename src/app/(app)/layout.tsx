@@ -19,7 +19,7 @@ async function AuthenticatedShell({ children }: { children: React.ReactNode }) {
   const { projects, activeProjectId } = await getProjectScope();
   return (
     <AppShell
-      user={{ id: actor.id, name: actor.name, email: actor.email, role: actor.role, roleLabel: ROLE_LABELS[actor.role] }}
+      user={{ id: actor.id, name: actor.name, email: actor.email, role: actor.role, roleLabel: ROLE_LABELS[actor.role], isTeamLead: Boolean(actor.ledTeamIds?.length) }}
       projects={projects}
       activeProjectId={activeProjectId}
     >

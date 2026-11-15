@@ -5,6 +5,8 @@ export type SessionUser = {
   email: string;
   role: string;
   roleLabel: string;
+  /** Leads at least one active team (shows "My team"). */
+  isTeamLead?: boolean;
 };
 
 export type ProjectOption = { id: string; name: string };
