@@ -68,9 +68,11 @@ export function LeadFilterDrawer({
   title,
   params,
   lookups,
+  agents = [],
   onApply,
   total,
 }: {
+  agents?: { id: string; name: string }[];
   open: boolean;
   onClose: () => void;
   title: string;
@@ -104,6 +106,21 @@ export function LeadFilterDrawer({
         <span className="inline-flex rounded-full border border-brand/30 bg-brand-50 px-2.5 py-1 text-[10px] font-black tracking-[0.05em] text-brand-700 uppercase">
           {formatInt(total)} leads
         </span>
+        {agents.length ? (
+          <Field label="Agent">
+            {(id) => (
+              <div id={id} className="rounded-xl border border-zinc-200/80 bg-zinc-50/70 px-1.5 shadow-hairline">
+                <Select
+                  label="Agent"
+                  options={[{ value: "", label: "All agents" }, ...agents.map((a) => ({ value: a.id, label: a.name }))]}
+                  value={params.owner ?? ""}
+                  onChange={(v) => set("owner", v || null)}
+                  buttonClassName="h-9"
+                />
+              </div>
+            )}
+          </Field>
+        ) : null}
         <ChipGroup
           label="Stages"
           options={LEAD_STAGES.map((s) => ({ value: s, label: STAGE_LABELS[s] }))}

@@ -42,7 +42,7 @@ export function UnitStatusPanel({
         </div>
         {canManage ? (
           <div className="space-y-3 border-t border-zinc-100 pt-3">
-            <p className="text-[11px] text-zinc-500">Admin override until Bookings updates status automatically. A reason is required and recorded.</p>
+            <p className="text-[11px] text-zinc-500">Super Admin override: bookings normally change the status automatically. A reason is required and recorded.</p>
             <Field label="New status" error={errors.status}>
               {(id, describedBy) => (
                 <select id={id} aria-describedby={describedBy} value={target} onChange={(e) => setTarget(e.target.value)} className={selectClass} disabled={pending}>

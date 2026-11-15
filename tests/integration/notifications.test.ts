@@ -92,6 +92,10 @@ describe.skipIf(!hasTestDb)("Notifications (PostgreSQL integration)", () => {
       const [req2] = await db.select().from(approvals).where(and(eq(approvals.leadId, id2)));
       await decideLostRequest(db, f.actors.manager, req2.id, { approve: true });
       expect((await mine(f.actors.agent1)).filter((x) => x.type === "lost_rejected")).toHaveLength(1);
+
+      // The managers' request notifications now say they were handled, and by whom (15 Nov 2026).
+      const handled = (await listNotifications(db, f.actors.manager)).rows.filter((x) => x.type === "lost_requested").map((x) => x.outcome?.text);
+      expect(handled.sort()).toEqual([`Lost request approved by ${f.actors.manager.name}`, `Lost request rejected by ${f.actors.manager.name}`].sort());
     });
 
     it("sends nothing when the owner's team has no manager", async () => {

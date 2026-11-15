@@ -8,6 +8,7 @@ import { followUpLeadActive, type DbOrTx } from "@/modules/leads/support";
 import { parseTask } from "@/modules/tasks/support";
 import { currentTargets, TARGET_METRICS } from "@/modules/targets/service";
 import { TARGET_PERIOD_LABELS } from "@/modules/targets/period";
+import { requestOutcomes } from "./outcomes";
 
 /**
  * In-app notifications (FR-006). Only documented events raise them:
@@ -185,6 +186,7 @@ export async function listNotifications(db: Database, actor: Actor, input: unkno
       title: notifications.title,
       body: notifications.body,
       link: notifications.link,
+      dedupeKey: notifications.dedupeKey,
       readAt: notifications.readAt,
       createdAt: notifications.createdAt,
       // A reminder created before its lead was marked Lost stays listed (history) but no longer pops up (F-2).
@@ -195,7 +197,20 @@ export async function listNotifications(db: Database, actor: Actor, input: unkno
     .orderBy(desc(notifications.createdAt), desc(notifications.id))
     .limit(NOTIFICATION_PAGE_SIZE)
     .offset((page - 1) * NOTIFICATION_PAGE_SIZE);
-  return { query: { ...query, page }, total, page, pageCount, unread, rows };
+  // Request notifications say whether the request has since been decided (15 Nov 2026).
+  const outcomes = await requestOutcomes(db, rows);
+  return {
+    query: { ...query, page },
+    total,
+    page,
+    pageCount,
+    unread,
+    rows: rows.map((r) => {
+      const { dedupeKey, ...rest } = r;
+      void dedupeKey; // internal: identifies the request; not sent to the browser
+      return { ...rest, outcome: outcomes.get(r.id) ?? null };
+    }),
+  };
 }
 export type NotificationRow = Awaited<ReturnType<typeof listNotifications>>["rows"][number];
 

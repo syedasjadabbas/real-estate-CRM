@@ -79,19 +79,24 @@ export async function teamOutput(db: Database, leadWhere: SQL | undefined, teamL
     .slice(0, 6);
 }
 
-/** Completed meetings in the last 30 days, the last 6 months, and [teamStart, now) for leads owned by team members. */
-export async function meetingTotals(db: Database, leadWhere: SQL | undefined, now: Date, teamStart: Date) {
+/**
+ * Completed meetings in the last 30 days and the last 6 months, and, for the Team meetings tile, those
+ * in the dashboard's selected range [start, end) on leads owned by team members (15 Nov 2026).
+ */
+export async function meetingTotals(db: Database, leadWhere: SQL | undefined, now: Date, range: { start: Date; end: Date }) {
   const sixMonths = new Date(now);
   sixMonths.setMonth(sixMonths.getMonth() - 6);
+  const thirty = new Date(now.getTime() - 30 * DAY);
+  const from = range.start < sixMonths ? range.start : sixMonths;
   const [row] = await db
     .select({
-      d30: sql<number>`count(*) filter (where ${meetings.startsAt} >= ${new Date(now.getTime() - 30 * DAY)})::int`,
-      m6: sql<number>`count(*)::int`,
-      team: sql<number>`count(*) filter (where ${meetings.startsAt} >= ${teamStart} and exists (select 1 from ${teamMembers} tm where tm.user_id = "leads"."owner_id"))::int`,
+      d30: sql<number>`count(*) filter (where ${meetings.startsAt} >= ${thirty} and ${meetings.startsAt} < ${now})::int`,
+      m6: sql<number>`count(*) filter (where ${meetings.startsAt} >= ${sixMonths} and ${meetings.startsAt} < ${now})::int`,
+      team: sql<number>`count(*) filter (where ${meetings.startsAt} >= ${range.start} and ${meetings.startsAt} < ${range.end} and exists (select 1 from ${teamMembers} tm where tm.user_id = "leads"."owner_id"))::int`,
     })
     .from(meetings)
     .innerJoin(leads, eq(leads.id, meetings.leadId))
-    .where(and(leadWhere, eq(meetings.status, "completed"), gte(meetings.startsAt, sixMonths), lt(meetings.startsAt, now)));
+    .where(and(leadWhere, eq(meetings.status, "completed"), gte(meetings.startsAt, from), lt(meetings.startsAt, now > range.end ? now : range.end)));
   return row;
 }
 

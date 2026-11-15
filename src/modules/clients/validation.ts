@@ -59,6 +59,19 @@ export const clientListQuerySchema = z.object({
   q: z.string().trim().max(100).optional().catch(undefined),
   /** "Has investment in project" filter. */
   project: z.string().uuid().optional().catch(undefined),
+  /** More filters (owner, 15 Nov 2026). */
+  /** Has an inquiry (a lead) in this project. */
+  interest: z.string().uuid().optional().catch(undefined),
+  owner: z.string().uuid().optional().catch(undefined),
+  city: z.string().uuid().optional().catch(undefined),
+  relationship: z.enum(RELATIONSHIPS).optional().catch(undefined),
+  /** "booked": has a booking that isn't cancelled; "none": has none. */
+  booking: z.enum(["booked", "none"]).optional().catch(undefined),
+  /** Client follow-up state: overdue, due today, or none scheduled. */
+  followUp: z.enum(["overdue", "today", "none"]).optional().catch(undefined),
+  /** Added between these dates (Pakistan time, inclusive). */
+  from: z.iso.date().optional().catch(undefined),
+  to: z.iso.date().optional().catch(undefined),
   sort: z.enum(CLIENT_SORT_COLUMNS).catch("updatedAt"),
   dir: z.enum(["asc", "desc"]).catch("desc"),
   page: z.coerce.number().int().min(1).max(10_000).catch(1),

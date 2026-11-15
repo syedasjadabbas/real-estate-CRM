@@ -6,6 +6,7 @@ import type { Database } from "@/server/db";
 import { auditLogs, budgetRanges, cities, leadImportBatches, leadImportRows, leadSources, projects, users } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
 import { AppError, forbidden, notFound } from "@/server/errors";
+import { notify } from "@/modules/notifications/service";
 import { createLead } from "./commands";
 import { PRIORITIES } from "./constants";
 import { normalizePhone } from "./phone";
@@ -164,6 +165,20 @@ export async function submitImport(db: Database, actor: Actor, input: { projectI
       await tx.insert(leadImportRows).values(rows.slice(i, i + 500).map((r) => ({ ...r, batchId: batch.id })));
     }
     await tx.insert(auditLogs).values({ actorId: actor.id, ip: actor.ip ?? null, action: "lead_import.submit", entity: "lead_import_batch", entityId: batch.id, after: { projectId, fileName, totalRows: body.length, ...counts } });
+    // Every active Super Admin is told a batch waits for approval (15 Nov 2026); the submitter isn't.
+    const superAdmins = await tx.select({ id: users.id }).from(users).where(and(eq(users.role, "super_admin"), eq(users.status, "active")));
+    await notify(
+      tx,
+      superAdmins.map((u) => ({
+        userId: u.id,
+        type: "import_requested" as const,
+        title: `Lead import to approve: ${counts.valid} lead${counts.valid === 1 ? "" : "s"}`,
+        body: `${actor.name} uploaded ${fileName ?? "a CSV"} (${body.length} rows: ${counts.valid} valid, ${counts.duplicate} duplicate, ${counts.invalid} invalid).`,
+        link: `/dashboard/leads/import/${batch.id}`,
+        dedupeKey: `import_requested:${batch.id}`,
+      })),
+      actor.id,
+    );
     return { batchId: batch.id, totalRows: body.length, ...counts };
   });
 }
@@ -234,6 +249,21 @@ export async function decideImportBatch(db: Database, actor: Actor, batchId: str
       throw new AppError("CONFLICT", "This batch has already been decided.");
     }
     await tx.insert(auditLogs).values({ actorId: actor.id, ip: actor.ip ?? null, action: approve ? "lead_import.approve" : "lead_import.reject", entity: "lead_import_batch", entityId: batchId, before: { status: "pending" }, after: { status: row.status, note } });
+    // The Admin who uploaded it hears the decision.
+    if (row.uploadedById) {
+      await notify(
+        tx,
+        [{
+          userId: row.uploadedById,
+          type: "import_decided" as const,
+          title: approve ? `Lead import approved${row.fileName ? `: ${row.fileName}` : ""}` : `Lead import rejected${row.fileName ? `: ${row.fileName}` : ""}`,
+          body: approve ? `${actor.name} approved it; the valid rows are being added as leads.` : `${actor.name}: ${note}`,
+          link: `/dashboard/leads/import/${batchId}`,
+          dedupeKey: `import_decided:${batchId}`,
+        }],
+        actor.id,
+      );
+    }
     return row;
   });
   if (!approve) return { status: "rejected" as const, created: 0, skipped: 0 };

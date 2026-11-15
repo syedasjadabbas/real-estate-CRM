@@ -6,7 +6,6 @@ import {
   assignClient,
   completeClientFollowUp,
   convertLeadToClient,
-  createClient,
   scheduleClientFollowUp,
   updateClient,
   type ConvertOutcome,
@@ -30,9 +29,6 @@ async function run<T>(fn: (db: ReturnType<typeof getDb>, actor: Awaited<ReturnTy
   }
 }
 
-export async function createClientAction(input: Record<string, unknown>): Promise<ActionResult<{ clientId: string }>> {
-  return run((db, actor) => createClient(db, actor, input));
-}
 
 export async function convertLeadAction(leadId: string, onExisting: "reject" | "link" = "reject"): Promise<ActionResult<ConvertOutcome>> {
   return run((db, actor) => convertLeadToClient(db, actor, { leadId, onExisting }));

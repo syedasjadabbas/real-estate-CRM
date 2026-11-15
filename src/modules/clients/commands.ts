@@ -75,7 +75,10 @@ function duplicateError(existing: { client: { id: string; name: string }; visibl
   );
 }
 
-/** Manual client (admins; FR-050 "or manually by admin"). */
+/**
+ * Manual client. Not reachable from the app since 15 Nov 2026 (the owner removed "Add client": every
+ * client comes from a lead); kept for data fixes and test setup.
+ */
 export async function createClient(db: Database, actor: Actor, input: unknown) {
   assertCanClient(actor, "createManual");
   const data = parse(createClientSchema, input);

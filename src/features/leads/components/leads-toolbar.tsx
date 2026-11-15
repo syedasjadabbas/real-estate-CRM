@@ -14,11 +14,14 @@ export function LeadsToolbar({
   params,
   total,
   lookups,
+  agents = [],
   drawerTitle = "Lead filters",
 }: {
   params: Record<string, string>;
   total: number;
   lookups: LeadLookups;
+  /** Agents an Admin can filter by; empty hides the Agent filter. */
+  agents?: { id: string; name: string }[];
   drawerTitle?: string;
 }) {
   const router = useRouter();
@@ -84,6 +87,7 @@ export function LeadsToolbar({
         title={drawerTitle}
         params={params}
         lookups={lookups}
+        agents={agents}
         onApply={go}
         total={total}
       />

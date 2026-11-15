@@ -1235,6 +1235,9 @@ export const notificationType = pgEnum("notification_type", [
   "discount_decided",
   // Finance found a booking's token payment not genuine and rejected the booking (14 Nov 2026).
   "booking_rejected",
+  // An Admin submitted a lead import batch for a Super Admin to approve, and its decision (15 Nov 2026).
+  "import_requested",
+  "import_decided",
 ]);
 
 /** In-app notifications (DATA_MODEL.md "notifications"). One row per recipient and event key, never duplicated. */

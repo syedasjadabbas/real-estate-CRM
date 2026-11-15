@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
 
-type Item = { id: string; type: string; title: string; body: string | null; link: string | null; readAt: string | null; createdAt: string; popup?: boolean };
+type Item = { id: string; type: string; title: string; body: string | null; link: string | null; readAt: string | null; createdAt: string; popup?: boolean; outcome?: { decision: string; text: string } | null };
 type Feed = { unread: number; rows: Item[] };
 
 /** Polling interval (SYSTEM_ARCHITECTURE.md: 30–60 s polling). */
@@ -149,6 +149,9 @@ export function NotificationBell() {
                     <span aria-hidden="true" className={cn("mt-1.5 size-2 shrink-0 rounded-full", n.readAt ? "bg-transparent" : "bg-brand")} />
                     <span className="min-w-0">
                       <span className="block text-xs font-bold break-words text-zinc-900">{n.title}</span>
+                      {n.outcome ? (
+                        <span className="mt-1 inline-block rounded-full border border-zinc-200 bg-zinc-100 px-2 py-0.5 text-[10px] font-bold text-zinc-600">{n.outcome.text}</span>
+                      ) : null}
                       {n.body ? <span className="mt-0.5 block text-[11px] break-words text-zinc-600">{n.body}</span> : null}
                       <span className="mt-0.5 block text-[10px] text-zinc-400">
                         {timeOf(n.createdAt)}

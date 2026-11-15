@@ -4,7 +4,7 @@ import { createLead } from "@/modules/leads/commands";
 import { decideImportBatch, getImportBatch, listImportBatches, submitImport } from "@/modules/leads/imports";
 import { listLeads } from "@/modules/leads/queries";
 import { loadActor } from "@/server/auth/session-store";
-import { auditLogs, leadImportBatches, leadImportRows, leads, users } from "@/server/db/schema";
+import { auditLogs, leadImportBatches, leadImportRows, leads, notifications, users } from "@/server/db/schema";
 import type { Database } from "@/server/db";
 import type { Actor } from "@/server/auth/types";
 import { AppError } from "@/server/errors";
@@ -90,6 +90,16 @@ describe.skipIf(!hasTestDb)("Sprint P3: lead import batches, priority order, won
   });
 
   describe("deciding", () => {
+    it("tells every Super Admin a batch waits, and tells the Admin the decision (15 Nov 2026)", async () => {
+      const r = await submit(admin, ["A One,03001110031,,Facebook,,,"]);
+      const toSa = await db.select().from(notifications).where(eq(notifications.userId, f.actors.superAdmin.id));
+      expect(toSa).toEqual([expect.objectContaining({ type: "import_requested", link: `/dashboard/leads/import/${r.batchId}` })]);
+      expect(await db.select().from(notifications).where(eq(notifications.userId, admin.id))).toEqual([]);
+      await decideImportBatch(db, f.actors.superAdmin, r.batchId, { approve: false, note: "Wrong project" });
+      const toAdmin = await db.select().from(notifications).where(eq(notifications.userId, admin.id));
+      expect(toAdmin).toEqual([expect.objectContaining({ type: "import_decided", body: expect.stringContaining("Wrong project") })]);
+    });
+
     it("only a Super Admin approves or rejects", async () => {
       const r = await submit(admin, ["A One,03001110021,,Facebook,,,"]);
       for (const who of [f.actors.agent1, f.actors.manager, admin]) {

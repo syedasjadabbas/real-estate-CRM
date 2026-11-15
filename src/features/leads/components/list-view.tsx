@@ -7,7 +7,7 @@ import { buttonClasses } from "@/components/ui/button";
 import { EmptyState, RestrictedState } from "@/components/ui/empty-state";
 import type { LeadView } from "@/modules/leads/constants";
 import { canDo, leadScope } from "@/modules/leads/policy";
-import { leadLookups, listLeads } from "@/modules/leads/queries";
+import { assignableUsers, leadLookups, listLeads } from "@/modules/leads/queries";
 import type { Actor } from "@/server/auth/types";
 import { leadsContext } from "../context";
 import { formatDateTime } from "../format";
@@ -62,9 +62,11 @@ export async function LeadsListView({
 }) {
   return withLeadsAccess(async ({ actor, db, projectId }) => {
     const params = flattenParams(await searchParams);
-    const [result, lookups] = await Promise.all([
+    const [result, lookups, agents] = await Promise.all([
       listLeads(db, actor, projectId, { ...params, view }),
       leadLookups(db),
+      // Admins and Super Admins filter the list by agent (15 Nov 2026); agents only see their own.
+      leadScope(actor.role) === "all" ? assignableUsers(db, actor) : Promise.resolve([]),
     ]);
     return (
       <section className="space-y-6" aria-label={title}>
@@ -90,7 +92,7 @@ export async function LeadsListView({
             {result.query.createdFrom ? `created ${formatDateTime(result.query.createdFrom)} to ${formatDateTime(result.query.createdTo)}` : "the selected days"}. Clear the filters to see all leads.
           </p>
         ) : null}
-        <LeadsToolbar params={params} total={result.total} lookups={lookups} />
+        <LeadsToolbar params={params} total={result.total} lookups={lookups} agents={agents} />
         <LeadsTable
           defaultSort={null}
           rows={result.rows}

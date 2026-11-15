@@ -173,7 +173,9 @@ describe.skipIf(!hasTestDb)("Dashboard analytics (PostgreSQL integration)", () =
     expect(d.meetingMixByRange?.["7d"]?.find((m) => m.id === "site_visit")?.count).toBe(1);
     // Under the team of the lead's owner (agent1's team); teams with nothing are left out.
     expect(d.teamOutput).toEqual([expect.objectContaining({ meetings: 1, bookings: 0 })]);
-    expect(d.insights).toMatchObject({ meetings30d: 1, meetings6m: 1, bookings: 0 });
+    expect(d.insights).toMatchObject({ meetings30d: 1, meetings6m: 1, teamMeetings: 1, bookings: 0 });
+    // Team meetings follows the chosen range: the meeting was 3 days ago, so "24h" counts none.
+    expect((await dashboardData(db, admin, f.projectId, { range: "24h" }, now)).data!.insights).toMatchObject({ meetings30d: 1, teamMeetings: 0 });
     expect(d.insightsUpdatedAt).not.toBeNull();
     // An agent's dashboard doesn't compute the team panels.
     expect((await dashboardData(db, f.actors.agent1, f.projectId, { range: "30d" }, now)).data!.teamOutput).toEqual([]);

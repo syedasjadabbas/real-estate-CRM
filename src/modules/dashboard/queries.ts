@@ -195,7 +195,7 @@ export async function dashboardData(db: Database, actor: Actor, projectId: strin
     : await (async () => {
         const mixes = await meetingMixes(db, inProject, now, monthStart);
         const output = await teamOutput(db, inProject, team ? options.filter((t) => t.id === team) : options, start, end);
-        const totals = await meetingTotals(db, inProject, now, monthStart);
+        const totals = await meetingTotals(db, inProject, now, { start, end });
         const aging = await agingRows(db, and(inProject, open), now);
         return { mixes, output, totals, aging };
       })();

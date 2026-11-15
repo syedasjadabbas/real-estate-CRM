@@ -69,7 +69,7 @@ try {
     if (existing.rows[0]) {
       ids[u.email] = existing.rows[0].id;
       // Bring an older dev account in line (the dev Manager became an Admin; the password is kept).
-      await client.query("UPDATE users SET name = $2, role = $3, updated_at = now() WHERE id = $1 AND role = 'manager'", [existing.rows[0].id, u.name, u.role]);
+      await client.query("UPDATE users SET name = $2, role = $3, updated_at = now() WHERE id = $1 AND (role = 'manager' OR name = 'Dev Manager')", [existing.rows[0].id, u.name, u.role]);
       continue;
     }
     const password = randomBytes(9).toString("base64url");

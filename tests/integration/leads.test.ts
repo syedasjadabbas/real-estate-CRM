@@ -298,6 +298,18 @@ describe.skipIf(!hasTestDb)("Leads module (PostgreSQL integration)", () => {
   });
 
   describe("lists, search, filters and board", () => {
+    it("lets an Admin filter the list to one agent's leads (15 Nov 2026)", async () => {
+      const a1 = await createLead(db, f.actors.agent1, leadInput(f));
+      const a2 = await createLead(db, f.actors.agent2, leadInput(f, { phoneNumber: "03215550099" }));
+      if (a1.outcome !== "created" || a2.outcome !== "created") throw new Error("setup");
+      const ids = async (actor: typeof f.actors.agent1, owner?: string) => (await listLeads(db, actor, f.projectId, owner ? { owner } : {})).rows.map((r) => r.id);
+      expect((await ids(f.actors.superAdmin)).sort()).toEqual([a1.leadId, a2.leadId].sort());
+      expect(await ids(f.actors.superAdmin, f.actors.agent1.id)).toEqual([a1.leadId]);
+      expect(await ids(f.actors.superAdmin, f.actors.agent2.id)).toEqual([a2.leadId]);
+      // An agent can't use it to see someone else's leads.
+      expect(await ids(f.actors.agent1, f.actors.agent2.id)).toEqual([]);
+    });
+
     it("searches by name, phone and code and filters by stage/priority", async () => {
       const a = await createLead(db, f.actors.agent1, leadInput(f, { name: "Sana Malik", priority: "high", phoneNumber: "03215550001" }));
       const b = await createLead(db, f.actors.agent1, leadInput(f, { name: "Usman Tariq", email: "usman@example.com" }));

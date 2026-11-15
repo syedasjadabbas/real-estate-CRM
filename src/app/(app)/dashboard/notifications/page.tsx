@@ -29,6 +29,8 @@ const TYPE_LABELS: Record<NotificationType, string> = {
   target_met: "Target met",
   name_changed: "Name changed",
   booking_rejected: "Booking rejected",
+  import_requested: "Import to approve",
+  import_decided: "Import decision",
 };
 
 /** Notification history (FR-006): the user's own notifications only. */
@@ -80,6 +82,8 @@ export default async function NotificationsPage({ searchParams }: PageProps<"/da
                       <StatusTag tone={n.type === "follow_up_soon" ? "amber" : n.type === "lost_rejected" ? "rose" : "brand"}>{TYPE_LABELS[n.type]}</StatusTag>
                       <span className="text-[11px] text-zinc-500">{formatDateTime(n.createdAt)}</span>
                       {n.readAt ? null : <span className="text-[11px] font-bold text-brand">Unread</span>}
+                      {/* The request this asked for has since been decided (15 Nov 2026). */}
+                      {n.outcome ? <StatusTag tone="neutral">{n.outcome.text}</StatusTag> : null}
                     </div>
                     {n.link ? (
                       <Link href={n.link} className="mt-1 block text-sm break-words text-zinc-900 hover:text-brand hover:underline">

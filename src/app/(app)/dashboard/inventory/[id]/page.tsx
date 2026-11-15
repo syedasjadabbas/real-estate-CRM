@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/shell/page-header";
 import { buttonClasses } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { ReadOnlyDetails } from "@/components/ui/read-only-details";
 import { RestrictedState } from "@/components/ui/empty-state";
 import { BookingsMiniList } from "@/features/bookings/components/bookings-table";
 import { formatArea, formatListedOn, formatPrice } from "@/features/inventory/format";
@@ -84,11 +85,8 @@ export default async function UnitDetailPage({ params }: PageProps<"/dashboard/i
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
         <div className="min-w-0 space-y-6">
-          {permissions.manage ? null : (
-            <p className="rounded-2xl border border-amber-200/80 bg-amber-50/90 px-4 py-3 text-sm text-amber-950 shadow-hairline">
-              <span className="font-semibold">Read-only.</span> Only admins can edit units.
-            </p>
-          )}
+          {/* Viewers who can't edit get a plain details card, not a greyed-out form (15 Nov 2026). */}
+          {permissions.manage ? (
           <UnitForm
             unitId={unit.id}
             disabled={!permissions.manage}
@@ -110,6 +108,28 @@ export default async function UnitDetailPage({ params }: PageProps<"/dashboard/i
               comment: str(unit.comment),
             }}
           />
+          ) : (
+            <ReadOnlyDetails
+              title="Unit details"
+              note="Only the Super Admin adds or edits units."
+              rows={[
+                { label: "Project", value: unit.projectName },
+                { label: "Unit no", value: unit.unitNo },
+                { label: "Floor", value: unit.floor },
+                { label: "Block", value: unit.block },
+                { label: "Sale model", value: SALE_MODEL_LABELS[unit.saleModel] },
+                { label: "Area", value: formatArea(unit.areaSqft) },
+                { label: "Base price", value: formatPrice(unit.basePrice) },
+                { label: "Premium", value: unit.premium === null || unit.premium === undefined ? null : String(unit.premium) },
+                { label: "Nature", value: unit.nature },
+                { label: "Category", value: unit.category },
+                { label: "Type", value: unit.type },
+                { label: "Bedrooms", value: unit.bedrooms === null || unit.bedrooms === undefined ? null : String(unit.bedrooms) },
+                { label: "Listed on", value: unit.listedOn ? formatListedOn(unit.listedOn) : null },
+                { label: "Comment", value: unit.comment, wide: true },
+              ]}
+            />
+          )}
           <UnitHistory history={detail.history} />
         </div>
         <div className="space-y-6">

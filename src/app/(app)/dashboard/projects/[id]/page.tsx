@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/shell/page-header";
 import { Badge } from "@/components/ui/badge";
 import { buttonClasses } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { ReadOnlyDetails } from "@/components/ui/read-only-details";
 import { RestrictedState } from "@/components/ui/empty-state";
 import { PanelCard } from "@/features/leads/components/detail-panels";
 import { formatDateTime } from "@/features/leads/format";
@@ -79,11 +80,8 @@ export default async function ProjectDetailPage({ params }: PageProps<"/dashboar
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
         <div className="min-w-0 space-y-6">
-          {permissions.manage ? null : (
-            <p className="rounded-2xl border border-amber-200/80 bg-amber-50/90 px-4 py-3 text-sm text-amber-950 shadow-hairline">
-              <span className="font-semibold">Read-only.</span> Only admins can edit projects.
-            </p>
-          )}
+          {/* Viewers who can't edit get a plain details card, not a greyed-out form (15 Nov 2026). */}
+          {permissions.manage ? (
           <ProjectForm
             projectId={project.id}
             disabled={!permissions.manage}
@@ -97,6 +95,21 @@ export default async function ProjectDetailPage({ params }: PageProps<"/dashboar
               description: project.description ?? "",
             }}
           />
+          ) : (
+            <ReadOnlyDetails
+              title="Project details"
+              note="Only the Super Admin adds or edits projects."
+              rows={[
+                { label: "Name", value: project.name },
+                { label: "Type", value: PROJECT_TYPE_LABELS[project.type] },
+                { label: "Status", value: PROJECT_STATUS_LABELS[project.status] },
+                { label: "Developer", value: project.developer },
+                { label: "City", value: project.city },
+                { label: "Address", value: project.address },
+                { label: "Description", value: project.description, wide: true },
+              ]}
+            />
+          )}
         </div>
         <div className="space-y-6">
           <PanelCard title="Linked records">

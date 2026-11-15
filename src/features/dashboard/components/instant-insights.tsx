@@ -134,7 +134,7 @@ export function InstantInsights({ data, own = false }: { data: DashboardData; ow
           value={formatInt(insights?.meetings30d)}
           caption={insights ? `30d ${insights.meetings30d} · 6mo ${insights.meetings6m}` : NO_VALUE}
         />
-        <MiniStat label="Team meetings" value={formatInt(insights?.teamMeetings)} caption="MTD period" />
+        <MiniStat label="Team meetings" value={formatInt(insights?.teamMeetings)} caption="Completed in the selected range" />
         <MiniStat label="Bookings" value={formatInt(insights?.bookings)} caption="Across top teams" />
       </div>
       )}
@@ -219,7 +219,10 @@ export function InstantInsights({ data, own = false }: { data: DashboardData; ow
         )}
       </div>
 
-      <div className={own ? "grid grid-cols-1 gap-5" : "grid grid-cols-1 gap-5 xl:grid-cols-2"}>
+      <div className="grid grid-cols-1 gap-5">
+        {/* Targets are personal goals: shown on an agent's own dashboard only (15 Nov 2026). Admins see
+            each agent's targets on Targets, Performance and the agent's work profile. */}
+        {own ? (
         <Card className="self-start p-4">
           <Eyebrow className="text-xs leading-4">My Targets</Eyebrow>
           <p className="mt-0.5 text-[11px] text-zinc-600">Daily, weekly, and monthly goals vs your activity.</p>
@@ -231,10 +234,11 @@ export function InstantInsights({ data, own = false }: { data: DashboardData; ow
             </div>
           ) : (
             <EmptyState size="sm" className="mt-3">
-              Targets appear here once you are signed in.
+              No targets set for you yet.
             </EmptyState>
           )}
         </Card>
+        ) : null}
 
         {own ? null : (
         <Card className="overflow-hidden">

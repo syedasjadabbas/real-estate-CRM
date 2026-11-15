@@ -238,5 +238,25 @@ describe.skipIf(!hasTestDb)("Clients module (PostgreSQL integration)", () => {
       expect(await names({ q: "nobody" })).toEqual([]);
       expect(await names({ sort: "name", dir: "asc" })).toEqual(["Ahmed Ali", "Zara Khan"]);
     });
+
+    it("filters by interest project, agent, city, relationship, booking, follow-up and date added (15 Nov 2026)", async () => {
+      const lead = await createLead(db, f.actors.agent1, leadInput(f, { name: "Interested Buyer", phoneNumber: "3007770011" }));
+      if (lead.outcome !== "created") throw new Error("setup");
+      await createClient(db, f.actors.superAdmin, { name: "Other Buyer", phoneCountryCode: "+92", phoneNumber: "3007770012", ownerId: f.actors.agent2.id });
+      await db.update(clients).set({ relationship: "investor", cityId: f.cityId, nextFollowUpAt: new Date(Date.now() - 3_600_000) }).where(eq(clients.name, "Other Buyer"));
+      const names = async (q: Record<string, string>) => (await listClients(db, f.actors.superAdmin, q)).rows.map((r) => r.name).sort();
+      expect(await names({ interest: f.projectId })).toEqual(["Interested Buyer"]);
+      expect(await names({ interest: f.otherProjectId })).toEqual([]);
+      expect(await names({ owner: f.actors.agent2.id })).toEqual(["Other Buyer"]);
+      expect(await names({ relationship: "investor" })).toEqual(["Other Buyer"]);
+      expect(await names({ city: f.cityId })).toContain("Other Buyer");
+      expect(await names({ followUp: "overdue" })).toEqual(["Other Buyer"]);
+      expect(await names({ followUp: "none" })).toEqual(["Interested Buyer"]);
+      expect(await names({ booking: "booked" })).toEqual([]);
+      expect(await names({ booking: "none" })).toEqual(["Interested Buyer", "Other Buyer"]);
+      expect(await names({ from: "2000-01-01", to: "2000-01-02" })).toEqual([]);
+      // Bad values are ignored, not errors.
+      expect(await names({ followUp: "soon", owner: "x" })).toEqual(["Interested Buyer", "Other Buyer"]);
+    });
   });
 });

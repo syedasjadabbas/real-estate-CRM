@@ -4,7 +4,7 @@ import { canDoBooking } from "@/modules/bookings/policy";
 import { and, asc, count, desc, eq, ilike, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
 import { alias, type AnyPgColumn } from "drizzle-orm/pg-core";
 import type { Database } from "@/server/db";
-import { cities, clientActivities, clientFollowUps, clientPhones, clients, leadPhones, leads, projects, users } from "@/server/db/schema";
+import { bookings, cities, clientActivities, clientFollowUps, clientPhones, clients, leadPhones, leads, projects, users } from "@/server/db/schema";
 import type { LeadStage } from "@/modules/leads/constants";
 import type { Actor } from "@/server/auth/types";
 import { forbidden } from "@/server/errors";
@@ -49,6 +49,30 @@ const listSelection = {
   updatedAt: clients.updatedAt,
 };
 
+/** The Clients list's extra filters (owner, 15 Nov 2026). Scope still comes from clientScopeFilter. */
+function extraFilters(q: ReturnType<typeof clientListQuerySchema.parse>, now: Date): (SQL | undefined)[] {
+  const day = (d: string) => new Date(`${d}T00:00:00+05:00`);
+  const today = new Date(now.getTime() + 5 * 3_600_000).toISOString().slice(0, 10);
+  const todayEnd = new Date(day(today).getTime() + 86_400_000);
+  const booked = sql`exists (select 1 from ${bookings} b where b.client_id = "clients"."id" and b.stage <> 'cancelled')`;
+  return [
+    q.interest ? sql`exists (select 1 from ${leads} l where l.client_id = "clients"."id" and l.project_id = ${q.interest} and l.deleted_at is null)` : undefined,
+    q.owner ? eq(clients.ownerId, q.owner) : undefined,
+    q.city ? eq(clients.cityId, q.city) : undefined,
+    q.relationship ? eq(clients.relationship, q.relationship) : undefined,
+    q.booking === "booked" ? booked : q.booking === "none" ? sql`not ${booked}` : undefined,
+    q.followUp === "overdue"
+      ? sql`${clients.nextFollowUpAt} < ${now}`
+      : q.followUp === "today"
+        ? and(sql`${clients.nextFollowUpAt} >= ${now}`, sql`${clients.nextFollowUpAt} < ${todayEnd}`)
+        : q.followUp === "none"
+          ? isNull(clients.nextFollowUpAt)
+          : undefined,
+    q.from ? sql`${clients.createdAt} >= ${day(q.from)}` : undefined,
+    q.to ? sql`${clients.createdAt} < ${new Date(day(q.to).getTime() + 86_400_000)}` : undefined,
+  ];
+}
+
 export type ClientListRow = Awaited<ReturnType<typeof listClients>>["rows"][number];
 
 /**
@@ -60,7 +84,7 @@ export async function listClients(db: Database, actor: Actor, rawQuery: unknown,
   const query = clientListQuerySchema.parse(rawQuery ?? {});
   const members = await teamMemberIds(db, actor);
   const investedFilter = query.project && canDoBooking(actor, "view") ? clientInvestedIn(actor, members, query.project) : undefined;
-  const where = and(clientScopeFilter(actor, members), searchCondition(query.q), investedFilter);
+  const where = and(clientScopeFilter(actor, members), searchCondition(query.q), investedFilter, ...extraFilters(query, now));
   const column = sortColumns[query.sort];
 
   const [{ total }] = await db.select({ total: count() }).from(clients).where(where);
