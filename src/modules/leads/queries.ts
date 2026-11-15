@@ -700,7 +700,7 @@ export async function leadLookups(db: Database) {
       .where(eq(lostReasons.isActive, true))
       .orderBy(asc(lostReasons.sortOrder)),
     // The Size dropdown offers each project's unit sizes from inventory.
-    db.selectDistinct({ projectId: units.projectId, areaSqft: units.areaSqft }).from(units).orderBy(asc(units.projectId), asc(units.areaSqft)),
+    db.selectDistinct({ projectId: units.projectId, areaSqft: units.areaSqft }).from(units).where(isNull(units.archivedAt)).orderBy(asc(units.projectId), asc(units.areaSqft)),
   ]);
   const active = allCities.filter((c) => c.isActive).map(({ id, name }) => ({ id, name }));
   return {
@@ -741,7 +741,7 @@ export async function activeProjects(db: Database) {
   return db
     .select({ id: projects.id, name: projects.name })
     .from(projects)
-    .where(eq(projects.status, "active"))
+    .where(and(eq(projects.status, "active"), isNull(projects.archivedAt)))
     .orderBy(asc(projects.name));
 }
 

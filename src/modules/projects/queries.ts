@@ -1,4 +1,4 @@
-import { and, asc, count, countDistinct, eq, ilike, isNull, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, count, countDistinct, eq, ilike, isNotNull, isNull, or, sql, type SQL } from "drizzle-orm";
 import type { Database } from "@/server/db";
 import { clients, leads, projects, units } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
@@ -51,12 +51,14 @@ export async function listProjects(db: Database, actor: Actor, rawQuery: unknown
     searchCondition(query.q),
     query.type ? eq(projects.type, query.type) : undefined,
     query.status ? eq(projects.status, query.status) : undefined,
+    // Archived projects (owner, 16 Nov 2026) appear only in the Archived view.
+    query.archived ? isNotNull(projects.archivedAt) : isNull(projects.archivedAt),
   );
 
   const [[kpi], [{ total }], [{ units: unitsTracked }], perProject] = await Promise.all([
-    db.select({ projects: count(), types: countDistinct(projects.type) }).from(projects),
+    db.select({ projects: count(), types: countDistinct(projects.type) }).from(projects).where(isNull(projects.archivedAt)),
     db.select({ total: count() }).from(projects).where(where),
-    db.select({ units: count() }).from(units),
+    db.select({ units: count() }).from(units).innerJoin(projects, eq(projects.id, units.projectId)).where(and(isNull(units.archivedAt), isNull(projects.archivedAt))),
     unitCounts(db),
   ]);
   const pageCount = Math.max(1, Math.ceil(total / PROJECT_PAGE_SIZE));
@@ -107,7 +109,7 @@ export async function getProjectDetail(db: Database, actor: Actor, projectId: st
           .innerJoin(leads, eq(leads.clientId, clients.id))
           .where(and(inProject, clientScopeFilter(actor, members)))
       : Promise.resolve(null),
-    db.select({ units: count() }).from(units).where(eq(units.projectId, projectId)),
+    db.select({ units: count() }).from(units).where(and(eq(units.projectId, projectId), isNull(units.archivedAt))),
   ]);
 
   return {
@@ -117,7 +119,7 @@ export async function getProjectDetail(db: Database, actor: Actor, projectId: st
       clients: clientRow ? clientRow[0].n : null,
       unitsTracked,
     },
-    permissions: { manage: canDoProject(actor, "manage") },
+    permissions: { manage: canDoProject(actor, "manage") && !project.archivedAt, archive: canDoProject(actor, "manage") },
   };
 }
 export type ProjectDetail = Awaited<ReturnType<typeof getProjectDetail>>;
@@ -146,7 +148,7 @@ export async function selectableProjects(db: Database, actor: Pick<Actor, "role"
   const rows = await db
     .select({ id: projects.id, name: projects.name, status: projects.status })
     .from(projects)
-    .where(includeInactive ? undefined : eq(projects.status, "active"))
+    .where(and(isNull(projects.archivedAt), includeInactive ? undefined : eq(projects.status, "active")))
     .orderBy(asc(projects.status), asc(projects.name));
   return rows.map((p) => ({ id: p.id, name: p.status === "active" ? p.name : `${p.name} (inactive)` }));
 }

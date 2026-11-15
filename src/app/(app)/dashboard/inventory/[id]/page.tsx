@@ -9,6 +9,7 @@ import { ReadOnlyDetails } from "@/components/ui/read-only-details";
 import { RestrictedState } from "@/components/ui/empty-state";
 import { BookingsMiniList } from "@/features/bookings/components/bookings-table";
 import { formatArea, formatListedOn, formatPrice } from "@/features/inventory/format";
+import { ArchivePanel } from "@/features/inventory/components/archive-panel";
 import { UnitStatusPanel } from "@/features/inventory/components/status-panel";
 import { UnitStatusPill } from "@/features/inventory/components/status-pill";
 import { UnitForm } from "@/features/inventory/components/unit-form";
@@ -111,7 +112,7 @@ export default async function UnitDetailPage({ params }: PageProps<"/dashboard/i
           ) : (
             <ReadOnlyDetails
               title="Unit details"
-              note="Only the Super Admin adds or edits units."
+              note={unit.archivedAt || unit.projectArchivedAt ? "This unit is archived. Restore it to edit." : "Only the Super Admin adds or edits units."}
               rows={[
                 { label: "Project", value: unit.projectName },
                 { label: "Unit no", value: unit.unitNo },
@@ -134,6 +135,14 @@ export default async function UnitDetailPage({ params }: PageProps<"/dashboard/i
         </div>
         <div className="space-y-6">
           <UnitStatusPanel unitId={unit.id} status={unit.status} saleModel={unit.saleModel} canManage={permissions.manage} />
+          {permissions.archive ? (
+            <ArchivePanel
+              kind="unit"
+              id={unit.id}
+              archivedAt={unit.archivedAt ?? unit.projectArchivedAt}
+              blockedNote={unit.projectArchivedAt ? "Its project is archived. Restore the project to bring this unit back." : undefined}
+            />
+          ) : null}
           <PanelCard title="Booking history">
             <BookingsMiniList rows={unitBookings} empty="No bookings for this unit (within your access)." />
           </PanelCard>

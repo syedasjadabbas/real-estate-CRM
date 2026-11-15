@@ -17,7 +17,8 @@ import { canViewEmployees } from "@/modules/employees/policy";
 import { canViewHolidays } from "@/modules/holidays/policy";
 import { CROSS_YEAR_HELD_NOTE, isCrossYear, LEAVE_TYPE_LABELS, STAFF_STEP_LABELS } from "@/modules/leave/rules";
 import { businessToday } from "@/modules/bookings/today";
-import { canCancelApprovedLeave, canManageLeaveSettings, canOpenLeaveAdmin, leaveBalances, leaveOverview, type LeaveRow } from "@/modules/leave/service";
+import { canCancelApprovedLeave, canManageLeaveSettings, canOpenLeaveAdmin, canRecordLeave, leaveBalances, leaveOverview, leavePeople, type LeaveRow } from "@/modules/leave/service";
+import { RecordLeaveForm } from "@/features/leave/components/record-leave-form";
 import { requirePageUser } from "@/server/auth/current-user";
 import { ROLE_LABELS, type Role } from "@/server/auth/types";
 import { getDb } from "@/server/db";
@@ -37,7 +38,7 @@ export default async function LeavePage({ searchParams }: PageProps<"/dashboard/
   // Calendar years only (C-11); out-of-range values fall back to this year.
   const year = Number.isInteger(asked) && asked >= 2000 && asked <= thisYear + 1 ? asked : thisYear;
   const db = getDb();
-  const [data, balances] = await Promise.all([leaveOverview(db, actor, year, params), leaveBalances(db, actor, year)]);
+  const [data, balances, people] = await Promise.all([leaveOverview(db, actor, year, params), leaveBalances(db, actor, year), leavePeople(db, actor)]);
   const sortHeader = (column: Parameters<typeof LeaveSortHeader>[0]["column"], label: string) => (
     <th scope="col" className="py-2 pr-3" aria-sort={data.query.sort === column ? (data.query.dir === "asc" ? "ascending" : "descending") : undefined}>
       <LeaveSortHeader path={PATH} params={params} column={column} label={label} sort={data.query.sort} dir={data.query.dir} />
@@ -94,6 +95,21 @@ export default async function LeavePage({ searchParams }: PageProps<"/dashboard/
         </PanelCard>
       ) : null}
 
+      {canRecordLeave(actor) ? (
+        <PanelCard title="Record leave for someone">
+          <RecordLeaveForm
+            people={people}
+            approvesNow={
+              actor.role === "super_admin"
+                ? "Leave you record is approved at once."
+                : actor.role === "admin"
+                  ? "Leave you record for agents, accountants and staff without a login is approved at once; for HR and Admins it goes to a Super Admin."
+                  : "Leave you record goes through the normal approvals."
+            }
+          />
+        </PanelCard>
+      ) : null}
+
       <PanelCard title={`All requests · ${data.year} · ${data.total}`}>
         <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
           <LeaveListFilters path={PATH} params={params} years={data.years} year={data.year} />
@@ -119,7 +135,10 @@ export default async function LeavePage({ searchParams }: PageProps<"/dashboard/
                   <tr key={r.id} className="border-b border-zinc-100 align-top last:border-b-0">
                     <td className="py-2 pr-3">
                       <span className="font-bold">{r.userName}</span>
-                      <span className="block text-[11px] text-zinc-500">{ROLE_LABELS[r.userRole as Role]}</span>
+                      <span className="block text-[11px] text-zinc-500">
+                        {r.userRole ? ROLE_LABELS[r.userRole as Role] : "No CRM login"}
+                        {r.recordedById ? " · recorded by HR / Admin" : ""}
+                      </span>
                     </td>
                     <td className="py-2 pr-3">{LEAVE_TYPE_LABELS[r.type]}</td>
                     <td className="py-2 pr-3 whitespace-nowrap">{when(r)}</td>
@@ -152,12 +171,13 @@ export default async function LeavePage({ searchParams }: PageProps<"/dashboard/
           <EmptyState size="sm">No one to show.</EmptyState>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[560px] border-collapse text-left text-xs" aria-label="Leave balances">
+            <table className="w-full min-w-[640px] border-collapse text-left text-xs" aria-label="Leave balances">
               <thead>
                 <tr className="border-b border-zinc-200 text-[10px] font-black tracking-[0.05em] text-zinc-600 uppercase">
                   <th scope="col" className="py-2 pr-3">Employee</th>
                   <th scope="col" className="py-2 pr-3 text-right">Allowance</th>
                   <th scope="col" className="py-2 pr-3 text-right">Taken</th>
+                  <th scope="col" className="py-2 pr-3 text-right">of which medical</th>
                   <th scope="col" className="py-2 pr-3 text-right">Pending</th>
                   <th scope="col" className="py-2 text-right">Remaining</th>
                 </tr>
@@ -167,13 +187,14 @@ export default async function LeavePage({ searchParams }: PageProps<"/dashboard/
                   <tr key={b.id} className="border-b border-zinc-100 last:border-b-0">
                     <td className="py-2 pr-3">
                       <span className="font-bold">{b.name}</span>
-                      <span className="block text-[11px] text-zinc-500">{ROLE_LABELS[b.role]}</span>
+                      <span className="block text-[11px] text-zinc-500">{b.role ? ROLE_LABELS[b.role as Role] : "No CRM login"}</span>
                     </td>
                     <td className="py-2 pr-3 text-right tabular-nums">
                       {b.allowance}
                       {b.provisional ? <span className="block text-[10px] text-amber-800">prorated (provisional)</span> : b.prorated ? <span className="block text-[10px] text-zinc-500">prorated</span> : null}
                     </td>
                     <td className="py-2 pr-3 text-right tabular-nums">{b.granted}</td>
+                    <td className="py-2 pr-3 text-right tabular-nums text-zinc-600">{b.medical}</td>
                     <td className="py-2 pr-3 text-right tabular-nums">{b.pending}</td>
                     <td className="py-2 text-right font-bold tabular-nums">{b.remaining}</td>
                   </tr>

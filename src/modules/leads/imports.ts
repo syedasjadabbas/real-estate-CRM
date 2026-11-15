@@ -121,8 +121,8 @@ export async function submitImport(db: Database, actor: Actor, input: { projectI
   if (body.length > MAX_IMPORT_ROWS) throw fail(`Use at most ${MAX_IMPORT_ROWS} rows per file`);
 
   return db.transaction(async (tx) => {
-    const [project] = await tx.select({ id: projects.id, status: projects.status }).from(projects).where(eq(projects.id, projectId));
-    if (!project || project.status !== "active") throw new AppError("VALIDATION_FAILED", "Choose an active project.", { fields: { projectId: "Choose an active project" } });
+    const [project] = await tx.select({ id: projects.id, status: projects.status, archivedAt: projects.archivedAt }).from(projects).where(eq(projects.id, projectId));
+    if (!project || project.status !== "active" || project.archivedAt) throw new AppError("VALIDATION_FAILED", "Choose an active project.", { fields: { projectId: "Choose an active project" } });
     const [sourceRows, cityRows, budgetRows] = [
       await tx.select({ id: leadSources.id, name: leadSources.name }).from(leadSources).where(eq(leadSources.isActive, true)),
       await tx.select({ id: cities.id, name: cities.name }).from(cities).where(eq(cities.isActive, true)),

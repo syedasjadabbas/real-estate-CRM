@@ -82,7 +82,7 @@ export async function createBooking(db: Database, actor: Actor, input: unknown) 
 
   return db.transaction(async (tx) => {
     const [project] = await tx.select().from(projects).where(eq(projects.id, data.projectId)).limit(1);
-    if (!project || project.status !== "active") throw fieldError("projectId", "Choose an active project");
+    if (!project || project.status !== "active" || project.archivedAt) throw fieldError("projectId", "Choose an active project");
     // Visibility check without a lock; the lead row is locked after the unit, matching confirm's lock order.
     const { lead } = await loadAccessibleLead(tx, actor, data.leadId);
     assertWorkable(actor, lead);
@@ -91,7 +91,7 @@ export async function createBooking(db: Database, actor: Actor, input: unknown) 
       throw new AppError("BUSINESS_RULE", `A ${STAGE_LABELS[lead.stage].toLowerCase()} lead can't be booked.`);
     }
     const [unit] = await tx.select().from(units).where(eq(units.id, data.unitId)).limit(1);
-    if (!unit || unit.projectId !== data.projectId) throw fieldError("unitId", "Choose an available unit in this project");
+    if (!unit || unit.projectId !== data.projectId || unit.archivedAt) throw fieldError("unitId", "Choose an available unit in this project");
 
     // Price from inventory (owner, 14 Nov 2026). Up to the role's cap (agents 5%) the discount applies at
     // once; more waits for an Admin or Super Admin, with the booking held at the cap meanwhile.

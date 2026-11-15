@@ -92,6 +92,8 @@ export const unitListQuerySchema = z.object({
   type: z.string().trim().max(60).optional().catch(undefined),
   premium: z.string().trim().max(60).optional().catch(undefined),
   area: z.coerce.number().positive().max(1_000_000).optional().catch(undefined),
+  /** "1" lists archived units (or units of archived projects) instead (owner, 16 Nov 2026). */
+  archived: z.literal("1").optional().catch(undefined),
   sort: z.enum(UNIT_SORT_COLUMNS).optional().catch(undefined),
   dir: z.enum(["asc", "desc"]).catch("desc"),
   page: z.coerce.number().int().min(1).max(10_000).catch(1),

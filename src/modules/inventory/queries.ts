@@ -1,5 +1,5 @@
 import { AREA_FILTER, DIMENSION_FIELD, DIMENSION_KEYS, DIMENSION_LABELS } from "./constants";
-import { and, asc, count, desc, eq, ilike, isNotNull, or, sql, type SQL, type SQLWrapper } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, isNotNull, isNull, or, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { Database } from "@/server/db";
 import { auditLogs, projects, units, users } from "@/server/db/schema";
@@ -44,6 +44,8 @@ const rowSelection = {
   statusChangedAt: units.statusChangedAt,
   comment: units.comment,
   listedOn: units.listedOn,
+  archivedAt: units.archivedAt,
+  projectArchivedAt: projects.archivedAt,
   /** Shown only for booked, partially booked and sold units (owner, 13 Nov 2026). */
   bookedOn: sql<string | null>`case when ${units.status} in ('booked', 'partially_booked', 'sold') then ${bookedOnSql} end`,
   createdAt: units.createdAt,
@@ -69,6 +71,11 @@ const SORTS: Record<UnitSortColumn, SQL> = {
   listedOn: sql`${units.listedOn}`,
   bookedOn: sql`case when ${units.status} in ('booked', 'partially_booked', 'sold') then ${bookedOnSql} end`,
 };
+
+/** A unit counts as archived when it or its project is archived (owner, 16 Nov 2026). */
+const archivedProjectIds = sql`(select p.id from projects p where p.archived_at is not null)`;
+const notArchivedUnit = sql`(${units.archivedAt} is null and ${units.projectId} not in ${archivedProjectIds})`;
+const isArchivedUnit = sql`(${units.archivedAt} is not null or ${units.projectId} in ${archivedProjectIds})`;
 
 export type UnitRow = Awaited<ReturnType<typeof listUnits>>["rows"][number];
 
@@ -109,6 +116,7 @@ export async function listUnits(db: Database, actor: Actor, rawQuery: unknown, d
   const projectId = query.project === "all" ? null : (query.project ?? defaultProjectId);
   const where = and(
     projectId ? eq(units.projectId, projectId) : undefined,
+    query.archived ? isArchivedUnit : notArchivedUnit,
     searchCondition(query.q),
     query.status ? eq(units.status, query.status) : undefined,
     query.saleModel ? eq(units.saleModel, query.saleModel) : undefined,
@@ -126,12 +134,12 @@ export async function listUnits(db: Database, actor: Actor, rawQuery: unknown, d
     db
       .selectDistinct({ nature: units.nature })
       .from(units)
-      .where(and(isNotNull(units.nature), projectId ? eq(units.projectId, projectId) : undefined))
+      .where(and(isNotNull(units.nature), notArchivedUnit, projectId ? eq(units.projectId, projectId) : undefined))
       .orderBy(asc(units.nature)),
     db
       .select({ status: units.status, n: count() })
       .from(units)
-      .where(projectId ? eq(units.projectId, projectId) : undefined)
+      .where(and(query.archived ? isArchivedUnit : notArchivedUnit, projectId ? eq(units.projectId, projectId) : undefined))
       .groupBy(units.status),
     projectId ? projectDimensionFilters(db, projectId) : [],
   ]);
@@ -189,7 +197,7 @@ export async function getUnitDetail(db: Database, actor: Actor, unitId: string) 
     unit: row,
     dimensions: project.dimensionConfig,
     history,
-    permissions: { manage: canDoInventory(actor, "manage") },
+    permissions: { manage: canDoInventory(actor, "manage") && !row.archivedAt && !row.projectArchivedAt, archive: canDoInventory(actor, "manage") },
   };
 }
 export type UnitDetail = Awaited<ReturnType<typeof getUnitDetail>>;
@@ -199,12 +207,13 @@ export async function inventoryProjects(db: Database) {
   const rows = await db
     .select({ id: projects.id, name: projects.name, status: projects.status, dimensionConfig: projects.dimensionConfig })
     .from(projects)
+    .where(isNull(projects.archivedAt))
     .orderBy(asc(projects.status), asc(projects.name));
   return rows.map((p) => ({ ...p, label: p.status === "active" ? p.name : `${p.name} (inactive)` }));
 }
 
 /** Units per project (Projects KPI "Units tracked"). */
 export async function unitCounts(db: Database) {
-  const rows = await db.select({ projectId: units.projectId, n: count() }).from(units).groupBy(units.projectId);
+  const rows = await db.select({ projectId: units.projectId, n: count() }).from(units).where(isNull(units.archivedAt)).groupBy(units.projectId);
   return new Map(rows.map((r) => [r.projectId, r.n]));
 }

@@ -191,6 +191,7 @@ export async function taskFormOptions(db: Database, actor: Actor, projectId: str
       })
       .from(units)
       .innerJoin(projects, eq(projects.id, units.projectId))
+      .where(and(isNull(units.archivedAt), isNull(projects.archivedAt)))
       .orderBy(asc(sql`lower(${units.unitNo})`))
       .limit(5000),
     getProposalSettings(db),

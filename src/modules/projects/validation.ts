@@ -53,6 +53,8 @@ export const projectListQuerySchema = z.object({
   type: z.enum(PROJECT_TYPES).optional().catch(undefined),
   status: z.enum(PROJECT_STATUSES).optional().catch(undefined),
   sort: z.enum(PROJECT_SORTS).optional().catch(undefined),
+  /** "1" lists archived projects instead (owner, 16 Nov 2026). */
+  archived: z.literal("1").optional().catch(undefined),
   dir: z.enum(["asc", "desc"]).catch("asc"),
   page: z.coerce.number().int().min(1).max(10_000).catch(1),
 });

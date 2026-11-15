@@ -230,7 +230,7 @@ export async function bookingFormOptions(db: Database, actor: Actor, projectId: 
     db
       .select({ id: units.id, unitNo: units.unitNo, floor: units.floor, areaSqft: units.areaSqft, basePrice: units.basePrice })
       .from(units)
-      .where(and(eq(units.projectId, projectId), eq(units.status, "available"), eq(units.saleModel, "whole")))
+      .where(and(eq(units.projectId, projectId), eq(units.status, "available"), eq(units.saleModel, "whole"), isNull(units.archivedAt)))
       .orderBy(asc(sql`lower(${units.unitNo})`)),
   ]);
   const priceSettings = await getProposalSettings(db);

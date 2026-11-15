@@ -1,4 +1,4 @@
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, ne, notInArray } from "drizzle-orm";
 import { syncProposalsForUnit } from "@/modules/tasks/price-sync";
 import type { Database } from "@/server/db";
 import { auditLogs, bookings, projects, units, type ProjectDimensions } from "@/server/db/schema";
@@ -49,7 +49,7 @@ export async function createUnit(db: Database, actor: Actor, input: unknown) {
   const data = parse(createUnitSchema, input);
   return db.transaction(async (tx) => {
     const [project] = await tx.select().from(projects).where(eq(projects.id, data.projectId)).limit(1);
-    if (!project) throw new AppError("VALIDATION_FAILED", "Check the highlighted fields.", { fields: { projectId: "Choose a project" } });
+    if (!project || project.archivedAt) throw new AppError("VALIDATION_FAILED", "Check the highlighted fields.", { fields: { projectId: "Choose a project" } });
     const dims = applyDimensions(project.dimensionConfig, data);
     const values = {
       projectId: data.projectId,
@@ -161,5 +161,65 @@ export async function setUnitStatus(db: Database, actor: Actor, unitId: string, 
     }
     await transitionUnitStatus(tx, { unitId, from: [unit.status], to: status, actorId: actor.id, ip: actor.ip ?? null, source: "manual", reason });
     return { from: unit.status, to: status };
+  });
+}
+
+/** Bookings still in progress (not confirmed, not cancelled) block archiving: they would lose their unit. */
+const IN_PROGRESS = notInArray(bookings.stage, ["confirmed", "cancelled"]);
+
+/**
+ * Archive or restore a unit (owner, 16 Nov 2026): Super Admin only. An archived unit is hidden from
+ * inventory, booking and proposal pickers; its bookings and history stay. A unit in a booking that is
+ * still in progress can't be archived.
+ */
+export async function setUnitArchived(db: Database, actor: Actor, unitId: string, archived: boolean) {
+  assertCanInventory(actor, "manage");
+  if (!/^[0-9a-f-]{36}$/i.test(unitId)) throw notFound("Unit");
+  return db.transaction(async (tx) => {
+    const [unit] = await tx.select().from(units).where(eq(units.id, unitId)).limit(1).for("update");
+    if (!unit) throw notFound("Unit");
+    if (Boolean(unit.archivedAt) === archived) return { changed: false };
+    if (archived) {
+      const [busy] = await tx.select({ id: bookings.id }).from(bookings).where(and(eq(bookings.unitId, unitId), IN_PROGRESS)).limit(1);
+      if (busy) throw new AppError("BUSINESS_RULE", "This unit is in a booking that is still in progress. Confirm or cancel the booking first.");
+    } else {
+      const [project] = await tx.select({ archivedAt: projects.archivedAt }).from(projects).where(eq(projects.id, unit.projectId));
+      if (project?.archivedAt) throw new AppError("BUSINESS_RULE", "This unit's project is archived. Restore the project first.");
+    }
+    const archivedAt = archived ? new Date() : null;
+    await tx.update(units).set({ archivedAt, updatedAt: new Date() }).where(eq(units.id, unitId));
+    await auditUnit(tx, actor, archived ? "unit.archive" : "unit.restore", unitId, { archivedAt: unit.archivedAt }, { archivedAt });
+    return { changed: true };
+  });
+}
+
+/**
+ * Archive or restore a project (owner, 16 Nov 2026): Super Admin only. An archived project and its units
+ * are hidden everywhere (selector, lists, new leads, bookings); existing leads, bookings and payments keep
+ * it. Blocked while any of its bookings is still in progress.
+ */
+export async function setProjectArchived(db: Database, actor: Actor, projectId: string, archived: boolean) {
+  assertCanInventory(actor, "manage");
+  if (!/^[0-9a-f-]{36}$/i.test(projectId)) throw notFound("Project");
+  return db.transaction(async (tx) => {
+    const [project] = await tx.select().from(projects).where(eq(projects.id, projectId)).limit(1).for("update");
+    if (!project) throw notFound("Project");
+    if (Boolean(project.archivedAt) === archived) return { changed: false };
+    if (archived) {
+      const [busy] = await tx.select({ id: bookings.id }).from(bookings).where(and(eq(bookings.projectId, projectId), IN_PROGRESS)).limit(1);
+      if (busy) throw new AppError("BUSINESS_RULE", "This project has bookings still in progress. Confirm or cancel them first.");
+    }
+    const archivedAt = archived ? new Date() : null;
+    await tx.update(projects).set({ archivedAt, updatedAt: new Date() }).where(eq(projects.id, projectId));
+    await tx.insert(auditLogs).values({
+      actorId: actor.id,
+      ip: actor.ip ?? null,
+      action: archived ? "project.archive" : "project.restore",
+      entity: "project",
+      entityId: projectId,
+      before: { archivedAt: project.archivedAt },
+      after: { archivedAt },
+    });
+    return { changed: true };
   });
 }

@@ -59,7 +59,7 @@ async function resolveProposal(tx: DbOrTx, actor: Actor, input: ProposalData, ex
   let unit: typeof units.$inferSelect | undefined;
   if (input.unitId) {
     [unit] = await tx.select().from(units).where(eq(units.id, input.unitId)).limit(1);
-    if (!unit) throw taskFieldError("proposal.unitId", "Choose a unit");
+    if (!unit || (unit.archivedAt && unit.id !== existing?.unitId)) throw taskFieldError("proposal.unitId", "Choose a unit");
     if (projectId && unit.projectId !== projectId) throw taskFieldError("proposal.unitId", "This unit belongs to another project");
     // Q48: only Available units can be quoted in a Proposal (a payment plan for an existing booking uses
     // the booked unit). A proposal that keeps its existing unit stays editable.
@@ -67,8 +67,8 @@ async function resolveProposal(tx: DbOrTx, actor: Actor, input: ProposalData, ex
     projectId = unit.projectId;
   }
   if (projectId && projectId !== existing?.projectId) {
-    const [project] = await tx.select({ status: projects.status }).from(projects).where(eq(projects.id, projectId)).limit(1);
-    if (!project || (project.status !== "active" && !seesInactiveInSelector(actor))) throw taskFieldError("proposal.projectId", "Choose an active project");
+    const [project] = await tx.select({ status: projects.status, archivedAt: projects.archivedAt }).from(projects).where(eq(projects.id, projectId)).limit(1);
+    if (!project || project.archivedAt || (project.status !== "active" && !seesInactiveInSelector(actor))) throw taskFieldError("proposal.projectId", "Choose an active project");
   }
 
   const areaSqft = unit ? unit.areaSqft : null;

@@ -142,7 +142,7 @@ export async function dashboardData(db: Database, actor: Actor, projectId: strin
       .groupBy(projects.id, projects.name)
       .orderBy(desc(count()), asc(projects.name))
       .limit(5),
-    db.select({ n: count() }).from(projects).where(eq(projects.status, "active")),
+    db.select({ n: count() }).from(projects).where(and(eq(projects.status, "active"), isNull(projects.archivedAt))),
     db
       .select({
         stale: sql<number>`count(*) filter (where ${leads.updatedAt} < ${new Date(now.getTime() - STALE_DAYS * DAY)})::int`,

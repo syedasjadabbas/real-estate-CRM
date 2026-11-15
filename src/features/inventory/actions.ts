@@ -1,7 +1,7 @@
 "use server";
 
 import { refresh } from "next/cache";
-import { createUnit, setUnitStatus, updateUnit } from "@/modules/inventory/commands";
+import { createUnit, setProjectArchived, setUnitArchived, setUnitStatus, updateUnit } from "@/modules/inventory/commands";
 import { importUnits } from "@/modules/inventory/import";
 import { updateProjectDimensions } from "@/modules/projects/commands";
 import { requireActor } from "@/server/auth/current-user";
@@ -33,6 +33,15 @@ export async function updateUnitAction(unitId: string, input: Record<string, unk
 
 export async function setUnitStatusAction(unitId: string, status: string, reason: string) {
   return run((db, actor) => setUnitStatus(db, actor, unitId, { status, reason }));
+}
+
+/** Archive / restore (Super Admin, 16 Nov 2026). */
+export async function setUnitArchivedAction(unitId: string, archived: boolean) {
+  return run((db, actor) => setUnitArchived(db, actor, unitId, archived));
+}
+
+export async function setProjectArchivedAction(projectId: string, archived: boolean) {
+  return run((db, actor) => setProjectArchived(db, actor, projectId, archived));
 }
 
 export async function updateDimensionsAction(projectId: string, input: Record<string, string[]>) {

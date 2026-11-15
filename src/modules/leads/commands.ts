@@ -134,7 +134,7 @@ export async function createLead(db: Database, actor: Actor, input: unknown): Pr
 
   return db.transaction(async (tx) => {
     const [project] = await tx.select().from(projects).where(eq(projects.id, data.projectId)).limit(1);
-    if (!project || project.status !== "active") {
+    if (!project || project.status !== "active" || project.archivedAt) {
       throw new AppError("VALIDATION_FAILED", "Check the highlighted fields.", { fields: { projectId: "Choose an active project" } });
     }
     const members = await teamMemberIds(tx, actor);

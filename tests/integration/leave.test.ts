@@ -345,6 +345,17 @@ describe.skipIf(!hasTestDb)("Leave (questionnaire Q4–Q19, PostgreSQL integrati
       expect(await decideLeave(db, m2, id, { approve: true })).toMatchObject({ status: "approved" });
     });
 
+    it("team admin: an Admin set as the agent's Team admin approves; another Admin can't (16 Nov 2026)", async () => {
+      await steps("team_manager", "hr");
+      const teamAdmin = await makeActor("Team Admin", "teamadmin@test.local", "admin");
+      const [team] = await db.insert(teams).values({ name: "Team TA", managerId: teamAdmin.id }).returning();
+      await db.insert(teamMembers).values({ teamId: team.id, userId: f.actors.agent2.id });
+      const { id } = await req(f.actors.agent2, "10-12", "10-12");
+      expect(await errorCode(decideLeave(db, admin, id, { approve: true }))).toBe("FORBIDDEN");
+      await decideLeave(db, teamAdmin, id, { approve: true });
+      expect(await decideLeave(db, f.actors.hr, id, { approve: true })).toMatchObject({ status: "approved" });
+    });
+
     it("different roles at each step keep working, with unauthorised and self-approval still refused", async () => {
       await steps("team_manager", "hr");
       const a = f.actors.agent1;

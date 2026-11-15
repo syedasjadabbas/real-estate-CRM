@@ -13,6 +13,7 @@ import { ReadOnlyDetails } from "@/components/ui/read-only-details";
 import { RestrictedState } from "@/components/ui/empty-state";
 import { PanelCard } from "@/features/leads/components/detail-panels";
 import { formatDateTime } from "@/features/leads/format";
+import { ArchivePanel } from "@/features/inventory/components/archive-panel";
 import { DimensionsPanel } from "@/features/inventory/components/dimensions-panel";
 import { ProjectForm } from "@/features/projects/components/project-form";
 import { ProjectLinks } from "@/features/projects/components/project-links";
@@ -59,6 +60,7 @@ export default async function ProjectDetailPage({ params }: PageProps<"/dashboar
           <>
             <Badge tone="brand">{PROJECT_TYPE_LABELS[project.type]}</Badge>
             <Badge tone={project.status === "active" ? "brand" : "neutral"}>{PROJECT_STATUS_LABELS[project.status]}</Badge>
+            {project.archivedAt ? <Badge tone="neutral">Archived</Badge> : null}
             <Link href="/dashboard/projects" className={buttonClasses({ variant: "secondary", size: "lg" })}>
               <ArrowLeft aria-hidden="true" className="size-4" />
               Back to list
@@ -98,7 +100,7 @@ export default async function ProjectDetailPage({ params }: PageProps<"/dashboar
           ) : (
             <ReadOnlyDetails
               title="Project details"
-              note="Only the Super Admin adds or edits projects."
+              note={project.archivedAt ? "This project is archived. Restore it to edit." : "Only the Super Admin adds or edits projects."}
               rows={[
                 { label: "Name", value: project.name },
                 { label: "Type", value: PROJECT_TYPE_LABELS[project.type] },
@@ -134,6 +136,7 @@ export default async function ProjectDetailPage({ params }: PageProps<"/dashboar
               View inventory →
             </Link>
           </PanelCard>
+          {permissions.archive ? <ArchivePanel kind="project" id={project.id} archivedAt={project.archivedAt} /> : null}
           <PanelCard title="Record">
             <dl className="space-y-1 text-xs">
               <div className="flex justify-between gap-3">

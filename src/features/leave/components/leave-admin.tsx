@@ -136,17 +136,29 @@ export function LeaveSettingsForm({
         {step("staffStep1", "Staff approval: first step")}
         {step("staffStep2", "Staff approval: second step")}
       </div>
-      <Field label="Proration for joiners" error={errors.prorationMethod} hint="The company hasn't confirmed the method yet; only the provisional method is available.">
-        {(id, d) => (
-          <select id={id} aria-describedby={d} className={selectClass} value={v.prorationMethod} disabled={pending} onChange={(e) => setV((s) => ({ ...s, prorationMethod: e.target.value }))}>
-            {(Object.keys(PRORATION_METHODS) as ProrationMethod[]).map((k) => (
-              <option key={k} value={k}>
-                {PRORATION_METHODS[k].label}
-              </option>
-            ))}
-          </select>
-        )}
-      </Field>
+      {(Object.keys(PRORATION_METHODS) as ProrationMethod[]).length > 1 ? (
+        <Field label="Proration for joiners" error={errors.prorationMethod}>
+          {(id, d) => (
+            <select id={id} aria-describedby={d} className={selectClass} value={v.prorationMethod} disabled={pending} onChange={(e) => setV((s) => ({ ...s, prorationMethod: e.target.value }))}>
+              {(Object.keys(PRORATION_METHODS) as ProrationMethod[]).map((k) => (
+                <option key={k} value={k}>
+                  {PRORATION_METHODS[k].label}
+                </option>
+              ))}
+            </select>
+          )}
+        </Field>
+      ) : (
+        // One method only until the company confirms theirs: shown as text, not a one-choice dropdown (15 Nov 2026).
+        <div className="space-y-1">
+          <p className="text-[10px] font-black tracking-[0.1em] text-zinc-500 uppercase">Proration for joiners</p>
+          <p className="text-sm text-zinc-800">
+            Someone who joins during the year gets a share of the allowance for the days left in the year, rounded to the nearest half day. Example: joining on 1 July gives
+            about 15 of 30 days.
+          </p>
+          <p className="text-[11px] text-amber-800">Temporary method until the company confirms theirs; it can be changed here then.</p>
+        </div>
+      )}
       <p className="text-[11px] text-zinc-500">
         Agents&apos; and accountants&apos; leave needs two approvals by two different people: HR first, then an Admin, unless you change the order above. HR&apos;s and Admins&apos;
         leave is approved by a Super Admin, and a Super Admin&apos;s own leave is approved automatically. Nobody approves their own leave.

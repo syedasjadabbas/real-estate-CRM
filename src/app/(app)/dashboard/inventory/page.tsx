@@ -30,11 +30,22 @@ export default async function InventoryPage({ searchParams }: PageProps<"/dashbo
     <section className="space-y-6" aria-label="Units">
       <PageHeader
         as="h2"
-        title="Units"
-        description={`Units for sale in ${scopeName}. Open a unit for its full dimensions and details.`}
+        title={params.archived ? "Archived units" : "Units"}
+        description={
+          params.archived
+            ? "Archived units, and units of archived projects. Open one to restore it."
+            : `Units for sale in ${scopeName}. Open a unit for its full dimensions and details.`
+        }
         actions={
-          canDoInventory(actor, "manage") && projects.length ? (
+          canDoInventory(actor, "manage") && params.archived ? (
+            <Link href="/dashboard/inventory" className={buttonClasses({ variant: "secondary", size: "lg" })}>
+              Back to active units
+            </Link>
+          ) : canDoInventory(actor, "manage") && projects.length ? (
             <div className="flex flex-wrap gap-2">
+              <Link href="/dashboard/inventory?archived=1&project=all" className={buttonClasses({ variant: "secondary", size: "lg" })}>
+                Archived
+              </Link>
               <Link href="/dashboard/inventory/import" className={buttonClasses({ variant: "secondary", size: "lg" })}>
                 Import CSV
               </Link>

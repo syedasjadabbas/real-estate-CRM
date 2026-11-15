@@ -1,10 +1,10 @@
 import { and, eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { createUnit, setUnitStatus, updateUnit } from "@/modules/inventory/commands";
+import { createUnit, setProjectArchived, setUnitArchived, setUnitStatus, updateUnit } from "@/modules/inventory/commands";
 import { getUnitDetail, listUnits } from "@/modules/inventory/queries";
 import { reserveAvailableUnit } from "@/modules/inventory/status";
 import { updateProjectDimensions } from "@/modules/projects/commands";
-import { getProjectDetail, listProjects } from "@/modules/projects/queries";
+import { getProjectDetail, listProjects, selectableProjects } from "@/modules/projects/queries";
 import { hashPassword } from "@/server/auth/password";
 import { loadActor } from "@/server/auth/session-store";
 import { auditLogs, units, users } from "@/server/db/schema";
@@ -194,6 +194,35 @@ describe.skipIf(!hasTestDb)("Inventory module (PostgreSQL integration)", () => {
       const list = await listUnits(db, f.actors.agent1, {}, f.projectId);
       expect(list.natures).toEqual(["Apartment", "Shop"]);
       expect(list.statusCounts).toEqual({ available: 2, reserved: 1 });
+    });
+  });
+
+  describe("archive (owner, 16 Nov 2026)", () => {
+    it("lets only the Super Admin archive and restore a unit, hiding it from the list meanwhile", async () => {
+      const { unitId } = await unit();
+      expect(await errorCode(setUnitArchived(db, f.actors.manager, unitId, true))).toBe("FORBIDDEN");
+      await setUnitArchived(db, f.actors.superAdmin, unitId, true);
+      expect((await listUnits(db, f.actors.superAdmin, {}, f.projectId)).rows.map((r) => r.id)).not.toContain(unitId);
+      expect((await listUnits(db, f.actors.superAdmin, { archived: "1" }, f.projectId)).rows.map((r) => r.id)).toEqual([unitId]);
+      const detail = await getUnitDetail(db, f.actors.superAdmin, unitId);
+      expect(detail.permissions).toEqual({ manage: false, archive: true });
+      await setUnitArchived(db, f.actors.superAdmin, unitId, false);
+      expect((await listUnits(db, f.actors.superAdmin, {}, f.projectId)).rows.map((r) => r.id)).toContain(unitId);
+      const actions = await db.select({ action: auditLogs.action }).from(auditLogs).where(eq(auditLogs.entityId, unitId));
+      expect(actions.map((a) => a.action)).toEqual(expect.arrayContaining(["unit.archive", "unit.restore"]));
+    });
+
+    it("hides an archived project and its units, and blocks new units in it", async () => {
+      const { unitId } = await unit();
+      await setProjectArchived(db, f.actors.superAdmin, f.projectId, true);
+      expect((await selectableProjects(db, f.actors.superAdmin)).map((p) => p.id)).not.toContain(f.projectId);
+      expect((await listProjects(db, f.actors.superAdmin, {})).rows.map((r) => r.id)).not.toContain(f.projectId);
+      expect((await listProjects(db, f.actors.superAdmin, { archived: "1" })).rows.map((r) => r.id)).toEqual([f.projectId]);
+      expect((await listUnits(db, f.actors.superAdmin, { project: "all" }, null)).rows.map((r) => r.id)).not.toContain(unitId);
+      expect((await listUnits(db, f.actors.superAdmin, { project: "all", archived: "1" }, null)).rows.map((r) => r.id)).toEqual([unitId]);
+      expect(await errorCode(unit({ unitNo: "A-102" }))).toBe("VALIDATION_FAILED");
+      await setProjectArchived(db, f.actors.superAdmin, f.projectId, false);
+      expect((await listUnits(db, f.actors.superAdmin, {}, f.projectId)).rows.map((r) => r.id)).toContain(unitId);
     });
   });
 });

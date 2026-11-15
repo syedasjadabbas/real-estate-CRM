@@ -45,21 +45,34 @@ export default async function ProjectsPage({ searchParams }: PageProps<"/dashboa
       </div>
       <PageHeader
         as="h2"
-        title="All projects"
-        description="Projects are company-wide. Inactive projects stay listed here but are hidden from the project selector for non-admins."
+        title={params.archived ? "Archived projects" : "All projects"}
+        description={
+          params.archived
+            ? "Archived projects are hidden everywhere. Open one to restore it."
+            : "Projects are company-wide. Inactive projects stay listed here but are hidden from the project selector for non-admins."
+        }
         actions={
-          canDoProject(actor, "manage") ? (
+          canDoProject(actor, "manage") && params.archived ? (
+            <Link href="/dashboard/projects" className={buttonClasses({ variant: "secondary", size: "lg" })}>
+              Back to projects
+            </Link>
+          ) : canDoProject(actor, "manage") ? (
+            <div className="flex flex-wrap gap-2">
+            <Link href="/dashboard/projects?archived=1" className={buttonClasses({ variant: "secondary", size: "lg" })}>
+              Archived
+            </Link>
             <Link href="/dashboard/projects/new" className={buttonClasses({ variant: "primary", size: "lg", className: "px-5" })}>
               <Plus aria-hidden="true" className="size-4" />
               Add project
             </Link>
+            </div>
           ) : null
         }
       />
       <ProjectsToolbar params={params} total={result.total} />
       <SortLinks path="/dashboard/projects" params={params} name="Sort projects" columns={SORT_COLUMNS} sort={result.query.sort} dir={result.query.dir} />
       {result.rows.length === 0 ? (
-        <EmptyState className="bg-white">{filtered ? "No projects match these filters." : "No projects yet."}</EmptyState>
+        <EmptyState className="bg-white">{filtered ? "No projects match these filters." : params.archived ? "No archived projects." : "No projects yet."}</EmptyState>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {result.rows.map((p) => (

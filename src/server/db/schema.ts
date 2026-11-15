@@ -230,6 +230,8 @@ export const projects = pgTable(
     /** The project's payment plan (owner, 14 Nov 2026), used by New booking and the booking form. Empty = the standard plan. */
     paymentPlan: jsonb("payment_plan").$type<ProjectPaymentPlan>().notNull().default({}),
     status: projectStatus("status").notNull().default("active"),
+    /** Archived by the Super Admin (owner, 16 Nov 2026): hidden everywhere, history kept, can be restored. */
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
     ...timestamps,
   },
   // Names are unique ignoring case ("Serene Heights" = "serene heights").
@@ -484,6 +486,8 @@ export const units = pgTable(
     statusChangedAt: timestamp("status_changed_at", { withTimezone: true }).notNull().defaultNow(),
     comment: text("comment"),
     listedOn: date("listed_on"),
+    /** Archived by the Super Admin (owner, 16 Nov 2026): hidden everywhere, history kept, can be restored. */
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
     createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
     ...timestamps,
   },
@@ -930,9 +934,12 @@ export const leaveRequests = pgTable(
   "leave_requests",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "restrict" }),
+    /** The CRM user on leave; staff without a CRM login use `employeeProfileId` instead (15 Nov 2026). */
+    userId: uuid("user_id").references(() => users.id, { onDelete: "restrict" }),
+    /** An HR record without a CRM login whose leave HR or an Admin recorded (15 Nov 2026). */
+    employeeProfileId: uuid("employee_profile_id").references((): AnyPgColumn => employeeProfiles.id, { onDelete: "restrict" }),
+    /** Set when HR or an Admin recorded the leave for the person (phoned in sick, no CRM login). */
+    recordedById: uuid("recorded_by_id").references(() => users.id, { onDelete: "set null" }),
     type: leaveType("type").notNull(),
     startDate: date("start_date").notNull(),
     endDate: date("end_date").notNull(),
@@ -948,6 +955,8 @@ export const leaveRequests = pgTable(
   },
   (t) => [
     index("leave_requests_user_start_idx").on(t.userId, t.startDate),
+    index("leave_requests_profile_start_idx").on(t.employeeProfileId, t.startDate),
+    check("leave_requests_one_person", sql`(${t.userId} is null) <> (${t.employeeProfileId} is null)`),
     check("leave_requests_dates", sql`${t.startDate} <= ${t.endDate}`),
     check("leave_requests_days", sql`${t.days} = (${t.endDate} - ${t.startDate}) + 1`),
     check("leave_requests_path", sql`${t.approvalPath} in ('senior', 'staff')`),

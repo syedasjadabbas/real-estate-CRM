@@ -1,9 +1,9 @@
-import { and, asc, desc, eq, ilike, inArray, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import type { Database } from "@/server/db";
 import { appSettings, auditLogs, employeeProfiles, leaveDecisions, leaveRequests, rosterEntries, teamMembers, teams, users } from "@/server/db/schema";
-import type { Actor } from "@/server/auth/types";
+import { ROLE_LABELS, type Actor } from "@/server/auth/types";
 import { AppError, forbidden, notFound } from "@/server/errors";
 import { businessToday } from "@/modules/bookings/today";
 import { isUniqueViolation } from "@/modules/leads/support";
@@ -35,6 +35,12 @@ type DbOrTx = Database | Tx;
 
 const KEYS = { annualDays: "leave.annual_days", staffStep1: "leave.staff_step1", staffStep2: "leave.staff_step2", prorationMethod: "leave.proration_method" } as const;
 const requester = alias(users, "leave_requester");
+/** The HR record of staff without a CRM login (leave recorded for them, 15 Nov 2026). */
+const recordPerson = alias(employeeProfiles, "leave_record_person");
+
+/** Who a leave request is for: a CRM user, or an HR record without a login. */
+export type LeaveSubject = { userId: string; profileId?: undefined } | { profileId: string; userId?: undefined };
+const subjectWhere = (s: LeaveSubject) => (s.userId ? eq(leaveRequests.userId, s.userId) : eq(leaveRequests.employeeProfileId, s.profileId!));
 const deciderUser = alias(users, "leave_decider");
 const fieldError = (field: string, message: string) => new AppError("VALIDATION_FAILED", "Check the highlighted fields.", { fields: { [field]: message } });
 
@@ -97,9 +103,18 @@ export async function updateLeaveSettings(db: Database, actor: Actor, input: unk
 
 /** Allowance, granted, pending and remaining days for one person and calendar year. */
 export async function leaveBalance(db: DbOrTx, userId: string, year: number) {
+  return leaveBalanceFor(db, { userId }, year);
+}
+
+/** The same, for a CRM user or an HR record without a login. */
+export async function leaveBalanceFor(db: DbOrTx, subject: LeaveSubject, year: number) {
   // Sequential on purpose: inside a transaction all queries share one connection.
   const settings = await getLeaveSettings(db);
-  const [profile] = await db.select({ joiningDate: employeeProfiles.joiningDate }).from(employeeProfiles).where(eq(employeeProfiles.userId, userId)).limit(1);
+  const [profile] = await db
+    .select({ joiningDate: employeeProfiles.joiningDate })
+    .from(employeeProfiles)
+    .where(subject.userId ? eq(employeeProfiles.userId, subject.userId) : eq(employeeProfiles.id, subject.profileId!))
+    .limit(1);
   const [sums] = await db
       .select({
         granted: sql<number>`coalesce(sum(${leaveRequests.days}) filter (where ${leaveRequests.status} in ('approved', 'cancel_requested')), 0)::int`,
@@ -108,7 +123,7 @@ export async function leaveBalance(db: DbOrTx, userId: string, year: number) {
       })
       .from(leaveRequests)
       // Held cross-year requests (Q17, C-13) count against neither year until the rule is confirmed.
-      .where(and(eq(leaveRequests.userId, userId), sql`extract(year from ${leaveRequests.startDate}) = ${year}`, sql`extract(year from ${leaveRequests.endDate}) = ${year}`));
+      .where(and(subjectWhere(subject), sql`extract(year from ${leaveRequests.startDate}) = ${year}`, sql`extract(year from ${leaveRequests.endDate}) = ${year}`));
   const allowance = proratedAllowance(settings.annualDays, profile?.joiningDate ?? null, year, settings.prorationMethod);
   return {
     year,
@@ -184,6 +199,101 @@ export async function submitLeave(db: Database, actor: Actor, input: unknown) {
   });
 }
 
+// ─── Recording leave for someone ─────────────────────────────────────────────
+
+/** HR, Admins and Super Admins record leave for others (owner, 15 Nov 2026). */
+export const canRecordLeave = (actor: Pick<Actor, "role">) => actor.role === "hr" || actor.role === "admin" || actor.role === "super_admin";
+
+const recordSchema = z
+  .object({
+    /** "user:<id>" for a CRM user, "record:<id>" for an HR record without a login. */
+    person: z.string().regex(/^(user|record):[0-9a-f-]{36}$/i, "Choose the person"),
+    type: z.enum(LEAVE_TYPES, "Choose a leave type"),
+    startDate: dateString("first"),
+    endDate: dateString("last"),
+    reason: z.string().trim().min(1, "Say why it is recorded here, e.g. phoned in sick").max(500, "Use at most 500 characters"),
+  })
+  .strict()
+  .refine((v) => v.startDate <= v.endDate, { path: ["endDate"], message: "The last day must be on or after the first day" });
+
+/** Everyone leave can be recorded for: active CRM users and active HR records without a login. */
+export async function leavePeople(db: Database, actor: Actor) {
+  if (!canRecordLeave(actor)) return [];
+  const [accounts, records] = await Promise.all([
+    db.select({ id: users.id, name: users.name, role: users.role }).from(users).where(eq(users.status, "active")).orderBy(asc(sql`lower(${users.name})`)),
+    db
+      .select({ id: employeeProfiles.id, name: employeeProfiles.fullName })
+      .from(employeeProfiles)
+      .where(and(isNull(employeeProfiles.userId), eq(employeeProfiles.status, "active")))
+      .orderBy(asc(sql`lower(${employeeProfiles.fullName})`)),
+  ]);
+  return [
+    ...accounts.filter((a) => a.id !== actor.id).map((a) => ({ value: `user:${a.id}`, label: `${a.name} · ${ROLE_LABELS[a.role]}` })),
+    ...records.map((r) => ({ value: `record:${r.id}`, label: `${r.name ?? "Unnamed record"} · No CRM login` })),
+  ];
+}
+
+/**
+ * Records leave for another person (owner, 15 Nov 2026): someone who phoned in sick, or staff with
+ * no CRM login who can't ask for leave themselves. The same checks as a request apply (overlap,
+ * balance, cross-year hold). A Super Admin's entry, and an Admin's entry for staff (agents,
+ * accountants, staff without a login), is approved at once; anything else waits for the normal
+ * approvals. Nobody records their own leave here.
+ */
+export async function recordLeave(db: Database, actor: Actor, input: unknown) {
+  if (!canRecordLeave(actor)) throw forbidden();
+  const data = parse(recordSchema, input);
+  const [kind, id] = data.person.split(":") as ["user" | "record", string];
+  if (kind === "user" && id === actor.id) throw fieldError("person", "Request your own leave from My workplace.");
+  const held = isCrossYear(data);
+  const days = calendarDays(data.startDate, data.endDate);
+  return db.transaction(async (tx) => {
+    let subject: LeaveSubject;
+    let approvalPath: "staff" | "senior";
+    if (kind === "user") {
+      const [u] = await tx.select({ id: users.id, role: users.role, status: users.status }).from(users).where(eq(users.id, id)).for("update");
+      if (!u || u.status !== "active") throw fieldError("person", "Choose an active person");
+      subject = { userId: u.id };
+      approvalPath = approvalPathFor(u.role);
+    } else {
+      const [r] = await tx.select({ id: employeeProfiles.id, userId: employeeProfiles.userId, status: employeeProfiles.status }).from(employeeProfiles).where(eq(employeeProfiles.id, id)).for("update");
+      if (!r || r.userId || r.status !== "active") throw fieldError("person", "Choose an active person");
+      subject = { profileId: r.id };
+      approvalPath = "staff";
+    }
+    const clash = await tx
+      .select({ id: leaveRequests.id })
+      .from(leaveRequests)
+      .where(and(subjectWhere(subject), inArray(leaveRequests.status, HOLDING_STATUSES), sql`${leaveRequests.startDate} <= ${data.endDate} and ${data.startDate} <= ${leaveRequests.endDate}`))
+      .limit(1);
+    if (clash.length) throw fieldError("startDate", "This person already has leave requested or approved on some of these days.");
+    const balance = held ? null : await leaveBalanceFor(tx, subject, yearOf(data.startDate));
+    if (balance && days > balance.remaining) {
+      throw fieldError("endDate", `This is ${days} day${days === 1 ? "" : "s"}, but only ${Math.max(0, balance.remaining)} remain for ${balance.year}.`);
+    }
+    const approveNow = !held && (actor.role === "super_admin" || (actor.role === "admin" && approvalPath === "staff"));
+    const now = new Date();
+    const [row] = await tx
+      .insert(leaveRequests)
+      .values({
+        userId: subject.userId ?? null,
+        employeeProfileId: subject.profileId ?? null,
+        recordedById: actor.id,
+        type: data.type,
+        startDate: data.startDate,
+        endDate: data.endDate,
+        days,
+        reason: data.reason,
+        approvalPath,
+        ...(approveNow ? { status: "approved" as const, decidedAt: now } : {}),
+      })
+      .returning({ id: leaveRequests.id });
+    const rosterDays = approveNow ? await writeRoster(tx, actor, { id: row.id, userId: subject.userId ?? null, startDate: data.startDate, endDate: data.endDate }) : 0;
+    await audit(tx, actor, "leave.record", row.id, { person: data.person, type: data.type, startDate: data.startDate, endDate: data.endDate, days, held, approved: approveNow, rosterDays, reason: data.reason });
+    return { id: row.id, days, held, status: approveNow ? ("approved" as const) : ("pending" as const) };
+  });
+}
+
 async function loadRequest(db: DbOrTx, id: string, lock = false) {
   if (!/^[0-9a-f-]{36}$/i.test(id)) throw notFound("Leave request");
   const q = db.select().from(leaveRequests).where(eq(leaveRequests.id, id)).limit(1);
@@ -219,7 +329,7 @@ async function stepOneApproverId(db: DbOrTx, requestId: string) {
  * Whether `actor` may decide the request's current approval step. Nobody approves their own leave,
  * and the two staff steps need two different people (F-6), even when both steps are the same role.
  */
-export async function canDecideStep(db: DbOrTx, actor: Actor, request: { id: string; userId: string; approvalPath: string; currentStep: number; status: string; startDate: string; endDate: string }, settings: LeaveSettings) {
+export async function canDecideStep(db: DbOrTx, actor: Actor, request: { id: string; userId: string | null; approvalPath: string; currentStep: number; status: string; startDate: string; endDate: string }, settings: LeaveSettings) {
   if (request.status !== "pending" || actor.id === request.userId) return false;
   if (isCrossYear(request)) return false;
   if (request.approvalPath === "senior") return actor.role === "super_admin";
@@ -227,23 +337,28 @@ export async function canDecideStep(db: DbOrTx, actor: Actor, request: { id: str
   if (request.currentStep === 2 && (await stepOneApproverId(db, request.id)) === actor.id) return false;
   if (approver === "hr") return actor.role === "hr";
   if (approver === "admin") return actor.role === "admin" || actor.role === "super_admin";
-  return actor.role === "manager" && (await managesRequester(db, actor.id, request.userId));
+  // The team admin: the Admin set as manager of one of the requester's teams (the Manager role merged into Admin, 13 Nov 2026).
+  const teamAdminRole = actor.role === "admin" || actor.role === "manager" || actor.role === "super_admin";
+  return teamAdminRole && request.userId !== null && (await managesRequester(db, actor.id, request.userId));
 }
 
 /** Writes "On leave" for each day (Q18) on the person's first active team, without replacing a day a manager already set (C-14). */
-async function writeRoster(tx: Tx, actor: Actor, request: { id: string; userId: string; startDate: string; endDate: string }) {
+async function writeRoster(tx: Tx, actor: Actor, request: { id: string; userId: string | null; startDate: string; endDate: string }) {
+  // Staff without a CRM login are on no team roster.
+  if (!request.userId) return 0;
+  const userId = request.userId;
   const [team] = await tx
     .select({ id: teams.id })
     .from(teamMembers)
     .innerJoin(teams, eq(teams.id, teamMembers.teamId))
-    .where(and(eq(teamMembers.userId, request.userId), eq(teams.isActive, true)))
+    .where(and(eq(teamMembers.userId, userId), eq(teams.isActive, true)))
     .orderBy(asc(teams.name))
     .limit(1);
   if (!team) return 0;
   const days = datesOf(request.startDate, request.endDate);
   const inserted = await tx
     .insert(rosterEntries)
-    .values(days.map((date) => ({ teamId: team.id, userId: request.userId, date, status: "on_leave" as const, setById: actor.id, leaveRequestId: request.id })))
+    .values(days.map((date) => ({ teamId: team.id, userId, date, status: "on_leave" as const, setById: actor.id, leaveRequestId: request.id })))
     .onConflictDoNothing({ target: [rosterEntries.userId, rosterEntries.date] })
     .returning({ id: rosterEntries.id });
   return inserted.length;
@@ -356,8 +471,10 @@ export async function cancelApprovedLeave(db: Database, actor: Actor, id: string
 const listSelect = {
   id: leaveRequests.id,
   userId: leaveRequests.userId,
-  userName: requester.name,
+  employeeProfileId: leaveRequests.employeeProfileId,
+  userName: sql<string>`coalesce(${requester.name}, ${recordPerson.fullName})`,
   userRole: requester.role,
+  recordedById: leaveRequests.recordedById,
   type: leaveRequests.type,
   startDate: leaveRequests.startDate,
   endDate: leaveRequests.endDate,
@@ -368,7 +485,7 @@ const listSelect = {
   currentStep: leaveRequests.currentStep,
   createdAt: leaveRequests.createdAt,
 };
-export type LeaveRow = { id: string; userId: string; userName: string; userRole: string; type: "annual" | "medical"; startDate: string; endDate: string; days: number; reason: string | null; status: LeaveStatus; approvalPath: string; currentStep: number; createdAt: Date };
+export type LeaveRow = { id: string; userId: string | null; employeeProfileId: string | null; recordedById: string | null; userName: string; userRole: string | null; type: "annual" | "medical"; startDate: string; endDate: string; days: number; reason: string | null; status: LeaveStatus; approvalPath: string; currentStep: number; createdAt: Date };
 
 /** The signed-in person's requests and balance for a year, and the years they have requests in. */
 export async function myLeave(db: Database, actor: Actor, year = yearOf(businessToday())) {
@@ -377,7 +494,7 @@ export async function myLeave(db: Database, actor: Actor, year = yearOf(business
     db
       .select(listSelect)
       .from(leaveRequests)
-      .innerJoin(requester, eq(requester.id, leaveRequests.userId))
+      .leftJoin(requester, eq(requester.id, leaveRequests.userId)).leftJoin(recordPerson, eq(recordPerson.id, leaveRequests.employeeProfileId))
       .where(and(eq(leaveRequests.userId, actor.id), sql`extract(year from ${leaveRequests.startDate}) = ${year}`))
       .orderBy(desc(leaveRequests.startDate)),
     leaveYears(db, eq(leaveRequests.userId, actor.id)),
@@ -390,7 +507,7 @@ export const LEAVE_STATUS_FILTERS = ["pending", "approved", "rejected", "withdra
 export const LEAVE_SORT_COLUMNS = ["employee", "type", "dates", "status", "requested"] as const;
 export type LeaveSortColumn = (typeof LEAVE_SORT_COLUMNS)[number];
 const LEAVE_SORTS: Record<LeaveSortColumn, SQL> = {
-  employee: sql`lower(${requester.name})`,
+  employee: sql`lower(coalesce(${requester.name}, ${recordPerson.fullName}))`,
   type: sql`${leaveRequests.type}`,
   dates: sql`${leaveRequests.startDate}`,
   status: sql`${leaveRequests.status}`,
@@ -438,16 +555,16 @@ export async function leaveOverview(db: Database, actor: Actor, year = yearOf(bu
     sql`extract(year from ${leaveRequests.startDate}) = ${year}`,
     query.status ? eq(leaveRequests.status, query.status) : undefined,
     query.type ? eq(leaveRequests.type, query.type) : undefined,
-    term ? or(ilike(requester.name, term), ilike(leaveRequests.reason, term)) : undefined,
+    term ? or(ilike(requester.name, term), ilike(recordPerson.fullName, term), ilike(leaveRequests.reason, term)) : undefined,
   );
-  const [{ total }] = await db.select({ total: sql<number>`count(*)::int` }).from(leaveRequests).innerJoin(requester, eq(requester.id, leaveRequests.userId)).where(where);
+  const [{ total }] = await db.select({ total: sql<number>`count(*)::int` }).from(leaveRequests).leftJoin(requester, eq(requester.id, leaveRequests.userId)).leftJoin(recordPerson, eq(recordPerson.id, leaveRequests.employeeProfileId)).where(where);
   const pageCount = Math.max(1, Math.ceil(total / LEAVE_PAGE_SIZE));
   const page = Math.min(query.page, pageCount);
   const column = LEAVE_SORTS[query.sort];
   const rows = (await db
     .select(listSelect)
     .from(leaveRequests)
-    .innerJoin(requester, eq(requester.id, leaveRequests.userId))
+    .leftJoin(requester, eq(requester.id, leaveRequests.userId)).leftJoin(recordPerson, eq(recordPerson.id, leaveRequests.employeeProfileId))
     .where(where)
     .orderBy(query.dir === "asc" ? sql`${column} asc` : sql`${column} desc`, desc(leaveRequests.createdAt), desc(leaveRequests.id))
     // A CSV download takes every matching request (15 Nov 2026).
@@ -457,7 +574,7 @@ export async function leaveOverview(db: Database, actor: Actor, year = yearOf(bu
   const open = (await db
     .select(listSelect)
     .from(leaveRequests)
-    .innerJoin(requester, eq(requester.id, leaveRequests.userId))
+    .leftJoin(requester, eq(requester.id, leaveRequests.userId)).leftJoin(recordPerson, eq(recordPerson.id, leaveRequests.employeeProfileId))
     .where(and(scope, inArray(leaveRequests.status, ["pending", "cancel_requested"])))
     .orderBy(asc(leaveRequests.createdAt))) as LeaveRow[];
   const decidable: LeaveRow[] = [];
@@ -490,8 +607,17 @@ export async function leaveBalances(db: Database, actor: Actor, year = yearOf(bu
       : new Set<string>();
     people = people.filter((p) => members.has(p.id));
   }
-  const rows = [];
-  for (const p of people) rows.push({ ...p, ...(await leaveBalance(db, p.id, year)) });
+  const rows: ({ id: string; name: string; role: string | null; noLogin: boolean } & Awaited<ReturnType<typeof leaveBalanceFor>>)[] = [];
+  for (const p of people) rows.push({ ...p, noLogin: false, ...(await leaveBalanceFor(db, { userId: p.id }, year)) });
+  // HR records without a CRM login (15 Nov 2026): their leave is recorded by HR or an Admin.
+  if (canViewAllLeave(actor)) {
+    const records = await db
+      .select({ id: employeeProfiles.id, name: employeeProfiles.fullName })
+      .from(employeeProfiles)
+      .where(and(isNull(employeeProfiles.userId), eq(employeeProfiles.status, "active")))
+      .orderBy(asc(sql`lower(${employeeProfiles.fullName})`));
+    for (const r of records) rows.push({ id: r.id, name: r.name ?? "Unnamed record", role: null, noLogin: true, ...(await leaveBalanceFor(db, { profileId: r.id }, year)) });
+  }
   return { year, rows };
 }
 
