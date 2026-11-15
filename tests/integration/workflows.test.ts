@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { and, eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { advanceBooking, createBooking } from "@/modules/bookings/commands";
+import { createBooking } from "@/modules/bookings/commands";
 import { getBookingDetail } from "@/modules/bookings/queries";
 import { dashboardData } from "@/modules/dashboard/queries";
 import { listDocuments, openDocument, uploadDocument } from "@/modules/documents/service";
@@ -22,6 +22,7 @@ import type { Database } from "@/server/db";
 import type { Actor } from "@/server/auth/types";
 import { AppError } from "@/server/errors";
 import { readObject } from "@/server/storage/local";
+import { mp3Seconds } from "../support/audio";
 import { connectTestDb, hasTestDb, leadInput, resetDb, seedFixture, type Fixture } from "../support/db";
 
 /**
@@ -38,9 +39,9 @@ const code = async (p: Promise<unknown>) => {
     throw e;
   }
 };
+/** A real 61-second MP3 with a marker byte inside a frame, for the byte-range check. */
 const mp3 = () => {
-  const b = new Uint8Array(4096);
-  b.set([0x49, 0x44, 0x33, 4, 0, 0]);
+  const b = mp3Seconds(61);
   b[4000] = 9;
   return b;
 };
@@ -103,7 +104,7 @@ describe.skipIf(!hasTestDb)("End-to-end workflows (PostgreSQL integration)", () 
     expect(detail.activities.find((a) => a.type === "stage_change")?.data).toMatchObject({ from: "new_lead", to: "contacted" });
 
     // 4. Agent uploads a call recording and a document; the manager can play / download both, other users cannot.
-    const rec = await uploadRecording(db, f.actors.agent1, leadId, { bytes: mp3(), name: "call 1.mp3", durationSec: "61" });
+    const rec = await uploadRecording(db, f.actors.agent1, leadId, { bytes: mp3(), name: "call 1.mp3" });
     const doc = await uploadDocument(db, f.actors.agent1, leadId, { bytes: pdf(), name: "brochure.pdf" });
     const recFile = await openRecording(db, f.actors.manager, rec.id);
     expect(await bytesOf(readObject(recFile.storageKey))).toEqual(mp3());
@@ -182,7 +183,6 @@ describe.skipIf(!hasTestDb)("End-to-end workflows (PostgreSQL integration)", () 
     if (lead.outcome !== "created") throw new Error("setup");
     const { unitId } = await createUnit(db, f.actors.superAdmin, { projectId: f.projectId, unitNo: "WF-1", areaSqft: "500", basePrice: "1" });
     const { bookingId } = await createBooking(db, f.actors.agent1, { projectId: f.projectId, leadId: lead.leadId, unitId, ratePerSqft: "25000", tokenAmount: "500000" });
-    await advanceBooking(db, f.actors.superAdmin, bookingId, { toStage: "token_pending" });
     const day = today();
     await recordPayment(db, accountant, { bookingId, type: "token", amount: "500000", receivedOn: day, methodId: cashId });
     const second = await recordPayment(db, accountant, { bookingId, type: "down_payment", amount: "1000000", receivedOn: day, methodId: cashId });

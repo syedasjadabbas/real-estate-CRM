@@ -2,12 +2,12 @@ import type { Database } from "@/server/db";
 import type { Actor } from "@/server/auth/types";
 import { AppError, forbidden } from "@/server/errors";
 import { assertCanUploadTo, hideLeadFile, listLeadFiles, openLeadFile, saveLeadFile, type LeadFileRow } from "@/modules/files/lead-files";
+import { measureDuration } from "./duration";
 import {
   cleanFileName,
   extensionOf,
   formatMatchesExtension,
   MAX_RECORDING_BYTES,
-  parseDuration,
   RECORDING_EXTENSIONS,
   RECORDING_FORMATS,
   sniffAudio,
@@ -24,6 +24,7 @@ export async function uploadRecording(
   db: Database,
   actor: Actor,
   leadId: string,
+  /** `durationSec` from the browser is ignored: the server reads it from the file (15 Nov 2026). */
   input: { bytes: Uint8Array; name: string; durationSec?: unknown },
 ) {
   await assertCanUploadTo(db, actor, leadId);
@@ -40,7 +41,7 @@ export async function uploadRecording(
     name,
     ext,
     mime: RECORDING_FORMATS[format as RecordingFormat].mime,
-    durationSec: parseDuration(input.durationSec),
+    durationSec: measureDuration(input.bytes, format as RecordingFormat),
     auditAction: "lead.recording_upload",
   });
 }

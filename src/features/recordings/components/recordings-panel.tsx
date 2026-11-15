@@ -19,29 +19,6 @@ import {
   RECORDING_EXTENSIONS,
 } from "@/modules/recordings/validation";
 
-/** Reads the duration from the file's audio metadata in the browser; null when the browser can't. */
-function measureDuration(file: File): Promise<number | null> {
-  return new Promise((resolve) => {
-    const url = URL.createObjectURL(file);
-    const audio = new Audio();
-    const done = (value: number | null) => {
-      URL.revokeObjectURL(url);
-      resolve(value);
-    };
-    const timer = setTimeout(() => done(null), 5000);
-    audio.preload = "metadata";
-    audio.onloadedmetadata = () => {
-      clearTimeout(timer);
-      done(Number.isFinite(audio.duration) ? Math.round(audio.duration) : null);
-    };
-    audio.onerror = () => {
-      clearTimeout(timer);
-      done(null);
-    };
-    audio.src = url;
-  });
-}
-
 /**
  * Call recordings on a lead (FR-038). Agents record calls on their company Android phones with the
  * phone's built-in recorder, then upload the file here. Playback streams from the authenticated
@@ -83,12 +60,9 @@ export function RecordingsPanel({
       setRemoving(null);
     }
   };
-  // Measured when the file is chosen; the upload never waits for it (null = not known).
-  const duration = useRef<{ file: File; seconds: number | null } | null>(null);
 
   const choose = (f: File | null) => {
     setMsg(null);
-    duration.current = null;
     if (!f) return setFile(null);
     if (!(RECORDING_EXTENSIONS as string[]).includes(extensionOf(f.name))) {
       setFile(null);
@@ -101,9 +75,6 @@ export function RecordingsPanel({
       return;
     }
     setFile(f);
-    void measureDuration(f).then((seconds) => {
-      duration.current = { file: f, seconds };
-    });
   };
 
   const upload = async () => {
@@ -113,17 +84,21 @@ export function RecordingsPanel({
     try {
       const form = new FormData();
       form.set("file", file);
-      const measured = duration.current?.file === file ? duration.current.seconds : null;
-      if (measured !== null) form.set("durationSec", String(measured));
+      // The server reads the call's duration from the file itself (15 Nov 2026).
       const res = await fetch(`/api/v1/leads/${leadId}/recordings`, { method: "POST", body: form });
-      const json = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+      const json = (await res.json().catch(() => null)) as { data?: { durationSec: number | null }; error?: { message?: string } } | null;
       if (!res.ok) {
         setMsg({ text: json?.error?.message ?? "Upload failed. Try again.", ok: false });
         return;
       }
       setFile(null);
       if (input.current) input.current.value = "";
-      setMsg({ text: "Recording uploaded.", ok: true });
+      const sec = json?.data?.durationSec ?? null;
+      setMsg(
+        sec === null
+          ? { text: "Recording uploaded, but its length couldn't be read, so it adds no call minutes. Try exporting it as MP3 or M4A.", ok: false }
+          : { text: `Recording uploaded · call length ${formatClock(sec)}.`, ok: true },
+      );
       router.refresh();
     } catch {
       setMsg({ text: "Upload failed. Check your connection and try again.", ok: false });
@@ -162,7 +137,7 @@ export function RecordingsPanel({
                 </span>
               </div>
               <p className="mt-0.5 text-[11px] text-zinc-500">
-                {r.uploadedBy ?? "—"} · {formatDateTime(r.createdAt)} · {formatBytes(r.sizeBytes)} · {formatClock(r.durationSec)}
+                {r.uploadedBy ?? "—"} · {formatDateTime(r.createdAt)} · {formatBytes(r.sizeBytes)} · {r.durationSec === null ? <span className="text-amber-700" title="The CRM couldn't read this file's length, so it adds no call minutes.">duration unknown</span> : formatClock(r.durationSec)}
               </p>
               {canPlay ? (
                 <audio controls preload="none" src={`/api/v1/recordings/${r.id}`} className="mt-2 h-9 w-full" aria-label={`Play ${r.name}`}>

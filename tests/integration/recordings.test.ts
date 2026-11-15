@@ -11,6 +11,7 @@ import type { Database } from "@/server/db";
 import type { Actor } from "@/server/auth/types";
 import { AppError } from "@/server/errors";
 import { readObject } from "@/server/storage/local";
+import { mp3Seconds, wavSeconds } from "../support/audio";
 import { connectTestDb, hasTestDb, leadInput, resetDb, seedFixture, type Fixture } from "../support/db";
 
 const errorCode = async (p: Promise<unknown>) => {
@@ -29,12 +30,7 @@ const mp3 = (size = 2048) => {
   b.set([0x49, 0x44, 0x33, 0x04, 0, 0]);
   return b;
 };
-const wav = () => {
-  const b = new Uint8Array(512);
-  b.set([..."RIFF"].map((c) => c.charCodeAt(0)), 0);
-  b.set([..."WAVE"].map((c) => c.charCodeAt(0)), 8);
-  return b;
-};
+const wav = () => wavSeconds(3);
 
 describe.skipIf(!hasTestDb)("Call recordings (PostgreSQL integration)", () => {
   let db: Database;
@@ -84,11 +80,12 @@ describe.skipIf(!hasTestDb)("Call recordings (PostgreSQL integration)", () => {
 
   describe("upload", () => {
     it("stores the file privately, records metadata, timeline, audit and first touch", async () => {
-      const bytes = mp3();
-      const r = await uploadRecording(db, f.actors.agent1, leadId, { bytes, name: "C:\\calls\\Call 0300.mp3", durationSec: "95.4" });
-      expect(r).toMatchObject({ name: "Call 0300.mp3", sizeBytes: 2048, durationSec: 95 });
+      // The browser's figure is ignored: the server reads 95 s from the file itself (15 Nov 2026).
+      const bytes = mp3Seconds(95);
+      const r = await uploadRecording(db, f.actors.agent1, leadId, { bytes, name: "C:\\calls\\Call 0300.mp3", durationSec: "10" });
+      expect(r).toMatchObject({ name: "Call 0300.mp3", sizeBytes: bytes.length, durationSec: 95 });
       const [row] = await db.select().from(files).where(eq(files.id, r.id));
-      expect(row).toMatchObject({ leadId, kind: "call_recording", mime: "audio/mpeg", sizeBytes: 2048, durationSec: 95, uploadedById: f.actors.agent1.id });
+      expect(row).toMatchObject({ leadId, kind: "call_recording", mime: "audio/mpeg", sizeBytes: bytes.length, durationSec: 95, uploadedById: f.actors.agent1.id });
       expect(row.storageKey).toMatch(/^recordings\/\d{4}\/\d{2}\/[0-9a-f-]{36}\.mp3$/);
       expect(row.sha256).toMatch(/^[0-9a-f]{64}$/);
       const onDisk = await storedFiles();
@@ -146,9 +143,12 @@ describe.skipIf(!hasTestDb)("Call recordings (PostgreSQL integration)", () => {
       expect(await storedFiles()).toHaveLength(0);
     });
 
-    it("ignores a browser duration that is out of range", async () => {
+    it("reads the duration from the file and ignores the browser's figure", async () => {
       const r = await uploadRecording(db, f.actors.agent1, leadId, { bytes: wav(), name: "a.wav", durationSec: "999999" });
-      expect(r.durationSec).toBeNull();
+      expect(r.durationSec).toBe(3);
+      // A file the server can't time still uploads, with the duration unknown.
+      const unknown = await uploadRecording(db, f.actors.agent1, leadId, { bytes: mp3(), name: "b.mp3", durationSec: "61" });
+      expect(unknown.durationSec).toBeNull();
     });
   });
 
