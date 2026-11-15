@@ -14,6 +14,7 @@ import { unitPricePerSqft } from "./plan";
 import { getProposalSettings } from "./settings";
 import { loadAccessibleTask } from "./support";
 import { taskListQuerySchema } from "./validation";
+import { inTeam, onDays, teamFilterOptions } from "@/server/list-filters";
 
 const assignee = alias(users, "assignee");
 const creator = alias(users, "creator");
@@ -62,6 +63,8 @@ export async function listTasks(db: Database, actor: Actor, rawQuery: unknown, n
     query.type ? eq(tasks.type, query.type) : opts.printablesOnly ? ne(tasks.type, "general") : undefined,
     query.assignee ? eq(tasks.assigneeId, query.assignee === "me" ? actor.id : query.assignee) : undefined,
     query.overdue ? overdueCondition(now) : undefined,
+    query.team ? inTeam(tasks.assigneeId, query.team) : undefined,
+    onDays(tasks.dueAt, query.from, query.to),
     term ? or(ilike(tasks.title, term), ilike(leads.name, term), ilike(leads.code, term)) : undefined,
   );
   const [{ total }] = await db.select({ total: count() }).from(tasks).leftJoin(leads, eq(leads.id, tasks.leadId)).where(where);
@@ -333,3 +336,18 @@ export async function openTodos(db: Database, actor: Actor, requestedPage: unkno
   return { count: n, rows, page, pageCount, generatedAt: now.getTime() };
 }
 export type TodoRow = Awaited<ReturnType<typeof openTodos>>["rows"][number];
+
+/** Counts for the Tasks screen cards (16 Nov 2026), in the actor's scope; each card opens the matching filter. */
+export async function taskCounts(db: Database, actor: Actor, now = new Date()) {
+  if (!canDoTask(actor, "view")) return { open: 0, inProgress: 0, overdue: 0, done: 0 };
+  const members = await teamMemberIds(db, actor);
+  const n = (cond: SQL) => sql<number>`count(*) filter (where ${cond})`.mapWith(Number);
+  const [row] = await db
+    .select({ open: n(eq(tasks.status, "open")), inProgress: n(eq(tasks.status, "in_progress")), overdue: n(overdueCondition(now)), done: n(eq(tasks.status, "done")) })
+    .from(tasks)
+    .where(and(taskScopeFilter(actor, members), ne(tasks.type, "general")));
+  return row;
+}
+
+/** Teams for the Tasks Team filter. */
+export const taskTeamOptions = (db: Database, actor: Actor) => teamFilterOptions(db, actor, taskScope(actor.role));

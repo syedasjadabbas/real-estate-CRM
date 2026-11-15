@@ -100,19 +100,25 @@ export function MiniStat({
   value,
   caption,
   className,
+  href,
+  active,
 }: {
   label: string;
   value: ReactNode;
   caption?: ReactNode;
   className?: string;
+  /** With `href` the card opens that filtered list; `active` marks the filter now applied. */
+  href?: string;
+  active?: boolean;
 }) {
-  return (
-    <div
-      className={cn(
-        "rounded-2xl border border-zinc-200/80 bg-white px-3 py-2.5 shadow-hairline",
-        className,
-      )}
-    >
+  const box = cn(
+    "rounded-2xl border border-zinc-200/80 bg-white px-3 py-2.5 shadow-hairline",
+    href && "block transition-colors hover:border-brand/40 hover:bg-brand-50/30 focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:outline-none",
+    active && "border-brand bg-brand-50/50",
+    className,
+  );
+  const body = (
+    <>
       <p className="text-[9px] leading-[13.5px] font-black tracking-[0.05em] text-zinc-400 uppercase">
         {label}
       </p>
@@ -120,7 +126,14 @@ export function MiniStat({
       {caption ? (
         <p className="text-[10px] leading-[15px] font-semibold text-zinc-600">{caption}</p>
       ) : null}
-    </div>
+    </>
+  );
+  return href ? (
+    <Link href={href} aria-current={active ? "true" : undefined} className={box}>
+      {body}
+    </Link>
+  ) : (
+    <div className={box}>{body}</div>
   );
 }
 

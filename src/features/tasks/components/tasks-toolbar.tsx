@@ -14,7 +14,7 @@ import { PRINTABLE_TASK_TYPES, TASK_STATUSES, TASK_STATUS_LABELS, TASK_TYPE_LABE
 import { activeTaskFilters, TASK_FILTER_KEYS } from "../url";
 
 /** Search + Filters drawer (Status, Type, Assignee, Overdue) + Clear + count pill, in the Leads toolbar style. */
-export function TasksToolbar({ params, total, assignees }: { params: Record<string, string>; total: number; assignees: { id: string; name: string }[] }) {
+export function TasksToolbar({ params, total, assignees, teams = [] }: { params: Record<string, string>; total: number; assignees: { id: string; name: string }[]; teams?: { id: string; name: string }[] }) {
   const router = useRouter();
   const pathname = usePathname();
   const [pending, startTransition] = useTransition();
@@ -31,7 +31,7 @@ export function TasksToolbar({ params, total, assignees }: { params: Record<stri
   };
   const clearFilters = () => go(Object.fromEntries(TASK_FILTER_KEYS.map((k) => [k, null])));
 
-  const select = (key: "status" | "type" | "assignee", label: string, options: { value: string; label: string }[]) => (
+  const select = (key: "status" | "type" | "assignee" | "team", label: string, options: { value: string; label: string }[]) => (
     <Field label={label}>
       {(id) => (
         <select id={id} value={params[key] ?? ""} onChange={(e) => go({ [key]: e.target.value || null })} className={selectClass} disabled={pending}>
@@ -110,6 +110,25 @@ export function TasksToolbar({ params, total, assignees }: { params: Record<stri
           {select("status", "Status", TASK_STATUSES.map((s) => ({ value: s, label: TASK_STATUS_LABELS[s] })))}
           {select("type", "Type", PRINTABLE_TASK_TYPES.map((t) => ({ value: t, label: TASK_TYPE_LABELS[t] })))}
           {select("assignee", "Assignee", [{ value: "me", label: "Assigned to me" }, ...assignees.map((a) => ({ value: a.id, label: a.name }))])}
+          {teams.length ? select("team", "Team", teams.map((t) => ({ value: t.id, label: t.name }))) : null}
+          <div className="grid grid-cols-2 gap-3">
+            {(["from", "to"] as const).map((key) => (
+              <Field key={key} label={key === "from" ? "Due from" : "Due to"}>
+                {(id) => (
+                  <input
+                    id={id}
+                    type="date"
+                    value={params[key] ?? ""}
+                    max={key === "from" ? params.to : undefined}
+                    min={key === "to" ? params.from : undefined}
+                    onChange={(e) => go({ [key]: e.target.value || null })}
+                    className={selectClass}
+                    disabled={pending}
+                  />
+                )}
+              </Field>
+            ))}
+          </div>
           <button
             type="button"
             aria-pressed={params.overdue === "1"}

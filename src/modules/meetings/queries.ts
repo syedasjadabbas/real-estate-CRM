@@ -10,6 +10,8 @@ import { MEETING_PAGE_SIZE } from "./constants";
 import { loadAccessibleMeeting } from "./commands";
 import { ORGANIZER_ROLES, canAccessMeeting, canDoMeeting, meetingScope } from "./policy";
 import { meetingListQuerySchema } from "./validation";
+import { businessToday } from "@/modules/bookings/today";
+import { inTeam, onDays, teamFilterOptions } from "@/server/list-filters";
 
 const organizer = alias(users, "organizer");
 const actorUser = alias(users, "history_actor");
@@ -57,6 +59,8 @@ export async function listMeetings(db: Database, actor: Actor, rawQuery: unknown
     query.organizer ? eq(meetings.organizerId, query.organizer === "me" ? actor.id : query.organizer) : undefined,
     query.lead ? eq(meetings.leadId, query.lead) : undefined,
     query.overdue ? overdueCondition(now) : undefined,
+    query.team ? inTeam(meetings.organizerId, query.team) : undefined,
+    onDays(meetings.startsAt, query.from, query.to),
     term ? or(ilike(meetings.title, term), ilike(leads.name, term), ilike(leads.code, term)) : undefined,
   );
   const [{ total }] = await db.select({ total: count() }).from(meetings).innerJoin(leads, eq(leads.id, meetings.leadId)).where(where);
@@ -194,3 +198,25 @@ export async function meetingsForLead(db: Database, actor: Actor, leadId: string
   if (!canDoMeeting(actor, "view")) return [];
   return (await listMeetings(db, actor, { lead: leadId, sort: "startsAt", dir: "desc" }, now)).rows;
 }
+
+/** Counts for the Meetings screen cards (16 Nov 2026), in the actor's scope; each card opens the matching filter. */
+export async function meetingCounts(db: Database, actor: Actor, now = new Date()) {
+  const today = businessToday(now);
+  const monthStart = `${today.slice(0, 7)}-01`;
+  if (!canDoMeeting(actor, "view")) return { today: 0, ahead: 0, overdue: 0, heldThisMonth: 0, date: today, monthStart };
+  const members = await teamMemberIds(db, actor);
+  const n = (cond: SQL | undefined) => sql<number>`count(*) filter (where ${cond ?? sql`true`})`.mapWith(Number);
+  const [row] = await db
+    .select({
+      today: n(onDays(meetings.startsAt, today, today)),
+      ahead: n(and(eq(meetings.status, "scheduled"), onDays(meetings.startsAt, today))),
+      overdue: n(overdueCondition(now)),
+      heldThisMonth: n(and(eq(meetings.status, "completed"), onDays(meetings.startsAt, monthStart, today))),
+    })
+    .from(meetings)
+    .where(meetingScopeFilter(actor, members));
+  return { ...row, date: today, monthStart };
+}
+
+/** Teams for the Meetings Team filter. */
+export const meetingTeamOptions = (db: Database, actor: Actor) => teamFilterOptions(db, actor, meetingScope(actor.role));

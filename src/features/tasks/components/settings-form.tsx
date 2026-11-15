@@ -9,8 +9,8 @@ import type { ProposalSettings } from "@/modules/tasks/plan";
 import { updateProposalSettingsAction } from "../actions";
 
 const FIELDS: { key: keyof ProposalSettings; label: string; hint: string; optional?: boolean }[] = [
-  { key: "agentCap", label: "Agent discount cap %", hint: "Agents can't discount above this (5%, confirmed by the client)." },
-  { key: "managerCap", label: "Manager discount cap %", hint: "5%, confirmed by the client. Blank: managers use the agent cap.", optional: true },
+  { key: "agentCap", label: "Agent discount cap %", hint: "Agents can't give a bigger discount than this." },
+  { key: "managerCap", label: "Manager discount cap %", hint: "Sales Managers can't go above this. Leave blank to use the agent cap.", optional: true },
   { key: "downPaymentPct", label: "Down payment %", hint: "Default for new proposals. Agents can't change it." },
   { key: "installmentCount", label: "No. of installments", hint: "Default for new proposals." },
   { key: "defaultPricePerSqft", label: "Default price / sq ft (PKR)", hint: "Used when a unit has no list price and no floor rate applies. Blank: not set.", optional: true },

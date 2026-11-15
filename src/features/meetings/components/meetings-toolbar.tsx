@@ -14,7 +14,7 @@ import { MEETING_STATUSES, MEETING_STATUS_LABELS, MEETING_TYPES, MEETING_TYPE_LA
 import { activeMeetingFilters, MEETING_FILTER_KEYS } from "../url";
 
 /** FR-102: search + Filters drawer (Status, Organizer, Overdue) + Clear + count pill, in the Leads toolbar style. */
-export function MeetingsToolbar({ params, total, organizers }: { params: Record<string, string>; total: number; organizers: { id: string; name: string }[] }) {
+export function MeetingsToolbar({ params, total, organizers, teams = [] }: { params: Record<string, string>; total: number; organizers: { id: string; name: string }[]; teams?: { id: string; name: string }[] }) {
   const router = useRouter();
   const pathname = usePathname();
   const [pending, startTransition] = useTransition();
@@ -31,7 +31,7 @@ export function MeetingsToolbar({ params, total, organizers }: { params: Record<
   };
   const clearFilters = () => go(Object.fromEntries(MEETING_FILTER_KEYS.map((k) => [k, null])));
 
-  const select = (key: "status" | "type" | "organizer", label: string, options: { value: string; label: string }[]) => (
+  const select = (key: "status" | "type" | "organizer" | "team", label: string, options: { value: string; label: string }[]) => (
     <Field label={label}>
       {(id) => (
         <select id={id} value={params[key] ?? ""} onChange={(e) => go({ [key]: e.target.value || null })} className={selectClass} disabled={pending}>
@@ -110,6 +110,25 @@ export function MeetingsToolbar({ params, total, organizers }: { params: Record<
           {select("status", "Status", MEETING_STATUSES.map((s) => ({ value: s, label: MEETING_STATUS_LABELS[s] })))}
           {select("type", "Type", MEETING_TYPES.map((t) => ({ value: t, label: MEETING_TYPE_LABELS[t] })))}
           {select("organizer", "Organizer", [{ value: "me", label: "Organized by me" }, ...organizers.map((o) => ({ value: o.id, label: o.name }))])}
+          {teams.length ? select("team", "Team", teams.map((t) => ({ value: t.id, label: t.name }))) : null}
+          <div className="grid grid-cols-2 gap-3">
+            {(["from", "to"] as const).map((key) => (
+              <Field key={key} label={key === "from" ? "Meetings from" : "Meetings to"}>
+                {(id) => (
+                  <input
+                    id={id}
+                    type="date"
+                    value={params[key] ?? ""}
+                    max={key === "from" ? params.to : undefined}
+                    min={key === "to" ? params.from : undefined}
+                    onChange={(e) => go({ [key]: e.target.value || null })}
+                    className={selectClass}
+                    disabled={pending}
+                  />
+                )}
+              </Field>
+            ))}
+          </div>
           <button
             type="button"
             aria-pressed={params.overdue === "1"}

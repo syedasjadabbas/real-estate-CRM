@@ -28,7 +28,7 @@ export default async function ProposalSettingsPage() {
       <PageHeader
         as="h2"
         title="Proposal settings"
-        description="App settings for the proposal / payment-plan builder, with the defaults the client confirmed on 10 Nov 2026. Changes apply to proposals saved afterwards; saved proposals whose price changes are listed in the reconciliation below."
+        description="Discount limits and defaults for proposals and payment plans. Changes apply to proposals saved afterwards; saved proposals whose price changes are listed in the reconciliation below."
         actions={
           <Link href="/dashboard/tasks" className={buttonClasses({ variant: "secondary", size: "lg" })}>
             <ArrowLeft aria-hidden="true" className="size-4" />
@@ -37,7 +37,7 @@ export default async function ProposalSettingsPage() {
         }
       />
       <ProposalSettingsForm initial={settings} canEdit />
-      <PanelCard title="Proposal price reconciliation (Q47)">
+      <PanelCard title="Proposals with changed prices">
         <p className="mb-3 text-xs text-zinc-600">
           Saved plans whose stored unit price or area differs from the unit today. Proposals are updated automatically when a unit changes; this report covers ones saved
           earlier. Applying recalculates the listed proposals, keeps hand-edited schedules and records the previous figures in each proposal&apos;s history. Cancelled proposals and
