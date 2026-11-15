@@ -77,7 +77,7 @@ export function approvalPathFor(role: Role): "senior" | "staff" {
 /** Who may approve a staff step. The client has not said who approves first and second (C-4): an admin sets them. */
 export const STAFF_STEP_APPROVERS = ["team_manager", "hr", "admin"] as const;
 export type StaffStepApprover = (typeof STAFF_STEP_APPROVERS)[number];
-export const STAFF_STEP_LABELS: Record<StaffStepApprover, string> = { team_manager: "Team manager", hr: "HR", admin: "Admin or Super Admin" };
+export const STAFF_STEP_LABELS: Record<StaffStepApprover, string> = { team_manager: "The agent's team admin", hr: "HR", admin: "Admin or Super Admin" };
 /** Agents' and accountants' leave: HR first, then an Admin (owner, 15 Nov 2026). Admins can change the order. */
 export const DEFAULT_STAFF_STEP1: StaffStepApprover = "hr";
 export const DEFAULT_STAFF_STEP2: StaffStepApprover = "admin";

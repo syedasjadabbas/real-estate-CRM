@@ -18,6 +18,7 @@ export const STATUS_TONES: Record<AttendanceStatus, Tone> = {
   weekend: "neutral",
   not_yet: "neutral",
   upcoming: "neutral",
+  not_tracked: "neutral",
 };
 
 type Month = { present: number; late: number; absent: number; onLeave: number; workingDays: number; minutes: number };

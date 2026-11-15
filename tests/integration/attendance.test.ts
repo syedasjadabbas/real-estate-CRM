@@ -3,7 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { dayStatus, DEFAULT_ATTENDANCE_SETTINGS, instantOf, localTime } from "@/modules/attendance/rules";
 import { hrDashboard } from "@/modules/attendance/hr-dashboard";
 import { checkIn, checkOut, correctAttendance, dailySheet, monthlySummary, myAttendance, updateAttendanceSettings } from "@/modules/attendance/service";
-import { holidays, leaveRequests, auditLogs } from "@/server/db/schema";
+import { holidays, leaveRequests, auditLogs, users } from "@/server/db/schema";
 import type { Database } from "@/server/db";
 import { AppError } from "@/server/errors";
 import { connectTestDb, hasTestDb, resetDb, seedFixture, type Fixture } from "../support/db";
@@ -46,6 +46,8 @@ describe.skipIf(!hasTestDb)("Attendance (PostgreSQL integration)", () => {
   beforeEach(async () => {
     await resetDb(db);
     f = await seedFixture(db);
+    // Accounts made well before the test month, so only the tracking start limits what counts.
+    await db.update(users).set({ createdAt: new Date("2026-10-01T00:00:00+05:00") });
   });
 
   it("checks in and out once a day and shows the day in My workplace", async () => {
@@ -63,6 +65,8 @@ describe.skipIf(!hasTestDb)("Attendance (PostgreSQL integration)", () => {
   it("builds the daily sheet and monthly summary with leave and holidays; only HR and admins see it", async () => {
     const a = f.actors.agent1;
     const b = f.actors.agent2;
+    // Attendance started in the CRM on Monday 2 Nov (the first check-in anyone made).
+    await checkIn(db, f.actors.outsideAgent, instantOf("2026-11-02", "09:00"));
     await checkIn(db, a, instantOf("2026-11-16", "09:00"));
     await checkOut(db, a, instantOf("2026-11-16", "17:00"));
     await db.insert(leaveRequests).values({ userId: b.id, type: "annual", startDate: "2026-11-16", endDate: "2026-11-16", days: 1, status: "approved", approvalPath: "staff" });
@@ -81,6 +85,19 @@ describe.skipIf(!hasTestDb)("Attendance (PostgreSQL integration)", () => {
     expect(ma).toMatchObject({ present: 1, holiday: 1, workingDays: 14, minutes: 480 });
     expect(ma.absent).toBe(12); // 18th is today: not yet absent
     expect(month.rows.find((r) => r.userId === b.id)).toMatchObject({ onLeave: 1 });
+  });
+
+  it("never counts days before attendance started, or before the person joined, as absences", async () => {
+    const a = f.actors.agent1;
+    // Nobody checked in before the 16th: earlier days are "not tracked", not absent.
+    await checkIn(db, a, instantOf("2026-11-16", "09:00"));
+    const month = await monthlySummary(db, f.actors.hr, "2026-11", "2026-11-18");
+    const other = month.rows.find((r) => r.userId === f.actors.agent2.id)!;
+    expect(other).toMatchObject({ absent: 2, workingDays: 3 }); // 16th and 17th absent, 18th is today
+    expect((await dailySheet(db, f.actors.hr, "2026-11-10", "2026-11-18")).rows.find((r) => r.userId === f.actors.agent2.id)?.status).toBe("not_tracked");
+    // Someone whose account was made on the 17th isn't absent on the 16th.
+    await db.update(users).set({ createdAt: new Date("2026-11-17T10:00:00+05:00") }).where(eq(users.id, f.actors.agent2.id));
+    expect((await monthlySummary(db, f.actors.hr, "2026-11", "2026-11-18")).rows.find((r) => r.userId === f.actors.agent2.id)).toMatchObject({ absent: 1, workingDays: 2 });
   });
 
   it("lets HR correct someone else's day with a reason, and HR or admins change office hours", async () => {

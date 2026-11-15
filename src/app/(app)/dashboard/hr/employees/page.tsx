@@ -145,7 +145,7 @@ export default async function EmployeesPage({ searchParams }: PageProps<"/dashbo
                       >
                         {canEdit ? "Open profile" : "View"}
                       </Link>
-                      {r.role && canViewProfiles(actor) ? (
+                      {(r.role === "agent" || r.role === "admin") && canViewProfiles(actor) ? (
                         <Link
                           href={`/dashboard/people/${r.id}`}
                           className="ml-1.5 inline-flex h-7 items-center rounded-xl border border-brand/30 bg-brand-50 px-2.5 text-[11px] font-bold text-brand-700 shadow-hairline hover:bg-brand-50/70"

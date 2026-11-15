@@ -130,13 +130,13 @@ export function LeaveSettingsForm({
       }}
     >
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Field label="Annual allowance (days)" error={errors.annualDays} hint="Same for everyone (Q4).">
+        <Field label="Annual allowance (days)" error={errors.annualDays} hint="The same for everyone.">
           {(id, d) => <Input id={id} aria-describedby={d} inputMode="numeric" value={v.annualDays} disabled={pending} onChange={(e) => setV((s) => ({ ...s, annualDays: e.target.value }))} />}
         </Field>
         {step("staffStep1", "Staff approval: first step")}
         {step("staffStep2", "Staff approval: second step")}
       </div>
-      <Field label="Proration for joiners (Q13)" error={errors.prorationMethod} hint="The company hasn't confirmed the method yet; only the provisional method is available.">
+      <Field label="Proration for joiners" error={errors.prorationMethod} hint="The company hasn't confirmed the method yet; only the provisional method is available.">
         {(id, d) => (
           <select id={id} aria-describedby={d} className={selectClass} value={v.prorationMethod} disabled={pending} onChange={(e) => setV((s) => ({ ...s, prorationMethod: e.target.value }))}>
             {(Object.keys(PRORATION_METHODS) as ProrationMethod[]).map((k) => (
@@ -148,8 +148,8 @@ export function LeaveSettingsForm({
         )}
       </Field>
       <p className="text-[11px] text-zinc-500">
-        Agents and accountants need two approvals (Q6). Set who approves first and second once the company confirms the order. Until then their requests stay pending. Managers, HR, Admins
-        and Super Admins are approved by a Super Admin (Q7); nobody approves their own leave.
+        Agents&apos; and accountants&apos; leave needs two approvals by two different people: HR first, then an Admin, unless you change the order above. HR&apos;s and Admins&apos;
+        leave is approved by a Super Admin, and a Super Admin&apos;s own leave is approved automatically. Nobody approves their own leave.
       </p>
       <div className="flex flex-wrap items-center justify-end gap-3">
         <Status msg={msg} />

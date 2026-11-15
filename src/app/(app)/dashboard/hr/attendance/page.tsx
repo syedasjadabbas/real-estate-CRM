@@ -123,7 +123,7 @@ export default async function AttendancePage({ searchParams }: PageProps<"/dashb
                       <StatusTag tone={STATUS_TONES[r.status]}>{ATTENDANCE_STATUS_LABELS[r.status]}</StatusTag>
                       {r.corrected ? (
                         <p className="mt-1 max-w-48 truncate text-[10px] text-zinc-500" title={r.correctionNote ?? undefined}>
-                          Corrected by HR{r.correctionNote ? `: ${r.correctionNote}` : ""}
+                          Corrected{r.correctedBy ? ` by ${r.correctedBy}` : ""}{r.correctionNote ? `: ${r.correctionNote}` : ""}
                         </p>
                       ) : null}
                     </td>

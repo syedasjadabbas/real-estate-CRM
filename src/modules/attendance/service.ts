@@ -1,11 +1,11 @@
-import { and, asc, between, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, asc, between, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 import { businessToday } from "@/modules/bookings/today";
 import { GRANTED_STATUSES } from "@/modules/leave/rules";
 import { parseTask as parse } from "@/modules/tasks/support";
 import type { Actor } from "@/server/auth/types";
 import type { Database } from "@/server/db";
-import { appSettings, attendanceRecords, auditLogs, holidays, leaveRequests, users } from "@/server/db/schema";
+import { appSettings, attendanceRecords, auditLogs, employeeProfiles, holidays, leaveRequests, users } from "@/server/db/schema";
 import { AppError, forbidden, notFound } from "@/server/errors";
 import {
   DEFAULT_ATTENDANCE_SETTINGS,
@@ -182,16 +182,40 @@ export async function correctAttendance(db: Database, actor: Actor, input: unkno
 
 type Rec = typeof attendanceRecords.$inferSelect;
 
+/**
+ * The day attendance started in the CRM: the earliest check-in anyone has made, or today when nobody
+ * has checked in yet. Days before it are never counted as absences (15 Nov 2026).
+ */
+async function trackingStart(db: DbOrTx, today: string) {
+  const [row] = await db.select({ first: sql<string | null>`min(${attendanceRecords.date})::text` }).from(attendanceRecords);
+  return row?.first && row.first < today ? row.first : today;
+}
+
+/** Each person's first counted day: the later of the tracking start and the day they joined (or their account was made). */
+async function trackedFromByUser(db: DbOrTx, userIds: string[], today: string) {
+  const start = await trackingStart(db, today);
+  const rows = await db
+    .select({ id: users.id, createdOn: sql<string>`(${users.createdAt} at time zone 'Asia/Karachi')::date::text`, joined: sql<string | null>`${employeeProfiles.joiningDate}::text` })
+    .from(users)
+    .leftJoin(employeeProfiles, eq(employeeProfiles.userId, users.id))
+    .where(inArray(users.id, userIds));
+  return new Map(rows.map((r) => {
+    const personStart = r.joined ?? r.createdOn;
+    return [r.id, personStart > start ? personStart : start];
+  }));
+}
+
 /** Records, granted leave and company holidays for some people over a date range. */
-async function loadRange(db: DbOrTx, userIds: string[], from: string, to: string) {
-  if (userIds.length === 0) return { records: [] as Rec[], leave: [] as { userId: string; startDate: string; endDate: string }[], holidayDates: new Set<string>() };
+async function loadRange(db: DbOrTx, userIds: string[], from: string, to: string, today = businessToday()) {
+  if (userIds.length === 0) return { records: [] as Rec[], leave: [] as { userId: string; startDate: string; endDate: string }[], holidayDates: new Set<string>(), trackedFrom: new Map<string, string>() };
   const records = await db.select().from(attendanceRecords).where(and(inArray(attendanceRecords.userId, userIds), between(attendanceRecords.date, from, to)));
   const leave = await db
     .select({ userId: leaveRequests.userId, startDate: leaveRequests.startDate, endDate: leaveRequests.endDate })
     .from(leaveRequests)
     .where(and(inArray(leaveRequests.userId, userIds), inArray(leaveRequests.status, GRANTED_STATUSES), lte(leaveRequests.startDate, to), gte(leaveRequests.endDate, from)));
   const hols = await db.select({ date: holidays.date }).from(holidays).where(and(eq(holidays.scope, "company"), between(holidays.date, from, to)));
-  return { records, leave, holidayDates: new Set(hols.map((h) => h.date)) };
+  const trackedFrom = await trackedFromByUser(db, userIds, today);
+  return { records, leave, holidayDates: new Set(hols.map((h) => h.date)), trackedFrom };
 }
 
 function statusFor(
@@ -204,7 +228,7 @@ function statusFor(
 ): { status: AttendanceStatus; record: Rec | null } {
   const record = byKey.get(`${userId}|${date}`) ?? null;
   const onLeave = data.leave.some((l) => l.userId === userId && l.startDate <= date && date <= l.endDate);
-  return { status: dayStatus({ date, today, checkInAt: record?.checkInAt ?? null, onLeave, holiday: data.holidayDates.has(date), settings }), record };
+  return { status: dayStatus({ date, today, checkInAt: record?.checkInAt ?? null, onLeave, holiday: data.holidayDates.has(date), settings, trackedFrom: data.trackedFrom.get(userId) }), record };
 }
 
 const activePeople = (db: DbOrTx) =>
@@ -220,6 +244,8 @@ export type SheetRow = {
   minutes: number | null;
   corrected: boolean;
   correctionNote: string | null;
+  /** Who corrected the day (HR, an Admin or a Super Admin). */
+  correctedBy: string | null;
 };
 
 /** The daily sheet: every active person's status, times and hours for one day. */
@@ -228,8 +254,10 @@ export async function dailySheet(db: Database, actor: Actor, date: string, today
   const day = /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : today;
   const settings = await getAttendanceSettings(db);
   const people = await activePeople(db);
-  const data = await loadRange(db, people.map((p) => p.id), day, day);
+  const data = await loadRange(db, people.map((p) => p.id), day, day, today);
   const byKey = new Map(data.records.map((r) => [`${r.userId}|${r.date}`, r]));
+  const correctorIds = [...new Set(data.records.map((r) => r.correctedById).filter((x): x is string => Boolean(x)))];
+  const correctors = new Map(correctorIds.length ? (await db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, correctorIds))).map((u) => [u.id, u.name]) : []);
   const rows: SheetRow[] = people.map((p) => {
     const { status, record } = statusFor(p.id, day, today, settings, data, byKey);
     return {
@@ -242,6 +270,7 @@ export async function dailySheet(db: Database, actor: Actor, date: string, today
       minutes: record ? workedMinutes(record.checkInAt, record.checkOutAt) : null,
       corrected: Boolean(record?.correctedById),
       correctionNote: record?.correctionNote ?? null,
+      correctedBy: record?.correctedById ? (correctors.get(record.correctedById) ?? null) : null,
     };
   });
   const counts = Object.fromEntries(["present", "late", "absent", "on_leave", "holiday", "weekend", "not_yet"].map((s) => [s, rows.filter((r) => r.status === s).length])) as Record<string, number>;
@@ -260,7 +289,7 @@ function summarise(userId: string, dates: string[], today: string, settings: Att
     else if (status === "absent") s.absent++;
     else if (status === "on_leave") s.onLeave++;
     else if (status === "holiday") s.holiday++;
-    if (status !== "weekend" && status !== "holiday" && status !== "upcoming") s.workingDays++;
+    if (status !== "weekend" && status !== "holiday" && status !== "upcoming" && status !== "not_tracked") s.workingDays++;
     if (record) {
       const m = workedMinutes(record.checkInAt, record.checkOutAt);
       if (m === null) {
@@ -280,7 +309,7 @@ export async function monthlySummary(db: Database, actor: Actor, month: string, 
   const settings = await getAttendanceSettings(db);
   const people = await activePeople(db);
   const dates = datesOfMonth(m);
-  const data = await loadRange(db, people.map((p) => p.id), dates[0], dates[dates.length - 1]);
+  const data = await loadRange(db, people.map((p) => p.id), dates[0], dates[dates.length - 1], today);
   const byKey = new Map(data.records.map((r) => [`${r.userId}|${r.date}`, r]));
   const rows: MonthRow[] = people.map((p) => ({ userId: p.id, name: p.name, role: p.role, ...summarise(p.id, dates, today, settings, data, byKey) }));
   return { month: m, today, rows };
@@ -291,7 +320,7 @@ export async function myAttendance(db: Database, actor: Actor, now = new Date())
   const today = localDate(now);
   const settings = await getAttendanceSettings(db);
   const dates = datesOfMonth(today.slice(0, 7));
-  const data = await loadRange(db, [actor.id], dates[0], dates[dates.length - 1]);
+  const data = await loadRange(db, [actor.id], dates[0], dates[dates.length - 1], today);
   const byKey = new Map(data.records.map((r) => [`${r.userId}|${r.date}`, r]));
   const { status, record } = statusFor(actor.id, today, today, settings, data, byKey);
   return {

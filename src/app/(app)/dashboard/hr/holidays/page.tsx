@@ -149,7 +149,7 @@ export default async function HolidaysPage({ searchParams }: PageProps<"/dashboa
         )}
       </HolidayNotices>
       <p className="text-[11px] text-zinc-500">
-        Holidays are shown for reference. How they affect leave day counts depends on the leave policy, which is still to be confirmed by the client.
+        Company-wide holidays count as days off in attendance, so nobody is marked absent on them. Leave is counted in calendar days, so a holiday inside a leave request still counts as a leave day.
       </p>
     </PageStack>
   );

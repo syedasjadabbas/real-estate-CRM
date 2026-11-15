@@ -5,7 +5,7 @@ import { BUSINESS_TIME_ZONE } from "@/modules/leads/constants";
  * hours, the late cut-off and the weekly days off. Everything here is pure so it can be tested.
  */
 
-export const ATTENDANCE_STATUSES = ["present", "late", "absent", "on_leave", "holiday", "weekend", "not_yet", "upcoming"] as const;
+export const ATTENDANCE_STATUSES = ["present", "late", "absent", "on_leave", "holiday", "weekend", "not_yet", "upcoming", "not_tracked"] as const;
 export type AttendanceStatus = (typeof ATTENDANCE_STATUSES)[number];
 export const ATTENDANCE_STATUS_LABELS: Record<AttendanceStatus, string> = {
   present: "Present",
@@ -16,6 +16,7 @@ export const ATTENDANCE_STATUS_LABELS: Record<AttendanceStatus, string> = {
   weekend: "Day off",
   not_yet: "Not checked in",
   upcoming: "—",
+  not_tracked: "Not tracked",
 };
 
 export const WEEKDAY_LABELS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] as const;
@@ -80,9 +81,15 @@ export function dayStatus(input: {
   onLeave: boolean;
   holiday: boolean;
   settings: AttendanceSettings;
+  /**
+   * First day this person's attendance counts: the later of the day attendance started in the CRM and
+   * the day they joined (15 Nov 2026). Earlier days are "not tracked", never absent.
+   */
+  trackedFrom?: string;
 }): AttendanceStatus {
-  const { date, today, checkInAt, onLeave, holiday, settings } = input;
+  const { date, today, checkInAt, onLeave, holiday, settings, trackedFrom } = input;
   if (checkInAt) return minutesOf(localTime(checkInAt)) > minutesOf(settings.lateAfter) ? "late" : "present";
+  if (trackedFrom && date < trackedFrom) return "not_tracked";
   if (onLeave) return "on_leave";
   if (holiday) return "holiday";
   if (settings.weekendDays.includes(weekdayOf(date))) return "weekend";
