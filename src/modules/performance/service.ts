@@ -228,7 +228,9 @@ export async function performanceReport(db: Database, actor: Actor, rawQuery: un
   };
   const per = (v: number) => (count ? Math.round((v / count) * 10) / 10 : 0);
   const sorted = sortRows(all, q.sort, q.dir);
-  const pageCount = Math.max(1, Math.ceil(count / PERFORMANCE_PAGE_SIZE));
+  const term = q.q?.toLowerCase();
+  const listed = term ? sorted.filter((r) => r.name.toLowerCase().includes(term)) : sorted;
+  const pageCount = Math.max(1, Math.ceil(listed.length / PERFORMANCE_PAGE_SIZE));
   const page = Math.min(q.page, pageCount);
   return {
     range: { from: range.from, to: range.to },
@@ -279,8 +281,11 @@ export async function performanceReport(db: Database, actor: Actor, rawQuery: un
     dir: q.dir,
     page,
     pageCount,
-    total: count,
-    rows: sorted.slice((page - 1) * PERFORMANCE_PAGE_SIZE, page * PERFORMANCE_PAGE_SIZE),
+    total: listed.length,
+    search: q.q ?? "",
+    rows: listed.slice((page - 1) * PERFORMANCE_PAGE_SIZE, page * PERFORMANCE_PAGE_SIZE),
+    /** Agents matching the search, all pages (the Pipeline table). */
+    matched: listed,
     allRows: sorted,
     generatedAt: now.toISOString(),
   };
@@ -364,3 +369,4 @@ export function performanceCsv(report: PerformanceReport) {
   );
   return [header.join(","), ...lines].join("\n") + "\n";
 }
+

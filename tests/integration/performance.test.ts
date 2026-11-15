@@ -2,8 +2,9 @@ import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createLead } from "@/modules/leads/commands";
 import { performanceContexts, performanceCsv, performanceReport, teamComparison } from "@/modules/performance/service";
+import { pipelineCsv } from "@/modules/performance/pipeline-export";
 import { loadActor } from "@/server/auth/session-store";
-import { followUps, leadActivities, leads, meetings, signinLogs, teams, users } from "@/server/db/schema";
+import { auditLogs, followUps, leadActivities, leads, meetings, projects, signinLogs, teams, users } from "@/server/db/schema";
 import type { Database } from "@/server/db";
 import type { Actor } from "@/server/auth/types";
 import { AppError } from "@/server/errors";
@@ -176,6 +177,20 @@ describe.skipIf(!hasTestDb)("Performance (PostgreSQL integration)", () => {
     expect((await performanceContexts(db, f.actors.manager)).map((t) => t.name)).toEqual(["Team 1"]);
     expect((await performanceContexts(db, f.actors.superAdmin)).length).toBe(2);
     expect(await performanceContexts(db, f.actors.agent1)).toEqual([]);
+  });
+
+  it("finds agents by name in both tables and downloads the pipeline (16 Nov 2026)", async () => {
+    const found = await performanceReport(db, f.actors.superAdmin, { ...RANGE, q: "agent b" }, NOW);
+    expect(found.rows.map((r) => r.name)).toEqual(["Agent B"]);
+    expect(found.matched.map((r) => r.name)).toEqual(["Agent B"]);
+    expect([found.total, found.summary.agents]).toEqual([1, 3]);
+    const [p] = await db.select({ id: projects.id, name: projects.name }).from(projects).limit(1);
+    const out = await pipelineCsv(db, f.actors.superAdmin, { q: "agent b" }, p);
+    const lines = out.body.replace(/^﻿/, "").trim().split("\r\n");
+    expect(lines[0]).toMatch(/^Agent,New Lead,.*,Total$/);
+    expect(lines.slice(1).map((l) => l.split(",")[0])).toEqual(["Agent B"]);
+    const [log] = await db.select().from(auditLogs).where(eq(auditLogs.action, "performance.pipeline_export"));
+    expect(log).toMatchObject({ actorId: f.actors.superAdmin.id, entityId: p.id });
   });
 
   it("inactive agents are left out; a manager with no team sees no one", async () => {

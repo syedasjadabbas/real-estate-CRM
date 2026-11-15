@@ -169,7 +169,7 @@ export const navigation: NavGroup[] = [
         href: "/dashboard/bookings",
         icon: BookText,
         description:
-          "Lead → negotiation → forms & payments → confirmed. Units stay aligned with inventory.",
+          "Token → down payment → Closed Won. The unit stays held in Inventory while a booking is open.",
         roles: SALES_RECORD_ROLES,
       },
       {

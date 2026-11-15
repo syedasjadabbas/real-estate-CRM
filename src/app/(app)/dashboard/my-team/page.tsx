@@ -11,7 +11,8 @@ import { formatDateTime } from "@/features/leads/format";
 import { flattenParams } from "@/features/leads/url";
 import { cn } from "@/lib/cn";
 import { ATTENDANCE_STATUS_LABELS } from "@/modules/attendance/rules";
-import { STAGE_LABELS } from "@/modules/leads/constants";
+import { LEAD_STAGES, STAGE_LABELS } from "@/modules/leads/constants";
+import { buttonClasses } from "@/components/ui/button";
 import { addDays } from "@/modules/teams/dates";
 import { myTeamView } from "@/modules/teams/my-team";
 import { ROSTER_STATUS_LABELS } from "@/modules/teams/validation";
@@ -21,6 +22,8 @@ import { getDb } from "@/server/db";
 export const metadata: Metadata = { title: "My team" };
 
 const th = "px-3 py-2.5";
+const field = "h-9 rounded-xl border border-zinc-200/80 bg-white px-3 text-xs font-semibold shadow-hairline focus:border-brand/50 focus:outline-none";
+const OPEN_STAGES = LEAD_STAGES.filter((s) => s !== "booked" && s !== "lost_lead");
 const td = "px-3 py-2 whitespace-nowrap";
 
 /** A Team Lead's read-only view of the team they lead (owner, 15 Nov 2026). */
@@ -28,7 +31,16 @@ export default async function MyTeamPage({ searchParams }: PageProps<"/dashboard
   const actor = await requirePageUser();
   if (actor.role !== "agent" || !actor.ledTeamIds?.length) return <RestrictedState />;
   const q = flattenParams(await searchParams);
-  const v = await myTeamView(getDb(), actor, q.team, { from: q.from, to: q.to });
+  const v = await myTeamView(getDb(), actor, q.team, q);
+  const now = new Date();
+  const lf = v.leadFilters;
+  const leadsFiltered = Boolean(lf.q || lf.agent || lf.stage || lf.due);
+  /** Same page with the range and lead filters kept, plus `extra`. */
+  const keep = (extra: Record<string, string>) => {
+    const p = new URLSearchParams({ ...(v.teams.length > 1 ? { team: v.team.id } : {}), from: v.range.from, to: v.range.to });
+    for (const [k, val] of Object.entries({ lq: lf.q, lagent: lf.agent, lstage: lf.stage, ldue: lf.due, ...extra })) if (val) p.set(k, val);
+    return `/dashboard/my-team?${p}`;
+  };
   const base = (extra: Record<string, string>) => `/dashboard/my-team?${new URLSearchParams({ ...(v.teams.length > 1 ? { team: v.team.id } : {}), ...extra })}`;
   const presets = [
     { label: "Today", from: v.today },
@@ -59,6 +71,15 @@ export default async function MyTeamPage({ searchParams }: PageProps<"/dashboard
             </Link>
           );
         })}
+        <form method="get" action="/dashboard/my-team" className="flex flex-wrap items-center gap-1.5 text-xs font-bold text-zinc-500" aria-label="Custom dates">
+          {v.teams.length > 1 ? <input type="hidden" name="team" value={v.team.id} /> : null}
+          <input type="date" name="from" aria-label="From" defaultValue={v.range.from} max={v.today} className={field} />
+          to
+          <input type="date" name="to" aria-label="To" defaultValue={v.range.to} max={v.today} className={field} />
+          <button type="submit" className={buttonClasses({ variant: "secondary", size: "md" })}>
+            Show
+          </button>
+        </form>
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
@@ -113,8 +134,42 @@ export default async function MyTeamPage({ searchParams }: PageProps<"/dashboard
       </PanelCard>
 
       <PanelCard title={`Team's open leads · ${v.openTotal}`}>
+        <form method="get" action="/dashboard/my-team" role="search" aria-label="Filter the team's open leads" className="mb-3 flex flex-wrap items-center gap-2">
+          {v.teams.length > 1 ? <input type="hidden" name="team" value={v.team.id} /> : null}
+          <input type="hidden" name="from" value={v.range.from} />
+          <input type="hidden" name="to" value={v.range.to} />
+          <input type="search" name="lq" defaultValue={lf.q} placeholder="Lead name or code" maxLength={100} autoComplete="off" className={cn(field, "min-w-0 flex-1 basis-48")} />
+          <select name="lagent" defaultValue={lf.agent} aria-label="Agent" className={field}>
+            <option value="">All agents</option>
+            {v.members.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+          <select name="lstage" defaultValue={lf.stage} aria-label="Stage" className={field}>
+            <option value="">All stages</option>
+            {OPEN_STAGES.map((s) => (
+              <option key={s} value={s}>
+                {STAGE_LABELS[s]}
+              </option>
+            ))}
+          </select>
+          <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-700">
+            <input type="checkbox" name="ldue" value="overdue" defaultChecked={lf.due === "overdue"} className="size-4 accent-brand" />
+            Follow-up overdue
+          </label>
+          <button type="submit" className={buttonClasses({ variant: "primary", size: "md" })}>
+            Filter
+          </button>
+          {leadsFiltered ? (
+            <Link href={keep({ lq: "", lagent: "", lstage: "", ldue: "" })} className={buttonClasses({ variant: "secondary", size: "md" })}>
+              Clear
+            </Link>
+          ) : null}
+        </form>
         {v.openLeads.length === 0 ? (
-          <p className="text-xs text-zinc-500">No open leads.</p>
+          <p className="text-xs text-zinc-500">{leadsFiltered ? "No open leads match these filters." : "No open leads."}</p>
         ) : (
           <div className="overflow-x-auto rounded-xl border border-zinc-200/80">
             <table className="w-full min-w-max border-collapse text-left text-xs">
@@ -142,7 +197,7 @@ export default async function MyTeamPage({ searchParams }: PageProps<"/dashboard
                     </td>
                     <td className={td}>{STAGE_LABELS[l.stage]}</td>
                     <td className={td}>{l.ownerName}</td>
-                    <td className={cn(td, l.nextFollowUpAt && new Date(l.nextFollowUpAt) < new Date(v.today) ? "text-rose-700" : "")}>{l.nextFollowUpAt ? formatDateTime(l.nextFollowUpAt) : "—"}</td>
+                    <td className={cn(td, l.nextFollowUpAt && new Date(l.nextFollowUpAt) < now ? "font-bold text-rose-700" : "")}>{l.nextFollowUpAt ? formatDateTime(l.nextFollowUpAt) : "—"}</td>
                     <td className={td}>{formatDateTime(l.lastActivityAt)}</td>
                   </tr>
                 ))}
@@ -150,7 +205,28 @@ export default async function MyTeamPage({ searchParams }: PageProps<"/dashboard
             </table>
           </div>
         )}
-        {v.openTotal > v.openLeads.length ? <p className="mt-2 text-[11px] text-zinc-500">Showing the {v.openLeads.length} with the earliest follow-ups.</p> : null}
+        {v.leadMatches ? (
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-zinc-500">
+            <span>
+              Showing {(v.leadPage.page - 1) * 50 + 1}–{(v.leadPage.page - 1) * 50 + v.openLeads.length} of {v.leadMatches}
+              {leadsFiltered ? ` (filtered from ${v.openTotal})` : ""}, earliest follow-up first
+            </span>
+            {v.leadPage.pageCount > 1 ? (
+              <span className="flex gap-2">
+                {v.leadPage.page > 1 ? (
+                  <Link href={keep({ lpage: String(v.leadPage.page - 1) })} className={buttonClasses({ variant: "secondary", size: "md" })}>
+                    Previous
+                  </Link>
+                ) : null}
+                {v.leadPage.page < v.leadPage.pageCount ? (
+                  <Link href={keep({ lpage: String(v.leadPage.page + 1) })} className={buttonClasses({ variant: "secondary", size: "md" })}>
+                    Next
+                  </Link>
+                ) : null}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
         <p className="mt-2 text-[11px] text-zinc-500">You can open your own leads. Other agents&apos; leads are listed for your overview only.</p>
       </PanelCard>
     </PageStack>

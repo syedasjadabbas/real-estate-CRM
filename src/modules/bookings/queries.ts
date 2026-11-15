@@ -17,6 +17,8 @@ import { bookingScope, canAccessBooking, canDoBooking, canMoveTo } from "./polic
 import { netPaid, netPaidByBooking, toPaisa } from "@/modules/finance/ledger";
 import { businessToday } from "./today";
 import { bookingListQuerySchema, type BookingSortColumn } from "./validation";
+import { inTeam, onDays, teamFilterOptions } from "@/server/list-filters";
+import { CURRENT_STAGES } from "./constants";
 
 const agent = alias(users, "agent");
 
@@ -105,6 +107,9 @@ export async function listBookings(db: Database, actor: Actor, rawQuery: unknown
     bookingScopeFilter(actor, members),
     projectId ? eq(bookings.projectId, projectId) : undefined,
     query.stage ? eq(bookings.stage, query.stage) : undefined,
+    query.agent ? eq(bookings.agentId, query.agent) : undefined,
+    query.team ? inTeam(bookings.agentId, query.team) : undefined,
+    onDays(bookings.createdAt, query.from, query.to),
     searchCondition(query.q),
   );
   const from = () =>
@@ -298,4 +303,35 @@ export async function latestInvestments(db: Database, actor: Actor, clientIds: s
     .where(and(inArray(bookings.clientId, clientIds), sql`${bookings.stage} <> 'cancelled'`, bookingScopeFilter(actor, members)))
     .orderBy(bookings.clientId, desc(bookings.createdAt), desc(bookings.id));
   return new Map(rows.map(({ clientId, ...r }) => [clientId!, r]));
+}
+
+/**
+ * Bookings screen cards (owner review, 16 Nov 2026): how many bookings sit at each current stage and
+ * their sale value, in the actor's scope and the chosen project. Each card opens that stage.
+ */
+export async function bookingStageCounts(db: Database, actor: Actor, projectId: string | null) {
+  if (!canDoBooking(actor, "view")) return [];
+  const members = await teamMemberIds(db, actor);
+  const rows = await db
+    .select({ stage: bookings.stage, n: count(), value: sql<number>`coalesce(sum(${bookings.totalSale}), 0)`.mapWith(Number) })
+    .from(bookings)
+    .where(and(bookingScopeFilter(actor, members), projectId ? eq(bookings.projectId, projectId) : undefined))
+    .groupBy(bookings.stage);
+  return CURRENT_STAGES.map((stage) => ({ stage, n: rows.find((r) => r.stage === stage)?.n ?? 0, value: rows.find((r) => r.stage === stage)?.value ?? 0 }));
+}
+
+/** Sales agents with bookings the actor can see, for the Agent filter; and teams for the Team filter. */
+export async function bookingFilterOptions(db: Database, actor: Actor) {
+  if (!canDoBooking(actor, "view")) return { agents: [], teams: [] };
+  const members = await teamMemberIds(db, actor);
+  const [agents, teams] = await Promise.all([
+    db
+      .selectDistinct({ id: agent.id, name: agent.name })
+      .from(bookings)
+      .innerJoin(agent, eq(agent.id, bookings.agentId))
+      .where(bookingScopeFilter(actor, members))
+      .orderBy(agent.name),
+    teamFilterOptions(db, actor, bookingScope(actor.role)),
+  ]);
+  return { agents, teams };
 }

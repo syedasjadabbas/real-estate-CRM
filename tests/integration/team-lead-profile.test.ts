@@ -8,7 +8,7 @@ import { myTeamView } from "@/modules/teams/my-team";
 import { loadActor } from "@/server/auth/session-store";
 import type { Actor } from "@/server/auth/types";
 import type { Database } from "@/server/db";
-import { auditLogs, files, followUps, teamMembers, teams, users } from "@/server/db/schema";
+import { auditLogs, files, followUps, leads, teamMembers, teams, users } from "@/server/db/schema";
 import { AppError } from "@/server/errors";
 import { connectTestDb, hasTestDb, leadInput, resetDb, seedFixture, type Fixture } from "../support/db";
 
@@ -70,6 +70,17 @@ describe.skipIf(!hasTestDb)("Team Lead and employee profile (owner, 15 Nov 2026)
     expect(v.openLeads.map((l) => [l.id, l.mine]).sort()).toEqual([[mine.leadId, true], [theirs.leadId, false]].sort());
     expect((await errorOf(myTeamView(db, await reload(f.actors.agent2), undefined)))?.code).toBe("FORBIDDEN");
     expect((await errorOf(myTeamView(db, admin, undefined)))?.code).toBe("FORBIDDEN");
+
+    // Filters on the open leads (16 Nov 2026): agent, search by code, overdue follow-up, paging.
+    const theirsCode = v.openLeads.find((l) => l.id === theirs.leadId)!.code;
+    expect((await myTeamView(db, lead, undefined, { lagent: f.actors.agent2.id })).openLeads.map((l) => l.id)).toEqual([theirs.leadId]);
+    expect((await myTeamView(db, lead, undefined, { lq: theirsCode })).openLeads.map((l) => l.id)).toEqual([theirs.leadId]);
+    await db.update(leads).set({ nextFollowUpAt: new Date(Date.now() - 3_600_000) }).where(eq(leads.id, mine.leadId));
+    const overdue = await myTeamView(db, lead, undefined, { ldue: "overdue" });
+    expect(overdue.openLeads.map((l) => l.id)).toEqual([mine.leadId]);
+    expect(overdue).toMatchObject({ openTotal: 2, leadMatches: 1, leadPage: { page: 1, pageCount: 1 } });
+    // An agent outside the team is ignored rather than leaking their leads.
+    expect((await myTeamView(db, lead, undefined, { lagent: admin.id })).leadMatches).toBe(2);
   });
 
   it("Admins and Super Admins open an agent's full profile: calls, minutes, pipeline, follow-ups", async () => {

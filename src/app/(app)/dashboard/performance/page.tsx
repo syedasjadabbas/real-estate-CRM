@@ -13,6 +13,7 @@ import { findNavItem } from "@/config/navigation";
 import { Pagination } from "@/features/leads/components/pagination";
 import { flattenParams, withParams } from "@/features/leads/url";
 import { CallQuality, CallVolume, CallsVsMeetings, OutcomeMix, TopClosers } from "@/features/performance/components/charts";
+import { Search } from "lucide-react";
 import { PerformanceFilters } from "@/features/performance/components/performance-filters";
 import { cn } from "@/lib/cn";
 import { formatInt } from "@/lib/format";
@@ -50,6 +51,49 @@ const COLUMNS: { label: string; sort: PerformanceSort; title?: string }[] = [
 ];
 
 const pctText = (v: number | null) => (v === null ? "—" : `${v}%`);
+
+/**
+ * "Find an agent" (16 Nov 2026). One search shared by the agent table and Pipeline by agent: typing in
+ * either box filters both, so the two tables always list the same people. `anchor` keeps the reader at
+ * the table they searched from.
+ */
+function AgentSearch({ params, search, shown, total, anchor }: { params: Record<string, string>; search: string; shown: number; total: number; anchor?: string }) {
+  const hash = anchor ? `#${anchor}` : "";
+  return (
+    <form method="get" action={`/dashboard/performance${hash}`} role="search" aria-label="Find an agent" className="flex flex-wrap items-center gap-2">
+      {Object.entries(params)
+        .filter(([k]) => !["q", "page"].includes(k))
+        .map(([k, v]) => (
+          <input key={k} type="hidden" name={k} value={v} />
+        ))}
+      <label className="relative min-w-0 flex-1 basis-56 sm:max-w-xs">
+        <span className="sr-only">Agent name</span>
+        <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-zinc-400" />
+        <input
+          type="search"
+          name="q"
+          defaultValue={search}
+          placeholder="Find an agent by name"
+          maxLength={100}
+          autoComplete="off"
+          className="h-9 w-full rounded-xl border border-zinc-200/80 bg-white pr-3 pl-8 text-xs font-semibold shadow-hairline focus:border-brand/50 focus:outline-none"
+        />
+      </label>
+      <button type="submit" className={buttonClasses({ variant: "secondary", size: "md" })}>
+        Search
+      </button>
+      {search ? (
+        <Link href={`${withParams("/dashboard/performance", params, { q: null, page: null })}${hash}`} className={buttonClasses({ variant: "secondary", size: "md" })}>
+          Clear
+        </Link>
+      ) : null}
+      <Badge tone="neutral" className="ml-auto">
+        {search ? `${formatInt(shown)} of ${formatInt(total)}` : formatInt(total)} {total === 1 ? "person" : "people"}
+        {search ? ` · “${search}”` : ""}
+      </Badge>
+    </form>
+  );
+}
 
 function Glance({ label, value, caption, muted }: { label: string; value: ReactNode; caption: ReactNode; muted?: boolean }) {
   return (
@@ -93,7 +137,7 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
     <PageStack>
       <PageHeader
         title={isAgent ? "My performance" : "Performance"}
-        description={isAgent ? "Your leads, calls, follow-ups and meetings. Your leave and sign-ins are in My workplace." : "Agent KPIs and CRM sign-in activity for your scope (same metrics as team reports)."}
+        description={isAgent ? "Your leads, calls, follow-ups and meetings. Your leave and sign-ins are in My workplace." : "How each agent is doing on leads, follow-ups, calls, meetings and bookings, for the dates you pick."}
         icon={item.icon}
         actions={
           <PerformanceFilters
@@ -116,7 +160,12 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Glance label="Win rate" value={pctText(s.winPct)} caption={`${formatInt(s.booked)} booked of ${formatInt(decided)} decided leads`} />
             <Glance label="Follow-ups done" value={pctText(s.fuPct)} caption={`${formatInt(s.fuDone)} of ${formatInt(s.fuDue)} due in the range`} />
-            <Glance label="Meaningful calls" value="—" caption="Needs AI call scoring, which is not part of this system" muted />
+            <Glance
+              label="Qualified calls"
+              value={formatInt(s.callsQualified)}
+              caption={s.calls === 0 ? "No call recordings in the range" : `60 s or longer · ${formatInt(s.callsVerified)} were 30 s+ · ${formatInt(s.callsTimed)} of ${formatInt(s.calls)} have a length`}
+              muted={s.calls === 0}
+            />
           </div>
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <div className="rounded-2xl border border-zinc-200/80 p-3">
@@ -162,8 +211,19 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <OutcomeMix mix={report.charts.outcomeMix} winPct={s.winPct} />
         {own ? null : <TopClosers rows={report.charts.topClosers} />}
-        <CallQuality data={report.charts.callQuality} />
-        {own ? null : <CallVolume rows={report.charts.callVolume} />}
+        {s.calls === 0 ? (
+          <Panel title="Calls" description="Call quality and call leaders">
+            <EmptyState size="sm">
+              No call recordings were uploaded in this range. Calls are counted from recordings agents upload on a lead&apos;s page; call quality and the call leaders
+              appear here once there are some.
+            </EmptyState>
+          </Panel>
+        ) : (
+          <>
+            <CallQuality data={report.charts.callQuality} />
+            {own ? null : <CallVolume rows={report.charts.callVolume} />}
+          </>
+        )}
         {own ? null : <CallsVsMeetings rows={report.charts.callsVsMeetings} />}
       </div>
 
@@ -208,7 +268,7 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
 
       <Panel
         title={own ? "Your figures & CRM sign-in activity" : "Performance & CRM sign-in activity"}
-        description="Same KPI columns as team reports: leads, follow-ups, meetings, bookings, calls, and CRM sign-in counts for the date range."
+        description={own ? "Your figures for the chosen dates." : "One row per agent for the chosen dates. Click a column to sort it, or a name to open that person's work profile. Hover a column title for what it counts."}
         actions={
           <a href={`/api/v1/performance/export?${csvQuery}`} className={buttonClasses({ variant: "secondary", className: "h-[33px] px-3 text-xs" })} download>
             <Download aria-hidden="true" className="size-3.5" />
@@ -217,24 +277,11 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
         }
         bodyClassName="space-y-3"
       >
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            disabled
-            title="The Critical rule has not been defined yet (client decision Q-L8)"
-            className="inline-flex cursor-not-allowed items-center gap-2 rounded-xl border border-zinc-200/80 bg-zinc-50 px-2.5 py-1.5 text-[10px] font-black tracking-[0.05em] text-zinc-400 uppercase"
-          >
-            Critical only
-          </button>
-          <span className="text-[11px] text-zinc-500">The Critical flag is not available until its rule is agreed.</span>
-          {own ? null : (
-            <Badge tone="neutral" className="ml-auto">
-              {formatInt(report.total)} {report.total === 1 ? "person" : "people"}
-            </Badge>
-          )}
-        </div>
+        {own ? null : (
+          <AgentSearch params={params} search={report.search} shown={report.total} total={s.agents} />
+        )}
         {report.total === 0 ? (
-          <EmptyState>No agents in this scope.</EmptyState>
+          <EmptyState>{report.search ? `No agent matches “${report.search}”.` : "No agents in this scope."}</EmptyState>
         ) : (
           <div className="max-h-[540px] overflow-auto rounded-xl border border-zinc-200/80">
             <table className="w-full min-w-max border-collapse text-left text-xs">
@@ -295,18 +342,30 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
         </p>
         <p className="text-[11px] text-zinc-500">
           CRM sign-ins and sign-outs are authentication activity only. They are not attendance and are not used to work out hours, lateness or absences;
-          attendance is not available until the client approves its rules. {retentionNote}
+          attendance (check-in, late, absent) is in HR → Attendance. {retentionNote}
         </p>
       </Panel>
 
       {pipeline && project ? (
+        <div id="pipeline" className="scroll-mt-20">
         <Panel
           title={own ? "Your pipeline" : "Pipeline by agent"}
           description={`Leads held right now in each stage · ${project.name} · not limited to the date range. Click a number to open those leads.`}
+          actions={
+            <a
+              href={`/api/v1/performance/pipeline-export?${new URLSearchParams({ ...(report.team ? { team: report.team } : {}), ...(report.search ? { q: report.search } : {}) })}`}
+              className={buttonClasses({ variant: "secondary", className: "h-[33px] px-3 text-xs" })}
+              download
+            >
+              <Download aria-hidden="true" className="size-3.5" />
+              Export CSV
+            </a>
+          }
           bodyClassName="space-y-3"
         >
-          {report.allRows.length === 0 ? (
-            <EmptyState>No agents in this scope.</EmptyState>
+          {own ? null : <AgentSearch params={params} search={report.search} shown={report.total} total={s.agents} anchor="pipeline" />}
+          {report.matched.length === 0 ? (
+            <EmptyState>{report.search ? `No agent matches “${report.search}”.` : "No agents in this scope."}</EmptyState>
           ) : (
             <div className="max-h-[540px] overflow-auto rounded-xl border border-zinc-200/80">
               <table className="w-full min-w-max border-collapse text-left text-xs">
@@ -322,7 +381,7 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
                   </tr>
                 </thead>
                 <tbody>
-                  {report.allRows.map((r) => {
+                  {report.matched.map((r) => {
                     const counts = pipeline.get(r.userId);
                     const total = counts ? LEAD_STAGES.reduce((a, st) => a + counts[st], 0) : 0;
                     return (
@@ -359,6 +418,7 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
             </div>
           )}
         </Panel>
+        </div>
       ) : null}
     </PageStack>
   );

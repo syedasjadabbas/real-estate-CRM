@@ -111,7 +111,7 @@ export function PerformanceFilters({
         onClose={() => setOpen(false)}
         side="right"
         title="Performance filters"
-        description="Scope, team, and date range. Changes apply immediately."
+        description="Choose whose figures to show and the dates. Changes apply immediately."
         footer={
           <>
             <Button variant="secondary" size="lg" onClick={() => go({ from: null, to: null, team: null })} disabled={pending}>
@@ -124,7 +124,7 @@ export function PerformanceFilters({
         }
       >
         <div className="space-y-4">
-          <Field label="Context">
+          <Field label="Show">
             {(id) =>
               allLabel === null ? (
                 <select id={id} disabled className={selectClass}>

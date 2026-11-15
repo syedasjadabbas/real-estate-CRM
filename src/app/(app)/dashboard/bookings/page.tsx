@@ -9,7 +9,11 @@ import { BookingsToolbar } from "@/features/bookings/components/bookings-toolbar
 import { Pagination } from "@/features/leads/components/pagination";
 import { flattenParams } from "@/features/leads/url";
 import { canDoBooking } from "@/modules/bookings/policy";
-import { listBookings } from "@/modules/bookings/queries";
+import { bookingFilterOptions, bookingStageCounts, listBookings } from "@/modules/bookings/queries";
+import { BOOKING_STAGE_LABELS } from "@/modules/bookings/constants";
+import { MiniStat } from "@/components/ui/stat";
+import { formatPrice } from "@/features/inventory/format";
+import { withParams } from "@/features/leads/url";
 import { businessToday } from "@/modules/bookings/today";
 import { inventoryProjects } from "@/modules/inventory/queries";
 import { requirePageUser } from "@/server/auth/current-user";
@@ -24,8 +28,9 @@ export default async function BookingsPage({ searchParams }: PageProps<"/dashboa
   const params = flattenParams(await searchParams);
   const db = getDb();
   const [{ activeProjectId }, projects] = await Promise.all([getProjectScope(), inventoryProjects(db)]);
-  const result = await listBookings(db, actor, params, activeProjectId, businessToday());
-  const filtered = Boolean(params.q || params.stage);
+  const [result, options] = await Promise.all([listBookings(db, actor, params, activeProjectId, businessToday()), bookingFilterOptions(db, actor)]);
+  const stages = await bookingStageCounts(db, actor, result.projectId);
+  const filtered = Boolean(params.q || params.stage || params.agent || params.team || params.from || params.to);
 
   return (
     <section className="space-y-6" aria-label="Bookings list">
@@ -45,7 +50,22 @@ export default async function BookingsPage({ searchParams }: PageProps<"/dashboa
           ) : null
         }
       />
-      <BookingsToolbar params={params} total={result.total} projects={projects} projectId={result.projectId} />
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+        {stages.map((s) => {
+          const on = params.stage === s.stage;
+          return (
+            <MiniStat
+              key={s.stage}
+              label={BOOKING_STAGE_LABELS[s.stage]}
+              value={String(s.n)}
+              caption={s.n ? formatPrice(s.value) : "None"}
+              href={withParams("/dashboard/bookings", params, { stage: on ? null : s.stage, page: null })}
+              active={on}
+            />
+          );
+        })}
+      </div>
+      <BookingsToolbar params={params} total={result.total} projects={projects} projectId={result.projectId} agents={options.agents} teams={options.teams} />
       <BookingsTable rows={result.rows} params={params} emptyMessage={filtered ? "No bookings match these filters." : "No bookings in this scope yet."} />
       <Pagination page={result.page} pageCount={result.pageCount} total={result.total} params={params} />
     </section>

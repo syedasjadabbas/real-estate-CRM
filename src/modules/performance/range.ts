@@ -15,6 +15,8 @@ export const performanceQuerySchema = z.object({
   from: z.iso.date().optional().catch(undefined),
   to: z.iso.date().optional().catch(undefined),
   team: z.uuid().optional().catch(undefined),
+  /** Agent name search on the table (16 Nov 2026); the summary and charts keep the whole scope. */
+  q: z.string().trim().max(100).optional().catch(undefined),
   sort: z.enum(PERFORMANCE_SORTS).catch("agent"),
   dir: z.enum(["asc", "desc"]).catch("asc"),
   page: z.coerce.number().int().min(1).max(10_000).catch(1),

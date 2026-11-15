@@ -6,26 +6,31 @@ import { useState, useTransition, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { selectClass } from "@/features/leads/components/lead-fields";
 import { withParams } from "@/features/leads/url";
+import { cn } from "@/lib/cn";
 import { formatInt } from "@/lib/format";
 import { BOOKING_STAGE_LABELS, CURRENT_STAGES } from "@/modules/bookings/constants";
 
-/** Reference bookings filters: search, Project, Stage (FR-085). */
+/** Bookings filters: search, Project, Stage (FR-085); Agent, Team and booked dates (16 Nov 2026). */
 export function BookingsToolbar({
   params,
   total,
   projects,
   projectId,
+  agents = [],
+  teams = [],
 }: {
   params: Record<string, string>;
   total: number;
   projects: { id: string; label: string }[];
   projectId: string | null;
+  agents?: { id: string; name: string }[];
+  teams?: { id: string; name: string }[];
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const [pending, startTransition] = useTransition();
   const [q, setQ] = useState(params.q ?? "");
-  const hasAny = Boolean(params.q || params.stage);
+  const hasAny = Boolean(params.q || params.stage || params.agent || params.team || params.from || params.to);
 
   const go = (overrides: Record<string, string | null>) =>
     startTransition(() => router.replace(withParams(pathname, params, { ...overrides, page: null })));
@@ -71,6 +76,38 @@ export function BookingsToolbar({
             ))}
           </select>
         </label>
+        {agents.length > 1 ? (
+          <label className="min-w-0 flex-1 basis-40 lg:flex-none">
+            <span className="sr-only">Sales agent</span>
+            <select value={params.agent ?? ""} onChange={(e) => go({ agent: e.target.value || null })} className={selectClass} disabled={pending}>
+              <option value="">All agents</option>
+              {agents.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        {teams.length ? (
+          <label className="min-w-0 flex-1 basis-40 lg:flex-none">
+            <span className="sr-only">Team</span>
+            <select value={params.team ?? ""} onChange={(e) => go({ team: e.target.value || null })} className={selectClass} disabled={pending}>
+              <option value="">All teams</option>
+              {teams.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        <span className="flex w-full min-w-0 items-center gap-1.5 text-xs font-bold text-zinc-500 sm:w-auto sm:flex-1 sm:basis-72 lg:flex-none">
+          Booked
+          <input type="date" aria-label="Booked from" value={params.from ?? ""} max={params.to} onChange={(e) => go({ from: e.target.value || null })} className={cn(selectClass, "min-w-0 flex-1 lg:w-36 lg:flex-none")} disabled={pending} />
+          to
+          <input type="date" aria-label="Booked to" value={params.to ?? ""} min={params.from} onChange={(e) => go({ to: e.target.value || null })} className={cn(selectClass, "min-w-0 flex-1 lg:w-36 lg:flex-none")} disabled={pending} />
+        </span>
         {hasAny ? (
           <Button
             variant="secondary"
@@ -78,7 +115,7 @@ export function BookingsToolbar({
             className="h-10 px-4 text-xs"
             onClick={() => {
               setQ("");
-              go({ q: null, stage: null });
+              go({ q: null, stage: null, agent: null, team: null, from: null, to: null });
             }}
           >
             Clear
