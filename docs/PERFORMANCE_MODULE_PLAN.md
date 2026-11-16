@@ -4,7 +4,8 @@ Status: **implemented and verified 29 Oct 2026** (§5–§9).
 - **Data:** no database migration; every metric is computed from existing tables.
 - **Tests:** 201 / 201 pass; typecheck, lint and build are clean.
 - **Browser:** checked for all six roles, at 375, 768 and 1440.
-- **Not available:** Meaningful calls (AI score) and the Critical flag, with no data or rule yet (§1.3). Calls, call minutes, call quality, call volume and calls vs meetings come from uploaded call recordings since 11 Nov 2026 (§10).
+- **Not available:** the Critical flag, with no rule yet (§1.3). Calls, call minutes, call quality, call volume and calls vs meetings come from uploaded call recordings since 11 Nov 2026 (§10).
+- **Updated 16 Nov 2026 (§11):** "Meaningful calls" is replaced by Qualified calls, "Critical only" is removed, and the page gains a Score and Targets met column, Teams compared, Pipeline by agent with its own CSV, and an agent name search.
 
 ## Sources
 
@@ -191,12 +192,12 @@ A team the actor may not see is rejected with 403. Ranges are validated: dates, 
 ## 9. Limitations and unresolved client decisions
 
 **Not available (no data or rule; shown as "—" with the reason, never estimated):**
-- Meaningful calls (AI score; AI call analysis is out of scope, Q-P4).
-- The **Critical** flag and the "Critical only" filter (Q-L8).
+- Meaningful calls (AI score; AI call analysis is out of scope, Q-P4). *16 Nov 2026: the card is gone, replaced by Qualified calls (§11).*
+- The **Critical** flag and the "Critical only" filter (Q-L8). *16 Nov 2026: the disabled button is removed; the rule is still undefined (§11).*
 - Pipeline pressure (undefined).
 - The roster's "Avg M / Avg QC".
 
-**Attendance (Q-H2):** only CRM sign-in and sign-out counts are shown, labelled as authentication activity. No hours, days present or roster-based attendance is calculated.
+**Attendance (Q-H2):** only CRM sign-in and sign-out counts are shown, labelled as authentication activity. No hours, days present or roster-based attendance is calculated. *16 Nov 2026: still true on this page, but attendance now exists in HR → Attendance (check-in); the footnote points there (§11).*
 
 **30 Oct 2026 (`PRODUCTION_READINESS_PLAN.md` §4):** the header now says "Agent KPIs and CRM sign-in activity for your scope", the table is "Performance & CRM sign-in activity", the sign-in glance and column tooltips say "not attendance", and a footnote states that sign-ins are not attendance plus the retention policy. This departs from the reference wording on purpose (C1).
 
@@ -216,6 +217,44 @@ The client confirmed in writing on 10 Nov 2026: "Calls = uploaded recordings lin
 
 - **Table:** Calls and Call min are sortable (missing Call min sorts last either way); the CSV fills both columns. Top closers show "Win % · N calls" as on the reference page.
 - **Team at a glance:** Activity → Calls shows the total, the per-agent average and the total call minutes.
-- **Still unavailable:** Meaningful calls (AI score ≥ 70) and the Critical flag.
-- **Durations** are reported by the uploader's browser from the audio metadata and can be missing; that is why recordings without one still count as calls.
+- **Still unavailable:** Meaningful calls (AI score ≥ 70) and the Critical flag. *(16 Nov 2026: Meaningful calls is no longer shown at all; see §11.)*
+- **Durations** are reported by the uploader's browser from the audio metadata and can be missing; that is why recordings without one still count as calls. *Superseded 15 Nov 2026: the server measures the length from the file itself (§11).*
 - **Tests:** `tests/integration/performance-calls.test.ts` (definition, window boundaries, hidden / non-recording files, uploader attribution, minutes, buckets, CSV, sorting, charts, scope); `performance.test.ts` and `tests/unit/performance-rules.test.ts` updated; `e2e/performance-page.spec.ts` now checks the call charts and footnote instead of the "not available" wording.
+
+## 11. Update, 16 Nov 2026
+
+What the page does now, after the changes of 14–16 Nov 2026. Where this differs from the sections above, this section wins.
+
+**Header and filters**
+- Admins see "How each agent is doing on leads, follow-ups, calls, meetings and bookings, for the dates you pick." Agents see "My performance" with their own figures only.
+- The Filters drawer says "Choose whose figures to show and the dates." The Context field is now called **Show**.
+- Since 13 Nov 2026 the Manager role is merged into Admin, so the "Manager" column in §3 no longer applies to new accounts. Admins who own leads are listed alongside agents.
+
+**Team at a glance**
+- The "Meaningful calls" card, which always showed "—", is replaced by **Qualified calls**: recordings of 60 seconds or longer in the range. Its caption gives the 30-second-plus count and how many calls have a known length. With no recordings it is greyed out and says so.
+
+**Charts**
+- With no call recordings in the range, Call quality and Call volume leaders are replaced by one **Calls** panel. It explains that calls are counted from recordings uploaded on a lead's page.
+
+**Teams compared** (Admins and Super Admins, when no team is picked)
+- One row per active team with its agents added together: agents, open leads, booked, lost, win %, calls, call minutes, qualified calls, follow-up % and meetings. Clicking a team narrows the page to it.
+- An agent in two teams counts in both. Admins who own leads but are in no team are in no row.
+
+**Agent table** ("Performance & CRM sign-in activity")
+- The disabled **Critical only** button is gone. The Critical rule (Q-L8) is still not defined.
+- **Score** column: the agent's 0–100 score (see Settings → Assignment & agent scores), "prov." while there is too little history. Sortable and in the CSV.
+- **Targets met** column: goals met out of goals set, for targets whose period starts in the range. Custom goals count too. Sortable and in the CSV.
+- A name opens that person's work profile (`/dashboard/people/[id]`) for Admins and Super Admins.
+- **Find an agent by name** (`?q=`): one search shared by the agent table and Pipeline by agent, so both always list the same people. The summary and charts still cover the whole scope. The badge shows "N of M people".
+- The footnote now says attendance (check-in, late, absent) is in HR → Attendance. Sign-ins and sign-outs are still not attendance.
+
+**Pipeline by agent**
+- For the project selected in the header: one row per agent and one column per stage, counting the leads each agent holds now. It is not limited to the date range. Each number opens those leads (the leads list's agent filter). Agents see "Your pipeline".
+- **Export CSV** (`GET /api/v1/performance/pipeline-export?team=&q=`): the table as shown, one row per agent with each stage and a total, for the header project and the same scope, team and name search. Every download is written to the audit log as `performance.pipeline_export`.
+
+**Call lengths**
+- Since 15 Nov 2026 the server measures each recording's length from the file itself (MP3, M4A, AAC, OGG Vorbis / Opus, WAV) and ignores any length the browser sends. A file it can't read still counts as a call, with the length shown as unknown.
+
+**Known wording issue:** the Score column's tooltip still says the score is used "as automatic assignment uses it". Since 13 Nov 2026 new leads go by equal rotation and the score no longer chooses owners. The tooltip should be reworded.
+
+**Still not available:** the Critical flag (Q-L8), AI call scoring and Pipeline pressure.

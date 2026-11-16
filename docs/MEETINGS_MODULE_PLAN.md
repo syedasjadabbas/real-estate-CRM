@@ -4,6 +4,7 @@ Status: **implemented and verified 29 Oct 2026** (§9–§13).
 - **Tests:** 172 / 172 pass; typecheck, lint and build are clean.
 - **Browser:** checked for all six roles, at 375, 768 and 1440.
 - **Open:** the assumptions in §1.3 still need client confirmation. Nothing is committed.
+- **Updated 16 Nov 2026 (§15):** clickable count cards, a Team filter and a meeting date range on the list.
 
 ## Sources
 
@@ -32,7 +33,7 @@ Status: **implemented and verified 29 Oct 2026** (§9–§13).
 | Statuses: Scheduled, Completed, Cancelled | FR-100, observed |
 | List: search, status and organizer filters | FR-102, observed |
 | Columns: Title, When, Organizer, Lead, Status, Updated (sortable) and Actions | Observed |
-| Tiles: Total meetings ("All accessible"), Active filters, On this page ("Loaded rows"); "Page X of Y", page box, Go / Previous / Next | Observed |
+| Tiles: Total meetings ("All accessible"), Active filters, On this page ("Loaded rows"); "Page X of Y", page box, Go / Previous / Next *(16 Nov 2026: tiles replaced by clickable counts, §15)* | Observed |
 | Empty state: "No meetings match" / "Try clearing filters or adjusting search." | Observed |
 | Status changes: Scheduled → Completed or Cancelled | USER_FLOWS §7, API_DESIGN |
 | Overdue meetings appear in To-dos | FR-027, USER_FLOWS §7 |
@@ -76,8 +77,8 @@ Status: **implemented and verified 29 Oct 2026** (§9–§13).
 
 **List** (`/dashboard/meetings`):
 - **Header:** the module header and a "Schedule meeting" button.
-- **Tiles:** Total meetings, Active filters, On this page.
-- **Toolbar:** search (title, lead name, lead code), a Filters drawer (Status, Organizer, "Overdue only") and Clear.
+- **Tiles:** Total meetings, Active filters, On this page. *(Superseded 16 Nov 2026: Today, Scheduled ahead, Need an outcome, Held this month; §15.)*
+- **Toolbar:** search (title, lead name, lead code), a Filters drawer (Status, Organizer, "Overdue only") and Clear. *(16 Nov 2026: also Type, Team and Meetings from / to; §15.)*
 - **Table:** sortable columns and pagination (50 per page, FR-005). An Overdue chip appears on Scheduled meetings that are past their start time.
 
 **Create** (`/dashboard/meetings/new?lead=…`):
@@ -268,7 +269,23 @@ Status: **implemented and verified 29 Oct 2026** (§9–§13).
 
 ## 14. Remaining concerns (not bugs found)
 
-- **Dashboard:** its meeting widgets ("meetings by format", "Team meetings") are still not connected to real data. "Format" is undefined, so this was left alone (§1.4).
-- **Performance and targets:** "meetings done" counts will come from this table once those modules are built.
-- **Lead picker:** a native select, limited to 1000 leads in the header project. Large projects may need a search picker later; the same applies to Tasks.
+- **Dashboard:** its meeting widgets ("meetings by format", "Team meetings") are still not connected to real data. "Format" is undefined, so this was left alone (§1.4). *Superseded: meetings now have a type (Company office, Site visit, Virtual, Outdoor, Sales event), and since 15 Nov 2026 the dashboard's Meeting mix, Meetings Distribution and Team meetings use real data.*
+- **Performance and targets:** "meetings done" counts will come from this table once those modules are built. *Done: both count completed meetings the agent organized.*
+- **Lead picker:** a native select, limited to 1000 leads in the header project. Large projects may need a search picker later; the same applies to Tasks. *Done 13–14 Nov 2026: Meetings, Tasks and Bookings use a searchable lead picker.*
 - **Assumptions:** M-A1 to M-A9 (§1.3) still need client confirmation. None blocks use, and each can be changed without data migration.
+
+## 15. Update, 16 Nov 2026
+
+What the Meetings list does now, after the owner's review of 16 Nov 2026. Where this differs from the sections above, this section wins.
+
+- **Description:** "Site visits, office and online meetings with clients. Mark each one held or cancelled after it happens."
+- **Count cards:** the Total meetings / Active filters / On this page tiles are replaced by four clickable cards. Each count covers everything in the user's scope, not the current filters. Clicking a card applies exactly that filter; clicking it again clears it.
+  - **Today**: meetings dated today (any status).
+  - **Scheduled ahead**: Scheduled meetings from today onwards.
+  - **Need an outcome**: Scheduled meetings whose time has passed (red when above 0). Opens "Overdue only".
+  - **Held this month**: Completed meetings from the 1st of this month to today.
+- **New filters** in the Filters drawer (`src/server/list-filters.ts`):
+  - **Team**: meetings whose organizer is a member of that team or its team admin. Shown only to roles that see every team or manage a team; it never widens the user's own scope.
+  - **Meetings from / Meetings to**: by start time, whole days in Pakistan time, either end optional.
+- **Create:** the start time uses the shared date-time picker (date, Hour / Minute / AM-PM, quick days), and the lead is chosen with a searchable picker. A meeting can also be booked from the lead page's "Update after call" card.
+- **Roles:** the Manager role is merged into Admin (13 Nov 2026), so "manager" in this record now means the team admin.

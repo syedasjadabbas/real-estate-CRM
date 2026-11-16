@@ -2,6 +2,8 @@
 
 > This is the planned API for **our** CRM. No reference-CRM endpoints were inspected or reproduced.
 
+> **Updated 16 Nov 2026.** §2 is the original plan; some paths were built differently. §4 lists the CSV downloads that exist in `src/app/api/v1`, with who may use them. Where this file and the code differ, the code wins.
+
 ## 1. Conventions
 
 - Base path `/api/v1`, JSON over HTTPS. The UI may call the same services through server actions; these REST routes exist for integrations, future mobile apps and tests.
@@ -125,7 +127,7 @@ Validation uses shared Zod schemas on client and server. Writes accept an `Idemp
 
 Sprint (Nov 2026, built):
 - `GET /leads/unassigned`, `POST /leads/:id/claim` (first claim wins; later claims get 409).
-- `GET/POST /lead-imports`, `GET /lead-imports/:id`, `POST /lead-imports/:id/decision` `{ approve, note? }` (Super Admin only; a note is required to reject).
+- `GET/POST /lead-imports` (submit: Admin and Super Admin), `GET /lead-imports/:id`, `GET /lead-imports/template`, `POST /lead-imports/:id/decision` `{ approve, note? }` (Super Admin only; a note is required to reject).
 - `GET/PUT /settings/assignment` (Super Admin, Admin).
 - `GET /voip/status` (configured or not; never secrets).
 - Leads and clients accept `phones: [{ countryCode, number }]` for numbers 2–5.
@@ -150,9 +152,30 @@ Cities (FR-042, built): `GET/POST /lookups/cities`, `PATCH /lookups/cities/:id` 
 
 Webhooks respond `200` quickly and create the lead in a background job (idempotent on `external_id`).
 
+Built 14–16 Nov 2026 (besides the downloads in §4):
+- `GET /leads/verification`, `POST /leads/:id/verification` (Admin, Super Admin), `POST /leads/:id/resubmit` (the agent, after a rejection).
+- `POST /leads/:id/notes`, `POST /leads/:id/reviews`: agents may add these on their own leads.
+- `GET/POST /bookings/:id/proofs`, `GET /bookings/proofs/:fileId` (transfer screenshots on a booking), `GET/POST /bookings/:id/signed-forms`.
+- `DELETE /recordings/:id`: Super Admin only (hides the recording; the file is kept).
+- `GET/POST /leave`, `POST /leave/:id/decision`, `POST /leave/:id/cancellation` (the built paths for leave requests).
+
 ## 3. Rate limits and security
 
 - Login: 5 attempts / 15 min per IP + account, then a temporary lock.
 - General API: 300 req / min per user.
 - Webhooks: signature required; payload size ≤ 1 MB.
 - See `SECURITY_AND_PRIVACY.md`.
+
+## 4. CSV downloads (built; updated 16 Nov 2026)
+
+Every route needs a signed-in session; only `POST /auth/login` does not. A download returns `text/csv` with `Cache-Control: no-store`. It uses the same filters and the same record scope as its page. A role without access gets `403`.
+
+| Method | Path | Who | Audit action | Notes |
+|---|---|---|---|---|
+| GET | `/audit/export?q&actor&entity&action&from&to` | Super Admin, Admin | `audit.export` | New 16 Nov 2026. The audit log, newest first, at most 20,000 rows. Plain labels beside codes; secret-looking values hidden |
+| GET | `/performance/pipeline-export?team&q` | Super Admin, Admin, Agent (own row only) | `performance.pipeline_export` | New 16 Nov 2026. Pipeline by agent for the project selected in the header |
+| GET | `/people/:id/export?from&to` | Super Admin, Admin | `people.export` | New 16 Nov 2026. One employee's work record (calls, pipeline, follow-ups, targets, attendance). Coaching notes are never included (owner, 16 Nov 2026): the file may be handed to the employee |
+| GET | `/hr/export?kind=…` | HR, Admin, Super Admin | `hr.export` | New 16 Nov 2026. `kind` is `employees`, `leave`, `leave-balances`, `attendance-month`, `attendance-day` or `attendance-person`, plus the page's filters |
+| GET | `/finance/reports/export?report=…&from&to` | Finance roles that can see the report | `finance.report_export` | `report` is `collections`, `outstanding_project`, `outstanding_agent` or `income_expense` |
+| GET | `/performance/export?from&to&team` | Super Admin, Admin, Agent (own row only) | — | The agent table on Performance |
+| GET | `/targets/export?period&anchor` | Roles that see Targets | — | The visible targets grid |

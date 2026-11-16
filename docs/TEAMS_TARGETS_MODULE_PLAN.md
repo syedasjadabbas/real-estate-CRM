@@ -4,6 +4,7 @@ Status: **implemented and verified 29 Oct 2026** (§6–§10).
 - **Tests:** 192 / 192 pass; typecheck, lint and build are clean.
 - **Browser:** checked for all six roles, at 375, 768 and 1440.
 - **Open:** client questions TQ1–TQ8 (§1.4). Nothing is committed.
+- **Updated 16 Nov 2026 (§12):** Manager merged into Admin, optional Team Lead and "My team" page, daily report and roster filled from CRM data, custom target periods and custom goals, rotation skips leave and "Leads off", employee work profile with coaching notes.
 
 ## Sources
 
@@ -71,10 +72,10 @@ Status: **implemented and verified 29 Oct 2026** (§6–§10).
 | T-A1 | **Teams create / edit / activate / membership: admins only** (super admin, admin). Managers **view** their own teams; HR views all (read-only). Agents have no Teams tab. | The matrix gives managers "T", but letting a manager add members would widen their lead scope to that member's leads. Restricting it avoids that data exposure. |
 | T-A2 | A team manager must be an active user with role **manager**. Members must be active **agents or managers**. A user may belong to several teams (the current schema allows it; Q-R2 open). | Matches how scopes are computed today |
 | T-A3 | Teams are **deactivated, never deleted** | Leads, rotation and history reference them |
-| T-A4 | Daily report: the team's manager, admins and super admins can enter or edit it, **on the report date only** (Pakistan time). Earlier dates are read-only for everyone. HR reads all; agents have no access. | FR-121 "editable on the same day" |
+| T-A4 | Daily report: the team's manager, admins and super admins can enter or edit it, **on the report date only** (Pakistan time). Earlier dates are read-only for everyone. HR reads all; agents have no access. *Changed 16 Nov 2026: on the report date **and the day after** (§12).* | FR-121 "editable on the same day" |
 | T-A5 | Daily report lines cover the team's current **agent** members. Counts are whole numbers ≥ 0; remarks are optional. | Manual entry (Q-H3) |
 | T-A6 | Roster: manager, admin and super admin can edit a team member's status for a date **until 11:00 Pakistan time that day**. Future dates are editable; past dates and today after 11:00 are view-only. The lock applies to every role. Agents see only their own roster; HR reads all. | Observed lock; documented read rights |
-| T-A7 | Roster statuses are **recorded only**. They do **not** change lead rotation yet: "leads off / on leave → skip in rotation" is INFERRED (A-12, Q-L2) and needs confirmation. | Avoids changing live lead assignment on an unconfirmed rule |
+| T-A7 | Roster statuses are **recorded only**. They do **not** change lead rotation yet: "leads off / on leave → skip in rotation" is INFERRED (A-12, Q-L2) and needs confirmation. *Superseded: the equal rotation now skips agents on approved leave or marked "Leads off" for the day (§12).* | Avoids changing live lead assignment on an unconfirmed rule |
 | T-A8 | Targets are set by admins (any agent) and managers (agents in their teams), for **agents** only. Values are calls and meetings (whole ≥ 0) and sold sq ft (≥ 0, 2 decimals). Saving all three as 0 or blank clears the target. | Matrix + FR-110 |
 | T-A9 | **Achievement windows** use the period start and the next period start in **Pakistan time** (the reference labels its start as UTC; the rest of this app uses Pakistan time). The period start is normalised: daily = the date, weekly = Monday, monthly = the 1st. | Consistent with the rest of the app |
 | T-A10 | **Meetings achieved** = **completed** meetings where the agent is the organizer and the start falls in the window | Meetings module data |
@@ -88,7 +89,7 @@ Status: **implemented and verified 29 Oct 2026** (§6–§10).
 |---|---|
 | TQ1 (Q-R2) | Can a user be in several teams? Can a manager manage several teams? |
 | TQ2 | May managers add or remove members of their own team (T-A1)? |
-| TQ3 (A-12 / Q-L2) | Should "Leads off" and "On leave" exclude an agent from rotation that day? |
+| TQ3 (A-12 / Q-L2) | Should "Leads off" and "On leave" exclude an agent from rotation that day? **Answered: yes** (equal rotation, §12). |
 | TQ4 | Does the 11:00 roster lock also apply to admins? Can past days ever be corrected? |
 | TQ5 | Can a daily report be corrected after its date, and by whom? |
 | TQ6 | ~~Which calls count as "qualified", and where will call data come from?~~ **Answered 10 Nov 2026:** calls = uploaded recordings linked to a lead (one recording = one call). The reference column label "Calls (qualified)" is now shown as "Calls", because every recording counts (T-A12). |
@@ -262,8 +263,58 @@ Status: **implemented and verified 29 Oct 2026** (§6–§10).
 
 ## 11. Remaining concerns
 
-- **Rotation:** "Leads off" and "On leave" are recorded but do not change rotation (TQ3).
+- **Rotation:** "Leads off" and "On leave" are recorded but do not change rotation (TQ3). *Superseded: they now skip the agent for the day (§12).*
 - **Calls:** achievement counts every uploaded recording (T-A12, 11 Nov 2026). If the client wants targets measured on qualified calls (≥ 60 s) only, that is a one-line filter in `listTargets`.
 - **Avg M / Avg QC:** the roster text mentions these Performance metrics, which aren't built yet.
 - **Team membership:** a user can belong to several teams (TQ1). A manager added as a member of another team would not gain its scope; scope still comes from `manager_id`.
 - **Clock-based locks:** both locks (report date and roster 11:00) follow the server's clock in Pakistan time.
+
+## 12. Update, 16 Nov 2026
+
+What Teams and Targets do now, after the changes of 13–16 Nov 2026. Where this differs from the sections above, this section wins.
+
+**Roles**
+- The Manager role is merged into Admin (13 Nov 2026). The team form says **Team admin**: the Admin who leads the team. Admins can also be team members, so their own leads count for the team. Wherever this record says "manager", read "team admin".
+- Teams is no longer in HR's sidebar (15 Nov 2026). HR can still open it by address, read-only.
+
+**Team Lead and "My team"** (migration `0044_team_lead`)
+- A team can have one optional **Team Lead**: an active agent who is a member, appointed by an Admin or Super Admin. A Team Lead who leaves the team stops leading it.
+- The Team Lead keeps working as an agent and gets a read-only **My team** page (`/dashboard/my-team`, `src/modules/teams/my-team.ts`): members with their pipeline, follow-ups, calls, meetings and today's roster and attendance, plus the team's open leads.
+- Date range: Today, 7 days, 30 days, This month, or custom **From / To** dates.
+- Team's open leads: search by lead name or code, filter by agent, stage and "Follow-up overdue", **50 per page** with Previous / Next (it used to stop at 100). A follow-up shows red when it is before the current time.
+- The Team Lead can open only their own leads. Other agents' leads are listed for overview only.
+
+**Teams tab**
+- Team search and an Active / Inactive filter.
+- One team's settings are split into **Members** (opens first), **Team Lead** and **Details**. Members has a search box and "Selected only".
+- Agent scores can be searched by name and filtered (score below 50, provisional only, enough history). Each name opens the agent's work profile.
+- Weekly days off are no longer set per team. They come from one company setting in HR → Attendance → Office hours and days off.
+
+**Daily Report**
+- The numbers start from the CRM's own figures for each agent's day (`src/modules/teams/daily-figures.ts`): leads that became theirs, call recordings uploaded, completed meetings, bookings opened (tokens) and bookings closed as won.
+- The team admin adds remarks, corrects a number only if the CRM missed something, and presses **Confirm report**. A corrected number keeps the CRM figure beside it, and "Use CRM figures" puts them back.
+- A report can be confirmed on its date **or the day after**. Older dates are view only.
+- Agent search for big teams, and ← Previous day / Today / Next day buttons.
+
+**Duty Roster**
+- People who checked in are pre-marked **In office** until saved. Approved leave already writes "On leave".
+- "Checked-in → In office" and "Clear all" buttons, member search, a count of people not marked, and an "Unsaved changes" note.
+- Plain lock notes: today can be changed until 11:00, future days any time, past days are view only. Company holidays and weekly days off are shown.
+- The month view has a total per status for each person, and each date opens that day.
+
+**Rotation**
+- New leads go to agents by **equal rotation** (Settings → Assignment & agent scores). Agents on approved leave, marked "Leads off" in today's roster, or on a weekly day off without a roster entry are skipped and rejoin when back. This answers TQ3.
+- Known gap: rotation still reads the old per-team weekend column, which the team form no longer edits. The roster and attendance use the HR setting.
+
+**Targets**
+- **Custom dates** period (migration `0048_custom_target_period`): any From–To range up to a year, for example a campaign. Running custom targets show on the agent's My Targets card.
+- **Custom goals** (migration `0049_target_custom_goals`): up to 10 named goals per target (for example "Brochures delivered") with a target and a hand-entered "done so far". They show in a Custom goals column and count in Targets met.
+- Agent name search and a team filter for Admins.
+- A goal counts as **met** when its target is above 0 and the achievement reaches it. It gets a Met badge on Targets and My Targets, a `target_met` notification to the agent and their team admins (once per goal and period), and a Targets met column on Performance.
+
+**Employee work profile** (`/dashboard/people/[id]`, Admins and Super Admins)
+- Opened from Employees, Teams, Performance or HR → Find employee: KPIs for any date range, pipeline, follow-ups, meetings, bookings, targets, score, attendance, leave and recent activity.
+- **Download record (CSV)**: the profile's figures for the chosen dates, audited as `people.export`.
+- **Coaching notes** (migration `0050_employee_notes`): private notes written and read by Admins and Super Admins only. They are hidden from the person they are about, including an Admin opening their own profile. Only the author or a Super Admin can delete one. Writing and deleting are audited.
+
+**Still open:** TQ1, TQ2, TQ4, TQ5, TQ7, TQ8. The roster text no longer mentions Avg M / Avg QC.

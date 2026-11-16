@@ -94,7 +94,8 @@ export async function employeeProfileCsv(db: Database, actor: Actor, userId: str
   for (const r of p.lostByReason) add("Lost reasons", r.reason, r.count);
   for (const r of p.bySource) add("Lead sources", r.source, `${r.leads} leads · ${r.won} won · ${r.lost} lost`);
   for (const d of p.daily) if (d.calls || d.meetings) add("Daily activity", d.date, `${d.calls} calls · ${d.meetings} meetings`);
-  for (const n of p.notes) add("Coaching notes", `${n.authorName ?? "Former user"} · ${n.createdAt.toISOString().slice(0, 10)}`, n.body);
+  // Coaching notes are left out on purpose (owner, 16 Nov 2026): the file may be handed to the
+  // employee, and the notes must stay hidden from the person they are about.
 
   for (const r of p.recordings) add("Call recordings", `${r.leadName} (${r.leadCode})`, `${r.durationSec ?? ""}s · ${r.createdAt.toISOString()}`);
 

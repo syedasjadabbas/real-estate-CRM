@@ -1,5 +1,14 @@
 # Remaining client clarifications
 
+> **Update, 16 Nov 2026.** Answered by the owner since this list was written, and built:
+> - Sign-in history is kept **12 months** (agreed 16 Nov). Automatic deletion of older entries stays off until it's switched on in Settings → Security.
+> - Staff leave goes HR, then Admin; HR and Admin leave goes to a Super Admin; a Super Admin's own leave is approved automatically; 30 days' allowance (15 Nov).
+> - Attendance is check-in / check-out from My workplace, separate from CRM sign-ins (15 Nov).
+> - Team leaders are Admins; a team can have an optional Team Lead (an agent) with a read-only My team page; only the Super Admin edits projects and inventory (15 Nov).
+> - New leads are shared by equal rotation; agent scores no longer decide who gets a lead (13 Nov).
+>
+> **Still open:** Finance (how amounts entered on booking stage changes become verified payments, plus the Finance review itself); the client's own booking form, provisional receipt and sales order templates; the server items below, especially an **off-site backup copy**. The current list is at the top of [`PROJECT_STATUS.md`](PROJECT_STATUS.md).
+
 Prepared 2 Nov 2026 after the questionnaire answers (`CLIENT_ANSWERS_RECONCILIATION.md`). Questions are written in plain company-policy language so they can go to the client as they are. Each one says why it matters and what we would build in the meantime. Nothing is built on a guess.
 
 **Priority:**

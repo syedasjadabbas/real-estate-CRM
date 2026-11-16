@@ -3,6 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createLead } from "@/modules/leads/commands";
 import { employeeProfile } from "@/modules/people/profile";
 import { employeeProfileCsv } from "@/modules/people/export";
+import { addEmployeeNote } from "@/modules/people/notes";
 import { setTeamLead, setTeamMembers } from "@/modules/teams/commands";
 import { myTeamView } from "@/modules/teams/my-team";
 import { loadActor } from "@/server/auth/session-store";
@@ -106,7 +107,11 @@ describe.skipIf(!hasTestDb)("Team Lead and employee profile (owner, 15 Nov 2026)
 
     // The whole record downloads as CSV for Admins and Super Admins, and is audited (15 Nov 2026).
     expect((await errorOf(employeeProfileCsv(db, a1, a1.id, {})))?.code).toBe("FORBIDDEN");
+    // Coaching notes never go into the file (owner, 16 Nov 2026): it may be handed to the employee.
+    await addEmployeeNote(db, admin, a1.id, { body: "Private coaching note xyz" });
     const file = await employeeProfileCsv(db, admin, a1.id, {});
+    expect(file.body).not.toContain("Private coaching note xyz");
+    expect(file.body).not.toContain("Coaching notes");
     expect(file.filename).toMatch(/^work-record-.+.csv$/);
     expect(file.body).toContain("Calls,Calls (recordings),2");
     expect(file.body).toContain("Calls,Qualified (60s+),1");

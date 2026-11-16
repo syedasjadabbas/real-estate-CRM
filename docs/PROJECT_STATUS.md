@@ -1,10 +1,32 @@
 # Project status and completion checklist
 
+## Current status (16 Nov 2026)
+
+**Everything except Finance has been reviewed page by page in the browser and fixed**, as Admin and then as Super Admin. All work is committed and pushed to `main` (last code change `d2c7a7a`). Nothing is deployed.
+
+| Area | State |
+|---|---|
+| Agent side | Done (dashboard, leads, to-dos, clients, bookings, tasks, meetings, targets, performance, My workplace, My team for Team Leads) |
+| Admin side | Done. Reviewed: dashboard, leads, notifications, clients, to-dos, projects, inventory, HR (employees, holidays, leave, attendance), Teams, Targets, Tasks, Meetings, Bookings (list, detail, new), Performance, My workplace, Settings (Security, Cities, Assignment & scores, Audit log). See §71–§81 |
+| Super Admin side | Done. Same pages as Admin plus Users & access and Backups; the differences are listed in `USER_ROLES_AND_PERMISSIONS.md` |
+| HR and Accounts roles | HR done (§71–§73). Accounts waits on Finance |
+| **Finance** | **Not reviewed yet: the next step.** Start with the open point below |
+
+**Open before going live**
+
+1. **Finance: closed bookings show Paid PKR 0.** Agents type "Amount received" and attach proof when moving a booking's stage, but those amounts are notes on the stage change, not Finance payments. A booking can be Closed Won with Paid PKR 0 and the 30% milestone "Not met". Decide how stage amounts become payments that Finance verifies.
+2. **Backups: off-site copy.** Backups are kept on the same server as the CRM only. Set `BACKUP_DIR` and `BACKUP_REMOTE` on the live server (see `scripts/ops/RESTORE.md`).
+3. **IP addresses.** Set up the trusted proxy (`TRUST_PROXY`) on the live server, or the audit log and sign-in history show "—" instead of addresses (`DEPLOYMENT_PROXY.md`).
+4. **Sign-in history deletion.** 12 months is the agreed period (owner, 16 Nov 2026). Automatic deletion is still off; switch it on in Settings → Security when ready.
+5. **Client templates.** The booking form, provisional receipt and sales order are still demo layouts until the client sends theirs.
+
+---
+
 > **Roles, 15 Nov 2026:** team leaders stay Admins. Only the Super Admin adds or edits projects and inventory; Admins see them read-only. Each team can have an optional **Team Lead** (one of its agents, appointed by an Admin) who works as an agent and gets a read-only "My team" page. Admins and Super Admins open any employee's **work profile** (`/dashboard/people/[id]`) from Employees, Teams or Performance.
 >
 > **HR, 15 Nov 2026:** the owner answered C-4 (staff leave goes HR, then Admin), C-5 (a Super Admin's own leave is approved automatically, audited), the allowance (30 days) and attendance (check in / check out, built). Older sections that say staff leave can't be approved or attendance isn't built are superseded.
 >
-> **Latest: §57 (11 Nov 2026).** Built the client's 10 Nov rules: calls from recordings, token hold release, overdue and aging, reversal date, receipt format, proposal rules, paging, recording playback (68 implemented, 8 partial, 5 blocked, 4 excluded). Not committed. Previously, **§56 (11 Nov 2026).** The client's completed confirmations (10 Nov) answer several open decisions; matrix updated (60 implemented, 16 partial, 5 blocked, 4 excluded). Requirements spec written. Previously, **§54 (10 Nov 2026).** Pre-presentation cleanup on top of §53: phone numbers typed "92 300…" now match, the Teams tile shows a real average score, and HR and accountants no longer see menu links they can't open. Requirements unchanged at 60 implemented, 14 partial, 7 blocked, 4 excluded. The §53 sprint is committed as 3819bbf; §54 is not committed, and nothing is deployed. §1 – §23 are the 31 Oct baseline.
+> **Earlier history, §57 (11 Nov 2026).** Built the client's 10 Nov rules: calls from recordings, token hold release, overdue and aging, reversal date, receipt format, proposal rules, paging, recording playback (68 implemented, 8 partial, 5 blocked, 4 excluded). Not committed. Previously, **§56 (11 Nov 2026).** The client's completed confirmations (10 Nov) answer several open decisions; matrix updated (60 implemented, 16 partial, 5 blocked, 4 excluded). Requirements spec written. Previously, **§54 (10 Nov 2026).** Pre-presentation cleanup on top of §53: phone numbers typed "92 300…" now match, the Teams tile shows a real average score, and HR and accountants no longer see menu links they can't open. Requirements unchanged at 60 implemented, 14 partial, 7 blocked, 4 excluded. The §53 sprint is committed as 3819bbf; §54 is not committed, and nothing is deployed. §1 – §23 are the 31 Oct baseline.
 
 Updated **31 Oct 2026 (final read-only audit, §9)**. Everything below was checked against the code and by running the checks named here.
 - Rounds 1–4 are committed and pushed as `e956033` on `main`.
@@ -3808,3 +3830,99 @@ Typecheck and lint pass; performance and leads integration tests pass (47 / 47).
 | Above the cap | Booking created at the cap (5%) with the asked % **pending** (migration 0040: bookings.discount_pct, discount_requested_pct, discount_status, decided by/at, note; notification types discount_requested / discount_decided). Admins and Super Admins are notified; the booking can't move stage until decided |
 | Decision | Booking page banner: Approve (price moves to the asked %, unless more is already paid) or Reject with a reason (stays at 5%). The agent is notified; history and audit record it |
 | Token proof | New booking form takes an optional transfer screenshot, uploaded to the booking's Payment proofs right after creation; the demo provisional receipt prints image proofs |
+
+## 71. HR: leave approval order, attendance check-in, HR dashboard (15 Nov 2026)
+
+Committed (`34672f9`, `da63fd9`, `ba80b8a`). Owner's answers: staff leave goes HR, then Admin; a Super Admin's own leave is approved automatically (audited); 30 days' allowance.
+
+| Change | Detail |
+|---|---|
+| Attendance | Check in / check out from My workplace (migration 0043). HR → Attendance shows the day's sheet and a monthly summary. Office hours 09:00–18:00; after 09:15 counts as late. Days before attendance started aren't counted as absent |
+| HR dashboard | HR staff land on a people dashboard (who's in, on leave, late) instead of the sales one; Teams is hidden from HR |
+| Leave | Approval order shown on each request; HR page fixes |
+
+## 72. Lead timeline, call length from the recording (15 Nov 2026)
+
+Committed (`a3a8c2e`, `90902d1`, `2ee04df`). The lead timeline reads as plain sentences ("Stage changed from Contacted to Qualified by Dev Agent One"). Call duration is read from the uploaded recording file on the server, not typed, and shown on the timeline and in the recordings panel.
+
+## 73. Team Lead, work profile, Super Admin-only projects, archive (15–16 Nov 2026)
+
+Committed (`8b1c068`, `60c5047`, `6d13388`).
+
+| Change | Detail |
+|---|---|
+| Team Lead | Optional, one agent per team (migration 0044), appointed by an Admin. Works as an agent and gets a read-only **My team** page |
+| Work profile | `/dashboard/people/[id]` for Admins and Super Admins: KPIs with previous-period comparison, team comparison, pipeline, follow-ups, targets, attendance, calls, overdue list, lost reasons, sources, daily activity. **Download record (CSV)** (audited `people.export`), Print / PDF |
+| Projects and inventory | Only the Super Admin adds or edits; Admins get read-only detail pages. **Archive / restore** for projects and units (migration 0046): hidden everywhere, history kept |
+| Notifications | Import requests notify every Super Admin (migration 0045); notifications show a "Handled" tag once acted on |
+
+## 74. HR downloads, attendance history, leave for someone (16 Nov 2026)
+
+Committed (`e937d5e`, `6d13388`).
+
+| Change | Detail |
+|---|---|
+| CSV downloads | Employees, leave, leave balances, attendance (month, day, one person), all audited (`hr.export`) |
+| Attendance history | `/dashboard/hr/attendance/[id]`: one person's days, month by month |
+| Record leave for someone | HR, Admins and Super Admins record leave for a person, including **staff without a CRM login** (migration 0047). Admin-recorded leave for agents, accountants and staff without a login is approved at once; for HR and Admins it goes to a Super Admin. A Super Admin's is approved at once for anyone |
+| Leaving staff | When an account is switched off with open leads, a warning asks to move them first; Admins can now receive them |
+| Navigation | Leads and Finance tabs load instantly (loading screens and Suspense) |
+
+## 75. Teams: daily report and roster from CRM data, custom targets, Find employee (16 Nov 2026)
+
+Committed (`6c49de8`, `885b515`).
+
+| Change | Detail |
+|---|---|
+| Daily report | Starts from the CRM's own figures (leads, calls, meetings, tokens, bookings) per agent; corrections keep the CRM figure beside them; today or yesterday can be confirmed |
+| Roster | People who checked in are suggested as In office; weekend days come from attendance settings; month view with totals |
+| Targets | **Custom period** with an end date (migration 0048) and **custom goals** of your own (migration 0049); agent and team search |
+| Find employee | HR overview: type a name or email, jump to the work profile or HR record |
+| Coaching notes | Private notes on a work profile (migration 0050), Admins and Super Admins only. **Hidden from the person they're about**, including an Admin opening their own profile. The author or a Super Admin can delete one |
+| Notes / reviews | Agents can add notes / reviews on their own leads; the tab is now "Notes / reviews" and shows each writer's role |
+
+## 76. Tasks and Meetings (16 Nov 2026)
+
+Committed (`4799a69`). The useless "Total / Active filters / On this page" cards are replaced with clickable counts: Tasks **Open, In progress, Overdue, Done**; Meetings **Today, Scheduled ahead, Need an outcome, Held this month**. Both lists gain a **Team** filter and a **From / To** date range (tasks by due date, meetings by start). Plain page descriptions; "(Q47)" and similar internal wording removed from Proposal settings.
+
+## 77. Performance, Bookings, My team (16 Nov 2026)
+
+Committed (`9e06c22`).
+
+| Page | Change |
+|---|---|
+| Performance | "Meaningful calls" (always —) replaced by **Qualified calls**; disabled "Critical only" removed; the two empty call panels merge into one when there are no recordings; wrong attendance footnote corrected; **Find an agent by name**, shared by the agent table and Pipeline by agent; **Pipeline by agent → Export CSV** (audited `performance.pipeline_export`) |
+| Bookings | Clickable stage cards with count and sale value; **Agent, Team and Booked from / to** filters; header shows the current stages |
+| My team | Open leads: search, agent, stage and overdue filters, 50 per page (no longer cut at 100); custom dates; overdue colour uses the current time |
+
+## 78. Audit log, Cities, Security (16 Nov 2026)
+
+Committed (`e8aa581`).
+
+| Page | Change |
+|---|---|
+| Audit log | Actions in plain English ("Approved a booking discount") with the code beneath; records named and linked ("Mr X · unit DEMO-G02"); grouped Action filter; search understands the plain wording; **Export CSV** of the filtered log (up to 20,000 rows, itself audited as `audit.export`) |
+| Cities | Search, Active / Inactive / All, sort (list order, A–Z, most used), counts link to filtered leads and clients, input hint. New **Typed under "Other"**: city names typed by hand, most used first, with **Add to list**, which adds the city and moves those leads and clients onto it (audited) |
+| Security | Plain wording; 12 months shown as the agreed period; amber warning when the daily cleanup hasn't run for 2 days; plain IP-recording status with technical details folded; new **Sign-in history** list (search, event, dates, 50 per page) |
+
+## 79. Assignment & agent scores (16 Nov 2026)
+
+Committed (`0d9668e`). The page is renamed **Assignment & agent scores** (menu: "Assignment & scores") and split in two: **1 · Who gets a new lead** (the equal rotation, which has no settings) and **2 · Agent scores** (the weights and details). The Maximum load hint is corrected: it lowers the score only; agents keep their turn. Every field has a plain hint; the weights heading says when the total isn't 100%.
+
+## 80. Clients, To-dos, My workplace, booking detail, New booking (16 Nov 2026)
+
+Committed (`df6291e`).
+
+| Page | Change |
+|---|---|
+| To-dos | Search by lead name, code or phone, and an **agent filter** for the lead buckets; counts follow the filter; scope still applies |
+| Clients | Correct "no results" message for every filter; plain Relationship hint; "Find a person" in the owner picker once there are more than 8 people |
+| My workplace | Plain sign-in history wording; browser names shared with Security |
+| Booking detail | A closed booking shows Reserved until **Sold** / **Released** instead of an old hold date |
+| New booking | Searchable unit picker; discount hint per role |
+
+## 81. Backups in plain words (16 Nov 2026)
+
+Committed (`d2c7a7a`). The Backups page (Super Admin) now explains itself: a plain warning when backups are late (amber on a developer's computer, red on the live server), a separate **off-site copy** warning and card, "Keeps the last 30 days, plus one a month for 12 months", one plain sentence per run with the server message under Details, and plain names (Tidy-up, Worked, Nightly, Run by hand). Technical commands are folded under "Technical details".
+
+**Checks for §76–§81:** typecheck and lint pass after each change; the affected integration and unit tests were run and pass (tasks, meetings, bookings, team-lead, performance, audit, cities, security, todos-paging, leads, backups). Each page was checked in the browser as Admin; Backups is Super Admin only and was checked by tests and on the owner's Super Admin login.

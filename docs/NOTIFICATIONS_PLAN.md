@@ -1,6 +1,6 @@
 # In-app notifications (FR-006) — implementation notes
 
-Status: **built and tested, 31 Oct 2026.** Follow-up reminders are **off** until an admin sets the reminder window, because the threshold is not documented (see §5).
+Status: **built and tested, 31 Oct 2026.** Follow-up reminders are **off** until an admin sets the reminder window, because the threshold is not documented (see §5). **Updated 16 Nov 2026:** nine more event types and a "handled" tag on request notifications (§7).
 
 Sources:
 - `REQUIREMENTS.md` FR-006
@@ -23,7 +23,7 @@ Sources:
 
 Not raised:
 - **Approval of a lost request.** The flow documents a notification on rejection only.
-- **Anything else:** meetings, tasks, bookings, finance, HR. There is no requirement for them.
+- **Anything else:** meetings, tasks, bookings, finance, HR. There is no requirement for them. *Superseded 13–15 Nov 2026: the owner asked for more events (lead verification, targets, renames, booking discounts and rejections, imports); see §7.*
 
 ## 2. Behaviour
 
@@ -97,3 +97,30 @@ Not raised:
 | Phone layout | Fixed in round 2: the dropdown stays inside a 375 px screen | Browser |
 
 Open rules (N1–N6, §5) are unchanged and still need the client.
+
+## 7. Update, 16 Nov 2026
+
+What notifications do now, after the changes of 13–16 Nov 2026. Where this differs from the sections above, this section wins. The storage, no-duplicate, no-self-notification and same-transaction rules in §2 apply to every new type.
+
+**New events** (`notification_type` enum in `src/server/db/schema.ts`)
+
+| Event | Raised when | Recipient | Migration |
+|---|---|---|---|
+| `lead_verification_requested` | An agent adds a lead by hand, or resubmits a rejected one | Every active Admin and Super Admin | 0032 |
+| `lead_verified` | A lead is approved or rejected | The agent who added it | 0032 |
+| `target_met` | An agent reaches a goal of a current target (checked when their notifications are read) | The agent and their team admins, once per goal and period | 0037 |
+| `name_changed` | An agent renames a lead or client | Every active Admin and Super Admin | 0038 |
+| `discount_requested` | A booking asks for a discount above the agent's cap | Every active Admin and Super Admin | 0040 |
+| `discount_decided` | The discount is approved or rejected | The booking's agent | 0040 |
+| `booking_rejected` | Accounts reject a booking whose token payment isn't genuine | The booking's agent | 0041 |
+| `import_requested` | An Admin submits a lead import batch | Every active Super Admin | 0045 |
+| `import_decided` | A Super Admin approves or rejects the batch | The Admin who uploaded it | 0045 |
+
+- `lost_requested` now goes to the team admins of the owner's teams: the Manager role is merged into Admin (13 Nov 2026).
+- `target_met` is the one case where the actor is notified about their own action: the agent is told about their own achievement.
+
+**"Handled" tag** (15 Nov 2026, `src/modules/notifications/outcomes.ts`)
+- Request notifications (lead to verify, discount, lost request, import) show in the list and the bell whether the request has since been decided, and by whom, for example "Already approved by …" or "Discount rejected by …".
+- It is read from the request each time, so it is always current; nothing extra is stored.
+
+**Still open:** N1, N3, N5 and N6 in §5. N2 now means "when the owner's team has no team admin". N4 is partly answered by the events above.

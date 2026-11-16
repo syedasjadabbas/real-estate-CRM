@@ -55,6 +55,7 @@ Legend: **F** full · **T** own team · **O** own records · **R** read-only · 
 | Leads: create | F | F | T | O | — | — |
 | Leads: verify an agent's new lead (approve / reject with reason; since 13 Nov 2026) | F | F | — | — | — | — |
 | Leads: work on own lead before it is verified | F | F | T | — (view only; a rejected lead's details can be corrected and resubmitted) | — | — |
+| Leads: add notes and reviews (agents on their own leads since 16 Nov 2026) | F | F | T | O | — | — |
 | Leads: reassign | F | F | T | — | — | — |
 | Leads: mark lost | F | F | T (approve) | O (request) | — | — |
 | Leads: delete | F | — | — | — | — | — |
@@ -68,6 +69,8 @@ Legend: **F** full · **T** own team · **O** own records · **R** read-only · 
 | Bookings: change stage | F | F | T | O (up to Sales order) | — | R |
 | Bookings: confirm / cancel | F | F | T | — | — | — |
 | Tasks | F | F | T | O | O (assigned to them; no create) | O (assigned to them; no create) |
+| Tasks: assign to someone else (Q45, since 10 Nov 2026) | F | F | — | — (own tasks only) | — | — |
+| Proposal: edit once saved (Q36, since 10 Nov 2026; `tasks/policy.ts` `canEditSavedProposal`) | F | — | — | — | — | — |
 | Proposal discount | any | any | ≤ manager cap | ≤ agent cap (5%) | — | — |
 | Meetings | F | F | T | O | — | — |
 | Targets: set | F | F | T | — | — | — |
@@ -75,31 +78,58 @@ Legend: **F** full · **T** own team · **O** own records · **R** read-only · 
 | Teams / daily report / roster | F | F | T | R (own roster) | R | — |
 | HR employees / holidays | F | F | R | — | F | — |
 | HR records without a CRM login (Q1) | F | F | R | — | F | — |
-| Leave: request | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Leave: approve | F | F | T | — | F | — |
+| Leave: request | ✓ (approved at once) | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Leave: approve agents' and accountants' leave ("staff" path, two configured steps) | F | F | T | — | F | — |
+| Leave: approve HR staff's and Admins' leave ("senior" path) | F | — | — | — | — | — |
+| Leave: record for someone else (phoned in sick, staff without a login; 15 Nov 2026) | F (approved at once) | F (approved at once for agents, accountants and staff without a login) | — | — | F (waits for approval) | — |
 | Performance | F | F | T | O | — | — |
 | Accounts & Finance | F | R | — | — | — | F |
+| Payment reversal: decide | F (also their own request) | F (not their own request) | — | — | — | — (requests only) |
 | CRM accounts: create, role, password, deactivate, lead shift (Q2, Q3) | F | F, except Super Admin accounts (C-1) | — | — | — | — |
+| Settings → Users & access (every account, including Super Admins) | F | — | — | — | — | — |
 | Recordings: delete (Q53; hides, file kept) | F | — | — | — | — | — |
-| Settings, users, roles | F | users only | — | — | — | — |
+| Settings, users, roles | F | users only (not Super Admins) | — | — | — | — |
 | City list (FR-042, S-22) | F | F | — | — | — | — |
-| Audit log | F | R | — | — | — | — |
+| Settings → Security (sign-in history and its retention) | F | F | — | — | — | — |
+| Audit log (view and CSV download) | F | R | — | — | — | — |
 | Lead import batches: submit (Admin and Super Admin only since 13 Nov 2026) | F | F | — | — | — | — |
 | Lead import batches: approve / reject | F | — | — | — | — | — |
 | Claim an unassigned lead | — | — | F | F | — | — |
 | Appoint a team's Team Lead (15 Nov 2026) | F | F | — | — | — | — |
 | Team Lead's read-only team view ("My team"; an agent who leads a team) | — | — | — | Team Lead only | — | — |
-| Employee work profile (calls, minutes, pipeline, follow-ups, targets, attendance; 15 Nov 2026) | F | F | — | — | — | — |
-| Assignment weights and thresholds | F | F | — | — | — | — |
+| Employee work profile (calls, minutes, pipeline, follow-ups, targets, attendance; 15 Nov 2026) and its CSV | F | F | — | — | — | — |
+| Coaching notes on a work profile: add (16 Nov 2026; never on yourself) | F | F | — | — | — | — |
+| Coaching notes: delete | F (anyone's) | F (own notes only) | — | — | — | — |
+| HR CSV downloads (employees, leave, balances, attendance) | F | F | — | — | F | — |
+| Assignment & scores (rotation rule, agent score settings) | F | F | — | — | — | — |
 | Backups page (read-only; restore only on the server) | F | — | — | — | — | — |
 
 **Changes from the client questionnaire (implemented 3 Nov 2026):** Tasks for HR and Accountants (Q45), HR records without logins (Q1), account management (Q2, Q3) and recording deletion (Q53).
 
-**Not yet applied:** the answers that *remove* access wait for the signed questionnaire (S-1) and stay as shown above:
-- Manager reversal approval (Q31);
-- agent recording playback (Q52);
-- proposal editing limited to Super Admin (Q36);
-- task assignment limited to Admins (Q45).
+**Applied since (confirmed 10 Nov 2026):** proposal editing limited to the Super Admin (Q36) and task assignment limited to Admins and Super Admins (Q45). Self-tasks stay allowed.
+
+**Not yet applied** (updated 16 Nov 2026): agents can still play recordings on leads they can see (Q52). Manager reversal approval (Q31) no longer matters: nobody holds the Manager role.
+
+### Super Admin only (updated 16 Nov 2026)
+
+Checked in code. Admins cannot do these:
+- **Settings → Users & access:** manage every account, including other Super Admins. The last active Super Admin can't be deactivated or demoted. Elsewhere, Admins manage accounts but can't touch a Super Admin account or grant that role.
+- **Settings → Backups** (read-only status).
+- **Approve or reject lead import batches** (`leads/imports.ts` `canDecideImport`). Admins and Super Admins submit them.
+- **Delete call recordings** (`files/lead-files.ts`; the file is hidden, not erased).
+- **Approve leave of HR staff and Admins** (the "senior" path, `leave/service.ts`). A Super Admin's own leave is approved on submission, and leave a Super Admin records for anyone is approved at once.
+- **Edit a saved proposal** (`tasks/policy.ts` `canEditSavedProposal`).
+- **Approve their own payment reversal request** (`finance/commands.ts`). Everyone else needs a second person.
+- **Delete anyone's coaching note.** Admins delete only their own.
+- **Add or edit projects and inventory** (since 15 Nov 2026). Admins see them read-only.
+
+### Team Lead (15 Nov 2026)
+
+A Team Lead is an agent an Admin or Super Admin appoints for one team (`teams.team_lead_id`). They keep working as an agent. They also get a read-only **My team** page: the team's members, pipeline, performance and roster. They can't reassign leads or change the team.
+
+### Work profiles and coaching notes (16 Nov 2026)
+
+Admins and Super Admins open any employee's work profile (`people/profile.ts`) and can download it as CSV (audited as `people.export`; coaching notes are never in the file, since it may be handed to the employee). They can add private coaching notes. The person a note is about never sees it, even an Admin opening their own profile, and nobody can add notes on themselves.
 
 ### Enforcement rules (PROPOSED)
 
@@ -114,6 +144,9 @@ See `ASSUMPTIONS_AND_OPEN_QUESTIONS.md`: Q-R1 to Q-R6.
 
 ## Sidebar per role (10 Nov 2026)
 The sidebar shows only the modules a role can open. Each item's role list (`src/config/navigation.ts`) matches the page's own check, and `tests/unit/navigation-roles.test.ts` keeps them equal. **No permission changed:** pages and APIs still check access, and an address typed by hand still shows Access denied.
-- **HR:** Dashboard, My workplace, HR, Teams, Tasks. Leads, New leads, Clients, Projects, Inventory and Bookings are hidden.
-- **Accountant:** Dashboard, Clients, Projects, Inventory, My workplace, HR, Bookings, Finance, Tasks. Leads and New leads are hidden.
-- **Other roles:** unchanged.
+**Updated 16 Nov 2026** (from `src/config/navigation.ts`):
+- **Super Admin:** everything except My team. Settings: Assignment & scores and Users & access. The settings tabs also give Security, Cities, Audit log and Backups.
+- **Admin:** the same, without Users & access and Backups.
+- **Agent:** Dashboard, Leads, New leads, To-dos, Clients, Projects, Inventory, Targets, Bookings, Tasks, Meetings, and under Reports My performance and My workplace. A Team Lead also sees **My team**. No Teams, Finance or HR.
+- **HR:** Dashboard, My workplace, HR, Tasks. Teams has been hidden since 15 Nov 2026. Leads, Clients, Projects, Inventory and Bookings are hidden.
+- **Accountant:** Dashboard, Clients, Projects, Inventory, My workplace, Bookings, Finance, Tasks. Leads and HR are hidden.

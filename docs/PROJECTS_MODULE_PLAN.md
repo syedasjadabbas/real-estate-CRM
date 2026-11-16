@@ -1,6 +1,6 @@
 # Projects Module — Implementation Notes (Phase 1)
 
-Status: **implemented and verified against PostgreSQL** (29 Oct 2026). Sources: `REQUIREMENTS.md` FR-060–062 · `MODULES_AND_FEATURES.md` §4 · `DATA_MODEL.md` §3 · `USER_ROLES_AND_PERMISSIONS.md` (Projects) · `API_DESIGN.md` (Projects and inventory) · `REVERSE_ENGINEERING_REPORT.md` §2.
+Status: **implemented and verified against PostgreSQL** (29 Oct 2026). **Updated 16 Nov 2026:** only the Super Admin adds or edits projects, projects can be archived, and each project can have a payment plan. See §9; it replaces older statements below where they differ. Sources: `REQUIREMENTS.md` FR-060–062 · `MODULES_AND_FEATURES.md` §4 · `DATA_MODEL.md` §3 · `USER_ROLES_AND_PERMISSIONS.md` (Projects) · `API_DESIGN.md` (Projects and inventory) · `REVERSE_ENGINEERING_REPORT.md` §2.
 
 ## 1. Evidence and assumptions
 
@@ -38,6 +38,8 @@ Not built (undocumented or out of scope): delete, `default_rate_per_sqft` (infer
 | Manager / Agent / Accountant | ✓ (read-only form) | — | — |
 | HR | — | — | — |
 
+*Superseded 15 Nov 2026:* only the **Super Admin** creates, edits, (de)activates and archives projects. Admins view them read-only, like the other roles. Admins still see inactive projects in the selector (§9).
+
 ## 5. Screens and API
 
 - `/dashboard/projects` (KPIs, toolbar, cards, pagination), `/dashboard/projects/new` (admins), `/dashboard/projects/[id]` (facts, edit form, linked records, inventory placeholder). Each has a `loading.tsx`.
@@ -68,3 +70,23 @@ Screenshots could not be captured in this pass (the browser pane was not drawing
 
 - "Units tracked" (KPI, cards, detail) now counts real units; FR-061 dimensions are edited on the project detail page (see `INVENTORY_MODULE_PLAN.md`).
 - Bug fixed: the Add project form's defaults were imported by the server page from a `"use client"` module and arrived as a client reference, so fields started uncontrolled. Moved to `features/projects/defaults.ts`.
+
+## 9. Update, 16 Nov 2026
+
+What Projects does now, after the changes of 14–16 Nov 2026. Where this differs from the sections above, this section wins.
+
+**Who can change projects** (15 Nov 2026, `src/modules/projects/policy.ts`)
+- Only the **Super Admin** adds, edits, activates / deactivates and archives projects. Admins, agents and accountants view them read-only; HR has no access.
+- Non-editors see a clean read-only details card on the project page with the note "Only the Super Admin adds or edits projects." (it was a disabled form).
+- Super Admins and Admins still see inactive projects in the header selector, labelled "(inactive)".
+
+**Archive and restore** (16 Nov 2026, migration `0046_archive_projects_units`)
+- The Super Admin can archive a project from its page, and restore it. An archived project and its units are hidden everywhere: the header selector, project and inventory lists, new leads and bookings. Existing leads, bookings and payments keep it, and its history stays.
+- A project with a booking still in progress (not Closed Won, not Cancelled) can't be archived.
+- `/dashboard/projects?archived=1` lists archived projects for the Super Admin. An archived project can't be edited until it is restored.
+- The Projects and Units tracked counts, and the dashboard's Active projects tile, leave out archived projects and units.
+- Archive and restore are audited as `project.archive` / `project.restore`.
+
+**Payment plan per project** (14 Nov 2026, migration `0042_project_payment_plan`)
+- A Payment plan panel on the project page: down payment %, number of installments, how often (monthly, quarterly, …), balloon payments and an amount on possession. The Super Admin edits it; others see it.
+- New bookings and the booking printables use it. Any part left empty falls back to the standard plan in Proposal settings.

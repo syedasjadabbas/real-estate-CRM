@@ -11,12 +11,14 @@ The scripts in this folder back up the database **and** the uploaded files toget
 | `systemd/` | `mz-crm-backup.service`, `mz-crm-backup.timer`, `mz-crm-backup-failed.service` |
 
 ## Nightly backup
-`backup.sh` reads `DATABASE_URL`, `FILE_STORAGE_DIR`, `BACKUP_DIR` and, optionally, `BACKUP_REMOTE`. It writes `BACKUP_DIR/<UTC timestamp>/` containing:
+`backup.sh` reads `DATABASE_URL`, `FILE_STORAGE_DIR`, `BACKUP_DIR` and, optionally, `BACKUP_REMOTE`. `BACKUP_DIR` must be an absolute path outside the app folder and outside `FILE_STORAGE_DIR`; the runner refuses to start otherwise. It writes a dated folder `BACKUP_DIR/<UTC timestamp>/` containing:
 - `database.dump`: `pg_dump` custom format;
 - `storage.tar.gz`: the `FILE_STORAGE_DIR` folder;
 - `SHA256SUMS`.
 
 With `BACKUP_REMOTE` set (an rsync destination), the folder is also copied off the server.
+
+> **Updated 16 Nov 2026: the off-site copy is not set up yet.** `BACKUP_REMOTE` is not set, so backups sit on the same server as the CRM and would be lost with it. **Set `BACKUP_REMOTE` before going live** (another server, or cloud storage reachable by rsync), and give that destination its own clean-up rule (see "Retention"). The backup files are not encrypted, so the destination must be private too.
 
 **Passwords:** they never appear on a command line. `pg-env.mjs` turns the URL into libpq environment variables.
 
@@ -49,7 +51,14 @@ journalctl -u mz-crm-backup.service -n 20        # look for "backup: OK"
 - A failed run triggers `mz-crm-backup-failed.service`, which writes a high-priority journal entry. Replace its command with the alert agreed for H-12 (for example, an email).
 - `pg_dump` must be the same major version as the server (PostgreSQL 18) or newer.
 
-**Settings → Backups** (Super Admins only) lists the last 50 runs, the age of the last successful backup and the retention. It shows a warning when there is no successful backup or the last one is more than **26 hours** old. It has no download and no restore button, by design.
+**Settings → Backups** (Super Admins only) lists the last 50 runs, the age of the last successful backup, the size, how long backups are kept, whether the off-site copy is on, and failed runs in the last 7 days. It has no download and no restore button, by design.
+
+Since 16 Nov 2026 it speaks in plain words, with the technical details folded away under "Technical details". It warns when:
+- there is no successful backup, or the last one is more than **26 hours** old;
+- the retention values on the server are wrong;
+- **`BACKUP_REMOTE` is not set:** "Backups are kept on the same server as the CRM only."
+
+**After the first night** on the live server, a Super Admin opens Settings → Backups and checks: last good backup under 26 hours old, "Off-site copy: On", and no warnings.
 
 ## Retention
 The client requires **30 daily and 12 monthly** copies. Days and months are counted in Pakistan time.

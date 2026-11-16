@@ -2,6 +2,8 @@
 
 Status: **implemented and verified, 30–31 Oct 2026 (§7).** D1–D4 approved as recommended. C1–C3 use the proposed defaults: sign-ins are never attendance; 12 months is proposed with **automatic deletion off**; Caddy is documented and CDN settings are pending.
 
+> **Updated 16 Nov 2026:** the 12-month period is now **agreed with the owner** (C2). Automatic deletion is **still off** until the owner switches it on in Settings → Security. See §10 for the sign-in history list, the cleanup warning and backups.
+
 Inspected:
 - `src/server/auth/current-user.ts` (`requestMeta`), `login.ts`, `rate-limit.ts`, `session-store.ts`.
 - The login / logout server actions and the `/api/v1/auth/*` routes.
@@ -225,7 +227,7 @@ No metric is removed. Counts stay, labelled as authentication activity.
 | # | Question | Proposed handling until answered |
 |---|---|---|
 | C1 | Confirm that **CRM sign-ins are never attendance** (this changes FR-143 and departs from the reference wording "CRM attendance"), and what attendance should be, if anything (Q-H2). | Apply the wording changes in §4; show attendance as "not available". |
-| C2 | Confirm **12 months** of sign-in log retention, and that old logs may then be **permanently deleted**. | Build everything with deletion **off** and 12 months shown as the proposed value. |
+| C2 | Confirm **12 months** of sign-in log retention, and that old logs may then be **permanently deleted**. | Build everything with deletion **off** and 12 months shown as the proposed value. **16 Nov 2026: 12 months agreed with the owner.** Switching deletion on is still the owner's call. |
 | C3 | Production network layout: Caddy only, or a CDN / load balancer in front? Can the app port be kept private? | Document both cases; ship with `TRUST_PROXY=false`, so production records no IP until the proxy is configured. |
 
 **Your decisions** (implementation choices):
@@ -457,7 +459,8 @@ Git warns that line endings will be converted from LF to CRLF on the next checko
 1. Set up production as in `DEPLOYMENT_PROXY.md` §7a: env file (`NODE_ENV`, `DATABASE_URL`, `TRUST_PROXY=true`, `TRUSTED_PROXY_COUNT=1`), build, migrate, start the app privately, Caddy 2.5+ in front, firewall.
 2. Run the §5 verification on the live server (real IP shown; a spoofed header ignored; app port unreachable; no `[client-ip]` warning).
 3. Schedule the daily `job:prune-signin-logs` and do one manual dry run.
-4. **Client decisions:** C2 (confirm 12 months, then an admin turns on automatic deletion), C3 (CDN or load balancer?), Q-H2 (attendance requirements).
+4. **Client decisions:** C2 (12 months agreed 16 Nov 2026; the owner still decides whether to turn on automatic deletion), C3 (CDN or load balancer?), Q-H2 (attendance requirements).
+6. Backups (added 16 Nov 2026): set `BACKUP_DIR`, install the nightly timer, **set `BACKUP_REMOTE`** for the off-site copy, and check Settings → Backups after the first night (§10).
 5. ~~Optional clean-up: remove the empty Verify Agent `employee_profiles` row.~~ Done (8.8).
 
 ### 8.8 Test data clean-up (31 Oct 2026, on your approval)
@@ -488,3 +491,25 @@ Git warns that line endings will be converted from LF to CRLF on the next checko
 | Production build | Passes. A Turbopack warning ("dynamic filesystem access causes tracing of the whole project") from the new storage module was fixed with `turbopackIgnore` comments; the build now has **0 warnings**. |
 
 Tasks that need the hosting environment are listed in `PROJECT_STATUS.md` §4.
+
+---
+
+## 10. Update 16 Nov 2026
+
+**Sign-in log retention (C2).**
+- 12 months is the agreed period (owner, 16 Nov 2026). `DEFAULT_RETENTION_MONTHS` in `src/modules/security/retention.ts` says so, and the Security page shows "Agreed default".
+- Automatic deletion is **still off**. Nothing is deleted until the owner switches it on in Settings → Security, with the confirmation dialog. Super Admins and Admins can change these settings.
+
+**Settings → Security now also shows:**
+- **Sign-in history** for everyone (Admins and Super Admins only; `src/modules/security/signins.ts`): who signed in or out, when, from which IP and browser. Search by name, email or IP; filter by event and date; 50 per page. It is still authentication activity, not attendance.
+- **A warning when the daily cleanup check hasn't run for 2 days** (or has never run). On the live server it tells the reader to ask whoever manages the server to check the scheduled job.
+
+**Attendance (C1).** Attendance is now its own record (`attendance_records`, migration 0043): people check in and out from My workplace. It never uses sign-ins, so C1 still holds.
+
+**Backups** (`scripts/ops/RESTORE.md`):
+- Every night the server writes a dated folder in `BACKUP_DIR` with `database.dump`, `storage.tar.gz` and `SHA256SUMS`. `BACKUP_DIR` must be absolute, outside the app folder and outside `FILE_STORAGE_DIR`.
+- Kept by default: 30 daily and 12 monthly copies.
+- **The off-site copy (`BACKUP_REMOTE`) is not set up.** It must be before going live. Settings → Backups now warns about this in plain words ("Backups are kept on the same server as the CRM only").
+- After the first night, a Super Admin checks Settings → Backups: last good backup under 26 hours old, off-site copy on, no warnings.
+
+**IP addresses.** `TRUST_PROXY` must be set on the live server, or no IP is recorded for sign-ins or the audit log (§2).

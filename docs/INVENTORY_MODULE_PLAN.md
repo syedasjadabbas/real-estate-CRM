@@ -1,6 +1,6 @@
 # Inventory Module — Implementation Notes (Phase 1)
 
-Status: **implemented and verified against PostgreSQL** (29 Oct 2026). Sources: `REQUIREMENTS.md` FR-061, FR-070–075 · `MODULES_AND_FEATURES.md` §5 · `DATA_MODEL.md` §3 · `USER_ROLES_AND_PERMISSIONS.md` (Inventory) · `API_DESIGN.md` · `USER_FLOWS.md` §4–5 · `ASSUMPTIONS_AND_OPEN_QUESTIONS.md` Q-B1, Q-B4, Q-P5.
+Status: **implemented and verified against PostgreSQL** (29 Oct 2026). **Updated 16 Nov 2026:** only the Super Admin adds, edits or imports units, and units can be archived. See §10; it replaces older statements below where they differ. Sources: `REQUIREMENTS.md` FR-061, FR-070–075 · `MODULES_AND_FEATURES.md` §5 · `DATA_MODEL.md` §3 · `USER_ROLES_AND_PERMISSIONS.md` (Inventory) · `API_DESIGN.md` · `USER_FLOWS.md` §4–5 · `ASSUMPTIONS_AND_OPEN_QUESTIONS.md` Q-B1, Q-B4, Q-P5.
 
 ## 1. Evidence and assumptions
 
@@ -23,7 +23,7 @@ The reference could not be re-opened (browser extension not connected). Evidence
 1. **Status before Bookings:** new units start Available; admins may override status with a required reason (audited). "Partially booked" only for SPU / 50% units (FR-072).
 2. **SPU / 50% fractional:** the sale model is recorded and filterable only. No share rows, share pricing or share status until Q-B1 is answered.
 3. **Dimensions (FR-061):** admins keep per-project lists (floors, blocks, categories, types, premiums) on the project page. A non-empty list restricts the unit field (matched ignoring case, stored in the configured spelling); an empty list allows free text. Only changed fields are re-checked on edit, so removing a value doesn't lock older units.
-4. **CSV import (FR-075):** deferred until the client provides an export or template (Q-P5).
+4. **CSV import (FR-075):** deferred until the client provides an export or template (Q-P5). *Built 3 Nov 2026 (`/dashboard/inventory/import`); since 15 Nov 2026 only the Super Admin imports (§10).*
 
 Not built: unit delete (undocumented), "Sales" column, share-level booking.
 
@@ -49,6 +49,8 @@ Not built: unit delete (undocumented), "Sales" column, share-level booking.
 | Super Admin / Admin | ✓ | ✓ |
 | Manager / Agent / Accountant | ✓ (read-only) | — |
 | HR | — | — |
+
+*Superseded 15 Nov 2026:* only the **Super Admin** creates, edits, imports, overrides status, sets dimensions and archives units. Admins view them read-only, like the other roles (§10).
 
 ## 6. Screens and API
 
@@ -83,3 +85,27 @@ Screenshots were not possible (the browser pane was not drawing); the UI was exe
 
 - Bookings now reserve units through `reserveAvailableUnit()` and confirm / cancel through `transitionUnitStatus()` (see `BOOKINGS_MODULE_PLAN.md`). Its conflict message now reads "This unit is no longer available (it is …)".
 - The admin status override is refused while a unit has an active booking; the unit page lists the unit's bookings.
+
+## 10. Update, 16 Nov 2026
+
+What Inventory does now, after the changes of 13–16 Nov 2026. Where this differs from the sections above, this section wins.
+
+**Who can change units** (15 Nov 2026, `src/modules/inventory/policy.ts`)
+- Only the **Super Admin** adds, edits and imports units, overrides a status, sets a project's dimensions and archives units. Admins, agents and accountants view everything read-only; HR has no access.
+- Non-editors see a clean read-only details card on the unit page with the note "Only the Super Admin adds or edits units." (it was a disabled form).
+
+**Archive and restore** (16 Nov 2026, migration `0046_archive_projects_units`)
+- The Super Admin can archive a unit from its page, and restore it. An archived unit, and every unit of an archived project, is hidden from the inventory list and from booking and proposal pickers. Its bookings and history stay.
+- A unit in a booking still in progress (not Closed Won, not Cancelled) can't be archived. A unit whose project is archived can't be restored until the project is.
+- `/dashboard/inventory?archived=1&project=all` lists archived units for the Super Admin. An archived unit can't be edited until it is restored.
+- Units tracked counts leave out archived units. Archive and restore are audited as `unit.archive` / `unit.restore`.
+
+**List columns** (13 Nov 2026)
+- Comment and Type are no longer in the list. A **Booked on** date shows only for booked units.
+
+**Bookings and proposals**
+- New booking takes its price from the unit's inventory price less a discount (`BOOKINGS_MODULE_PLAN.md` §9).
+- New booking picks the unit with a searchable picker (unit number or floor) instead of a plain list.
+- Open bookings keep the unit held (Reserved) until they are Closed Won (unit Booked) or cancelled (unit Available).
+
+**Still open:** Q-B1 (SPU / 50% shares), Q-B4 (when a unit becomes Sold), the meaning of the reference's "Sales" column, and currency confirmation.

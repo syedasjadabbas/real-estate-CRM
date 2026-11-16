@@ -1,6 +1,6 @@
 # Dashboard — implementation notes
 
-Status: **FR-010, FR-011, FR-012, FR-013 (tiles), FR-015 and FR-016 wired to PostgreSQL, 31 Oct 2026.** The aging matrix (FR-014) is not built. The metric definitions below are the implementer's reading of the reference and `REQUIREMENTS.md`; **the client has not confirmed them**.
+Status: **FR-010, FR-011, FR-012, FR-013 (tiles), FR-015 and FR-016 wired to PostgreSQL, 31 Oct 2026.** The aging matrix (FR-014) is not built. *Updated 16 Nov 2026 (§8): the aging matrix, meeting panels and My Targets now show real data, agents get an own-only dashboard and HR gets a people dashboard.* The metric definitions below are the implementer's reading of the reference and `REQUIREMENTS.md`; **the client has not confirmed them**.
 
 Sources: `REQUIREMENTS.md` §1 (FR-010 to FR-016), `MODULES_AND_FEATURES.md` §1, the existing dashboard view (`src/features/dashboard/*`, previously fed empty data).
 
@@ -14,7 +14,7 @@ Code:
 
 - **Project:** the header's active project. Top projects is the exception and compares the projects the user can see.
 - **Leads:** the user's lead scope, the same rules as the Leads list. Agents see their own leads, managers their teams', admins and super admins everything. Deleted leads are excluded.
-- **HR and accountants:** they have no lead access, so they keep the empty-state dashboard ("No lead analytics for your role").
+- **HR and accountants:** they have no lead access, so they keep the empty-state dashboard ("No lead analytics for your role"). *Since 15 Nov 2026 HR gets a people dashboard instead (§8); accountants keep the empty state.*
 - **Team filter** (`?team=`):
   - Admins can pick any active team; managers only the teams they manage. Any other value is ignored.
   - A team means leads owned by that team's members.
@@ -55,7 +55,7 @@ KPIs, lead sources, inbound channels and top projects count **leads created in t
 | Widget | Why |
 |---|---|
 | Aging vs meetings matrix (FR-014, low priority) | The age and meeting buckets and the "engaged pipeline" exclusion rule aren't defined well enough to count. |
-| Instant insights: team output, meeting mix, targets, and the Meetings / Team meetings / Bookings tiles | Meeting "format" is not defined in any document (`MEETINGS_MODULE_PLAN.md` §M). The targets view belongs to the Targets module. These tiles show "—", never a guessed number. |
+| Instant insights: team output, meeting mix, targets, and the Meetings / Team meetings / Bookings tiles | Meeting "format" is not defined in any document (`MEETINGS_MODULE_PLAN.md` §M). The targets view belongs to the Targets module. These tiles show "—", never a guessed number. *Superseded 14–15 Nov 2026: all wired (§8).* |
 
 **Team score and average score (10 Nov 2026).** These are now defined. A team's score is the average of its active agents' assignment scores (`leads/assignment.ts` `teamScores`, the score My Teams shows). The Teams tile shows how many teams in the viewer's scope have a score, and the plain average of those team scores, marked "provisional" while any agent is still on the neutral starting score. With no scored team it shows "Avg score —", not 0. Like the Team performance panel, it ignores the date chips and team filter: the score is the agent's current standing.
 
@@ -88,6 +88,8 @@ A bug found while testing was fixed in the "no meeting" subquery: Drizzle leaves
 
 ## 7. Aging vs meetings matrix (FR-014): blocked on definitions (31 Oct 2026)
 
+*Superseded 15 Nov 2026: the matrix is built with the definitions in §8. The questions below are settled by the definitions in the code; the client has not confirmed them.*
+
 **What is known:**
 - From the reference capture (`MODULES_AND_FEATURES.md` §1 and the observed layout kept in `sample-data.dev.ts`):
   - **Rows:** lead-age bands 0–1M, 1–2M, 2–3M, 3–5M, 5–8M, 8–12M, 12M+.
@@ -109,3 +111,26 @@ A bug found while testing was fixed in the "no meeting" subquery: Drizzle leaves
 - The pipeline-health tiles (stale, no meeting, meetings done) are live.
 - In place of the matrix, the card says the matrix is waiting for these definitions. The dev preview keeps the observed sample layout.
 - The existing `AgingRow` type and table rendering are ready. Once M-Q1 to M-Q5 are answered, only the query in `src/modules/dashboard/queries.ts` (and its tests) needs to be written.
+
+## 8. Update, 16 Nov 2026
+
+What the dashboard does now, after the changes of 13–16 Nov 2026. Where this differs from the sections above, this section wins. The definitions below are in the code (`src/modules/dashboard/insights.ts`, `queries.ts`); the client has not confirmed them.
+
+**Who sees what**
+- **Agents** (13 Nov 2026) see only their own figures: total leads, conversion rate, open pipeline, won / lost, regenerated, their leads by project, their own score and My Targets. Team panels, Organization Health, meeting mix and distribution, Aging vs Meetings, lead sources, inbound channels and lost leads by team are hidden from them, and not computed.
+- **HR** (15 Nov 2026) gets a people dashboard instead of the sales one: today's attendance, late and not checked in, leave waiting for a decision, missing check-outs, who is away this week, upcoming holidays, this month's most late and most absent, and headcount (`src/modules/attendance/hr-dashboard.ts`).
+- **Accountants** keep the empty state.
+- The Manager role is merged into Admin (13 Nov 2026); the team filter works as described in §1 for team admins.
+
+**Panels now filled** (15 Nov 2026). All follow the same lead scope, project and team filter as the rest of the dashboard.
+- **Meeting mix / Meetings Distribution:** meetings that weren't cancelled, by type (Company office, Site visit, Virtual, Outdoor, Sales event, or "Format not set"), that started in the window. The Distribution card has its own 24h / 7d / 30d / MTD / 6m picker.
+- **Meetings vs bookings:** per team, completed meetings and bookings that weren't cancelled in the selected range, counted under the team of the lead's owner. Busiest six teams.
+- **Tiles:** Meetings = completed meetings in the last 30 days and the last 6 months. **Team meetings** = completed meetings in the selected range on leads owned by team members (it used to be month to date). Bookings = the bookings in Meetings vs bookings. Teams / Avg score as in §4.
+- **Aging vs Meetings:** open leads that have been touched at least once (so untouched imports are left out), in age bands 0–7, 8–30, 31–90, 91–180 and over 180 days, against how many completed meetings each has had in its lifetime (0–1, 2–5, 6–10, 11–20, 20+). Leads and Meetings columns are totals per band. Note: the **Avg / owner** column is leads per distinct owner in the band, not meetings per owner.
+
+**My Targets** (agents' dashboards only)
+- Filled from the agent's real targets for today, this week and this month (14 Nov 2026), with a **Met** tick on goals reached. Custom-date targets running today (for example a campaign) show as extra columns, and custom goals appear with their hand-entered progress.
+- Admins no longer see an empty My Targets card; they see agents' targets on Targets, Performance and the work profile.
+
+**Other**
+- **Active projects** leaves out archived projects (16 Nov 2026).

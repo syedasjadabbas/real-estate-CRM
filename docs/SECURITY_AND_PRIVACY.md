@@ -9,7 +9,7 @@ The CRM holds customer phone numbers, emails, budgets, call recordings, booking 
 | Passwords | Argon2id hash; minimum 10 characters; block common passwords |
 | Sessions | Random 256-bit token, stored hashed in the DB; HTTP-only, Secure, SameSite=Lax cookie; 12 h idle / 7 d absolute expiry; revoke on password change |
 | Brute force | 5 failed logins / 15 min per email + **verified** client IP → temporary lock. Spoofed forwarded headers cannot reset it (implemented 30 Oct 2026, `PRODUCTION_READINESS_PLAN.md` §2). |
-| Sign-in log | Every sign-in and sign-out with the verified client IP (from a trusted reverse proxy only; none otherwise) and user agent (capped at 512 characters). It is **authentication activity, never attendance** (My Workplace "CRM Sign-in History", Performance counts). |
+| Sign-in log | Every sign-in and sign-out with the verified client IP (from a trusted reverse proxy only; none otherwise) and user agent (capped at 512 characters). It is **authentication activity, never attendance** (My Workplace "CRM Sign-in History", Performance counts). Since 16 Nov 2026 **Settings → Security** also lists everyone's sign-in history (Admins and Super Admins only; search by name, email or IP, filter by event and date, 50 per page; `src/modules/security/signins.ts`). |
 | Client IP | Taken only from the header a trusted proxy overwrites (`TRUST_PROXY`, `TRUSTED_PROXY_COUNT`, optional `PROXY_SHARED_SECRET`). Browser-supplied `X-Forwarded-For` is never trusted; production without proxy configuration records no IP. See `DEPLOYMENT_PROXY.md`. |
 | Account lifecycle | Admin creates users; deactivated users are blocked immediately (sessions revoked) |
 | Password reset | Email token, 30 min expiry, single use (needs SMTP) |
@@ -28,6 +28,9 @@ The CRM holds customer phone numbers, emails, budgets, call recordings, booking 
 - Audit logs and sign-in logs are separate tables. Sign-in log retention never deletes audit logs.
 - Covers: lead stage, owner and lost changes, booking stage changes, unit status changes, payments and reversals, user and role changes, settings changes, exports, logins, and permission denials (sampled).
 - Admins can view audit logs: **Settings → Audit log** (`/dashboard/settings/audit-log`, `GET /api/v1/audit-logs`), Super Admin and Admin only, read-only. Values under secret-looking keys (password, token, secret, API key) are hidden on display. Nobody can edit or delete them through the app.
+- **Updated 16 Nov 2026.** Each entry shows a plain label beside its code (e.g. "Downloaded the audit log" for `audit.export`; `src/modules/audit/labels.ts`) and the name of the record it is about.
+- **Audit log download:** `GET /api/v1/audit/export` gives a CSV with the page's filters, newest first, at most **20,000 rows**. Super Admin and Admin only. Secret-looking values are hidden in the file too. Every download is itself logged as `audit.export`.
+- **Other audited downloads:** `people.export` (one employee's work record), `performance.pipeline_export` (pipeline by agent), `hr.export` (HR files) and `finance.report_export` (finance reports). Each entry records who downloaded what, with the filters used.
 
 ## 4. Data isolation
 
@@ -70,8 +73,11 @@ The CRM holds customer phone numbers, emails, budgets, call recordings, booking 
 
 ## 9. Backups and recovery
 
-- Nightly `pg_dump`, encrypted, copied off-server (object storage, separate bucket). Keep 7 daily + 4 weekly + 3 monthly.
-- Object storage versioning on (recordings and documents).
+Updated 16 Nov 2026 to match what is built (`scripts/ops/RESTORE.md`):
+- Every night the server writes a dated folder in `BACKUP_DIR` with `database.dump`, `storage.tar.gz` (the uploaded files) and `SHA256SUMS`. `BACKUP_DIR` must be an absolute path outside the app folder and outside `FILE_STORAGE_DIR`.
+- Kept by default: one backup a day for 30 days, plus one a month for 12 months.
+- The backup files are not encrypted, so `BACKUP_DIR` must be readable only by the app user (mode `700`).
+- **Off-site copy is not set up yet.** It needs `BACKUP_REMOTE` (an rsync destination on another server or cloud storage). Until then backups live on the same server as the CRM and are lost with it. Settings → Backups says this in plain words. **Set it up before going live.** The remote copy needs its own clean-up rule.
 - A documented restore procedure, tested once before go-live.
 - Backup and hosting costs are client-paid. **Who monitors backups after handover must be agreed**, since maintenance is not included.
 
@@ -81,8 +87,8 @@ The CRM holds customer phone numbers, emails, budgets, call recordings, booking 
 - Phone numbers and emails are visible only to users with access to that lead or client.
 - Call recordings may contain sensitive conversations. Access is restricted to the lead owner, their managers and admins.
 - Sending recordings to a third-party AI provider (later phase) requires client approval and a disclosure to customers if required.
-- Data retention: leads are kept indefinitely unless deleted by an admin (proposed). **Sign-in logs:** a configurable retention period (3–120 months, **12 proposed**) is set on Security settings by a super admin or admin. A daily job (`npm run job:prune-signin-logs`, with `--dry-run`) deletes older sign-in history **only when automatic deletion is switched on**, which stays **off until the client approves (C2)**. Audit logs are never deleted. See `DEPLOYMENT_PROXY.md` §7–8. ⚠ Period and activation to confirm.
-- Exports (CSV / PDF) are limited to admin / accountant and logged.
+- Data retention: leads are kept indefinitely unless deleted by an admin (proposed). **Sign-in logs** (updated 16 Nov 2026): keep **12 months**. This period was **agreed with the owner on 16 Nov 2026** (C2); it can be changed on Settings → Security (3–120 months) by a Super Admin or Admin. A daily job (`npm run job:prune-signin-logs`, with `--dry-run`) deletes older sign-in history **only when automatic deletion is switched on**. Automatic deletion is **still off**: nothing is deleted until the owner switches it on in Settings → Security. Deletion is permanent. The Security page warns when the daily cleanup check hasn't run for 2 days. Audit logs are never deleted. See `DEPLOYMENT_PROXY.md` §7–8.
+- Exports (CSV / PDF) are limited to the roles that can see the data, and the sensitive ones are logged (see §3).
 - Migration data from the old CRM is handled only on the client's systems and deleted from developer machines after import.
 
 ## 11. Pre-go-live security checklist
@@ -90,9 +96,9 @@ The CRM holds customer phone numbers, emails, budgets, call recordings, booking 
 - [ ] Default and demo accounts removed; admin password changed
 - [ ] Permission matrix tests pass for every role
 - [ ] HTTPS and security headers verified
-- [ ] Backups run and one restore tested
+- [ ] Backups run and one restore tested; `BACKUP_DIR` set; off-site copy (`BACKUP_REMOTE`) set up
 - [ ] Secrets rotated and stored only on the server
 - [ ] Bucket is private; signed URLs expire
 - [ ] Error pages expose no stack traces
 - [ ] App port reachable only from the reverse proxy; `TRUST_PROXY` set; spoofing check in `DEPLOYMENT_PROXY.md` §5 passed
-- [ ] Daily `job:prune-signin-logs` scheduled; retention policy confirmed by the client before automatic deletion is switched on
+- [ ] Daily `job:prune-signin-logs` scheduled; 12-month period agreed (16 Nov 2026); owner decides whether to switch automatic deletion on

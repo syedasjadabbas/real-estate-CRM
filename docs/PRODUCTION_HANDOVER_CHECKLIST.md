@@ -7,7 +7,7 @@ Related documents:
 - `DEPLOYMENT_PROXY.md` (Caddy, proxy, headers, storage);
 - `SECURITY_AND_PRIVACY.md` §9 and §11 (backups and the security checklist).
 
-The runbook (P3), setup script (P1) and backup scripts (P2) referred to here are **planned and not yet written**. They will be delivered with Version 1.
+The runbook (P3) and setup script (P1) referred to here are **planned and not yet written**. They will be delivered with Version 1. The backup scripts (P2) are written: see `scripts/ops/RESTORE.md` (updated 16 Nov 2026).
 
 **Rules for the whole process:**
 - Never copy development or test records, fixtures or fictional data into production.
@@ -56,7 +56,7 @@ The runbook (P3), setup script (P1) and backup scripts (P2) referred to here are
 |---|---|
 | ☐ | Code checked out at the agreed release commit (private repository) |
 | ☐ | `npm ci` then `npm run build`, with no errors or warnings |
-| ☐ | Production env file is owned by the app user with mode `600`, and contains:<br>- `NODE_ENV=production`;<br>- `DATABASE_URL` (production only);<br>- `TRUST_PROXY=true`, `TRUSTED_PROXY_COUNT=1`;<br>- `FILE_STORAGE_DIR` (persistent);<br>- `PROXY_SHARED_SECRET`, if used. |
+| ☐ | Production env file is owned by the app user with mode `600`, and contains:<br>- `NODE_ENV=production`;<br>- `DATABASE_URL` (production only);<br>- `TRUST_PROXY=true`, `TRUSTED_PROXY_COUNT=1` (without these, no IP address is recorded for sign-ins or the audit log);<br>- `FILE_STORAGE_DIR` (persistent);<br>- `BACKUP_DIR`: an absolute path outside the app folder and outside `FILE_STORAGE_DIR`;<br>- `BACKUP_REMOTE`: the off-server copy destination (see §7);<br>- `PROXY_SHARED_SECRET`, if used. |
 | ☐ | **No** `TEST_DATABASE_URL` and no development values on the server |
 | ☐ | Secrets generated fresh for production; none reused from development |
 | ☐ | systemd service with graceful stop (`TimeoutStopSec=30`); starts on boot; restarts on failure |
@@ -66,7 +66,7 @@ The runbook (P3), setup script (P1) and backup scripts (P2) referred to here are
 |---|---|
 | ☐ | Dedicated PostgreSQL database and role for the CRM; strong password; not reachable from the internet |
 | ☐ | Database starts **empty**; schema created only by `npm run db:migrate` |
-| ☐ | `drizzle-kit check` reports no drift; all 13 migrations applied |
+| ☐ | `drizzle-kit check` reports no drift; all migrations applied (51 as of 16 Nov 2026: `0000` to `0050`) |
 | ☐ | Development and production use separate databases and credentials; the server has no development database |
 | ☐ | Connectivity check: the app starts and `/login` loads |
 
@@ -83,18 +83,22 @@ The runbook (P3), setup script (P1) and backup scripts (P2) referred to here are
 |---|---|---|
 | ☐ | P1 setup script run once with `--confirm-database <name>`: client-confirmed lookup lists inserted | Zeploy Tech |
 | ☐ | First Super Admin created by P1: the client's Super Admin types their own password at the prompt; it is not printed or recorded anywhere | Client Super Admin, with Zeploy Tech |
-| ☐ | Client Super Admin signs in and creates the other users through Settings → Users (E3); each user sets or receives their password privately | Client |
+| ☐ | Client Super Admin signs in and creates the other users from HR (E3); each user sets or receives their password privately. Settings → Users & access (Super Admin only) then shows every account with an on / off switch | Client |
 | ☐ | Teams created, members and managers assigned | Client, with Zeploy Tech |
 | ☐ | Settings applied through the screens: manager cap 5%, down payment 25%, installments 36 (pending C-26), "Pay order" method | Client Super Admin |
-| ☐ | Security settings: retention 12 months; **automatic deletion off** (it stays off until the signed approval and a dry run) | Zeploy Tech |
+| ☐ | Security settings: retention 12 months (agreed with the owner, 16 Nov 2026); **automatic deletion off** | Zeploy Tech |
+| ☐ | **Decision:** does the owner switch automatic deletion of old sign-in history on (Settings → Security)? Run one `--dry-run` first. Deletion is permanent | Client Super Admin |
 | ☐ | No development accounts, demo project or test data exist (check the user list and project list) | Zeploy Tech |
 
 ## 7. Scheduled jobs and backups
 | ✓ | Check |
 |---|---|
 | ☐ | Daily `job:prune-signin-logs` scheduled. With deletion off it deletes nothing; one `--dry-run` run is reviewed |
-| ☐ | Nightly backup (P2): database dump and `FILE_STORAGE_DIR` archive, copied off-server, with the 7 / 4 / 3 retention |
+| ☐ | `BACKUP_DIR` set (absolute, outside the app folder and `FILE_STORAGE_DIR`, owned by the app user, mode `700`) |
+| ☐ | Nightly backup timer installed (`scripts/ops/RESTORE.md`). Each night writes a dated folder with `database.dump`, `storage.tar.gz` and `SHA256SUMS`; kept 30 daily + 12 monthly by default |
+| ☐ | **`BACKUP_REMOTE` set** so each backup is also copied off the server. As of 16 Nov 2026 this is **not set up**; it must be before going live. The remote copy needs its own clean-up rule |
 | ☐ | First backup completed and present at the off-server destination |
+| ☐ | After the first night, a Super Admin opens **Settings → Backups**: last good backup under 26 hours old, "Off-site copy: On", no warnings |
 | ☐ | **Restore test:** restore into a temporary database on the server; verify row counts and that stored files are present; drop the temporary database. The live database is not touched |
 | ☐ | Backup failure alert or check agreed (H-12) |
 
@@ -102,7 +106,8 @@ The runbook (P3), setup script (P1) and backup scripts (P2) referred to here are
 | ✓ | Check |
 |---|---|
 | ☐ | `curl -sI https://<host>/login` shows CSP, X-Frame-Options, Referrer-Policy, X-Content-Type-Options and HSTS (`DEPLOYMENT_PROXY.md` §11) |
-| ☐ | Security settings shows the real public IP of the tester; a spoofed `X-Forwarded-For` sent directly is ignored |
+| ☐ | `TRUST_PROXY` set: Settings → Security shows the real public IP of the tester in the sign-in history; a spoofed `X-Forwarded-For` sent directly is ignored |
+| ☐ | Settings → Security shows no "daily cleanup check hasn't run" warning the day after the job is scheduled |
 | ☐ | App port not reachable from outside (test from another network) |
 | ☐ | Same-origin check over HTTPS: notification mark-read, recording upload and document upload succeed (`DEPLOYMENT_PROXY.md` §10) |
 | ☐ | Login rate limit triggers after repeated failures |
@@ -118,7 +123,7 @@ The client tests with their own accounts in production. Each line is passed or f
 |---|---|---|
 | ☐ | Super Admin / Admin | Create, change role, reset password, deactivate and reactivate users; inactive user cannot sign in |
 | ☐ | Super Admin / Admin | Settings (proposal defaults, payment methods, Security settings) |
-| ☐ | Manager | Create and assign leads; pipeline drag-and-drop; lost approvals; reviews; team dashboard filter |
+| ☐ | Admin (the Manager role was merged into Admin on 13 Nov 2026) | Create and assign leads; pipeline drag-and-drop; lost approvals; reviews; team dashboard filter |
 | ☐ | Manager / Agent | Proposal with 25% down payment, 5% cap, only Available units; print |
 | ☐ | Agent | Own leads only; follow-ups and reminders; notifications; upload a recording and a document; click-to-call |
 | ☐ | Accountant | Record a payment (including Pay order); request a reversal; Admin approves; outstanding and collections reports; CSV export |

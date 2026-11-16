@@ -1,6 +1,6 @@
 # My Workplace — module plan
 
-Status: **Upcoming holidays and Sign-in history built and verified, 30 Oct 2026 (§8).** My leaves stays pending until the HR leave questions are answered.
+Status: **Upcoming holidays and Sign-in history built and verified, 30 Oct 2026 (§8).** My leaves stays pending until the HR leave questions are answered. *Out of date: see "Update 16 Nov 2026" at the end. The page now has Check in / out, My leave, My to-dos (HR and Accountants) and My sign-in history; Upcoming holidays was removed.*
 W1–W4 were approved by the user as proposed in §3.1.
 
 Sources read:
@@ -255,11 +255,26 @@ The existing "My workplace" item stays as it is, visible to every role. No chang
 - **Retention:** configurable since Production Readiness (Security settings, `job:prune-signin-logs`); automatic deletion stays off until the client approves (C2).
 
 ### Still pending
-- **My leaves** — needs Q3, Q3b, Q5, Q6 (and the Q4 / Q8 / Q14 / Q15 defaults).
+- **My leaves** — needs Q3, Q3b, Q5, Q6 (and the Q4 / Q8 / Q14 / Q15 defaults). *Built since; see Update 16 Nov 2026.*
 - Region-filtered holidays — Q9.
-- Attendance — Q-H2 (sign-ins are never attendance).
+- Attendance — Q-H2 (sign-ins are never attendance). *Built 15 Nov 2026 as check-in / check-out; sign-ins are still never attendance.*
 
 ### Update 30 Oct 2026 (`PRODUCTION_READINESS_PLAN.md`)
-- The panel is now **"CRM Sign-in History"** with the subtitle **"Authentication activity"**; the tile caption says "not attendance".
-- The footnote says the history is not an attendance record, that IPs come only from the trusted proxy, and states the retention policy.
+- The panel is now **"CRM Sign-in History"** with the subtitle **"Authentication activity"**; the tile caption says "not attendance". *(Superseded 16 Nov 2026, see below.)*
+- The footnote says the history is not an attendance record, that IPs come only from the trusted proxy, and states the retention policy. *(Reworded 16 Nov 2026, see below.)*
 - IPs are now recorded only behind a configured trusted proxy (`DEPLOYMENT_PROXY.md`); in production without it the IP column shows "—".
+
+### Update 16 Nov 2026
+
+What `/dashboard/workspace` shows now, after the changes of 13–16 Nov 2026. Where this differs from the sections above, this section wins.
+
+- **Check in / Check out** (15 Nov 2026): once per business day, Pakistan time. This is the attendance record HR uses (see `HR_MODULE_PLAN.md`, updates of 15 and 16 Nov 2026).
+- **My leave**: the person's own requests by calendar year, with status, and the request form. It is no longer pending.
+- **My to-dos** (14 Nov 2026): HR staff and Accountants have no To-dos page, so to-dos an Admin gives them are listed here, with Done.
+- **Upcoming holidays** was removed from this page (13 Nov 2026).
+- **My sign-in history** (renamed from "CRM Sign-in History"; the "Authentication activity" subtitle is gone):
+  - Intro: "Each time you signed in to or out of the CRM. Not something you recognise? Tell an Admin straight away."
+  - The IP column is now called **Address (IP)** (was "IP (as recorded)").
+  - The browser is shown with the same short name as Settings → Security ("Chrome · Windows").
+  - Footnote: this isn't attendance (hours, lateness and absences come only from Check in); closing the browser without signing out shows no sign-out; wrong-password attempts aren't listed; then the retention note.
+- **Still pending:** region-filtered holidays (Q9).

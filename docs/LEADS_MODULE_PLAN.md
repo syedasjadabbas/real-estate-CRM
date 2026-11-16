@@ -1,6 +1,6 @@
 # Leads Module — Implementation Plan (Phase 1)
 
-Status: **implemented with the defaults in §9** (approved 28 Oct 2026) and **verified against PostgreSQL** (§10).
+Status: **implemented with the defaults in §9** (approved 28 Oct 2026) and **verified against PostgreSQL** (§10). **Updated 16 Nov 2026:** see §14 for the changes of 13–16 Nov 2026 (verification, Update after call, readable timeline, server-measured call length, To-dos search, equal rotation). §14 replaces older statements where they differ.
 
 ## 10. Implementation status (28 Oct 2026)
 
@@ -150,7 +150,7 @@ Before building each screen I'll re-measure it in the reference (header, tab bar
 |---|---|---|
 | **B1** | **Database access.** I can't connect without the `postgres` password. | You create a dev database and user (SQL below) and put `DATABASE_URL` in `.env.local`. I never need the superuser password. |
 | Q1 | Existing phone in same project: duplicate or regenerated? (Q-L1) | Phone matches an **open or lost lead in the same project** → mark that lead **Regenerated** and log the re-inquiry (no new lead). Manual entry with a matching phone → warning, then saved as a **Duplicate** linked to the original if the user confirms. |
-| Q2 | Rotation rule (Q-L2) | Round-robin over active agents in **assignable (active) teams**. A lead created by an agent is owned by that agent. Roster/leave skipping waits for HR/Teams. |
+| Q2 | Rotation rule (Q-L2) | Round-robin over active agents in **assignable (active) teams**. A lead created by an agent is owned by that agent. Roster/leave skipping waits for HR/Teams. *Superseded: equal rotation that skips leave, "Leads off" and days off (§14).* |
 | Q3 | Stage transitions (Q-L3) | Any stage can move to any other (as in the reference's "Select target stage"). **Lost** needs a reason and, for agents, approval. **Booked** is reserved for the Bookings module (blocked for now). |
 | Q4 | Uploads (FR-038) | Call recordings built on private local storage (§10); the production storage location (server disk or S3-compatible provider) is a deployment decision |
 | Q5 | Budget ranges, lost reasons, cities, sources | Seeded editable lists: sources = the 15 reference sources; cities = major Pakistani cities + "Overseas"; budget = Under 10M / 10–20M / 20–30M / 30–50M / 50M+ PKR; lost reasons = Not interested, Budget mismatch, Not responding, Bought elsewhere, Invalid number, Other |
@@ -190,7 +190,7 @@ TEST_DATABASE_URL=postgres://mz_crm:choose-a-dev-password@localhost:5432/mz_crm_
 - Empty files are rejected.
 - The file name is reduced to its base name, with control characters removed, at most 200 characters.
 - The request size is checked before the body is read, and requests with no declared size are refused.
-- The duration is read by the uploader's browser and stored if it is between 0 and 24 hours; otherwise it is left empty. The server does not decode audio.
+- The duration is read by the uploader's browser and stored if it is between 0 and 24 hours; otherwise it is left empty. The server does not decode audio. *Superseded 15 Nov 2026: the server measures the length from the file and ignores the browser's value (§14).*
 
 **Who may do what** (no new permissions; existing lead rules):
 
@@ -241,7 +241,7 @@ Each upload also:
 - Which phone models and formats the recorders produce. Some Android recorders save **AMR / 3GP**, which is outside the documented allow-list and most browsers can't play.
 - Whether recordings can be deleted or replaced, and by whom.
 - How long recordings are kept.
-- Whether an uploaded recording counts as a "call" in Performance and Targets (Calls / Call minutes stay "not available").
+- Whether an uploaded recording counts as a "call" in Performance and Targets (Calls / Call minutes stay "not available"). *Answered 10 Nov 2026: one recording = one call (`PERFORMANCE_MODULE_PLAN.md` §10).*
 - Where production files are stored (server disk with backups, or S3-compatible storage).
 
 
@@ -304,3 +304,54 @@ FR-032 lists merging leads that share a phone. No document defines the rules, an
 4. **Conflicting fields:** name, email, city, source, budget, priority, stage, lost reason, client link, regenerated or duplicate flags, codes. Which value wins: newest, non-empty, or chosen field by field?
 5. **Recording and audit:** a merge record (who, when, both codes, before and after values), a timeline entry on the survivor, and whether an undo is required.
 6. **Who may merge:** the matrix says super admin, admin and manager (team), but not across teams?
+
+*13 Nov 2026: the Shared phones and Duplicates tabs were removed from the tab bar (the pages still open by link). Merge is still not built.*
+
+## 14. Update, 16 Nov 2026
+
+What Leads does now, after the changes of 13–16 Nov 2026. Where this differs from the sections above, this section wins.
+
+**Roles and tabs** (13 Nov 2026)
+- The Manager role is merged into Admin. Admins can own leads and be team members.
+- Tabs in daily-use order: All, New leads, To-dos, Pipeline, Favorites, Verify, Unassigned, Regenerated, Won, Lost, Notes / reviews, Imports. Unassigned is hidden from agents.
+- **Verification:** a lead an agent adds by hand waits for an Admin or Super Admin (Verify tab, banner on the lead). Until approved, the agent can see and call it but not work on it. A rejected lead goes back to the agent with the reason; the agent corrects it and resubmits.
+
+**Leads list**
+- Admins and Super Admins can filter by **Agent** (`?owner=`). Pipeline by agent on Performance links here with this filter.
+- A call button sits beside each phone number in the list and on board cards.
+
+**Lead page**
+- **Update after call** card at the top (when the lead can be worked): call result (Talked, No answer, Busy, Switched off, Wrong number), minutes, what happened, stage (suggested from the result), an optional meeting and the next follow-up. **Save update** does it all in one go: note, stage change, meeting, follow-ups due by now marked done, next follow-up scheduled. If any part is refused, nothing is saved. "No call" is for updates without a call. The separate stage, note and follow-up forms it replaced are gone.
+- **Follow-up form:** a **When** list (In 1 hour, In 3 hours, Tomorrow, In 2 days, In 3 days, Next week, or a date) and **Follow-up for** suggestions (for example Call back, Send project details, Arrange a site visit). The comment box stays; a suggestion and a comment are saved together.
+- Every date-and-time field uses the shared picker (date box, Hour / Minute / AM-PM, quick days).
+- **Notes / reviews** (16 Nov 2026): agents can add notes and reviews on their own leads too, not only Admins. The panel and tab are called "Notes / reviews" and show each writer's role.
+
+**Timeline** (15 Nov 2026)
+- Each entry says what changed in words (old and new values), who did it with their role, and how long ago. Entries are grouped by month.
+- New history entries store readable values: creation details (project, source, budget, city), field changes and the lost reason. Assignment entries show names instead of ids. Follow-ups show as on time or late.
+
+**Call recordings** (15 Nov 2026)
+- The server measures each recording's length from the file itself (MP3, M4A, AAC, OGG Vorbis / Opus, WAV) and ignores any length sent by the browser. A file it can't read still uploads, with the length shown as unknown.
+- The agent sees the call length (or a warning) right after uploading. The timeline entry shows it ("Call recording uploaded · 2:05") and is tagged Call. Older entries take the length from the saved recording.
+
+**To-dos & overdues** (`/dashboard/leads/todos`)
+- **My to-dos** (14 Nov 2026): personal to-dos, with an Add a to-do box. Admins and Super Admins can give one to anyone. These replace General tasks.
+- **Search and agent filter** (16 Nov 2026) for the lead buckets (today, upcoming, overdue follow-ups, completed today, unattended new leads): search by lead name, code or phone (phone needs at least 3 digits), and an **Agent** filter when the viewer sees more than one agent. Agents don't get the agent filter; they only see their own leads anyway.
+- The follow-up and intake counts follow the filter, and the filter is kept when switching between lead buckets. It does not apply to the tasks, meetings or My to-dos buckets. The user's normal scope still applies.
+
+**Import**
+- Only Admins and Super Admins import (13 Nov 2026). Every batch still waits for a Super Admin.
+- The import page offers a **template download** (`GET /api/v1/lead-imports/template`): the exact columns with two made-up sample rows.
+- Every active Super Admin is notified when a batch waits for approval, and the uploader is told the decision (migration `0045_import_notifications`).
+
+**Assignment** (Settings → **Assignment & agent scores**, 16 Nov 2026)
+- The page has two parts. **1 · Who gets a new lead**: a lead with no owner chosen goes to the next agent in turn, in name order, looping back to the top, so everyone gets an equal share whatever their score. This rule has no settings.
+  - Skipped for the day and back when they return: agents on approved leave, marked "Leads off" in today's roster, or on their team's weekly day off (unless the roster says they're working).
+  - A returning customer goes back to the agent who handled them before.
+  - If no agent is available, the lead waits without an owner for an Admin.
+- **2 · Agent scores**: the weights (workload, performance, conversion, availability; they must add up to 100) and details only shape each agent's 0–100 score, shown on My Teams, the dashboard, Performance and the work profile. They do not decide who gets leads.
+- **Maximum load per agent** lowers the workload part of the score only. Agents at or above it keep getting their turn in the rotation.
+- Every field has a plain hint, and the heading warns when the weights don't add up to 100%.
+
+**Leaving staff** (15 Nov 2026)
+- A leaving person's open leads can move to an Admin as well as an agent. Switching off an account that still owns open leads shows a warning first.

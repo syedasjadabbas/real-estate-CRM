@@ -68,7 +68,7 @@ If any value is invalid (for example `TRUST_PROXY=yes`), the app records no IP a
 ## 5. Verify after deploying
 
 1. Sign in as a super admin or admin and open **Security settings → Client IP recording**. It should show "Trusted proxy: Enabled", and "Your IP on this request" should be your public IP (compare with any "what is my IP" site).
-2. Try to spoof it: install a browser extension that adds request headers (for example ModHeader), add `X-Forwarded-For: 6.6.6.6`, and reload Security settings. "Your IP on this request" must **still** show your real IP. Sign out and in again with the header active: **My Workplace → CRM Sign-in History** must show your real IP, never `6.6.6.6`. Remove the header afterwards.
+2. Try to spoof it: install a browser extension that adds request headers (for example ModHeader), add `X-Forwarded-For: 6.6.6.6`, and reload Security settings. "Your IP on this request" must **still** show your real IP. Sign out and in again with the header active: **My Workplace → CRM Sign-in History** (or the sign-in history on Security settings) must show your real IP, never `6.6.6.6`. Remove the header afterwards.
 3. Check that the app port is not reachable from outside (§2).
 4. Check the server log has no `[client-ip] Not recording client IP addresses` warning.
 
@@ -80,7 +80,9 @@ No configuration is needed. Without `TRUST_PROXY`, only the local loopback addre
 
 ## 7. Sign-in history cleanup (scheduled job)
 
-Retention is set on **Security settings** (super admin, admin): 3–120 months, with 12 proposed. **Automatic deletion is off** until the client approves the policy (C2).
+Retention is set on **Security settings** (super admin, admin): 3–120 months. **Updated 16 Nov 2026:** 12 months is the period **agreed with the owner** (C2). **Automatic deletion is still off** until the owner switches it on in Settings → Security.
+
+The Security page warns when the daily cleanup check hasn't run for 2 days (or has never run). On the live server, that warning means the scheduled job below isn't running. The same page also lists everyone's sign-in history (Admins and Super Admins), which is the easiest place to check that real IPs are recorded.
 
 The job only ever deletes from `signin_logs`, and only when automatic deletion is on. It never touches audit logs, sessions, users or other records. Each run:
 - takes a database lock, so two runs never overlap;
@@ -129,7 +131,7 @@ Enable it with `systemctl daemon-reload && systemctl enable --now mz-crm-prune.t
 Client rule (10 Nov 2026): a token / unit hold expires after 7 days and the unit returns to Available. A new booking's **Reserved until** defaults to 7 days after creation (`HOLD_DAYS` in `src/modules/bookings/constants.ts`); the creator may still pick another date, and managers / admins may change it on the booking page.
 
 A hold is **released** when all of these are true:
-- the booking is still in **Negotiation** or **Token pending** (Token received and later stages mean the token is in);
+- the booking is still in the **Token** stage (since 14 Nov 2026 the old Negotiation and Token pending stages are both Token; Partial Down Payment and later mean money is in);
 - its Reserved-until date is before today (business time zone, Asia/Karachi), so a hold "until 18 Nov" is released during 19 Nov;
 - **no payment has ever been recorded** on it (any payment row, even one later reversed).
 
@@ -180,7 +182,8 @@ Enable it with `systemctl daemon-reload && systemctl enable --now mz-crm-release
 3. Caddy 2.5+ in front with the config in §3; firewall as in §2.
 4. Verification steps in §5 pass.
 5. Daily cleanup scheduled (§7) and one manual dry run done. Hourly hold release scheduled (§7b) after one manual dry run.
-6. Retention period confirmed by the client before anyone turns automatic deletion on (§8). CDN or load balancer settings wait on C3.
+6. Retention period: 12 months, agreed with the owner on 16 Nov 2026. The owner decides whether to turn automatic deletion on (§8). CDN or load balancer settings wait on C3.
+7. Nightly backups set up as in `scripts/ops/RESTORE.md`: `BACKUP_DIR` set, timer installed, and **`BACKUP_REMOTE` set for the off-site copy** (not set up as of 16 Nov 2026; required before going live). Check Settings → Backups after the first night.
 
 The exit code is non-zero only on errors (for example the database is unreachable). "Skipped" (another run in progress) and "disabled" are normal results.
 
@@ -188,7 +191,7 @@ The exit code is non-zero only on errors (for example the database is unreachabl
 
 1. Sign in as a super admin or admin and open **Security settings** (shield icon in the header).
 2. **Retention period:** enter 3–120 months and save. This takes effect at the next job run.
-3. **Automatic deletion:** "Turn on automatic deletion…" asks for confirmation. Turn it on only after the client has approved the policy. "Turn off" stops further deletions immediately; entries already deleted cannot be restored except from a database backup.
+3. **Automatic deletion:** "Turn on automatic deletion…" asks for confirmation. The period is agreed (16 Nov 2026), but turning deletion on is the owner's decision; it stays off until then. "Turn off" stops further deletions immediately; entries already deleted cannot be restored except from a database backup.
 4. Every change is recorded in the audit log (`app.setting`).
 
 ---
@@ -201,7 +204,7 @@ Uploaded call recordings (`LEADS_MODULE_PLAN.md` §10) are stored as private fil
 |---|---|---|
 | `FILE_STORAGE_DIR` | An absolute path on a **persistent volume**, for example `/srv/mz-crm-data/storage` | Default is `./storage` in the app folder. In Docker it must be a named volume or bind mount, or files are lost when the container is replaced. The app user needs read and write access; files are created with mode 600. |
 
-**Backups:** recordings are **not** in the database, so the nightly `pg_dump` (`SECURITY_AND_PRIVACY.md` §9) does not include them. Back up `FILE_STORAGE_DIR` on the same schedule and restore both together. A `files` row whose file is missing returns "Recording file not found".
+**Backups:** recordings are **not** in the database, so a `pg_dump` alone does not include them. The nightly backup (`scripts/ops/RESTORE.md`) saves both together: `database.dump` and `storage.tar.gz` (the `FILE_STORAGE_DIR` folder) in one dated folder, and restores both together. A `files` row whose file is missing returns "Recording file not found".
 
 **Upload size at the proxy:** recordings can be 25 MB.
 - **Caddy:** no request body limit by default, so nothing to change.

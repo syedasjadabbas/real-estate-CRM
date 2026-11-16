@@ -1,5 +1,7 @@
 # Admin Walkthrough — Checklist and Question Sheet
 
+> **Historical document (31 Oct 2026).** This was the question sheet for the pre-development walkthrough of the reference CRM. Its questions have since been answered or carried into the module plans. For the current state of the CRM and what's still open, see the "Current status" section at the top of [`PROJECT_STATUS.md`](PROJECT_STATUS.md) (updated 16 Nov 2026).
+
 **Purpose:** close the gaps that could not be inspected with the Sales Agent account, and get decisions on the questions that affect cost, schedule and data model. Development starts only after this session and scope sign-off.
 
 | | |

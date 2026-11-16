@@ -3,7 +3,7 @@
 Status (30 Oct 2026):
 - **Holidays: implemented and verified** (see §12).
 - **Employee records, parts A and B: implemented and verified** (see §14). Adding employees and account changes stay blocked (Q1, Q2, Q16).
-- **Leave requests, approvals and balances: not started.** They wait for the blocking questions in §9.
+- **Leave requests, approvals and balances: not started.** They wait for the blocking questions in §9. *Out of date: leave, approvals, balances and attendance are built. See "Update, 15 Nov 2026" and "Update, 16 Nov 2026" at the end.*
 
 ## Sources
 
@@ -76,7 +76,7 @@ Status (30 Oct 2026):
 | Holidays | Calendar list by year, add / edit / delete, company-wide vs regional | Importing public-holiday feeds |
 | Leave requests & approvals | Request (any role), cancel, approve / reject with note, filters, sort, pagination, history and audit | Multi-level approval chains (pending Q3), email notifications |
 | Leave balances | Annual allowed / used / remaining per user per year | Carry-forward, encashment, accrual (pending Q4) |
-| Attendance | "Attendance — not available" card on the HR overview. CRM sign-in counts are authentication activity only (Performance, My Workplace) and are not attendance | Everything until Q-H2 is answered |
+| Attendance | "Attendance — not available" card on the HR overview. CRM sign-in counts are authentication activity only (Performance, My Workplace) and are not attendance *(superseded 15 Nov 2026: check-in attendance is built; see the updates at the end)* | Everything until Q-H2 is answered |
 | My Workplace | **Next milestone** (depends on holidays and leave) | — |
 
 ---
@@ -573,3 +573,38 @@ At the time of writing, nothing for Employee Records was implemented (A and B we
   - HR, Admins and Super Admins set the office start, the late cut-off, the office end and the weekly days off (default 09:00, 09:15, 18:00, Sunday off).
   - They can correct someone else's day (a forgotten check-in or check-out) with a reason. The correction is shown on the sheet and audited. Nobody corrects their own day.
   - Status is worked out, not stored. A check-in always counts. Without one, the day is on leave, then holiday, then day off, then absent (or "not checked in" for today).
+
+## Update, 16 Nov 2026
+
+What HR does now, after the changes of 15–16 Nov 2026. Where this differs from the sections above, this section wins.
+
+**HR dashboard and navigation**
+- HR staff land on a people dashboard instead of the sales one (`src/modules/attendance/hr-dashboard.ts`): today's attendance, who is late or not checked in, leave waiting for a decision, missing check-outs (last 30 days), who is away this week, upcoming holidays, this month's most late and most absent, and headcount (accounts, staff without a login, joiners this month).
+- Teams is no longer in HR's sidebar. HR can still open it by address, read-only.
+
+**Find employee** (HR overview, for anyone who can see employees)
+- Type a name or email to get up to 10 matches, each with **HR record** and, for agents and Admins when the viewer is an Admin or Super Admin, **Work profile**.
+
+**Attendance**
+- Days before attendance started in the CRM, or before a person joined, show **Not tracked**, never absent.
+- The daily sheet names who corrected a day, and opens a picked date straight away.
+- **Attendance history** (`/dashboard/hr/attendance/[id]`): one person's month, day by day, with times, hours and corrections. Linked from the sheets and the work profile. HR, Admins and Super Admins.
+- Weekly days off are one company setting here (Office hours and days off). The Teams duty roster uses it too.
+
+**CSV downloads** (`GET /api/v1/hr/export?kind=…`, `src/modules/hr/exports.ts`)
+- Employees, leave requests (with each decision), leave balances, the attendance month, the attendance day, and one person's attendance month.
+- HR, Admins and Super Admins only. Each file has the same rows as the page with the same filters. Every download is audited as `hr.export`.
+
+**Leave**
+- **Record leave for someone**: HR, Admins and Super Admins record leave for another person, for example someone who phoned in sick. The same checks as a request apply (overlap, balance, cross-year hold), and a reason is required. Nobody records their own leave this way.
+- Approval when recorded: a Super Admin's entry is approved at once for anyone. An Admin's entry for staff (agents, accountants, staff without a login) is approved at once. Anything else waits for the normal approvals; leave for HR or Admins goes to a Super Admin. Audited as `leave.record`.
+- **Staff without a CRM login** (migration `0047_leave_for_records`): a leave request can belong to an HR record with no login. Balances list those staff, marked "No CRM login", and show medical days. They are on no team roster, so no roster days are written for them.
+- Each card on HR → Leave has its own filters: requests waiting for your decision and cancellation requests (search, leave type), and balances (search, role including "No CRM login", and a Show filter). The balances CSV follows those filters.
+- Proration for people who joined during the year is described in plain text while there is only one method.
+- The team admin approval step is now done by the Admin set as the team's admin (the Manager role merged into Admin).
+
+**Leaving staff**
+- When an account is switched off while it still owns open leads, a warning asks to move them first. A leaving person's leads can now go to an Admin as well as an agent.
+
+**Employee records**
+- The Work profile button on Employees is shown only for agents and Admins.

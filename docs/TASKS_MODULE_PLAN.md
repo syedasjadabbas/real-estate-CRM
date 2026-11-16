@@ -5,6 +5,7 @@ Status: **implemented 29 Oct 2026.**
 - **PDF output:** verified with Chrome's own print engine (§7.4).
 - **Not verified:** the browser's interactive print dialog (§9).
 - **Needs the client:** the business rules in §1.1, triaged in §1.2.
+- **Updated 16 Nov 2026 (§11):** the Tasks screen lists proposals and payment plans only (everyday tasks are to-dos), with clickable count cards, a Team filter and a due-date range.
 
 Meetings is now implemented; see `MEETINGS_MODULE_PLAN.md`.
 
@@ -17,10 +18,10 @@ Sources: `REQUIREMENTS.md` (FR-009, FR-090–092), `MODULES_AND_FEATURES.md` §7
 | Item | Basis |
 |---|---|
 | Fields: title, type, status, due, assignee, lead, booking, description | FR-090, observed create form |
-| Types: General, Payment plan printable, Proposal | FR-090, observed |
+| Types: General, Payment plan printable, Proposal *(14 Nov 2026: General tasks are now to-dos on the To-dos page, §11)* | FR-090, observed |
 | Statuses: Open, In progress, Done, Cancelled | FR-090, observed |
-| Columns: Title, Type, Status, Due, Assignee, Updated (sortable), Actions; KPI tiles Total tasks, Active filters, On this page; pagination | Observed |
-| Filters: Status, Type, Assignee | MODULES §7. "Overdue only" was added for FR-092 |
+| Columns: Title, Type, Status, Due, Assignee, Updated (sortable), Actions; KPI tiles Total tasks, Active filters, On this page; pagination *(16 Nov 2026: the tiles are replaced by clickable counts, §11)* | Observed |
+| Filters: Status, Type, Assignee | MODULES §7. "Overdue only" was added for FR-092. *Team and Due from / to added 16 Nov 2026 (§11)* |
 | Builder: unit fills in area and price; total = area × price per sq ft; discount; down payment; N installments (default 36); editable rows; "Rebuild installment rows" | FR-091, observed |
 | Agent's discount above the cap (5%) is rejected | FR-091 acceptance, observed help text |
 | Default price per sq ft is used when a unit has no list price; ROI per year uses an ROI-per-sq-ft setting | Observed help text |
@@ -339,3 +340,28 @@ The client confirmed the proposal rules in writing on 10 Nov 2026 (`PROJECT_STAT
 **Still open:** C-25 (may an owner correct a proposal before printing?), C-27 (first installment month), C-28 (projects covered by the floor rates, ROI rate), C-29 (self-tasks), C-31 (keep a printed copy). A unit's floor change doesn't trigger the proposal sync (only price and area changes do; that rule lives in Inventory).
 
 **Tests:** `tests/unit/tasks-rules.test.ts` (assignment, Q36 lock, floor rates and codes, settings validation); `tests/integration/tasks.test.ts` (updated for Q36 / Q45, plus "client confirmations of 10 Nov 2026"); `e2e/questionnaire-screens.spec.ts` (agent sees no Edit after saving). Integration and Playwright runs are pending: the shared test database was in use.
+
+## 11. Update, 16 Nov 2026
+
+What Tasks does now, after the changes of 14–16 Nov 2026. Where this differs from the sections above, this section wins.
+
+**General tasks became to-dos** (14 Nov 2026)
+- The Tasks screen lists **Proposals and Payment plans only**. The Create task form no longer offers General; an existing General task can still be edited. The default type is Proposal. The API list is unchanged.
+- Everyday tasks are **to-dos** on To-dos (`/dashboard/leads/todos`, "My to-dos"): what, when (Today, Tomorrow, In 3 days, Next week, no date, or a date), an optional lead and a note. Admins and Super Admins can give a to-do to anyone. They are stored as `general` tasks, so older General tasks show there.
+- HR and Accountants have no To-dos page. To-dos an Admin gives them are listed in My workplace, with Done. The Tasks page no longer tells them to create a task.
+- A payment plan prints as "Payment Plan"; a proposal keeps "Exclusive Investment Proposal".
+
+**List screen** (`/dashboard/tasks`)
+- Page description: "Proposals and payment plans to prepare, track and print for clients. Everyday to-dos are on the To-dos page."
+- The Total tasks / Active filters / On this page tiles are replaced by four **clickable count cards**: **Open**, **In progress**, **Overdue** (red when above 0) and **Done**. Each count covers everything in the user's scope (proposals and payment plans only), not the current filters. Clicking a card applies exactly that filter; clicking it again clears it.
+- New filters in the Filters drawer (`src/server/list-filters.ts`):
+  - **Team**: tasks whose assignee is a member of that team or its team admin. Shown only to roles that see every team or manage a team; it never widens the user's own scope.
+  - **Due from / Due to**: by due date, whole days in Pakistan time, either end optional.
+
+**Forms**
+- Every date-and-time field uses the shared picker: a date box, Hour / Minute / AM-PM lists, and Today / Tomorrow / In 2 days / Next week buttons.
+- The lead is chosen with a searchable lead picker.
+- Create forms start empty when reopened.
+
+**Proposal settings**
+- Plain wording. The panel "Proposal price reconciliation (Q47)" is now "Proposals with changed prices". The cap hints say what they do instead of citing the client's confirmation.
