@@ -4109,3 +4109,7 @@ Test: deactivated-accounts.test.ts. Typecheck and lint pass; checked in the brow
 | 4 | A lost-lead request notified only the agent's team manager (and nobody when the team had none) | Every active Admin and Super Admin, plus the team manager, is notified; the requester never is |
 
 Tests updated in `notifications.test.ts`. Typecheck and lint pass; checked in the browser (tab, both downloads in the audit log).
+
+## 92. Duplicate box says where the lead goes (16 Nov 2026)
+
+In the "Phone number already exists" box on Add lead, **Save as duplicate** now says the new lead goes to the agent who already has the customer ("so you won't see it afterwards" when the existing lead is hidden from the person adding it), and **Log re-inquiry** says the existing lead's agent is told. The behaviour is unchanged: a returning customer stays with their active original agent. After saving, the existing notice already says the lead was assigned to the customer's agent. Text only; typecheck and lint pass.

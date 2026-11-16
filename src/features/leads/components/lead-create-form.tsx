@@ -202,10 +202,12 @@ export function LeadCreateForm({
           )}
           <ul className="list-disc space-y-1 pl-5 text-xs text-zinc-600">
             <li>
-              <span className="font-bold text-zinc-800">Log re-inquiry</span> marks the existing lead as Regenerated (no new lead).
+              <span className="font-bold text-zinc-800">Log re-inquiry</span> marks the existing lead as Regenerated and tells its agent (no new lead).
             </li>
             <li>
-              <span className="font-bold text-zinc-800">Save as duplicate</span> creates a new lead flagged as a duplicate of the original.
+              <span className="font-bold text-zinc-800">Save as duplicate</span> creates a new lead flagged as a duplicate of the original.{" "}
+              {/* A returning customer stays with their agent (commands.ts createLead), so the new lead goes there too (16 Nov 2026). */}
+              {conflict?.existingLeadId ? "It goes to the customer's existing agent while that agent is active." : "It goes to the agent who already has this customer, so you won't see it afterwards."}
             </li>
           </ul>
         </div>
