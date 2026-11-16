@@ -27,18 +27,21 @@ export async function performanceContexts(db: Database, actor: Actor) {
   return db.select({ id: teams.id, name: teams.name, isActive: teams.isActive }).from(teams).where(where).orderBy(asc(sql`lower(${teams.name})`));
 }
 
-/** P11: active agents in scope, optionally narrowed to one team the actor may see. */
+/**
+ * P11: agents in scope, optionally narrowed to one team the actor may see. Switched-off agents stay
+ * listed (owner, 16 Nov 2026) so their past work isn't lost from Performance; the page greys them out.
+ */
 async function agentsInScope(db: Database, actor: Actor, teamId: string | undefined) {
-  if (actor.role === "agent") return db.select({ id: users.id, name: users.name }).from(users).where(eq(users.id, actor.id));
+  if (actor.role === "agent") return db.select({ id: users.id, name: users.name, status: users.status }).from(users).where(eq(users.id, actor.id));
   if (actor.role === "manager" && teamId && !actor.managedTeamIds.includes(teamId)) throw forbidden("You can only see your own teams.");
   const teamIds = teamId ? [teamId] : actor.role === "manager" ? actor.managedTeamIds : null;
   if (teamIds && teamIds.length === 0) return [];
   // Agents, plus Admins who own leads (former Sales Managers keep and work leads; merged 13 Nov 2026).
   const ownsLeads = sql`exists (select 1 from ${leads} l where l.owner_id = ${users.id} and l.deleted_at is null)`;
-  const base = and(eq(users.status, "active"), or(eq(users.role, "agent"), and(inArray(users.role, ["admin", "manager"]), ownsLeads)));
-  if (!teamIds) return db.select({ id: users.id, name: users.name }).from(users).where(base).orderBy(asc(users.name));
+  const base = or(eq(users.role, "agent"), and(inArray(users.role, ["admin", "manager"]), ownsLeads));
+  if (!teamIds) return db.select({ id: users.id, name: users.name, status: users.status }).from(users).where(base).orderBy(asc(users.name));
   return db
-    .selectDistinct({ id: users.id, name: users.name })
+    .selectDistinct({ id: users.id, name: users.name, status: users.status })
     .from(users)
     .innerJoin(teamMembers, eq(teamMembers.userId, users.id))
     .where(and(base, inArray(teamMembers.teamId, teamIds)))
@@ -187,7 +190,7 @@ export async function agentMetrics(db: Database, agents: { id: string; name: str
   });
 }
 
-function sortRows(rows: AgentMetrics[], sort: PerformanceSort, dir: "asc" | "desc") {
+function sortRows<T extends AgentMetrics>(rows: T[], sort: PerformanceSort, dir: "asc" | "desc"): T[] {
   const key = sort === "agent" ? "name" : sort;
   const sign = dir === "asc" ? 1 : -1;
   return [...rows].sort((a, b) => {
@@ -214,16 +217,19 @@ export async function performanceReport(db: Database, actor: Actor, rawQuery: un
     targetsMetFor(db, agents.map((a) => a.id), range.from, range.to),
   ]);
   // Admins see every agent's score beside their figures (client meeting note, 14 Nov 2026).
+  const inactiveIds = new Set(agents.filter((a) => a.status !== "active").map((a) => a.id));
   const all = metrics.map((m) => {
     const sc = scores.get(m.userId);
     const tc = targetCounts.get(m.userId);
-    return { ...m, score: sc ? sc.score : null, scoreProvisional: sc?.provisional ?? false, targetsMet: tc?.met ?? 0, targetsSet: tc?.set ?? 0 };
+    return { ...m, inactive: inactiveIds.has(m.userId), score: sc ? sc.score : null, scoreProvisional: sc?.provisional ?? false, targetsMet: tc?.met ?? 0, targetsSet: tc?.set ?? 0 };
   });
 
   const sum = (k: keyof AgentMetrics) => all.reduce((acc, r) => acc + Number(r[k] ?? 0), 0);
   const count = all.length;
   const totals = {
     agents: count,
+    /** Of those, switched off (still counted in the totals: the work happened). */
+    inactive: inactiveIds.size,
     leads: sum("leads"),
     open: sum("open"),
     booked: sum("booked"),
@@ -378,7 +384,7 @@ export function performanceCsv(report: PerformanceReport) {
   };
   const header = ["Agent", "Score", "From", "To", "Open leads", "Booked", "Lost", "Win %", "Calls", "Call min", "F/U due", "F/U done", "F/U %", "Meetings", "CRM sign-ins", "CRM sign-outs", "Avg first touch (min)", "Targets met", "Target goals set", "Call review avg (1-5)", "Call reviews"];
   const lines = report.allRows.map((r) =>
-    [r.name, r.score, report.range.from, report.range.to, r.open, r.booked, r.lost, r.winPct, r.calls, r.callMin, r.fuDue, r.fuDone, r.fuPct, r.meetings, r.signIns, r.signOuts, r.avgFirstTouchMs === null ? null : Math.round(r.avgFirstTouchMs / 60_000), r.targetsMet, r.targetsSet, r.reviewAvg, r.reviewCount].map(esc).join(","),
+    [r.inactive ? `${r.name} (inactive)` : r.name, r.score, report.range.from, report.range.to, r.open, r.booked, r.lost, r.winPct, r.calls, r.callMin, r.fuDue, r.fuDone, r.fuPct, r.meetings, r.signIns, r.signOuts, r.avgFirstTouchMs === null ? null : Math.round(r.avgFirstTouchMs / 60_000), r.targetsMet, r.targetsSet, r.reviewAvg, r.reviewCount].map(esc).join(","),
   );
   return [header.join(","), ...lines].join("\n") + "\n";
 }

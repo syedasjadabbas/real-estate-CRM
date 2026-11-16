@@ -107,6 +107,11 @@ function Glance({ label, value, caption, muted }: { label: string; value: ReactN
   );
 }
 
+/** A switched-off agent (owner, 16 Nov 2026): kept in Performance, greyed out. */
+function InactiveTag() {
+  return <span className="ml-1.5 rounded-full bg-zinc-200 px-1.5 py-0.5 align-middle text-[9px] font-black tracking-[0.05em] text-zinc-600 uppercase">Inactive</span>;
+}
+
 export default async function PerformancePage({ searchParams }: PageProps<"/dashboard/performance">) {
   const actor = await requirePageUser();
   // Admins and Super Admins open an agent's full profile from their name (15 Nov 2026).
@@ -156,7 +161,7 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
 
       <Panel
         title={own ? "Your performance" : "Team at a glance"}
-        description={own ? `${report.range.from} → ${report.range.to}` : `${formatInt(s.agents)} ${s.agents === 1 ? "person" : "people"} in scope · ${report.range.from} → ${report.range.to}`}
+        description={own ? `${report.range.from} → ${report.range.to}` : `${formatInt(s.agents)} ${s.agents === 1 ? "person" : "people"} in scope${s.inactive ? ` (${formatInt(s.inactive)} switched off, shown greyed out)` : ""} · ${report.range.from} → ${report.range.to}`}
       >
         <div className="space-y-4 py-2">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -310,8 +315,11 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
               </thead>
               <tbody>
                 {report.rows.map((r) => (
-                  <tr key={r.userId} className="border-b border-zinc-100/80 last:border-b-0 hover:bg-zinc-50/60">
-                    <td className="px-3 py-2.5 font-bold whitespace-nowrap">{profileLinks ? <Link href={`/dashboard/people/${r.userId}`} className="hover:text-brand hover:underline">{r.name}</Link> : r.name}</td>
+                  <tr key={r.userId} className={cn("border-b border-zinc-100/80 last:border-b-0 hover:bg-zinc-50/60", r.inactive && "bg-zinc-50/70 text-zinc-400")} title={r.inactive ? "Switched off: past work still counts" : undefined}>
+                    <td className="px-3 py-2.5 font-bold whitespace-nowrap">
+                      {profileLinks ? <Link href={`/dashboard/people/${r.userId}`} className="hover:text-brand hover:underline">{r.name}</Link> : r.name}
+                      {r.inactive ? <InactiveTag /> : null}
+                    </td>
                     <td className={cn("px-3 py-2.5 text-right whitespace-nowrap tabular-nums", r.score === null && "text-zinc-400")}>
                       {r.score === null ? "—" : r.score}
                       {r.scoreProvisional ? <span className="ml-1 text-[10px] font-semibold text-zinc-400">prov.</span> : null}
@@ -398,8 +406,11 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
                     const counts = pipeline.get(r.userId);
                     const total = counts ? LEAD_STAGES.reduce((a, st) => a + counts[st], 0) : 0;
                     return (
-                      <tr key={r.userId} className="border-b border-zinc-100/80 last:border-b-0 hover:bg-zinc-50/60">
-                        <td className="px-3 py-2.5 font-bold whitespace-nowrap">{profileLinks ? <Link href={`/dashboard/people/${r.userId}`} className="hover:text-brand hover:underline">{r.name}</Link> : r.name}</td>
+                      <tr key={r.userId} className={cn("border-b border-zinc-100/80 last:border-b-0 hover:bg-zinc-50/60", r.inactive && "bg-zinc-50/70 opacity-60 grayscale")} title={r.inactive ? "Switched off: past work still counts" : undefined}>
+                        <td className="px-3 py-2.5 font-bold whitespace-nowrap">
+                          {profileLinks ? <Link href={`/dashboard/people/${r.userId}`} className="hover:text-brand hover:underline">{r.name}</Link> : r.name}
+                          {r.inactive ? <InactiveTag /> : null}
+                        </td>
                         {LEAD_STAGES.map((st) => {
                           const n = counts?.[st] ?? 0;
                           return (

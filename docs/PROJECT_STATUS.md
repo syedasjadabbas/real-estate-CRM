@@ -4071,3 +4071,16 @@ The owner asked that an agent or Admin running a meeting can upload pictures of 
 | List | The meetings list shows a camera with the photo count next to the title |
 
 Data: `file_kind` gains `meeting_photo`, and `files.meeting_id` links a photo to its meeting (its `lead_id` is the meeting's lead); migration `0052_meeting_photos`. Files are private, served by `/api/v1/meeting-photos/:id` after the meeting access check; upload is `POST /api/v1/meetings/:id/photos`. Stored under `meeting-photos/` in the same storage as recordings, so the nightly backup covers them. Tests in `meeting-photos.test.ts`.
+
+## 91. Switched-off agents stay in Performance, greyed out (16 Nov 2026)
+
+The owner reported that switching an agent off made them vanish from Performance, taking their past work with them. They now stay.
+
+| Change | Detail |
+|---|---|
+| Who is listed | Every agent in scope, active or switched off (and Admins who own leads), instead of active ones only (`agentsInScope`) |
+| Look | A switched-off agent's row in the agent table and in Pipeline by agent is greyed out with an **Inactive** tag; hover says their past work still counts |
+| Totals | Their figures still count in the totals and charts for the range; the page header says how many are switched off |
+| CSV | Their name is followed by "(inactive)" |
+
+Team comparison also keeps their work in their team's totals. Test updated in `performance.test.ts`.

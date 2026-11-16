@@ -113,6 +113,7 @@ describe.skipIf(!hasTestDb)("Performance (PostgreSQL integration)", () => {
     expect(row(report, a.id)).toEqual({
       userId: a.id,
       name: "Agent A",
+      inactive: false,
       leads: 5,
       open: 2,
       booked: 1,
@@ -198,9 +199,17 @@ describe.skipIf(!hasTestDb)("Performance (PostgreSQL integration)", () => {
     expect(log).toMatchObject({ actorId: f.actors.superAdmin.id, entityId: p.id });
   });
 
-  it("inactive agents are left out; a manager with no team sees no one", async () => {
+  it("switched-off agents stay listed, marked inactive (16 Nov 2026); a manager with no team sees no one", async () => {
+    const before = await performanceReport(db, f.actors.manager, RANGE, NOW);
     await db.update(users).set({ status: "inactive" }).where(eq(users.id, f.actors.agent2.id));
-    expect((await performanceReport(db, f.actors.manager, RANGE, NOW)).allRows.map((r) => r.name)).toEqual(["Agent A"]);
+    const after = await performanceReport(db, f.actors.manager, RANGE, NOW);
+    expect(after.allRows.map((r) => [r.name, r.inactive])).toEqual([
+      ["Agent A", false],
+      ["Agent B", true],
+    ]);
+    // Their past work still counts in the totals; the summary says how many are switched off.
+    expect(after.summary).toMatchObject({ agents: before.summary.agents, inactive: 1, booked: before.summary.booked, calls: before.summary.calls });
+    expect(performanceCsv(after).split("\n").some((l) => l.startsWith("Agent B (inactive),"))).toBe(true);
     await db.update(teams).set({ managerId: null }).where(eq(teams.id, team1));
     const reloaded = await loadActor(db, { id: f.actors.manager.id, name: "Manager", email: "manager@test.local", role: "manager" });
     expect((await performanceReport(db, reloaded, RANGE, NOW)).total).toBe(0);
