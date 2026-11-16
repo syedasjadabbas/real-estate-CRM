@@ -45,7 +45,7 @@ function NavGroups({ groups, pathname, search, onNavigate }: NavGroupsProps & { 
   return groups.map((group) => (
     <div key={group.label} className="mb-3">
       <div className="px-3 py-1 leading-6">
-        <span className="text-[11px] leading-[16.5px] font-black tracking-[0.1em] text-zinc-400 uppercase">{group.label}</span>
+        <span className="text-[11px] leading-[16.5px] font-black tracking-[0.1em] text-zinc-500 uppercase">{group.label}</span>
       </div>
       <ul className="mt-1 space-y-1">
         {group.items.map((item) => {
@@ -60,19 +60,19 @@ function NavGroups({ groups, pathname, search, onNavigate }: NavGroupsProps & { 
                 className={cn(
                   "group flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm leading-5 font-bold transition-colors",
                   active
-                    ? "bg-linear-to-r from-brand to-brand-700 text-white shadow-brand-hairline"
-                    : "text-zinc-700 hover:bg-zinc-100/80 hover:text-zinc-950",
+                    ? "bg-[#3d2e06] text-[#f5d27a] ring-1 ring-[#bb8c08]/40"
+                    : "text-zinc-300 hover:bg-white/[0.06] hover:text-white",
                 )}
               >
                 <Icon
                   aria-hidden="true"
                   className={cn(
                     "size-5 shrink-0 transition-transform group-hover:scale-105",
-                    active ? "text-white" : "text-zinc-400 group-hover:text-zinc-600",
+                    active ? "text-[#f5d27a]" : "text-zinc-500 group-hover:text-zinc-300",
                   )}
                 />
                 <span className="flex-1 truncate">{item.label}</span>
-                {active ? <span className="size-2 rounded-full bg-white shadow-hairline" /> : null}
+                {active ? <span className="size-2 rounded-full bg-[#f5d27a]" /> : null}
               </Link>
             </li>
           );
@@ -136,16 +136,16 @@ export function Sidebar({
   return (
     <div className="flex h-full flex-col">
       {/* Brand: the MZ Marketing logo (16 Nov 2026) */}
-      <div className="flex h-20 shrink-0 flex-col justify-center border-b border-zinc-100 bg-white/50 px-6">
+      <div className="flex h-20 shrink-0 flex-col justify-center border-b border-white/10 px-6">
         {/* eslint-disable-next-line @next/next/no-img-element -- small static logo, no resizing needed */}
         <img src={brand.logo.src} width={brand.logo.width} height={brand.logo.height} alt={brand.logo.alt} className="h-9 w-auto max-w-full object-contain object-left" />
-        <p className="mt-1 truncate text-[10px] leading-3 font-bold tracking-[0.15em] text-zinc-400 uppercase">{brand.tagline}</p>
+        <p className="mt-1 truncate text-[10px] leading-3 font-bold tracking-[0.15em] text-zinc-500 uppercase">{brand.tagline}</p>
       </div>
 
       {/* Menu search */}
       <div className="shrink-0 px-4 py-3">
-        <label className="flex items-center rounded-xl border border-zinc-200/80 bg-zinc-50/70 px-3 py-2 text-sm text-zinc-700 shadow-hairline focus-within:border-brand/40 focus-within:bg-white">
-          <Search aria-hidden="true" className="mr-2 size-4 shrink-0 text-zinc-400" />
+        <label className="flex items-center rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2 text-sm text-zinc-300 focus-within:border-[#bb8c08]/60 focus-within:bg-white/10">
+          <Search aria-hidden="true" className="mr-2 size-4 shrink-0 text-zinc-500" />
           <input
             ref={searchRef}
             type="search"
@@ -153,7 +153,7 @@ export function Sidebar({
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search"
             aria-label="Search menu"
-            className="min-w-0 flex-1 bg-transparent text-sm leading-5 font-medium text-zinc-900 placeholder:text-zinc-400 focus:outline-none [&::-webkit-search-cancel-button]:hidden"
+            className="min-w-0 flex-1 bg-transparent text-sm leading-5 font-medium text-zinc-100 placeholder:text-zinc-500 focus:outline-none [&::-webkit-search-cancel-button]:hidden"
           />
           <Kbd>/</Kbd>
         </label>
@@ -169,27 +169,27 @@ export function Sidebar({
           <ActiveNavGroups groups={groups} onNavigate={onNavigate} />
         </Suspense>
         {groups.length === 0 ? (
-          <p className="px-3 py-6 text-center text-xs font-semibold text-zinc-400">No menu items match.</p>
+          <p className="px-3 py-6 text-center text-xs font-semibold text-zinc-500">No menu items match.</p>
         ) : null}
       </nav>
 
       {/* User card */}
-      <div className="shrink-0 border-t border-zinc-100 bg-white/50 p-3.5">
-        <div className="rounded-2xl border border-zinc-200/80 bg-zinc-50/70 p-3 shadow-hairline">
+      <div className="shrink-0 border-t border-white/10 p-3.5">
+        <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-3">
           <div className="flex items-center gap-3">
             <Avatar name={user?.name} presence={Boolean(user)} />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm leading-[17.5px] font-bold">
+              <p className="truncate text-sm leading-[17.5px] font-bold text-zinc-100">
                 {user?.name ?? "Loading…"}
               </p>
-              <p className="truncate text-xs leading-[15px] font-medium text-zinc-600">
+              <p className="truncate text-xs leading-[15px] font-medium text-zinc-400">
                 {user?.email ?? " "}
               </p>
             </div>
           </div>
-          <div className="mt-2.5 flex items-center justify-between border-t border-zinc-200/60 pt-2 text-xs leading-4 font-bold">
-            <span className="text-zinc-400">Workspace</span>
-            <span className="truncate text-zinc-800">{brand.name}</span>
+          <div className="mt-2.5 flex items-center justify-between border-t border-white/10 pt-2 text-xs leading-4 font-bold">
+            <span className="text-zinc-500">Workspace</span>
+            <span className="truncate text-[#f5d27a]">{brand.name}</span>
           </div>
         </div>
       </div>

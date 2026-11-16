@@ -64,7 +64,8 @@ export function AppShell({
         id="app-sidebar"
         aria-label="Sidebar"
         className={cn(
-          "fixed inset-y-0 left-0 z-40 w-64 border-r border-zinc-200/80 bg-white shadow-hairline",
+          // Dark premium sidebar (owner, 16 Nov 2026); the page itself stays light.
+          "fixed inset-y-0 left-0 z-40 w-64 border-r border-black/40 bg-[#1c1b19] shadow-hairline",
           "transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]",
           drawerOpen ? "translate-x-0" : "-translate-x-full",
           desktopOpen ? "lg:translate-x-0" : "lg:-translate-x-full",
