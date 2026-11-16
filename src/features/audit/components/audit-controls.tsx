@@ -16,7 +16,7 @@ export function SettingsTabs({ active, showBackups = false }: { active: "securit
   const tabs = [
     { key: "security", label: "Security", href: "/dashboard/settings/security" },
     { key: "cities", label: "Cities", href: "/dashboard/settings/cities" },
-    { key: "assignment", label: "Assignment", href: "/dashboard/settings/assignment" },
+    { key: "assignment", label: "Assignment & scores", href: "/dashboard/settings/assignment" },
     { key: "audit", label: "Audit log", href: "/dashboard/settings/audit-log" },
     ...(showBackups ? [{ key: "backups", label: "Backups", href: "/dashboard/settings/backups" }] : []),
   ];

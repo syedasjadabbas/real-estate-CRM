@@ -221,10 +221,10 @@ export const navigation: NavGroup[] = [
     label: "Settings",
     items: [
       {
-        label: "Lead assignment",
+        label: "Assignment & scores",
         href: "/dashboard/settings/assignment",
         icon: SlidersHorizontal,
-        description: "How new leads are shared out, and the weights behind agent and team scores.",
+        description: "Who gets each new lead, and how agent and team scores are worked out.",
         // Same check as the page (leads/assignment.ts canManageAssignment).
         roles: ["super_admin", "admin"],
       },
