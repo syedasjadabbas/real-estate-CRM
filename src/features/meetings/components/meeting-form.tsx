@@ -149,7 +149,7 @@ export function MeetingForm({ mode, meetingId, options, initial }: { mode: "crea
         {mode === "create" && lead ? (
           <div className="sm:col-span-2">
             <label className="flex items-start gap-2 text-sm font-semibold text-zinc-800">
-              <input type="checkbox" className="mt-0.5 size-4 accent-[#107c41]" checked={moveLead && movable} disabled={!movable || pending} onChange={(e) => setMoveLead(e.target.checked)} />
+              <input type="checkbox" className="mt-0.5 size-4 accent-[#bb8c08]" checked={moveLead && movable} disabled={!movable || pending} onChange={(e) => setMoveLead(e.target.checked)} />
               <span>
                 Also move lead to Meeting Scheduled
                 <span className="block text-[11px] font-medium text-zinc-500">

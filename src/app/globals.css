@@ -6,10 +6,11 @@
  * Neutrals use Tailwind's default zinc scale, which matches the reference exactly.
  */
 @theme {
-  --color-brand: #107c41;
-  --color-brand-700: #0a5d2b;
-  --color-brand-50: #e7f3ec;
-  --color-canvas: #f6f8f7;
+  /* MZ Marketing gold, from mzmarketing.pk (owner, 16 Nov 2026); was green #107c41. */
+  --color-brand: #bb8c08;
+  --color-brand-700: #8a6706;
+  --color-brand-50: #fbf4e2;
+  --color-canvas: #f8f7f4;
 
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;

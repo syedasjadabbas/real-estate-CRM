@@ -60,7 +60,7 @@ export function MeetingStatusPanel({ meetingId, status, leadStage, canEdit }: { 
         </Field>
         {leadStage ? (
           <label className="flex items-start gap-2 text-xs font-semibold text-zinc-800">
-            <input type="checkbox" className="mt-0.5 size-4 accent-[#107c41]" checked={moveLead && movable} disabled={!movable || pending} onChange={(e) => setMoveLead(e.target.checked)} />
+            <input type="checkbox" className="mt-0.5 size-4 accent-[#bb8c08]" checked={moveLead && movable} disabled={!movable || pending} onChange={(e) => setMoveLead(e.target.checked)} />
             <span>
               On completion, also move lead to Meeting Done
               <span className="block text-[11px] font-medium text-zinc-500">

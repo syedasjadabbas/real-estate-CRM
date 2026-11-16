@@ -117,7 +117,7 @@ export function BookingPlan({
           <Num label="Possession amount" value={possessionPct} onChange={setPossessionPct} suffix="%" />
         </div>
         <label className="flex items-center gap-2 text-sm font-bold">
-          <input type="checkbox" className="size-4 accent-[#107c41]" checked={balloonOn} onChange={(e) => setBalloonOn(e.target.checked)} />
+          <input type="checkbox" className="size-4 accent-[#bb8c08]" checked={balloonOn} onChange={(e) => setBalloonOn(e.target.checked)} />
           Balloon payments
         </label>
         {balloonOn ? (
@@ -148,7 +148,7 @@ export function BookingPlan({
 
       {!invalid ? (
         <div className="relative pt-3">
-          <p className="mb-2 text-[11px] font-black tracking-[0.2em] text-[#107c41] uppercase">Payment schedule</p>
+          <p className="mb-2 text-[11px] font-black tracking-[0.2em] text-[#bb8c08] uppercase">Payment schedule</p>
           <table className="w-full border-collapse text-left text-xs">
             <thead>
               <tr className="border-b-2 border-zinc-300 text-[10px] font-black tracking-[0.05em] text-zinc-600 uppercase">

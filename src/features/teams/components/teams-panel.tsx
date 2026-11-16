@@ -96,7 +96,7 @@ function TeamForm({ team, managers, onDone }: { team?: Detail["team"]; managers:
       {/* Weekly days off are one company setting in HR → Attendance, used by the roster and attendance (15 Nov 2026). */}
       <p className="text-[11px] text-zinc-500">Weekly days off are set once for everyone in HR → Attendance → Office hours and days off.</p>
       <label className="flex items-start gap-2 text-xs font-semibold text-zinc-800">
-        <input type="checkbox" className="mt-0.5 size-4 accent-[#107c41]" checked={isActive} disabled={pending} onChange={(e) => setIsActive(e.target.checked)} />
+        <input type="checkbox" className="mt-0.5 size-4 accent-[#bb8c08]" checked={isActive} disabled={pending} onChange={(e) => setIsActive(e.target.checked)} />
         <span>
           Active (assignable)
           <span className="block text-[11px] font-medium text-zinc-500">Inactive teams are hidden from lead assignment (rotation).</span>
@@ -178,7 +178,7 @@ function MembersEditor({ teamId, members, candidates }: { teamId: string; member
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <Input type="search" aria-label="Search people to add" placeholder="Search by name or role" value={query} onChange={(e) => setQuery(e.target.value)} className="min-w-0 flex-1" />
           <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-700">
-            <input type="checkbox" className="size-4 accent-[#107c41]" checked={onlySelected} onChange={(e) => setOnlySelected(e.target.checked)} />
+            <input type="checkbox" className="size-4 accent-[#bb8c08]" checked={onlySelected} onChange={(e) => setOnlySelected(e.target.checked)} />
             Selected only
           </label>
         </div>
@@ -190,7 +190,7 @@ function MembersEditor({ teamId, members, candidates }: { teamId: string; member
                 <span className="flex items-center gap-2 font-semibold">
                   <input
                     type="checkbox"
-                    className="size-4 accent-[#107c41]"
+                    className="size-4 accent-[#bb8c08]"
                     checked={selected.includes(p.id)}
                     disabled={pending}
                     onChange={(e) => setSelected((s) => (e.target.checked ? [...s, p.id] : s.filter((x) => x !== p.id)))}

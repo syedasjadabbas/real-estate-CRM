@@ -163,7 +163,7 @@ export function CallUpdateCard({ leadId, currentStage }: { leadId: string; curre
         <label className="flex items-center gap-2 text-sm font-bold">
           <input
             type="checkbox"
-            className="size-4 accent-[#107c41]"
+            className="size-4 accent-[#bb8c08]"
             checked={meetingOn}
             disabled={pending}
             onChange={(e) => {
@@ -209,7 +209,7 @@ export function CallUpdateCard({ leadId, currentStage }: { leadId: string; curre
 
       <div className="space-y-3 rounded-xl border border-zinc-200/80 p-3">
         <label className="flex items-center gap-2 text-sm font-bold">
-          <input type="checkbox" className="size-4 accent-[#107c41]" checked={followOn} disabled={pending} onChange={(e) => setFollowOn(e.target.checked)} />
+          <input type="checkbox" className="size-4 accent-[#bb8c08]" checked={followOn} disabled={pending} onChange={(e) => setFollowOn(e.target.checked)} />
           Next follow-up
           <span className="text-[11px] font-medium text-zinc-500">(closes the follow-ups due now)</span>
         </label>

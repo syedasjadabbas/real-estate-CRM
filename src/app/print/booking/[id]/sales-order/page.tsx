@@ -24,7 +24,7 @@ export const metadata: Metadata = { title: "Sales order (demo)" };
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="relative space-y-1 border-t border-zinc-200 pt-4">
-      <h2 className="mb-2 text-[11px] font-black tracking-[0.2em] text-[#107c41] uppercase">{title}</h2>
+      <h2 className="mb-2 text-[11px] font-black tracking-[0.2em] text-[#bb8c08] uppercase">{title}</h2>
       {children}
     </section>
   );
@@ -86,13 +86,13 @@ export default async function SalesOrderDemo({ params }: PageProps<"/print/booki
           DEMO
         </p>
 
-        <header className="relative flex flex-wrap items-start justify-between gap-4 border-b-2 border-[#107c41] pb-4">
+        <header className="relative flex flex-wrap items-start justify-between gap-4 border-b-2 border-[#bb8c08] pb-4">
           <div>
             <p className="text-2xl font-black tracking-[-0.025em]">{brand.name}</p>
             <p className="text-xs text-zinc-500">{detail.projectName}</p>
           </div>
           <div className="text-right">
-            <p className="text-xl font-black tracking-[-0.02em] text-[#107c41]">SALES ORDER</p>
+            <p className="text-xl font-black tracking-[-0.02em] text-[#bb8c08]">SALES ORDER</p>
             <p className="text-xs text-zinc-600">
               Order no: <span className="font-bold">DEMO (not issued)</span>
             </p>
@@ -131,7 +131,7 @@ export default async function SalesOrderDemo({ params }: PageProps<"/print/booki
         </Section>
 
         <section className="relative space-y-2 border-t border-zinc-200 pt-4">
-          <h2 className="mb-2 text-[11px] font-black tracking-[0.2em] text-[#107c41] uppercase">Payment plan</h2>
+          <h2 className="mb-2 text-[11px] font-black tracking-[0.2em] text-[#bb8c08] uppercase">Payment plan</h2>
           <BookingPlan total={booking.totalSale} token={booking.tokenAmount} bookedOn={businessToday(booking.createdAt)} plan={resolvePaymentPlan(project?.paymentPlan, standard)} />
           <p className="pt-1 text-[11px] text-zinc-500">Sales agent: {detail.agentName ?? "—"}</p>
         </section>

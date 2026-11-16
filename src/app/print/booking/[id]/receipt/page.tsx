@@ -85,13 +85,13 @@ export default async function ProvisionalReceiptDemo({ params }: PageProps<"/pri
           DEMO
         </p>
 
-        <header className="relative flex flex-wrap items-start justify-between gap-4 border-b-2 border-[#107c41] pb-4">
+        <header className="relative flex flex-wrap items-start justify-between gap-4 border-b-2 border-[#bb8c08] pb-4">
           <div>
             <p className="text-2xl font-black tracking-[-0.025em]">{brand.name}</p>
             <p className="text-xs text-zinc-500">Real Estate · {detail.projectName}</p>
           </div>
           <div className="text-right">
-            <p className="text-xl font-black tracking-[-0.02em] text-[#107c41]">PROVISIONAL RECEIPT</p>
+            <p className="text-xl font-black tracking-[-0.02em] text-[#bb8c08]">PROVISIONAL RECEIPT</p>
             <p className="text-xs text-zinc-600">
               Receipt no: <span className="font-bold">DEMO (not issued)</span>
             </p>
@@ -100,7 +100,7 @@ export default async function ProvisionalReceiptDemo({ params }: PageProps<"/pri
         </header>
 
         <section className="relative space-y-1">
-          <p className="text-[11px] font-black tracking-[0.2em] text-[#107c41] uppercase">Received from</p>
+          <p className="text-[11px] font-black tracking-[0.2em] text-[#bb8c08] uppercase">Received from</p>
           <div className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
             <Row label="Customer" value={lead.name} />
             <Row label="Phone" value={lead.phone} />
@@ -110,7 +110,7 @@ export default async function ProvisionalReceiptDemo({ params }: PageProps<"/pri
         </section>
 
         <section className="relative space-y-1">
-          <p className="text-[11px] font-black tracking-[0.2em] text-[#107c41] uppercase">Property</p>
+          <p className="text-[11px] font-black tracking-[0.2em] text-[#bb8c08] uppercase">Property</p>
           <div className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
             <Row label="Project" value={detail.projectName} />
             <Row label="Unit" value={unit.unitNo} />
@@ -122,7 +122,7 @@ export default async function ProvisionalReceiptDemo({ params }: PageProps<"/pri
         </section>
 
         <section className="relative space-y-1">
-          <p className="text-[11px] font-black tracking-[0.2em] text-[#107c41] uppercase">Payment</p>
+          <p className="text-[11px] font-black tracking-[0.2em] text-[#bb8c08] uppercase">Payment</p>
           <div className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
             <Row label={money.paid > 0 ? "Amount received to date" : "Token amount"} value={formatPrice(received)} strong />
             <Row label="Balance" value={formatPrice(booking.totalSale - received)} />
@@ -137,7 +137,7 @@ export default async function ProvisionalReceiptDemo({ params }: PageProps<"/pri
 
         {proofs.length ? (
           <section className="relative break-inside-avoid space-y-2">
-            <p className="text-[11px] font-black tracking-[0.2em] text-[#107c41] uppercase">Payment proof</p>
+            <p className="text-[11px] font-black tracking-[0.2em] text-[#bb8c08] uppercase">Payment proof</p>
             {images.length ? (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {images.map((p) => (

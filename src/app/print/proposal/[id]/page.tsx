@@ -23,7 +23,7 @@ export const metadata: Metadata = { title: "Proposal" };
 function Section({ title, children, splittable = false }: { title: string; children: ReactNode; splittable?: boolean }) {
   return (
     <section className={cn("border-t border-zinc-200 pt-5", !splittable && "break-inside-avoid")}>
-      <h2 className="mb-3 break-after-avoid text-[11px] font-black tracking-[0.2em] text-[#107c41] uppercase">{title}</h2>
+      <h2 className="mb-3 break-after-avoid text-[11px] font-black tracking-[0.2em] text-[#bb8c08] uppercase">{title}</h2>
       {children}
     </section>
   );
@@ -76,7 +76,7 @@ export default async function ProposalPrintPage({ params }: PageProps<"/print/pr
         <header className="space-y-4 pb-2">
           <p className="text-xs font-black tracking-[0.2em] text-zinc-500 uppercase">{p.customHeader || brand.name}</p>
           <h1 className="text-3xl leading-tight font-black tracking-[-0.025em]">{detail.task.type === "payment_plan" ? "Payment Plan" : "Exclusive Investment Proposal"}</h1>
-          {project ? <p className="text-lg font-bold text-[#107c41]">{project}</p> : null}
+          {project ? <p className="text-lg font-bold text-[#bb8c08]">{project}</p> : null}
           <div className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
             <Row label="Prepared for" value={p.clientName || p.customerName} />
             <Row label="Date" value={p.preparedDate ? formatListedOn(p.preparedDate) : "—"} />
