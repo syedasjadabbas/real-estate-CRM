@@ -135,17 +135,11 @@ export function Sidebar({
 
   return (
     <div className="flex h-full flex-col">
-      {/* Brand — text wordmark until an official logo is supplied */}
-      <div className="flex h-20 shrink-0 items-center gap-3.5 border-b border-zinc-100 bg-white/50 px-6">
-        <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-2xl bg-brand-50/80 text-[13px] font-black tracking-[-0.02em] text-brand shadow-hairline ring-2 ring-brand/20">
-          {brand.monogram}
-        </span>
-        <div className="min-w-0">
-          <p className="truncate text-lg leading-[18px] font-black tracking-[-0.025em] uppercase">
-            {brand.name}
-          </p>
-          <p className="mt-1 truncate text-xs leading-4 font-semibold text-zinc-400">{brand.tagline}</p>
-        </div>
+      {/* Brand: the MZ Marketing logo (16 Nov 2026) */}
+      <div className="flex h-20 shrink-0 flex-col justify-center border-b border-zinc-100 bg-white/50 px-6">
+        {/* eslint-disable-next-line @next/next/no-img-element -- small static logo, no resizing needed */}
+        <img src={brand.logo.src} width={brand.logo.width} height={brand.logo.height} alt={brand.logo.alt} className="h-9 w-auto max-w-full object-contain object-left" />
+        <p className="mt-1 truncate text-[10px] leading-3 font-bold tracking-[0.15em] text-zinc-400 uppercase">{brand.tagline}</p>
       </div>
 
       {/* Menu search */}

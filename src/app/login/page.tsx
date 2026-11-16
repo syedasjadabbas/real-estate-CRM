@@ -13,17 +13,6 @@ const HIGHLIGHTS: { icon: ReactNode; title: string; text: string }[] = [
   { icon: <CalendarCheck2 aria-hidden="true" className="size-4" />, title: "Bookings and payments", text: "From token to confirmation, with receipts and balances." },
 ];
 
-function Monogram({ className }: { className?: string }) {
-  return (
-    <span
-      className={`inline-flex shrink-0 items-center justify-center rounded-2xl font-black tracking-[-0.02em] ${className ?? ""}`}
-      aria-hidden="true"
-    >
-      {brand.monogram}
-    </span>
-  );
-}
-
 /**
  * Login screen: a brand panel beside the form on wide screens, the form alone on phones.
  * Nothing here reveals whether an account exists; errors come from the sign-in action.
@@ -43,12 +32,13 @@ export default function LoginPage() {
         <div aria-hidden="true" className="pointer-events-none absolute -top-32 -right-32 size-[28rem] rounded-full bg-brand blur-3xl" />
         <div aria-hidden="true" className="pointer-events-none absolute -bottom-40 -left-24 size-[26rem] rounded-full bg-black/25 blur-3xl" />
 
-        <div className="relative flex items-center gap-3.5">
-          <Monogram className="size-11 bg-white text-[14px] text-brand-700 shadow-lg shadow-black/10" />
-          <div>
-            <p className="text-lg leading-[18px] font-black tracking-[-0.025em] uppercase">{brand.name}</p>
-            <p className="mt-1 text-xs font-semibold text-white/70">{brand.tagline}</p>
-          </div>
+        <div className="relative flex items-center gap-4">
+          {/* The gold logo sits on white so it stays visible on this gold panel. */}
+          <span className="inline-flex rounded-2xl bg-white px-4 py-2.5 shadow-lg shadow-black/10">
+            {/* eslint-disable-next-line @next/next/no-img-element -- small static logo */}
+            <img src={brand.logo.src} width={brand.logo.width} height={brand.logo.height} alt={brand.logo.alt} className="h-10 w-auto" />
+          </span>
+          <p className="text-xs font-bold tracking-[0.15em] text-white/80 uppercase">{brand.tagline}</p>
         </div>
 
         <div className="relative max-w-md">
@@ -78,12 +68,10 @@ export default function LoginPage() {
       <section className="relative flex items-center justify-center overflow-hidden px-4 py-10 sm:px-8">
         <div aria-hidden="true" className="pointer-events-none absolute -top-24 -right-24 size-80 rounded-full bg-brand/10 blur-3xl lg:hidden" />
         <div className="relative w-full max-w-[400px]">
-          <div className="flex items-center gap-3.5 lg:hidden">
-            <Monogram className="size-10 bg-brand text-[13px] text-white shadow-hairline" />
-            <div>
-              <p className="text-lg leading-[18px] font-black tracking-[-0.025em] uppercase">{brand.name}</p>
-              <p className="mt-1 text-xs font-semibold text-zinc-500">{brand.tagline}</p>
-            </div>
+          <div className="lg:hidden">
+            {/* eslint-disable-next-line @next/next/no-img-element -- small static logo */}
+            <img src={brand.logo.src} width={brand.logo.width} height={brand.logo.height} alt={brand.logo.alt} className="h-11 w-auto" />
+            <p className="mt-1.5 text-[10px] font-bold tracking-[0.15em] text-zinc-500 uppercase">{brand.tagline}</p>
           </div>
 
           <div className="mt-8 rounded-3xl border border-zinc-200/80 bg-white p-6 shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_32px_-12px_rgba(16,24,40,0.12)] sm:p-8 lg:mt-0">
