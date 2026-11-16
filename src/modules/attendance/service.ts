@@ -300,6 +300,23 @@ function summarise(userId: string, dates: string[], today: string, settings: Att
   return s;
 }
 
+/**
+ * Attendance for some people over any date range (Performance, quotation "Attendance"; 16 Nov 2026),
+ * with the same day rules as the monthly sheet, counted up to today. The caller checks who may see it.
+ */
+export async function attendanceTotals(db: DbOrTx, userIds: string[], from: string, to: string, today = businessToday()) {
+  const out = new Map<string, ReturnType<typeof summarise>>();
+  if (userIds.length === 0 || from > to || from > today) return out;
+  const settings = await getAttendanceSettings(db);
+  const last = to < today ? to : today;
+  const dates: string[] = [];
+  for (let d = new Date(`${from}T00:00:00Z`); d.toISOString().slice(0, 10) <= last; d.setUTCDate(d.getUTCDate() + 1)) dates.push(d.toISOString().slice(0, 10));
+  const data = await loadRange(db, userIds, from, last, today);
+  const byKey = new Map(data.records.map((r) => [`${r.userId}|${r.date}`, r]));
+  for (const id of userIds) out.set(id, summarise(id, dates, today, settings, data, byKey));
+  return out;
+}
+
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 /** Monthly summary per active person, counted up to today. */

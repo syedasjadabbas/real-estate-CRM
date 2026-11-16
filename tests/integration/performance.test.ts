@@ -4,7 +4,7 @@ import { createLead } from "@/modules/leads/commands";
 import { performanceContexts, performanceCsv, performanceReport, teamComparison } from "@/modules/performance/service";
 import { formatTalkTime, pipelineCsv } from "@/modules/performance/pipeline-export";
 import { loadActor } from "@/server/auth/session-store";
-import { auditLogs, followUps, leadActivities, leads, meetings, projects, signinLogs, teams, users } from "@/server/db/schema";
+import { appSettings, attendanceRecords, auditLogs, followUps, leadActivities, leads, meetings, projects, signinLogs, teams, users } from "@/server/db/schema";
 import type { Database } from "@/server/db";
 import type { Actor } from "@/server/auth/types";
 import { AppError } from "@/server/errors";
@@ -141,6 +141,12 @@ describe.skipIf(!hasTestDb)("Performance (PostgreSQL integration)", () => {
       // No call reviews scored (16 Nov 2026).
       reviewAvg: null,
       reviewCount: 0,
+      // Nobody has checked in, so no day is tracked yet (attendance in Performance, 16 Nov 2026).
+      attPresent: null,
+      attLate: 0,
+      attAbsent: 0,
+      attLeave: 0,
+      attWorkingDays: 0,
     });
     expect(row(report, f.actors.agent2.id)).toMatchObject({ leads: 1, booked: 1, winPct: 100, fuPct: null });
     expect(report.summary).toMatchObject({ agents: 3, open: 2, booked: 2, lost: 2, winPct: 50, fuDue: 3, fuDone: 2, fuPct: 67, meetings: 2, signIns: 2 });
@@ -199,6 +205,23 @@ describe.skipIf(!hasTestDb)("Performance (PostgreSQL integration)", () => {
     expect(log).toMatchObject({ actorId: f.actors.superAdmin.id, entityId: p.id });
   });
 
+  it("shows attendance in the range: days present of working days, late and absent (16 Nov 2026)", async () => {
+    const a = f.actors.agent1;
+    // No weekly day off, and the agent counts from before the range (not from the fixture's creation day).
+    await db.insert(appSettings).values({ key: "attendance.weekend_days", value: "" }).onConflictDoUpdate({ target: appSettings.key, set: { value: "" } });
+    await db.update(users).set({ createdAt: new Date("2026-01-01T00:00:00Z") }).where(eq(users.id, a.id));
+    // 5 Oct on time (09:00 PKT), 6 Oct late (10:00 PKT), 7 Oct no check-in = absent. Today is 8 Oct.
+    await db.insert(attendanceRecords).values([
+      { userId: a.id, date: "2026-10-05", checkInAt: new Date("2026-10-05T04:00:00Z"), checkOutAt: new Date("2026-10-05T13:00:00Z") },
+      { userId: a.id, date: "2026-10-06", checkInAt: new Date("2026-10-06T05:00:00Z"), checkOutAt: new Date("2026-10-06T13:00:00Z") },
+    ]);
+    const report = await performanceReport(db, f.actors.superAdmin, { from: "2026-10-05", to: "2026-10-07" }, new Date("2026-10-08T06:00:00Z"));
+    expect(row(report, a.id)).toMatchObject({ attPresent: 2, attWorkingDays: 3, attLate: 1, attAbsent: 1 });
+    // Sortable by attendance.
+    const sorted = await performanceReport(db, f.actors.superAdmin, { from: "2026-10-05", to: "2026-10-07", sort: "attPresent", dir: "desc" }, new Date("2026-10-08T06:00:00Z"));
+    expect(sorted.allRows[0].userId).toBe(a.id);
+  });
+
   it("switched-off agents stay listed, marked inactive (16 Nov 2026); a manager with no team sees no one", async () => {
     const before = await performanceReport(db, f.actors.manager, RANGE, NOW);
     await db.update(users).set({ status: "inactive" }).where(eq(users.id, f.actors.agent2.id));
@@ -224,8 +247,8 @@ describe.skipIf(!hasTestDb)("Performance (PostgreSQL integration)", () => {
     expect(asc.rows.at(-1)?.name).toBe("Agent Outside");
     expect((await performanceReport(db, f.actors.superAdmin, {}, NOW)).range).toEqual({ from: "2026-09-29", to: "2026-10-29" });
     const csv = performanceCsv(byWin).split("\n");
-    expect(csv[0]).toBe("Agent,Score,From,To,Open leads,Booked,Lost,Win %,Calls,Call min,F/U due,F/U done,F/U %,Meetings,CRM sign-ins,CRM sign-outs,Avg first touch (min),Targets met,Target goals set,Call review avg (1-5),Call reviews");
-    expect(csv[1]).toMatch(/^Agent B,\d+,2026-10-01,2026-10-29,0,1,0,100,0,,0,0,,0,0,0,,0,0,,0$/);
+    expect(csv[0]).toBe("Agent,Score,From,To,Open leads,Booked,Lost,Win %,Calls,Call min,F/U due,F/U done,F/U %,Meetings,CRM sign-ins,CRM sign-outs,Avg first touch (min),Targets met,Target goals set,Call review avg (1-5),Call reviews,Working days,Days present,Days late,Days absent,Days on leave");
+    expect(csv[1]).toMatch(/^Agent B,\d+,2026-10-01,2026-10-29,0,1,0,100,0,,0,0,,0,0,0,,0,0,,0,\d+,\d+,\d+,\d+,\d+$/);
     expect(byWin.page).toBe(1);
     expect(byWin.pageCount).toBe(1);
   });

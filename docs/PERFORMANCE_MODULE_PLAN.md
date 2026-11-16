@@ -197,7 +197,7 @@ A team the actor may not see is rejected with 403. Ranges are validated: dates, 
 - Pipeline pressure (undefined).
 - The roster's "Avg M / Avg QC".
 
-**Attendance (Q-H2):** only CRM sign-in and sign-out counts are shown, labelled as authentication activity. No hours, days present or roster-based attendance is calculated. *16 Nov 2026: still true on this page, but attendance now exists in HR → Attendance (check-in); the footnote points there (§11).*
+**Attendance (Q-H2):** only CRM sign-in and sign-out counts are shown, labelled as authentication activity. No hours, days present or roster-based attendance is calculated. *16 Nov 2026: attendance now exists in HR → Attendance (check-in), and since the quotation review the agent table has an **Attendance** column built from it (days present of working days, late, absent, on leave; sortable; in the CSV). Sign-ins are still not attendance.*
 
 **30 Oct 2026 (`PRODUCTION_READINESS_PLAN.md` §4):** the header now says "Agent KPIs and CRM sign-in activity for your scope", the table is "Performance & CRM sign-in activity", the sign-in glance and column tooltips say "not attendance", and a footnote states that sign-ins are not attendance plus the retention policy. This departs from the reference wording on purpose (C1).
 

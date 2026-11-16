@@ -47,6 +47,7 @@ const COLUMNS: { label: string; sort: PerformanceSort; title?: string }[] = [
   { label: "Meetings", sort: "meetings", title: "Completed meetings the agent organized, starting in the range." },
   { label: "CRM sign-ins", sort: "signIns", title: "CRM sign-ins logged in the range (authentication activity, not attendance)." },
   { label: "CRM sign-outs", sort: "signOuts", title: "CRM sign-outs logged in the range (authentication activity, not attendance)." },
+  { label: "Attendance", sort: "attPresent", title: "Days present (on time or late) of the working days in the range, as in HR → Attendance; late and absent days below. Weekly days off, company holidays and approved leave aren't working days." },
   { label: "Targets met", sort: "targetsMet", title: "Target goals reached (calls, meetings, sold sq ft), of those set, for targets whose day, week or month starts in the range." },
   { label: "Avg first touch", sort: "avgFirstTouchMs", title: "Average time from creation to first touch, for leads assigned in the range that have been touched." },
   { label: "Call review", sort: "reviewAvg", title: "Average score (1–5) Admins gave this agent's calls in Call reviews & notes during the range, and how many scored reviews." },
@@ -329,6 +330,24 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
                         {v === null ? "—" : typeof v === "number" ? formatInt(v) : v}
                       </td>
                     ))}
+                    <td
+                      className={cn("px-3 py-2.5 text-right whitespace-nowrap tabular-nums", r.attPresent === null && "text-zinc-400")}
+                      title={r.attPresent === null ? "No working day tracked in this range" : `${r.attPresent} of ${r.attWorkingDays} working days present · ${r.attLate} late · ${r.attAbsent} absent · ${r.attLeave} on leave`}
+                    >
+                      {r.attPresent === null ? "—" : (
+                        <>
+                          <span className="font-bold text-zinc-800">{r.attPresent}</span>
+                          <span className="text-zinc-400"> / {r.attWorkingDays}</span>
+                          {r.attLate || r.attAbsent ? (
+                            <span className="block text-[10px] font-semibold">
+                              {r.attLate ? <span className="text-amber-700">{r.attLate} late</span> : null}
+                              {r.attLate && r.attAbsent ? " · " : null}
+                              {r.attAbsent ? <span className="text-rose-600">{r.attAbsent} absent</span> : null}
+                            </span>
+                          ) : null}
+                        </>
+                      )}
+                    </td>
                     <td className={cn("px-3 py-2.5 text-right whitespace-nowrap tabular-nums", r.targetsSet === 0 && "text-zinc-400")}>
                       {r.targetsSet === 0 ? "—" : (
                         <>
@@ -359,7 +378,7 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
           original assignment date.
         </p>
         <p className="text-[11px] text-zinc-500">
-          CRM sign-ins and sign-outs are authentication activity only. They are not attendance and are not used to work out hours, lateness or absences; see HR → Attendance for check-ins.{" "}
+          CRM sign-ins and sign-outs are authentication activity only. They are not attendance and are not used to work out hours, lateness or absences. The Attendance column comes from check-ins, as in HR → Attendance.{" "}
           {retentionNote}
         </p>
       </Panel>

@@ -4113,3 +4113,9 @@ Tests updated in `notifications.test.ts`. Typecheck and lint pass; checked in th
 ## 92. Duplicate box says where the lead goes (16 Nov 2026)
 
 In the "Phone number already exists" box on Add lead, **Save as duplicate** now says the new lead goes to the agent who already has the customer ("so you won't see it afterwards" when the existing lead is hidden from the person adding it), and **Log re-inquiry** says the existing lead's agent is told. The behaviour is unchanged: a returning customer stays with their active original agent. After saving, the existing notice already says the lead was assigned to the customer's agent. Text only; typecheck and lint pass.
+
+## 93. Attendance in Performance (16 Nov 2026)
+
+Checked against the quotation, which lists **Attendance** under Performance. The agent table now has an **Attendance** column: days present (on time or late) of the working days in the selected range, e.g. "18 / 20", with late and absent days under it and the full breakdown on hover. Same day rules as HR → Attendance (weekly days off, company holidays and approved leave aren't working days; today isn't absent until it's over), through `attendanceTotals` in `attendance/service.ts`. Sortable; the CSV adds Working days, Days present, Days late, Days absent and Days on leave. Tests in `performance.test.ts` and `performance-calls.test.ts`.
+
+**Recent leads is not a gap:** the quotation lists it under Dashboard, but the client asked for it to be removed on 10 Nov 2026 (`DASHBOARD_PLAN.md`); New leads in the sidebar replaces it. A panel added by mistake during this check was taken out again, and `dashboard.test.ts` still guards that it stays removed.

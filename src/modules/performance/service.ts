@@ -5,6 +5,8 @@ import type { Actor } from "@/server/auth/types";
 import { forbidden } from "@/server/errors";
 import { agentScores } from "@/modules/leads/assignment";
 import { targetsMetFor } from "@/modules/targets/service";
+import { attendanceTotals } from "@/modules/attendance/service";
+import { businessToday } from "@/modules/bookings/today";
 import { LEAD_STAGES, type LeadStage } from "@/modules/leads/constants";
 import { callMinutes, callStatsByUser, NO_CALLS } from "./calls";
 import { PERFORMANCE_PAGE_SIZE, pct, performanceQuerySchema, resolveRange, type PerformanceSort } from "./range";
@@ -194,8 +196,8 @@ function sortRows<T extends AgentMetrics>(rows: T[], sort: PerformanceSort, dir:
   const key = sort === "agent" ? "name" : sort;
   const sign = dir === "asc" ? 1 : -1;
   return [...rows].sort((a, b) => {
-    const x = a[key as keyof AgentMetrics];
-    const y = b[key as keyof AgentMetrics];
+    const x = a[key as keyof T];
+    const y = b[key as keyof T];
     // Missing values (no decided leads, no follow-ups due, no touched leads, no timed calls) sort last either way.
     if (x === null && y !== null) return 1;
     if (y === null && x !== null) return -1;
@@ -211,17 +213,33 @@ export async function performanceReport(db: Database, actor: Actor, rawQuery: un
   const range = resolveRange(q.from, q.to, now);
   const team = actor.role === "agent" ? undefined : q.team;
   const agents = await agentsInScope(db, actor, team);
-  const [metrics, scores, targetCounts] = await Promise.all([
+  const [metrics, scores, targetCounts, attendance] = await Promise.all([
     agentMetrics(db, agents, range.window),
     agentScores(db, agents.map((a) => a.id), now),
     targetsMetFor(db, agents.map((a) => a.id), range.from, range.to),
+    // Attendance in the range (quotation "Attendance", 16 Nov 2026): same rules as HR → Attendance.
+    attendanceTotals(db, agents.map((a) => a.id), range.from, range.to, businessToday(now)),
   ]);
   // Admins see every agent's score beside their figures (client meeting note, 14 Nov 2026).
   const inactiveIds = new Set(agents.filter((a) => a.status !== "active").map((a) => a.id));
   const all = metrics.map((m) => {
     const sc = scores.get(m.userId);
     const tc = targetCounts.get(m.userId);
-    return { ...m, inactive: inactiveIds.has(m.userId), score: sc ? sc.score : null, scoreProvisional: sc?.provisional ?? false, targetsMet: tc?.met ?? 0, targetsSet: tc?.set ?? 0 };
+    const at = attendance.get(m.userId);
+    return {
+      ...m,
+      inactive: inactiveIds.has(m.userId),
+      score: sc ? sc.score : null,
+      scoreProvisional: sc?.provisional ?? false,
+      targetsMet: tc?.met ?? 0,
+      targetsSet: tc?.set ?? 0,
+      /** Days present (on time or late) of the working days in the range; null when no working day was tracked. */
+      attPresent: at && at.workingDays ? at.present + at.late : null,
+      attLate: at?.late ?? 0,
+      attAbsent: at?.absent ?? 0,
+      attLeave: at?.onLeave ?? 0,
+      attWorkingDays: at?.workingDays ?? 0,
+    };
   });
 
   const sum = (k: keyof AgentMetrics) => all.reduce((acc, r) => acc + Number(r[k] ?? 0), 0);
@@ -382,9 +400,9 @@ export function performanceCsv(report: PerformanceReport) {
     const s = v === null ? "" : String(v);
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  const header = ["Agent", "Score", "From", "To", "Open leads", "Booked", "Lost", "Win %", "Calls", "Call min", "F/U due", "F/U done", "F/U %", "Meetings", "CRM sign-ins", "CRM sign-outs", "Avg first touch (min)", "Targets met", "Target goals set", "Call review avg (1-5)", "Call reviews"];
+  const header = ["Agent", "Score", "From", "To", "Open leads", "Booked", "Lost", "Win %", "Calls", "Call min", "F/U due", "F/U done", "F/U %", "Meetings", "CRM sign-ins", "CRM sign-outs", "Avg first touch (min)", "Targets met", "Target goals set", "Call review avg (1-5)", "Call reviews", "Working days", "Days present", "Days late", "Days absent", "Days on leave"];
   const lines = report.allRows.map((r) =>
-    [r.inactive ? `${r.name} (inactive)` : r.name, r.score, report.range.from, report.range.to, r.open, r.booked, r.lost, r.winPct, r.calls, r.callMin, r.fuDue, r.fuDone, r.fuPct, r.meetings, r.signIns, r.signOuts, r.avgFirstTouchMs === null ? null : Math.round(r.avgFirstTouchMs / 60_000), r.targetsMet, r.targetsSet, r.reviewAvg, r.reviewCount].map(esc).join(","),
+    [r.inactive ? `${r.name} (inactive)` : r.name, r.score, report.range.from, report.range.to, r.open, r.booked, r.lost, r.winPct, r.calls, r.callMin, r.fuDue, r.fuDone, r.fuPct, r.meetings, r.signIns, r.signOuts, r.avgFirstTouchMs === null ? null : Math.round(r.avgFirstTouchMs / 60_000), r.targetsMet, r.targetsSet, r.reviewAvg, r.reviewCount, r.attWorkingDays, r.attPresent ?? 0, r.attLate, r.attAbsent, r.attLeave].map(esc).join(","),
   );
   return [header.join(","), ...lines].join("\n") + "\n";
 }
