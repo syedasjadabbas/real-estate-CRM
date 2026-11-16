@@ -3937,3 +3937,14 @@ Committed (`d2c7a7a`). The Backups page (Super Admin) now explains itself: a pla
 | Dashboard Avg / owner | Aging vs Meetings: completed meetings per owner in the band, one decimal (it divided leads by owners) |
 
 Typecheck and lint pass; rotation, lead assignment, imports, dashboard and bookings tests pass, with a new test for the day-off rule.
+
+## 83. Agent score described as it really works (16 Nov 2026)
+
+An independent check of the docs against the code found that the agent score uses **only follow-up performance and conversion**, weighted against each other by the Performance and Conversion settings (30 and 20 by default, so 60:40), over the history window (`agentScore`, `leads/assignment-score.ts`). The four-part weighted score of §52 (`weightedScore`) is no longer called anywhere since leads moved to equal rotation. The workload and availability weights, maximum load, online minutes, offline availability and working hours are saved but have no effect. Older rows above (FR-009, FR-029, §52) describe the earlier scored assignment.
+
+| Change | Detail |
+|---|---|
+| Assignment & agent scores | The form shows **Used in the score** (Performance %, Conversion %, minimum history, history window) and **Saved, but not used in the score today** (the rest). The example is now performance 70 and conversion 50 with weights 30 and 20 = 62 (it was a four-part sum = 77). Section 1 no longer mentions a website source; it says an agent's own lead stays with them and an unowned lead waits on the Unassigned list for an agent to claim or an Admin to assign |
+| Performance | The Score tooltip says performance and conversion |
+
+Text only; how the score is calculated is unchanged. Typecheck and lint pass; checked in the browser.

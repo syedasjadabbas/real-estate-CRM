@@ -28,7 +28,7 @@ export default async function AssignmentSettingsPage() {
       <PanelCard title="1 · Who gets a new lead">
         <div className="space-y-2 text-xs text-zinc-700">
           <p>
-            A new lead with no owner chosen (from an import, the website, or added without picking an agent) goes to the <strong>next agent in turn</strong>,
+            A new lead with no owner chosen (from an approved import, or added by an Admin without picking an agent) goes to the <strong>next agent in turn</strong>,
             in name order, starting again from the top: like dealing cards, everyone gets an equal share whatever their score.
           </p>
           <ul className="list-disc space-y-1 pl-5">
@@ -37,7 +37,8 @@ export default async function AssignmentSettingsPage() {
               the weekly day off set in HR → Attendance (unless the roster says they&apos;re working).
             </li>
             <li>A returning customer goes back to the agent who handled them before.</li>
-            <li>If no agent is available, the lead waits without an owner for an Admin to assign.</li>
+            <li>A lead an agent adds stays with that agent.</li>
+            <li>If no agent is available, the lead waits on the Unassigned list, where an agent can claim it or an Admin can assign it.</li>
           </ul>
           <p className="text-[11px] text-zinc-500">This rule has no settings. To keep someone out for a day, mark them &quot;Leads off&quot; in the team roster.</p>
         </div>
@@ -45,8 +46,8 @@ export default async function AssignmentSettingsPage() {
       <PanelCard title="2 · Agent scores">
         <p className="mb-4 text-xs text-zinc-600">
           Every agent gets a score from 0 to 100, shown on My Teams, the dashboard, Performance and their work profile. It&apos;s a quick health check and{" "}
-          <strong>does not decide who gets leads</strong>. Example: light workload 90, performance 70, conversion 50 and online 100 gives 90×40% + 70×30% +
-          50×20% + 100×10% = <strong>77</strong>.
+          <strong>does not decide who gets leads</strong>. It is made of two parts: follow-up performance and conversion. Example: performance 70 and
+          conversion 50, with weights 30 and 20, give (70×30 + 50×20) ÷ 50 = <strong>62</strong>.
         </p>
         <AssignmentSettingsForm settings={settings} />
       </PanelCard>

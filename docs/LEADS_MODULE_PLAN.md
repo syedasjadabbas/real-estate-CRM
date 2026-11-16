@@ -349,8 +349,8 @@ What Leads does now, after the changes of 13–16 Nov 2026. Where this differs f
   - Skipped for the day and back when they return: agents on approved leave, marked "Leads off" in today's roster, or on their team's weekly day off (unless the roster says they're working).
   - A returning customer goes back to the agent who handled them before.
   - If no agent is available, the lead waits without an owner for an Admin.
-- **2 · Agent scores**: the weights (workload, performance, conversion, availability; they must add up to 100) and details only shape each agent's 0–100 score, shown on My Teams, the dashboard, Performance and the work profile. They do not decide who gets leads.
-- **Maximum load per agent** lowers the workload part of the score only. Agents at or above it keep getting their turn in the rotation.
+- **2 · Agent scores**: each agent's 0–100 score (My Teams, the dashboard, Performance, the work profile) is made of **follow-up performance and conversion only**, weighted against each other by the Performance and Conversion settings (30 and 20 by default, so 60:40), over the history window (`agentScore` in `leads/assignment-score.ts`). It does not decide who gets leads.
+- **Saved but not used (corrected 16 Nov 2026):** the workload and availability weights, maximum load, online minutes, offline availability and working hours are stored and validated (the four weights must still total 100) but don't change the score today. The settings page groups them under "Saved, but not used in the score today".
 - Every field has a plain hint, and the heading warns when the weights don't add up to 100%.
 
 **Leaving staff** (15 Nov 2026)

@@ -33,7 +33,7 @@ const NO_CALL_DURATION = "No call recording in the range has a duration";
 /** Observed columns, in order. */
 const COLUMNS: { label: string; sort: PerformanceSort; title?: string }[] = [
   { label: "Name", sort: "agent" },
-  { label: "Score", sort: "score", title: "Agent score, 0–100: workload, follow-up performance, conversion and availability (Settings → Assignment & scores). It doesn't decide who gets leads. \"prov.\" = too little history yet." },
+  { label: "Score", sort: "score", title: "Agent score, 0–100: follow-up performance and conversion, weighted in Settings → Assignment & scores. It doesn't decide who gets leads. \"prov.\" = too little history yet." },
   { label: "Open leads", sort: "open", title: "Leads assigned in the selected date range that are not booked or lost." },
   { label: "Booked", sort: "booked", title: "Leads assigned in the range that are now Booked." },
   { label: "Lost", sort: "lost", title: "Leads assigned in the range that are now Lost." },
