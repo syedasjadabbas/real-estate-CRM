@@ -12,12 +12,13 @@ const FILTERS = ["q", "actor", "entity", "action", "from", "to"] as const;
  * Settings section tabs for Super Admins and Admins: Security settings, Cities and the Audit log.
  * Backups is added only when `showBackups` is set (Super Admins: see modules/backups/policy.ts).
  */
-export function SettingsTabs({ active, showBackups = false }: { active: "security" | "cities" | "assignment" | "audit" | "backups"; showBackups?: boolean }) {
+export function SettingsTabs({ active, showBackups = false }: { active: "security" | "cities" | "assignment" | "audit" | "deactivated" | "backups"; showBackups?: boolean }) {
   const tabs = [
     { key: "security", label: "Security", href: "/dashboard/settings/security" },
     { key: "cities", label: "Cities", href: "/dashboard/settings/cities" },
     { key: "assignment", label: "Assignment & scores", href: "/dashboard/settings/assignment" },
     { key: "audit", label: "Audit log", href: "/dashboard/settings/audit-log" },
+    { key: "deactivated", label: "Deactivated accounts", href: "/dashboard/settings/deactivated" },
     ...(showBackups ? [{ key: "backups", label: "Backups", href: "/dashboard/settings/backups" }] : []),
   ];
   return (

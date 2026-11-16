@@ -4084,3 +4084,17 @@ The owner reported that switching an agent off made them vanish from Performance
 | CSV | Their name is followed by "(inactive)" |
 
 Team comparison also keeps their work in their team's totals. Test updated in `performance.test.ts`.
+
+## 91. Deactivated accounts tab (16 Nov 2026)
+
+The owner asked for one place to see switched-off accounts and turn them back on.
+
+| Change | Detail |
+|---|---|
+| Where | Settings → **Deactivated accounts** tab (Admins and Super Admins); Users & access links to it |
+| Each row | Name, email, role, teams, when it was switched off and by whom (latest user.deactivate audit entry; "by you" for your own), last sign-in, and a warning when the person still owns open leads |
+| Filters | Search name or email, role, and **Switched off by me** |
+| Reactivate | Confirms, then turns the account back on through setAccountStatus (same checks, audit entry); the person signs in with their existing password, role and teams |
+| Scope | A Super Admin sees every account; an Admin sees every role but Super Admin |
+
+Test: deactivated-accounts.test.ts. Typecheck and lint pass; checked in the browser as an Admin.

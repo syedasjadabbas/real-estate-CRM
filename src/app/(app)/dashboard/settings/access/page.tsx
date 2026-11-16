@@ -1,5 +1,6 @@
 import { ShieldCheck } from "lucide-react";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { PageHeader, PageStack } from "@/components/shell/page-header";
 import { Card } from "@/components/ui/card";
 import { EmptyState, RestrictedState } from "@/components/ui/empty-state";
@@ -67,7 +68,7 @@ export default async function AccessPage() {
       />
       <p className="text-[11px] text-zinc-500">
         Turning someone off doesn&apos;t move their leads: they stay with that person until an Admin reassigns them (HR → Employees → Shift leads). Every change is
-        recorded in the audit log.
+        recorded in the audit log. To see only switched-off accounts, open <Link href="/dashboard/settings/deactivated" className="font-semibold text-brand hover:underline">Deactivated accounts</Link>.
       </p>
       {rows.length === 0 ? (
         <EmptyState>No accounts yet.</EmptyState>
