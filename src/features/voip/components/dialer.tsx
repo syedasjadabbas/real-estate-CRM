@@ -35,7 +35,7 @@ export function Dialer({ status, telHref, leadName, phone }: { status: VoipStatu
               <PhoneOff aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-zinc-400" />
               <p>
                 <span className="font-bold text-zinc-800">Browser calling isn&apos;t set up yet.</span> {VOIP_REASON_TEXT[status.reason]} Use
-                your phone to call <MaskedPhone phone={phone} />.
+                your phone to call <MaskedPhone phone={phone} name={leadName} />.
               </p>
             </div>
           )}

@@ -90,7 +90,7 @@ export function ClientsTable({
                     </span>
                   </td>
                   <td className="px-3 py-2.5 text-zinc-700">
-                    <MaskedPhone phone={r.phone} className="flex" />
+                    <MaskedPhone phone={r.phone} name={r.name} className="flex" />
                     <EmailWithGmail email={r.email} name={r.name} className="flex" />
                   </td>
                   <td className="px-3 py-2.5">

@@ -155,7 +155,7 @@ export function LeadsTable({
                       >
                         <Phone aria-hidden="true" className="size-3.5" />
                       </a>
-                      <MaskedPhone phone={r.phone} />
+                      <MaskedPhone phone={r.phone} name={r.name} />
                     </span>
                     <EmailWithGmail email={r.email} name={r.name} className="flex" />
                   </td>

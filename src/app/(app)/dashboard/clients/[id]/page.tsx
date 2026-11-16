@@ -86,7 +86,7 @@ export default async function ClientDetailPage({ params }: PageProps<"/dashboard
       <Card className="p-5">
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
           <Fact label="Phone">
-            <MaskedPhone phone={client.phone} />
+            <MaskedPhone phone={client.phone} name={client.name} />
           </Fact>
           <Fact label="Email">
             <EmailWithGmail email={client.email} name={client.name} />

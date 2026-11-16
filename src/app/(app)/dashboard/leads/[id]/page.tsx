@@ -105,7 +105,7 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
               <span className="tracking-[0.05em]">{lead.code}</span>
             </Fact>
             <Fact label="Phone">
-              <MaskedPhone phone={lead.phone} />
+              <MaskedPhone phone={lead.phone} name={lead.name} />
             </Fact>
             <Fact label="Email">
               <EmailWithGmail email={lead.email} name={lead.name} />

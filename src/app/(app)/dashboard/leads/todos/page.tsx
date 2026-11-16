@@ -254,7 +254,7 @@ export default function TodosPage({ searchParams }: PageProps<"/dashboard/leads/
                       {item.name} <span className="font-semibold tracking-[0.05em] text-zinc-500">{item.code}</span>
                     </Link>
                     <p className="text-zinc-600">
-                      <MaskedPhone phone={item.phone} /> · {item.ownerName ?? "Unassigned"}
+                      <MaskedPhone phone={item.phone} name={item.name} /> · {item.ownerName ?? "Unassigned"}
                       {item.note ? <span className="block text-zinc-700">{item.note}</span> : null}
                     </p>
                   </div>

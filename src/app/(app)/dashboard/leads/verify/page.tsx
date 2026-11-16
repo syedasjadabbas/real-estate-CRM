@@ -39,7 +39,7 @@ export default function VerifyLeadsPage() {
                     <a href={telHref(r.phoneCountryCode, r.phoneNumber)} aria-label={`Call ${r.name}`} title={`Call ${r.name}`} className="inline-flex size-6 items-center justify-center rounded-full bg-brand-50 text-brand ring-1 ring-brand/20 hover:bg-brand hover:text-white">
                       <Phone aria-hidden="true" className="size-3" />
                     </a>
-                    <MaskedPhone phone={r.phone} />
+                    <MaskedPhone phone={r.phone} name={r.name} />
                   </span>
                 </div>
                 <p className="mt-1 text-[11px] text-zinc-500">

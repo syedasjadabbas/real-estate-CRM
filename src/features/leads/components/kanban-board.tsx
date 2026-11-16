@@ -73,7 +73,7 @@ function KanbanCard({
         >
           <Phone aria-hidden="true" className="size-3" />
         </a>
-        <MaskedPhone phone={card.phone} />
+        <MaskedPhone phone={card.phone} name={card.name} />
       </p>
       <p className="text-[11px] text-zinc-600">{card.ownerName ?? "Unassigned"}</p>
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
