@@ -1,0 +1,12 @@
+# Runs mz-crm-release-holds.service every hour. Persistent=true catches up after downtime.
+# Check with: systemctl list-timers mz-crm-release-holds.timer ; journalctl -u mz-crm-release-holds.service
+[Unit]
+Description=Hourly MZ CRM unit-hold release
+
+[Timer]
+OnCalendar=hourly
+RandomizedDelaySec=2m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

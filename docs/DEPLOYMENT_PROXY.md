@@ -80,6 +80,8 @@ No configuration is needed. Without `TRUST_PROXY`, only the local loopback addre
 
 ## 7. Sign-in history cleanup (scheduled job)
 
+**Ready-made units (16 Nov 2026):** `scripts/ops/systemd/` now ships `mz-crm-prune-signins.service/.timer` (daily 03:15) and `mz-crm-release-holds.service/.timer` (hourly, §7b) next to the backup units. `sh scripts/ops/install-timers.sh` (as root) installs and enables all three in one step. The examples below are the same jobs for servers that use cron or Docker instead.
+
 Retention is set on **Security settings** (super admin, admin): 3–120 months. **Updated 16 Nov 2026:** 12 months is the period **agreed with the owner** (C2). **Automatic deletion is still off** until the owner switches it on in Settings → Security.
 
 The Security page warns when the daily cleanup check hasn't run for 2 days (or has never run). On the live server, that warning means the scheduled job below isn't running. The same page also lists everyone's sign-in history (Admins and Super Admins), which is the easiest place to check that real IPs are recorded.

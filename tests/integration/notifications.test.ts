@@ -74,13 +74,15 @@ describe.skipIf(!hasTestDb)("Notifications (PostgreSQL integration)", () => {
   });
 
   describe("lost requests", () => {
-    it("notifies the owner's team managers on a request, and the requester only on rejection", async () => {
+    it("notifies the team manager and every Admin and Super Admin on a request, and the requester only on rejection", async () => {
       const id = await lead(f.actors.agent1);
       await markLost(db, f.actors.agent1, id, { lostReasonId: f.lostReasonId, note: "Budget" });
       const [m] = await mine(f.actors.manager);
       expect(m).toMatchObject({ type: "lost_requested", link: `/dashboard/leads/${id}` });
       expect(m.body).toContain("Agent A asked to mark lead");
-      expect(await mine(admin)).toEqual([]); // admins are not in the documented recipients
+      // Every active Admin and Super Admin can decide it, so they are told too (16 Nov 2026).
+      expect((await mine(admin)).map((x) => x.type)).toEqual(["lost_requested"]);
+      expect((await mine(f.actors.superAdmin)).map((x) => x.type)).toEqual(["lost_requested"]);
       const [request] = await db.select().from(approvals).where(eq(approvals.leadId, id));
       await decideLostRequest(db, f.actors.manager, request.id, { approve: false, comment: "Call again" });
       const [r] = await mine(f.actors.agent1);
@@ -98,10 +100,12 @@ describe.skipIf(!hasTestDb)("Notifications (PostgreSQL integration)", () => {
       expect(handled.sort()).toEqual([`Lost request approved by ${f.actors.manager.name}`, `Lost request rejected by ${f.actors.manager.name}`].sort());
     });
 
-    it("sends nothing when the owner's team has no manager", async () => {
+    it("still reaches the Admins when the owner's team has no manager", async () => {
       const id = await lead(f.actors.outsideAgent);
       await markLost(db, f.actors.outsideAgent, id, { lostReasonId: f.lostReasonId });
-      expect(await db.select().from(notifications)).toEqual([]);
+      const sent = await db.select({ userId: notifications.userId, type: notifications.type }).from(notifications);
+      expect(sent.map((n) => n.userId).sort()).toEqual([admin.id, f.actors.superAdmin.id].sort());
+      expect(new Set(sent.map((n) => n.type))).toEqual(new Set(["lost_requested"]));
     });
   });
 

@@ -15,6 +15,8 @@ const TABS = [
   { label: "Verify", href: "/dashboard/leads/verify" },
   { label: "Unassigned", href: "/dashboard/leads/unassigned" },
   { label: "Regenerated", href: "/dashboard/leads/regenerated" },
+  // Leads saved as a duplicate of another (owner review, 16 Nov 2026; the page existed without a tab).
+  { label: "Duplicates", href: "/dashboard/leads/duplicates" },
   { label: "Won", href: "/dashboard/leads/won" },
   { label: "Lost", href: "/dashboard/leads/lost" },
   { label: "Call reviews & notes", href: "/dashboard/leads/reviews" },

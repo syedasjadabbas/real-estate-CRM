@@ -1,0 +1,20 @@
+# Daily sign-in history clean-up (docs/DEPLOYMENT_PROXY.md §7). It deletes only entries older than the
+# retention set in Settings → Security, and only while automatic deletion is switched on there;
+# otherwise it just records the run. Installed by scripts/ops/install-timers.sh.
+[Unit]
+Description=MZ CRM: sign-in history clean-up
+Wants=network-online.target
+After=network-online.target postgresql.service
+
+[Service]
+Type=oneshot
+User=mzcrm
+Group=mzcrm
+WorkingDirectory=/srv/mz-crm
+EnvironmentFile=/srv/mz-crm/.env
+ExecStart=/usr/bin/node scripts/jobs/prune-signin-logs.mjs
+TimeoutStartSec=30min
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true

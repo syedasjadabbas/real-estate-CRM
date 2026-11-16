@@ -1,0 +1,12 @@
+# Runs mz-crm-prune-signins.service every day at 03:15 server time (after the 02:00 backup).
+# Check with: systemctl list-timers mz-crm-prune-signins.timer
+[Unit]
+Description=Daily MZ CRM sign-in history clean-up
+
+[Timer]
+OnCalendar=*-*-* 03:15
+RandomizedDelaySec=10m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

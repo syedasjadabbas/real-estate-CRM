@@ -4098,3 +4098,14 @@ The owner asked for one place to see switched-off accounts and turn them back on
 | Scope | A Super Admin sees every account; an Admin sees every role but Super Admin |
 
 Test: deactivated-accounts.test.ts. Typecheck and lint pass; checked in the browser as an Admin.
+
+## 92. Four loose ends closed (16 Nov 2026)
+
+| # | Was | Now |
+|---|---|---|
+| 1 | The hold-release and sign-in clean-up jobs existed, but only the backup had a ready timer, so on a new server nothing would run them and expired Token holds would never free their units | `scripts/ops/systemd/` ships `mz-crm-release-holds.*` (hourly) and `mz-crm-prune-signins.*` (03:15 daily); `scripts/ops/install-timers.sh` installs and enables them with the backup timer in one step. Handover checklist §7 and `DEPLOYMENT_PROXY.md` §7 updated |
+| 2 | Performance and Targets CSV downloads weren't in the audit log | Both are recorded (`performance.export`, `targets.export`: file name, rows, range or period, team or search) through `logExport` (`modules/audit/export-log.ts`); labelled in the audit log |
+| 3 | The Duplicates list had no tab | **Duplicates** tab in Leads, after Regenerated |
+| 4 | A lost-lead request notified only the agent's team manager (and nobody when the team had none) | Every active Admin and Super Admin, plus the team manager, is notified; the requester never is |
+
+Tests updated in `notifications.test.ts`. Typecheck and lint pass; checked in the browser (tab, both downloads in the audit log).

@@ -93,7 +93,9 @@ The runbook (P3) and setup script (P1) referred to here are **planned and not ye
 ## 7. Scheduled jobs and backups
 | ✓ | Check |
 |---|---|
-| ☐ | Daily `job:prune-signin-logs` scheduled. With deletion off it deletes nothing; one `--dry-run` run is reviewed |
+| ☐ | **All three timers installed in one step:** `sh scripts/ops/install-timers.sh` (as root) copies the units in `scripts/ops/systemd/` and enables the nightly backup (02:00), the **hourly unit-hold release** and the daily sign-in clean-up (03:15). `systemctl list-timers 'mz-crm-*'` lists all three. Edit the `.service` files first if the app isn't in `/srv/mz-crm` run by `mzcrm` |
+| ☐ | Daily `job:prune-signin-logs` runs. With deletion off it deletes nothing; one `--dry-run` run is reviewed |
+| ☐ | Hourly `job:release-holds` runs: `journalctl -u mz-crm-release-holds.service` shows a JSON line each hour; a test booking left at Token past its hold date is cancelled and its unit is Available again |
 | ☐ | `BACKUP_DIR` set (absolute, outside the app folder and `FILE_STORAGE_DIR`, owned by the app user, mode `700`) |
 | ☐ | Nightly backup timer installed (`scripts/ops/RESTORE.md`). Each night writes a dated folder with `database.dump`, `storage.tar.gz` and `SHA256SUMS`; kept 30 daily + 12 monthly by default |
 | ☐ | **`BACKUP_REMOTE` set** so each backup is also copied off the server. As of 16 Nov 2026 this is **not set up**; it must be before going live. The remote copy needs its own clean-up rule |

@@ -1,6 +1,6 @@
 import { leadLink, notify, teamManagersOf } from "@/modules/notifications/service";
 import { assertPhoneEditable, notifyNameChange } from "@/modules/contacts/agent-edits";
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { auditClient, logClientActivity } from "@/modules/clients/support";
 import { copyLeadPhonesToClient, findCustomer, leadsWithAnyNumber, lockNumbers, normalizeExtraPhones, replaceLeadPhones, leadPhonesOf } from "@/modules/contacts/phones";
 import { resolveCity } from "@/modules/cities/resolve";
@@ -647,10 +647,16 @@ export async function markLost(db: Database, actor: Actor, leadId: string, input
     }
     await logActivity(tx, { leadId, actorId: actor.id, type: "lost_requested", body: note ?? null, data: { reason: reason.name } });
     await audit(tx, actor, "lead.lost_request", leadId, null, { lostReasonId });
-    const managers = await teamManagersOf(tx, lead.ownerId ?? actor.id);
+    // Every active Admin and Super Admin can decide it, so all of them are told (owner review, 16 Nov 2026),
+    // plus the team's own manager (legacy role). Before, only the team manager was notified.
+    const [managers, admins] = await Promise.all([
+      teamManagersOf(tx, lead.ownerId ?? actor.id),
+      tx.select({ id: users.id }).from(users).where(and(eq(users.status, "active"), inArray(users.role, ["admin", "super_admin"]))),
+    ]);
+    const deciders = [...new Set([...managers, ...admins.map((a) => a.id)])].filter((id) => id !== actor.id);
     await notify(
       tx,
-      managers.map((userId) => ({
+      deciders.map((userId) => ({
         userId,
         type: "lost_requested" as const,
         title: `Lost request · ${lead.name}`,
