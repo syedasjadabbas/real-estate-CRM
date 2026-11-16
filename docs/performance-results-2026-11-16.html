@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MZ Marketing CRM · Performance test results</title>
+<style>
+  :root { --gold:#bb8c08; --gold-dark:#8a6706; --cream:#fbf4e2; --ink:#1c1b19; --muted:#6b6a66; --line:#e6e3dc; --ok:#2f7d32; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:#f8f7f4; color:var(--ink); font: 14px/1.5 "Segoe UI", Roboto, Arial, sans-serif; }
+  .page { max-width: 920px; margin: 24px auto; background:#fff; border:1px solid var(--line); border-radius:16px; padding:32px 36px; }
+  header { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; border-bottom:2px solid var(--gold); padding-bottom:16px; }
+  h1 { margin:0; font-size:22px; }
+  .sub { color:var(--muted); margin:4px 0 0; }
+  .badge { background:var(--ok); color:#fff; font-weight:700; padding:8px 14px; border-radius:999px; white-space:nowrap; }
+  h2 { font-size:15px; margin:28px 0 10px; color:var(--gold-dark); text-transform:uppercase; letter-spacing:.06em; }
+  .kpis { display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; margin-top:20px; }
+  .kpi { background:var(--cream); border-radius:12px; padding:12px 14px; }
+  .kpi .v { font-size:22px; font-weight:800; color:var(--gold-dark); }
+  .kpi .l { font-size:12px; color:var(--muted); }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); border-bottom:1px solid var(--line); padding:6px 8px; }
+  td { padding:6px 8px; border-bottom:1px solid #f1efe9; }
+  td.n, th.n { text-align:right; font-variant-numeric: tabular-nums; }
+  .bar { height:8px; background:#f1efe9; border-radius:4px; position:relative; min-width:120px; }
+  .bar span { position:absolute; inset:0 auto 0 0; background:var(--gold); border-radius:4px; }
+  .pass { color:var(--ok); font-weight:700; }
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  .note { font-size:12px; color:var(--muted); }
+  ul { margin:6px 0; padding-left:18px; }
+  @media (max-width: 700px) { .kpis, .two { grid-template-columns:1fr 1fr; } .page { padding:20px; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <div>
+      <h1>MZ Marketing CRM · Performance test results</h1>
+      <p class="sub">Run on 16 Nov 2026, 06:07 (Pakistan time), on the current version of the CRM</p>
+    </div>
+    <div class="badge">All checks passed</div>
+  </header>
+
+  <div class="kpis">
+    <div class="kpi"><div class="v">10,000</div><div class="l">leads in the database</div></div>
+    <div class="kpi"><div class="v">10</div><div class="l">users at the same time</div></div>
+    <div class="kpi"><div class="v">333 ms</div><div class="l">slowest list page (p95)</div></div>
+    <div class="kpi"><div class="v">0</div><div class="l">errors</div></div>
+  </div>
+
+  <h2>Requirements</h2>
+  <table>
+    <tr><th>Requirement</th><th>Target</th><th>Result</th><th></th></tr>
+    <tr><td>List pages load fast with 10,000 leads</td><td>under 1,500 ms (p95)</td><td>slowest 333 ms</td><td class="pass">Passed</td></tr>
+    <tr><td>Up to 10 users working at once</td><td>no errors, no lost data</td><td>0 errors, 110 of 110 saved</td><td class="pass">Passed</td></tr>
+  </table>
+
+  <h2>Page speed, server (15 measurements per page)</h2>
+  <table>
+    <tr><th>Page</th><th class="n">Typical (p50)</th><th class="n">Busy (p95)</th><th>Against the 1,500 ms limit</th></tr>
+    <tr><td>Leads</td><td class="n">146 ms</td><td class="n">173 ms</td><td><div class="bar"><span style="width:11.5%"></span></div></td></tr>
+    <tr><td>Leads, last page</td><td class="n">178 ms</td><td class="n">248 ms</td><td><div class="bar"><span style="width:16.5%"></span></div></td></tr>
+    <tr><td>Leads, sorted by city</td><td class="n">136 ms</td><td class="n">178 ms</td><td><div class="bar"><span style="width:11.9%"></span></div></td></tr>
+    <tr><td>Leads, sorted by size</td><td class="n">149 ms</td><td class="n">184 ms</td><td><div class="bar"><span style="width:12.3%"></span></div></td></tr>
+    <tr><td>Leads, search</td><td class="n">145 ms</td><td class="n">276 ms</td><td><div class="bar"><span style="width:18.4%"></span></div></td></tr>
+    <tr><td>Leads, filtered</td><td class="n">102 ms</td><td class="n">150 ms</td><td><div class="bar"><span style="width:10%"></span></div></td></tr>
+    <tr><td>Lost leads</td><td class="n">92 ms</td><td class="n">115 ms</td><td><div class="bar"><span style="width:7.7%"></span></div></td></tr>
+    <tr><td>Pipeline board</td><td class="n">126 ms</td><td class="n">156 ms</td><td><div class="bar"><span style="width:10.4%"></span></div></td></tr>
+    <tr><td>Clients</td><td class="n">49 ms</td><td class="n">72 ms</td><td><div class="bar"><span style="width:4.8%"></span></div></td></tr>
+    <tr><td>Inventory</td><td class="n">49 ms</td><td class="n">95 ms</td><td><div class="bar"><span style="width:6.3%"></span></div></td></tr>
+    <tr><td>Bookings</td><td class="n">32 ms</td><td class="n">46 ms</td><td><div class="bar"><span style="width:3.1%"></span></div></td></tr>
+    <tr><td>Tasks</td><td class="n">38 ms</td><td class="n">60 ms</td><td><div class="bar"><span style="width:4%"></span></div></td></tr>
+    <tr><td>Performance</td><td class="n">307 ms</td><td class="n">333 ms</td><td><div class="bar"><span style="width:22.2%"></span></div></td></tr>
+    <tr><td>Dashboard</td><td class="n">163 ms</td><td class="n">328 ms</td><td><div class="bar"><span style="width:21.9%"></span></div></td></tr>
+  </table>
+
+  <div class="two">
+    <div>
+      <h2>In a real Chrome browser</h2>
+      <p class="note">From opening the page until the rows are on screen (5 measurements each).</p>
+      <table>
+        <tr><th>Page</th><th class="n">p50</th><th class="n">p95</th></tr>
+        <tr><td>Leads</td><td class="n">475 ms</td><td class="n">489 ms</td></tr>
+        <tr><td>Leads, sorted by size</td><td class="n">457 ms</td><td class="n">539 ms</td></tr>
+        <tr><td>Clients</td><td class="n">416 ms</td><td class="n">420 ms</td></tr>
+        <tr><td>Inventory</td><td class="n">448 ms</td><td class="n">486 ms</td></tr>
+      </table>
+    </div>
+    <div>
+      <h2>10 users at the same time, 60 s</h2>
+      <table>
+        <tr><th></th><th class="n">Realistic<br>(3 s pause)</th><th class="n">Worst case<br>(no pause)</th></tr>
+        <tr><td>Pages opened</td><td class="n">180</td><td class="n">1,058</td></tr>
+        <tr><td>Typical (p50)</td><td class="n">120 ms</td><td class="n">558 ms</td></tr>
+        <tr><td>Busy (p95)</td><td class="n">342 ms</td><td class="n">837 ms</td></tr>
+        <tr><td>Slowest</td><td class="n">488 ms</td><td class="n">1,474 ms</td></tr>
+        <tr><td>Notes saved</td><td class="n">16</td><td class="n">94</td></tr>
+        <tr><td>Errors</td><td class="n pass">0</td><td class="n pass">0</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <h2>Data safety under load</h2>
+  <ul>
+    <li><b>No lost data:</b> 110 notes written by users at the same time, 110 stored.</li>
+    <li><b>No mixed-up data:</b> 4 agents read their leads at the same moment, 20 times; each saw only their own leads (0 mismatches).</li>
+  </ul>
+
+  <h2>How it was tested</h2>
+  <ul class="note">
+    <li>Test data: 10,000 leads, 50,000 timeline entries, 5,000 follow-ups, 2,000 clients, 2,000 units; 10 users across all six roles. Separate test database, not live data.</li>
+    <li>Production build of the CRM. Pages measured signed in as Super Admin, who sees the most data.</li>
+    <li><b>p50</b> = typical speed (half of requests are faster). <b>p95</b> = 95 of every 100 requests are faster than this.</li>
+    <li>Machine: development laptop (Intel i5, 16 GB RAM), with the CRM, database and test tool on the same machine. Results on the final server may differ and will be rechecked at handover.</li>
+  </ul>
+</div>
+</body>
+</html>

@@ -1,0 +1,51 @@
+Seeding the test database…
+{
+  leads: 10000,
+  activities: 50000,
+  follow_ups: 5000,
+  clients: 2000,
+  units: 2000
+}
+server  Leads (default)                    p50 146 ms  p95 173 ms  max 173 ms
+server  Leads, last page                   p50 178 ms  p95 248 ms  max 248 ms
+server  Leads, sorted by city              p50 136 ms  p95 178 ms  max 178 ms
+server  Leads, sorted by size (computed)   p50 149 ms  p95 184 ms  max 184 ms
+server  Leads, search                      p50 145 ms  p95 276 ms  max 276 ms
+server  Leads, filtered                    p50 102 ms  p95 150 ms  max 150 ms
+server  Leads, lost                        p50 92 ms  p95 115 ms  max 115 ms
+server  Leads, pipeline board              p50 126 ms  p95 156 ms  max 156 ms
+server  Clients                            p50 49 ms  p95 72 ms  max 72 ms
+server  Inventory                          p50 49 ms  p95 95 ms  max 95 ms
+server  Bookings                           p50 32 ms  p95 46 ms  max 46 ms
+server  Tasks                              p50 38 ms  p95 60 ms  max 60 ms
+server  Performance                        p50 307 ms  p95 333 ms  max 333 ms
+server  Dashboard                          p50 163 ms  p95 328 ms  max 328 ms
+browser Leads                              p50 475 ms  p95 489 ms  max 489 ms
+browser Leads, sorted by size              p50 457 ms  p95 539 ms  max 539 ms
+browser Clients                            p50 416 ms  p95 420 ms  max 420 ms
+browser Inventory                          p50 448 ms  p95 486 ms  max 486 ms
+
+10 users, no pauses, 60 s…
+{
+  thinkMs: 0,
+  seconds: 60,
+  users: 10,
+  reads: { n: 1058, p50: 558, p95: 837, max: 1474 },
+  notesWritten: 94,
+  failures: 0,
+  failureSample: []
+}
+
+10 users, 3 s between actions, 60 s…
+{
+  thinkMs: 3000,
+  seconds: 60,
+  users: 10,
+  reads: { n: 180, p50: 120, p95: 342, max: 488 },
+  notesWritten: 16,
+  failures: 0,
+  failureSample: []
+}
+{ reported: 110, stored: 110 } { rounds: 20, agents: 4, mismatches: 0 }
+
+All measured pages under 1500 ms at p95.
