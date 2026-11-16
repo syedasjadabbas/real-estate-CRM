@@ -340,3 +340,21 @@ describe("Backups page status", () => {
     expect(lib.formatBytes(1536)).toBe("1.5 KB");
   });
 });
+
+describe("plain wording for backup runs (16 Nov 2026)", () => {
+  const run = (kind: string, status: string, message: string | null) => rules.plainRunSummary({ kind, status, message });
+  it("turns the server's messages into one plain sentence", () => {
+    expect(run("backup", "succeeded", "Backup 20261110T162009Z written (213.5 KB), checksums verified, no off-server copy (BACKUP_REMOTE not set).")).toBe("Saved and checked. Kept on this server only.");
+    expect(run("backup", "succeeded", "Backup written, checksums verified, copied to remote.")).toBe("Saved, checked and copied off the server.");
+    expect(run("prune", "succeeded", "Retention (30 daily, 12 monthly): removed 2 (20261001T020000Z, 20250101T020000Z), kept 1.")).toBe("Tidied up: removed 2 old backups, kept 1.");
+    expect(run("backup", "failed", "Backup not started: BACKUP_RETENTION_DAYS is no longer used. Remove it and set BACKUP_KEEP_DAILY instead.")).toBe("Didn't start: an old server setting needs to be updated.");
+    expect(run("backup", "failed", "Backup failed (exit 2): tar (child): Cannot connect to C: resolve failed")).toBe("The backup failed part-way, so nothing was saved.");
+    expect(run("restore_check", "succeeded", null)).toBe("Test restore worked: the backup can be brought back.");
+    expect(run("backup", "running", null)).toBe("In progress.");
+  });
+  it("describes how long backups are kept", () => {
+    expect(rules.describeRetentionPlain({ daily: 30, monthly: 12 })).toBe("Keeps the last 30 days, plus one a month for 12 months");
+    expect(rules.describeRetentionPlain({ daily: 1, monthly: 0 })).toBe("Keeps the last 1 day");
+    expect(rules.describeRetentionPlain({ daily: null, monthly: null })).toBe("Not set");
+  });
+});

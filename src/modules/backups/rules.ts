@@ -73,3 +73,36 @@ export function formatSize(bytes: number | null) {
   }
   return `${i === 0 ? v : v.toFixed(1)} ${units[i]}`;
 }
+
+/** "Last 30 days, plus one a month for 12 months" (owner review, 16 Nov 2026). */
+export function describeRetentionPlain(r: Pick<RetentionConfig, "daily" | "monthly">) {
+  if (!r.daily) return "Not set";
+  const daily = `the last ${r.daily} day${r.daily === 1 ? "" : "s"}`;
+  return r.monthly ? `Keeps ${daily}, plus one a month for ${r.monthly} month${r.monthly === 1 ? "" : "s"}` : `Keeps ${daily}`;
+}
+
+export const RUN_TRIGGER_LABELS: Record<string, string> = { schedule: "Nightly, automatic", manual: "Run by hand" };
+
+/**
+ * One plain sentence for a backup run (owner review, 16 Nov 2026). The server's own message stays
+ * available under "Details" for whoever manages the server.
+ */
+export function plainRunSummary(run: { kind: string; status: string; message: string | null }) {
+  const m = run.message ?? "";
+  if (run.status === "running") return "In progress.";
+  if (run.status === "failed") {
+    if (/no longer used/i.test(m)) return "Didn't start: an old server setting needs to be updated.";
+    if (/not configured|missing|not set/i.test(m)) return "Didn't start: the server isn't fully set up for backups.";
+    return run.kind === "backup" ? "The backup failed part-way, so nothing was saved." : "This failed. Nothing was changed.";
+  }
+  if (run.kind === "backup") return /no off-server copy/i.test(m) ? "Saved and checked. Kept on this server only." : "Saved, checked and copied off the server.";
+  if (run.kind === "prune") {
+    const removed = Number(/removed (\d+)/i.exec(m)?.[1] ?? NaN);
+    const kept = Number(/kept (\d+)/i.exec(m)?.[1] ?? NaN);
+    if (Number.isFinite(removed)) return `Tidied up: removed ${removed} old backup${removed === 1 ? "" : "s"}${Number.isFinite(kept) ? `, kept ${kept}` : ""}.`;
+    return "Old backups tidied up.";
+  }
+  if (run.kind === "restore_check") return "Test restore worked: the backup can be brought back.";
+  if (run.kind === "restore") return "Restored from a backup.";
+  return "Done.";
+}
