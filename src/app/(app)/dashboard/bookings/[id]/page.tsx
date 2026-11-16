@@ -151,7 +151,9 @@ export default async function BookingDetailPage({ params, searchParams }: PagePr
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 xl:grid-cols-8">
               <Fact label="Total sale">{formatPrice(booking.totalSale)}</Fact>
               <Fact label="Paid">
-                {formatPrice(money.paid)} <span className="text-zinc-400">/ {formatPrice(money.total)}</span>
+                {formatPrice(money.paid)}
+                {/* The total drops to its own line when the box is narrow (phones), instead of being cut off. */}
+                <span className="block truncate text-xs text-zinc-400">of {formatPrice(money.total)}</span>
               </Fact>
               <Fact label="Outstanding">{formatPrice(money.outstanding)}</Fact>
               <Fact label="Overdue (plan)">
