@@ -3948,3 +3948,17 @@ An independent check of the docs against the code found that the agent score use
 | Performance | The Score tooltip says performance and conversion |
 
 Text only; how the score is calculated is unchanged. Typecheck and lint pass; checked in the browser.
+
+## 84. Unassigned list works for agents and Admins (16 Nov 2026)
+
+A second independent check of the three client documents found that agents never saw the **Unassigned** tab (they could claim only by typing its address), and Admins saw the list read-only, with no way to act on a lead from it. The Assignment settings page already promised "an agent can claim it or an Admin can assign it". The owner asked for it to work that way.
+
+| Change | Detail |
+|---|---|
+| Tab | Leads → Unassigned now shows for agents (and the legacy Manager role) as well as Admins and Super Admins (`canListUnassigned`, `leads/claims.ts`); HR and Accountants still can't open it |
+| Agents | **Claim** as before: first come, first served, then the lead opens |
+| Admins and Super Admins | Each name links to the lead; **Assign** opens a person search (the same picker as bookings) and assigns through `assignLead`, so the change is recorded, audited and the new owner is notified |
+| Search | A search box filters by name, code or source, with a count; the list notes when it is showing only the first 200 |
+| Wording | The page no longer says agents may be "full" (maximum load isn't used) or that a "manager" reassigns |
+
+Test added in `ownership-assignment.test.ts` (agents and Admins see the pool, HR doesn't; an Admin assigns from it and the owner is notified). Typecheck and lint pass.

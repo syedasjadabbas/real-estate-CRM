@@ -9,6 +9,12 @@ import { adoptLeadClient, audit, logActivity } from "./support";
 /** Agents and managers can take an unassigned lead; admins assign instead. */
 export const canClaim = (actor: Pick<Actor, "role">) => actor.role === "agent" || actor.role === "manager";
 
+/** Who sees the Unassigned list: those who claim from it, and Admins and Super Admins who assign from it. */
+export const canListUnassigned = (actor: Pick<Actor, "role">) => canClaim(actor) || actor.role === "admin" || actor.role === "super_admin";
+
+/** The list shows at most this many unassigned leads, highest priority and oldest first. */
+export const UNASSIGNED_LIMIT = 200;
+
 const isId = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 
 /**
@@ -16,7 +22,7 @@ const isId = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0
  * numbers or notes, because a lead's details belong to its owner and their managers.
  */
 export async function listUnassigned(db: Database, actor: Actor, projectId: string | null) {
-  if (!canClaim(actor) && actor.role !== "admin" && actor.role !== "super_admin") throw forbidden();
+  if (!canListUnassigned(actor)) throw forbidden();
   if (!projectId) return [];
   return db
     .select({ id: leads.id, code: leads.code, name: leads.name, createdAt: leads.createdAt, priority: leads.priority, source: leadSources.name })
@@ -25,7 +31,7 @@ export async function listUnassigned(db: Database, actor: Actor, projectId: stri
     .leftJoin(leadSources, eq(leadSources.id, leads.sourceId))
     .where(and(eq(leads.projectId, projectId), isNull(leads.ownerId), isNull(leads.deletedAt)))
     .orderBy(desc(leads.priority), asc(leads.createdAt))
-    .limit(200);
+    .limit(UNASSIGNED_LIMIT);
 }
 
 /**

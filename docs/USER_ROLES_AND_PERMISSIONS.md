@@ -94,7 +94,8 @@ Legend: **F** full · **T** own team · **O** own records · **R** read-only · 
 | Audit log (view and CSV download) | F | R | — | — | — | — |
 | Lead import batches: submit (Admin and Super Admin only since 13 Nov 2026) | F | F | — | — | — | — |
 | Lead import batches: approve / reject | F | — | — | — | — | — |
-| Claim an unassigned lead | — | — | F | F | — | — |
+| Claim an unassigned lead (Leads → Unassigned) | — | — | F | F | — | — |
+| Assign an unassigned lead from the Unassigned list (16 Nov 2026) | F | F | — | — | — | — |
 | Appoint a team's Team Lead (15 Nov 2026) | F | F | — | — | — | — |
 | Team Lead's read-only team view ("My team"; an agent who leads a team) | — | — | — | Team Lead only | — | — |
 | Employee work profile (calls, minutes, pipeline, follow-ups, targets, attendance; 15 Nov 2026) and its CSV | F | F | — | — | — | — |

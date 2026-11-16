@@ -2,11 +2,11 @@ import { and, eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createClient } from "@/modules/clients/commands";
 import { readAssignmentSettings, updateAssignmentSettings } from "@/modules/leads/assignment";
-import { claimLead, listUnassigned } from "@/modules/leads/claims";
+import { canListUnassigned, claimLead, listUnassigned } from "@/modules/leads/claims";
 import { assignLead, createLead, updateLead } from "@/modules/leads/commands";
 import { getLeadDetail } from "@/modules/leads/queries";
 import { loadActor } from "@/server/auth/session-store";
-import { appSettings, clientActivities, leadAssignments, leadPhones, leads, rosterEntries, teams, users } from "@/server/db/schema";
+import { appSettings, clientActivities, leadAssignments, leadPhones, leads, notifications, rosterEntries, teams, users } from "@/server/db/schema";
 import type { Database } from "@/server/db";
 import type { Actor } from "@/server/auth/types";
 import { AppError } from "@/server/errors";
@@ -183,6 +183,19 @@ describe.skipIf(!hasTestDb)("Sprint P1–P2: phones, customers, ownership, claim
       expect(pool.map((p) => p.id)).toContain(id);
       expect(Object.keys(pool[0])).not.toContain("phoneE164");
       expect((await failure(claimLead(db, f.actors.hr, id))).code).toBe("FORBIDDEN");
+    });
+
+    it("agents and Admins see the pool (HR doesn't); an Admin assigns from it, and the new owner is told (16 Nov 2026)", async () => {
+      expect([f.actors.agent1, admin].map(canListUnassigned)).toEqual([true, true]);
+      expect(canListUnassigned(f.actors.hr)).toBe(false);
+      expect((await failure(listUnassigned(db, f.actors.hr, f.projectId))).code).toBe("FORBIDDEN");
+      const id = await unassigned();
+      expect((await listUnassigned(db, admin, f.projectId)).map((p) => p.id)).toContain(id);
+      await assignLead(db, admin, id, { ownerId: f.actors.agent2.id });
+      expect((await row(id)).ownerId).toBe(f.actors.agent2.id);
+      expect((await listUnassigned(db, f.actors.agent1, f.projectId)).map((p) => p.id)).not.toContain(id);
+      const [note] = await db.select().from(notifications).where(and(eq(notifications.userId, f.actors.agent2.id), eq(notifications.type, "lead_assigned")));
+      expect(note?.link).toContain(id);
     });
   });
 

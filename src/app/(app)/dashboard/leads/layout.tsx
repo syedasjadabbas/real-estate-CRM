@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { PageHeader, PageStack } from "@/components/shell/page-header";
 import { findNavItem } from "@/config/navigation";
 import { LeadsTabs } from "@/features/leads/components/leads-tabs";
+import { canListUnassigned } from "@/modules/leads/claims";
 import { canSubmitImport } from "@/modules/leads/imports";
 import { canVerifyLeads, pendingVerificationCount } from "@/modules/leads/verification";
 import { getDb } from "@/server/db";
@@ -14,7 +15,7 @@ async function RoleTabs() {
   const actor = await requirePageUser();
   // Verify lists agents' leads waiting for an Admin or Super Admin (lead verification).
   const verifyCount = canVerifyLeads(actor) ? await pendingVerificationCount(getDb(), actor, (await getProjectScope()).activeProjectId) : null;
-  return <LeadsTabs showImports={canSubmitImport(actor)} showUnassigned={actor.role !== "agent"} verifyCount={verifyCount} />;
+  return <LeadsTabs showImports={canSubmitImport(actor)} showUnassigned={canListUnassigned(actor)} verifyCount={verifyCount} />;
 }
 
 export default function LeadsLayout({ children }: LayoutProps<"/dashboard/leads">) {

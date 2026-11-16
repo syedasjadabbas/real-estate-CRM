@@ -313,7 +313,7 @@ What Leads does now, after the changes of 13–16 Nov 2026. Where this differs f
 
 **Roles and tabs** (13 Nov 2026)
 - The Manager role is merged into Admin. Admins can own leads and be team members.
-- Tabs in daily-use order: All, New leads, To-dos, Pipeline, Favorites, Verify, Unassigned, Regenerated, Won, Lost, Notes / reviews, Imports. Unassigned is hidden from agents.
+- Tabs in daily-use order: All, New leads, To-dos, Pipeline, Favorites, Verify, Unassigned, Regenerated, Won, Lost, Notes / reviews, Imports. Unassigned shows for agents, Admins and Super Admins (since 16 Nov 2026; it was hidden from agents before, so they could claim only through the page's address). Agents **Claim** a lead there (first come, first served). Admins and Super Admins open a lead from its name or **Assign** it from the row with a person search; the new owner is notified. The list has a search box (name, code or source) and shows up to 200 leads, highest priority and oldest first.
 - **Verification:** a lead an agent adds by hand waits for an Admin or Super Admin (Verify tab, banner on the lead). Until approved, the agent can see and call it but not work on it. A rejected lead goes back to the agent with the reason; the agent corrects it and resubmits.
 
 **Leads list**

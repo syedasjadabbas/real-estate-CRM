@@ -24,11 +24,11 @@ const TABS = [
 /** Sub-view tab bar (reference: white 16px-radius bar, green selected chip). Lead detail/new map to "All". */
 export function LeadsTabs({
   showImports = false,
-  showUnassigned = false,
+  showUnassigned = true,
   verifyCount = null,
 }: {
   showImports?: boolean;
-  /** Managers, admins and super admins; agents don't handle unassigned leads. */
+  /** Agents claim from it; Admins and Super Admins assign from it (16 Nov 2026). */
   showUnassigned?: boolean;
   /** Admin and Super Admin only; null hides the Verify tab. */
   verifyCount?: number | null;
