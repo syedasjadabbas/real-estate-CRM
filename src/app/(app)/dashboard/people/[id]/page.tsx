@@ -25,6 +25,7 @@ import { requirePageUser } from "@/server/auth/current-user";
 import { ROLE_LABELS, type Role } from "@/server/auth/types";
 import { getDb } from "@/server/db";
 import { AppError } from "@/server/errors";
+import { EmailWithGmail } from "@/components/ui/gmail-button";
 
 export const metadata: Metadata = { title: "Employee profile" };
 
@@ -181,7 +182,7 @@ export default async function EmployeeProfilePage({ params, searchParams }: Page
         icon={UserRound}
         description={
           <>
-            {ROLE_LABELS[p.person.role as Role]} · {p.person.email}
+            {ROLE_LABELS[p.person.role as Role]} · <EmailWithGmail email={p.person.email} name={p.person.name} />
             {p.profile?.designation ? ` · ${p.profile.designation}` : ""}
             {p.profile?.department ? ` · ${p.profile.department}` : ""}
             {p.profile?.joiningDate ? ` · joined ${formatListedOn(p.profile.joiningDate)}` : ""}

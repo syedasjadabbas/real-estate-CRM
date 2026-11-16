@@ -40,6 +40,7 @@ import { getVoipStatus } from "@/modules/voip/service";
 import { assignableUsers, getLeadDetail, leadLookups } from "@/modules/leads/queries";
 import { AppError } from "@/server/errors";
 import { MaskedPhone } from "@/components/ui/masked-phone";
+import { EmailWithGmail } from "@/components/ui/gmail-button";
 
 export const metadata: Metadata = { title: "Lead" };
 
@@ -99,12 +100,15 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
         <VerificationBanner leadId={lead.id} verification={detail.verification} canVerify={detail.permissions.verify} canResubmit={detail.permissions.resubmit} />
 
         <Card className="p-5">
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-7">
             <Fact label="Code">
               <span className="tracking-[0.05em]">{lead.code}</span>
             </Fact>
             <Fact label="Phone">
               <MaskedPhone phone={lead.phone} />
+            </Fact>
+            <Fact label="Email">
+              <EmailWithGmail email={lead.email} name={lead.name} />
             </Fact>
             <Fact label="Lead">
               <StagePill stage={lead.stage} />

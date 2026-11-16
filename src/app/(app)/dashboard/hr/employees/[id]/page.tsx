@@ -24,6 +24,7 @@ import { requirePageUser } from "@/server/auth/current-user";
 import { ROLE_LABELS } from "@/server/auth/types";
 import { getDb } from "@/server/db";
 import { AppError } from "@/server/errors";
+import { EmailWithGmail } from "@/components/ui/gmail-button";
 
 export const metadata: Metadata = { title: "Employee" };
 
@@ -106,7 +107,9 @@ export default async function EmployeePage({ params }: PageProps<"/dashboard/hr/
             ) : (
             <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Fact label="Name">{e.name}</Fact>
-              <Fact label="Email">{e.email}</Fact>
+              <Fact label="Email">
+                <EmailWithGmail email={e.email} name={e.name} />
+              </Fact>
               <Fact label="Role">{ROLE_LABELS[e.role]}</Fact>
               <Fact label="Account status">
                 <StatusTag tone={e.status === "active" ? "brand" : "neutral"}>{e.status === "active" ? "Active" : "Inactive"}</StatusTag>

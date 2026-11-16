@@ -10,6 +10,7 @@ import { canManageAccess, listAccess, type AccessRow } from "@/modules/accounts/
 import { requirePageUser } from "@/server/auth/current-user";
 import { ROLE_LABELS, type Role } from "@/server/auth/types";
 import { getDb } from "@/server/db";
+import { EmailWithGmail } from "@/components/ui/gmail-button";
 
 export const metadata: Metadata = { title: "Users & access" };
 
@@ -30,7 +31,7 @@ function Row({ r, superAdminsOn }: { r: AccessRow; superAdminsOn: number }) {
           {r.self ? <span className="ml-1.5 text-[11px] font-semibold text-zinc-500">(you)</span> : null}
         </p>
         <p className="text-[11px] break-words text-zinc-500">
-          {r.email} · {ROLE_LABELS[r.role]}
+          <EmailWithGmail email={r.email} name={r.name} /> · {ROLE_LABELS[r.role]}
           {r.teams.length ? ` · ${r.teams.join(", ")}` : ""}
         </p>
         <p className="text-[11px] text-zinc-500">

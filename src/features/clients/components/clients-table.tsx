@@ -10,6 +10,7 @@ import type { ClientSortColumn } from "@/modules/clients/constants";
 import type { ClientListRow } from "@/modules/clients/queries";
 import { RelationshipPill } from "./relationship-pill";
 import { MaskedPhone } from "@/components/ui/masked-phone";
+import { EmailWithGmail } from "@/components/ui/gmail-button";
 
 type Column = { key: string; label: string; sort?: ClientSortColumn };
 
@@ -90,7 +91,7 @@ export function ClientsTable({
                   </td>
                   <td className="px-3 py-2.5 text-zinc-700">
                     <MaskedPhone phone={r.phone} className="flex" />
-                    <span className="block">{r.email ?? "—"}</span>
+                    <EmailWithGmail email={r.email} name={r.name} className="flex" />
                   </td>
                   <td className="px-3 py-2.5">
                     <RelationshipPill value={r.relationship} />

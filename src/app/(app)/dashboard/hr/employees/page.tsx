@@ -26,6 +26,7 @@ import { canViewHolidays } from "@/modules/holidays/policy";
 import { requirePageUser } from "@/server/auth/current-user";
 import { ROLE_LABELS } from "@/server/auth/types";
 import { getDb } from "@/server/db";
+import { EmailWithGmail } from "@/components/ui/gmail-button";
 
 export const metadata: Metadata = { title: "Employees" };
 
@@ -130,7 +131,7 @@ export default async function EmployeesPage({ searchParams }: PageProps<"/dashbo
                       <Link href={`/dashboard/hr/employees/${r.id}`} className="block font-bold text-zinc-900 hover:text-brand hover:underline">
                         {r.name}
                       </Link>
-                      <span className="block text-[11px] text-zinc-500">{r.email ?? "No email"}</span>
+                      <EmailWithGmail email={r.email} name={r.name} empty="No email" className="flex text-[11px] text-zinc-500" />
                     </td>
                     <td className="max-w-[220px] px-3 py-3 break-words whitespace-normal">{r.designation ?? none}</td>
                     <td className="max-w-[220px] px-3 py-3 break-words whitespace-normal">{r.department ?? none}</td>

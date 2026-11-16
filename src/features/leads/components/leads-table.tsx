@@ -12,6 +12,7 @@ import { SourcePill, StagePill } from "./chips";
 import { VerificationBadge } from "./verification";
 import { CopyCodeButton, FavoriteButton, FollowUpButtons } from "./row-actions";
 import { MaskedPhone } from "@/components/ui/masked-phone";
+import { EmailWithGmail } from "@/components/ui/gmail-button";
 
 type Column = { key: string; label: string; sort?: SortColumn; className?: string };
 
@@ -156,7 +157,7 @@ export function LeadsTable({
                       </a>
                       <MaskedPhone phone={r.phone} />
                     </span>
-                    <span className="block">{r.email ?? "—"}</span>
+                    <EmailWithGmail email={r.email} name={r.name} className="flex" />
                   </td>
                   <td className="px-3 py-2.5 text-zinc-700">{r.cityName ?? "—"}</td>
                   <td className="px-3 py-2.5 whitespace-nowrap text-zinc-700">{since(r.stageChangedAt, now)}</td>

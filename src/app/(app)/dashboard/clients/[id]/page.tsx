@@ -25,6 +25,7 @@ import { bookingPaymentHistory } from "@/modules/finance/queries";
 import { assignableUsers, leadLookups } from "@/modules/leads/queries";
 import { AppError } from "@/server/errors";
 import { MaskedPhone } from "@/components/ui/masked-phone";
+import { EmailWithGmail } from "@/components/ui/gmail-button";
 
 const CLIENT_DOCUMENTS = { title: "Contracts and documents", empty: "No contracts or documents yet.", field: "Upload a contract or document", button: "Upload document", uploaded: "Document uploaded.", noun: "Documents" };
 
@@ -87,7 +88,9 @@ export default async function ClientDetailPage({ params }: PageProps<"/dashboard
           <Fact label="Phone">
             <MaskedPhone phone={client.phone} />
           </Fact>
-          <Fact label="Email">{client.email ?? "—"}</Fact>
+          <Fact label="Email">
+            <EmailWithGmail email={client.email} name={client.name} />
+          </Fact>
           <Fact label="Relationship">{relationshipLabel(client.relationship)}</Fact>
           <Fact label="City">{client.cityName ?? "—"}</Fact>
           <Fact label="Projects interested">
