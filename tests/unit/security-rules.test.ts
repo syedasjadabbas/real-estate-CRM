@@ -54,7 +54,9 @@ describe("attendance separation (C1)", () => {
   it("never calls sign-in counts attendance, except to say they are not", () => {
     for (const p of pages) {
       for (const line of read(p).split("\n")) {
-        if (!/attendance/i.test(line)) continue;
+        // Real check-in attendance exists since 15 Nov 2026, so only lines that also talk about
+        // sign-ins are checked: those must say sign-ins are not attendance.
+        if (!/attendance/i.test(line) || !/sign[- ]ins?\b/i.test(line)) continue;
         expect(line, `${p}: ${line.trim()}`).toMatch(/not (an )?attendance|not attendance|attendance is not available|not used to work out/i);
       }
     }

@@ -341,8 +341,8 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
           original assignment date.
         </p>
         <p className="text-[11px] text-zinc-500">
-          CRM sign-ins and sign-outs are authentication activity only. They are not attendance and are not used to work out hours, lateness or absences;
-          attendance (check-in, late, absent) is in HR → Attendance. {retentionNote}
+          CRM sign-ins and sign-outs are authentication activity only. They are not attendance and are not used to work out hours, lateness or absences; see HR → Attendance for check-ins.{" "}
+          {retentionNote}
         </p>
       </Panel>
 
