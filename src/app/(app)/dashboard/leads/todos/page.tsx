@@ -12,7 +12,7 @@ import { TodoDoneButton } from "@/features/leads/components/todo-done-button";
 import { formatDateTime } from "@/features/leads/format";
 import { flattenParams } from "@/features/leads/url";
 import { cn } from "@/lib/cn";
-import { leadTodos, TODO_BUCKETS, type TodoBucket } from "@/modules/leads/queries";
+import { assignableUsers as leadOwners, leadTodos, TODO_BUCKETS, type TodoBucket } from "@/modules/leads/queries";
 import { canDoMeeting } from "@/modules/meetings/policy";
 import { overdueMeetings } from "@/modules/meetings/queries";
 import { TASK_TYPE_LABELS } from "@/modules/tasks/constants";
@@ -76,7 +76,7 @@ export default function TodosPage({ searchParams }: PageProps<"/dashboard/leads/
     const listsMine = bucket === "mine";
     const other = listsTasks || listsMeetings || listsMine;
     const [{ counts: leadCounts, items, page: leadPage, pageCount: leadPages }, overdue, lateMeetings, mine] = await Promise.all([
-      leadTodos(db, actor, projectId, other ? "overdue" : bucket, undefined, other ? 1 : params.page),
+      leadTodos(db, actor, projectId, other ? "overdue" : bucket, undefined, other ? 1 : params.page, { q: params.q, owner: params.owner }),
       overdueTasks(db, actor, undefined, listsTasks ? params.page : 1),
       overdueMeetings(db, actor, undefined, listsMeetings ? params.page : 1),
       openTodos(db, actor, listsMine ? params.page : 1),
@@ -85,6 +85,17 @@ export default function TodosPage({ searchParams }: PageProps<"/dashboard/leads/
     const addForm = listsMine && canDoTask(actor, "create") ? await Promise.all([assignableUsers(db, actor), taskFormOptions(db, actor, projectId)]) : null;
     const { page, pageCount } = listsTasks ? overdue : listsMeetings ? lateMeetings : listsMine ? mine : { page: leadPage, pageCount: leadPages };
     const counts: Record<Bucket, number> = { ...leadCounts, tasks: overdue.count, meetings: lateMeetings.count, mine: mine.count };
+    // Search and agent filter for the lead lists (16 Nov 2026); agents only see their own leads anyway.
+    const owners = actor.role === "agent" ? [] : await leadOwners(db, actor);
+    const leadFiltered = Boolean(params.q || params.owner);
+    const bucketHref = (key: Bucket) => {
+      const p = new URLSearchParams({ bucket: key });
+      if (key !== "tasks" && key !== "meetings" && key !== "mine") {
+        if (params.q) p.set("q", params.q);
+        if (params.owner) p.set("owner", params.owner);
+      }
+      return `/dashboard/leads/todos?${p}`;
+    };
     const groups = GROUPS.map((g) => ({ ...g, buckets: g.buckets.filter((b) => (b.key !== "tasks" && b.key !== "mine" ? true : showTasks) && (b.key !== "meetings" || showMeetings)) })).filter((g) => g.buckets.length > 0);
 
     return (
@@ -92,7 +103,7 @@ export default function TodosPage({ searchParams }: PageProps<"/dashboard/leads/
         <PageHeader
           as="h2"
           title="To-dos & overdues"
-          description="Your own to-dos, today's lead follow-ups, follow-ups completed today, upcoming (tomorrow, 7 / 15 / 30 days), overdue lead follow-ups, tasks and meetings, and new leads unattended 24h+."
+          description="Everything that needs doing: your own to-dos, lead follow-ups due today or coming up, anything overdue, and new leads nobody has touched for 24 hours. Pick a box below to see its list."
           actions={
             <Link href={`/dashboard/leads/todos?bucket=${bucket}`} className={buttonClasses({ variant: "secondary", size: "lg" })}>
               <RefreshCw aria-hidden="true" className="size-4" />
@@ -112,7 +123,7 @@ export default function TodosPage({ searchParams }: PageProps<"/dashboard/leads/
                     return (
                       <Link
                         key={b.key}
-                        href={`/dashboard/leads/todos?bucket=${b.key}`}
+                        href={bucketHref(b.key)}
                         aria-current={selected ? "true" : undefined}
                         className={cn(
                           "inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold transition-colors",
@@ -134,6 +145,46 @@ export default function TodosPage({ searchParams }: PageProps<"/dashboard/leads/
             ))}
           </div>
         </Card>
+
+        {!other ? (
+          <form method="get" action="/dashboard/leads/todos" role="search" aria-label="Filter the lead lists" className="flex flex-wrap items-center gap-2">
+            <input type="hidden" name="bucket" value={bucket} />
+            <input
+              type="search"
+              name="q"
+              defaultValue={params.q ?? ""}
+              placeholder="Lead name, code or phone"
+              maxLength={100}
+              autoComplete="off"
+              aria-label="Lead name, code or phone"
+              className="h-10 min-w-0 flex-1 basis-56 rounded-xl border border-zinc-200/80 bg-white px-3 text-sm font-medium shadow-hairline focus:border-brand/50 focus:outline-none sm:max-w-sm"
+            />
+            {owners.length > 1 ? (
+              <select
+                name="owner"
+                defaultValue={params.owner ?? ""}
+                aria-label="Agent"
+                className="h-10 rounded-xl border border-zinc-200/80 bg-white px-3 text-sm font-medium shadow-hairline focus:border-brand/50 focus:outline-none"
+              >
+                <option value="">All agents</option>
+                {owners.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.name}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+            <button type="submit" className={buttonClasses({ variant: "primary", size: "lg" })}>
+              Filter
+            </button>
+            {leadFiltered ? (
+              <Link href={`/dashboard/leads/todos?bucket=${bucket}`} className={buttonClasses({ variant: "secondary", size: "lg" })}>
+                Clear
+              </Link>
+            ) : null}
+            {leadFiltered ? <span className="text-[11px] font-semibold text-zinc-500">The follow-up and intake counts above follow this filter.</span> : null}
+          </form>
+        ) : null}
 
         <Card className="overflow-hidden">
           <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-3.5">
@@ -191,7 +242,7 @@ export default function TodosPage({ searchParams }: PageProps<"/dashboard/leads/
             )
           ) : items.length === 0 ? (
             <div className="p-4">
-              <EmptyState>Nothing here. You&apos;re all caught up.</EmptyState>
+              <EmptyState>{leadFiltered ? "Nothing matches this search or agent." : "Nothing here. You’re all caught up."}</EmptyState>
             </div>
           ) : (
             <ul className="divide-y divide-zinc-100">

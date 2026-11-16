@@ -91,11 +91,10 @@ export default async function WorkspacePage({ searchParams }: PageProps<"/dashbo
           />
         </div>
 
-        <PanelCard title="CRM Sign-in History" className="min-w-0 self-start">
+        <PanelCard title="My sign-in history" className="min-w-0 self-start">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-[10px] font-black tracking-[0.2em] text-brand uppercase">Authentication activity</p>
-              <p className="text-[11px] text-zinc-500">Recorded when you sign in or out of this CRM (password sessions).</p>
+              <p className="text-[11px] text-zinc-500">Each time you signed in to or out of the CRM. Not something you recognise? Tell an Admin straight away.</p>
             </div>
             <div role="group" aria-label="Event" className="inline-flex rounded-xl border border-zinc-200/80 bg-zinc-50/70 p-1 shadow-hairline">
               {EVENT_FILTERS.map((f) => {
@@ -128,7 +127,7 @@ export default async function WorkspacePage({ searchParams }: PageProps<"/dashbo
                       <span className="tabular-nums text-zinc-600">{formatDateTime(r.at)}</span>
                     </div>
                     <p className="mt-1 break-words text-zinc-600">
-                      <span className="font-bold text-zinc-700">IP (as recorded):</span> {r.ip ?? "—"}
+                      <span className="font-bold text-zinc-700">Address (IP):</span> {r.ip ?? "—"}
                     </p>
                     <p className="break-words text-zinc-600" title={r.userAgent ?? undefined}>
                       <span className="font-bold text-zinc-700">Browser:</span> {r.browser}
@@ -142,7 +141,7 @@ export default async function WorkspacePage({ searchParams }: PageProps<"/dashbo
                     <tr className="border-b border-zinc-200 text-[10px] font-black tracking-[0.05em] text-zinc-600 uppercase">
                       <th scope="col" className="px-3 py-3">Event</th>
                       <th scope="col" className="px-3 py-3">Date &amp; time</th>
-                      <th scope="col" className="px-3 py-3">IP (as recorded)</th>
+                      <th scope="col" className="px-3 py-3">Address (IP)</th>
                       <th scope="col" className="px-3 py-3">Browser</th>
                     </tr>
                   </thead>
@@ -168,9 +167,8 @@ export default async function WorkspacePage({ searchParams }: PageProps<"/dashbo
             <Pagination page={signins.page} pageCount={signins.pageCount} total={signins.total} params={listParams} />
           </div>
           <p className="mt-3 text-[11px] text-zinc-500">
-            This is a record of CRM sign-ins, not an attendance record: it is never used to work out hours, lateness or absences. IP addresses are recorded only
-            from the server&apos;s trusted proxy and are shown as recorded. Sessions that expire on their own are not recorded as sign-outs, and failed sign-in
-            attempts are not listed. {retentionNote}
+            This isn&apos;t attendance: your hours, lateness and absences come only from Check in above. If you close the browser without signing out, no
+            sign-out is shown. Wrong-password attempts aren&apos;t listed. {retentionNote}
           </p>
         </PanelCard>
       </div>

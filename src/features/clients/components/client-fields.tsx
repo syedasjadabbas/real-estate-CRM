@@ -98,7 +98,7 @@ export function ClientFields({ values, onChange, errors, cities, disabled, lockP
           "relationship",
           "Relationship",
           RELATIONSHIPS.map((r) => ({ value: r, label: RELATIONSHIP_LABELS[r] })),
-          { empty: "Not set", hint: "Values pending client confirmation" },
+          { empty: "Not set", hint: "Prospect: hasn't bought yet. Investor: has bought once. Repeat investor: has bought more than once." },
         )}
         {select("cityId", "City", cityOptions(cities, currentCity), { empty: "Not specified" })}
         {values.cityId === OTHER_CITY ? text("cityOther", "City name", { required: true, placeholder: "e.g. Murree" }) : null}

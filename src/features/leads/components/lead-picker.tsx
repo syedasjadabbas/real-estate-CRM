@@ -20,6 +20,8 @@ export function LeadPicker({
   options,
   empty,
   disabled,
+  noun = "leads",
+  placeholder,
 }: {
   id: string;
   describedBy?: string;
@@ -29,6 +31,10 @@ export function LeadPicker({
   /** The first, empty option ("Select a lead…" or "No lead"). */
   empty: string;
   disabled?: boolean;
+  /** What is searched, e.g. "units" (default "leads"). */
+  noun?: string;
+  /** Placeholder of the search box (default "Search leads"). */
+  placeholder?: string;
 }) {
   const listId = useId();
   const [query, setQuery] = useState("");
@@ -57,7 +63,7 @@ export function LeadPicker({
           aria-controls={listId}
           aria-autocomplete="list"
           aria-activedescendant={showList && shown[active] ? `${listId}-${active}` : undefined}
-          aria-label="Search leads by name or code"
+          aria-label={`Search ${noun}`}
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
@@ -84,7 +90,7 @@ export function LeadPicker({
               setOpen(false);
             }
           }}
-          placeholder="Search leads"
+          placeholder={placeholder ?? `Search ${noun}`}
           autoComplete="off"
           disabled={disabled}
           className="h-10 w-full rounded-xl border border-zinc-200/80 bg-white pr-2.5 pl-8 text-sm font-medium shadow-hairline focus:border-brand/50 focus:ring-2 focus:ring-brand/15 focus:outline-none disabled:opacity-60"
@@ -93,7 +99,7 @@ export function LeadPicker({
           <ul
             id={listId}
             role="listbox"
-            aria-label="Matching leads"
+            aria-label={`Matching ${noun}`}
             className="absolute top-full right-0 left-0 z-30 mt-1 max-h-64 min-w-[260px] overflow-auto rounded-xl border border-zinc-200/80 bg-white py-1 shadow-lg"
           >
             {shown.length === 0 ? (

@@ -49,7 +49,7 @@ export default async function ClientsPage({ searchParams }: PageProps<"/dashboar
         pathname="/dashboard/clients"
         params={params}
         now={result.generatedAt}
-        emptyMessage={params.q || params.project ? "No clients match this search or filter." : "No clients yet."}
+        emptyMessage={Object.entries(params).some(([k, v]) => v && !["sort", "dir", "page"].includes(k)) ? "No clients match this search or these filters." : "No clients yet."}
       />
       <Pagination page={result.page} pageCount={result.pageCount} total={result.total} params={params} />
     </section>

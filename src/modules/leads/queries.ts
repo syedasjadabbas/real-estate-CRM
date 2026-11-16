@@ -441,10 +441,27 @@ export type TodoBucket = (typeof TODO_BUCKETS)[number];
  * To-dos & overdues (FR-027): lead follow-up buckets, 50 per page, so every item a count promises can
  * be reached. Task and meeting buckets come from their own modules on the To-dos page.
  */
-export async function leadTodos(db: Database, actor: Actor, projectId: string, bucket: TodoBucket, now = new Date(), requestedPage: unknown = 1) {
+export async function leadTodos(
+  db: Database,
+  actor: Actor,
+  projectId: string,
+  bucket: TodoBucket,
+  now = new Date(),
+  requestedPage: unknown = 1,
+  /** Search and agent filter (16 Nov 2026). They only narrow the actor's own scope; counts follow them. */
+  filters: { q?: string; owner?: string } = {},
+) {
   if (!canDo(actor, "view")) throw forbidden();
   const members = await teamMemberIds(db, actor);
-  const scope = and(...baseConditions(actor, members, projectId));
+  const q = filters.q?.trim().slice(0, 100);
+  const term = q ? `%${q.replace(/[%_\\]/g, (c) => `\\${c}`)}%` : null;
+  const digits = q?.replace(/\D/g, "").replace(/^0+/, "") ?? "";
+  const ownerFilter = filters.owner && /^[0-9a-f-]{36}$/i.test(filters.owner) ? filters.owner : null;
+  const scope = and(
+    ...baseConditions(actor, members, projectId),
+    ownerFilter ? eq(leads.ownerId, ownerFilter) : undefined,
+    term ? or(ilike(leads.name, term), ilike(leads.code, term), digits.length >= 3 ? ilike(leads.phoneNumber, `%${digits}%`) : undefined) : undefined,
+  );
   const today = dayStart(now, 0);
   const tomorrow = dayStart(now, 1);
   const dayAfter = dayStart(now, 2);

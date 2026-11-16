@@ -4,6 +4,7 @@ import { addDays } from "@/modules/bookings/today";
 import type { Actor } from "@/server/auth/types";
 import type { Database } from "@/server/db";
 import { signinLogs, users } from "@/server/db/schema";
+import { browserLabel } from "@/modules/workplace/user-agent";
 import { assertCanManageSecurity } from "./policy";
 
 /**
@@ -22,13 +23,8 @@ const query = z.object({
 });
 export type SigninQuery = z.infer<typeof query>;
 
-/** A short browser and device name from the user agent ("Chrome on Windows"), for reading only. */
-export function describeAgent(agent: string | null) {
-  if (!agent) return "—";
-  const browser = /Edg\//.test(agent) ? "Edge" : /OPR\//.test(agent) ? "Opera" : /Chrome\//.test(agent) ? "Chrome" : /Firefox\//.test(agent) ? "Firefox" : /Safari\//.test(agent) ? "Safari" : "Browser";
-  const device = /Android/.test(agent) ? "Android" : /iPhone|iPad/.test(agent) ? "iPhone / iPad" : /Windows/.test(agent) ? "Windows" : /Mac OS X/.test(agent) ? "Mac" : /Linux/.test(agent) ? "Linux" : "";
-  return device ? `${browser} on ${device}` : browser;
-}
+/** Same short browser name as My workplace ("Chrome · Windows"), so both pages read alike. */
+export const describeAgent = (agent: string | null) => browserLabel(agent);
 
 export async function listSignins(db: Database, actor: Actor, rawQuery: unknown = {}) {
   assertCanManageSecurity(actor);

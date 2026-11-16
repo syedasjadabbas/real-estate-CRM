@@ -166,10 +166,14 @@ export default async function BookingDetailPage({ params, searchParams }: PagePr
               </Fact>
               <Fact label={`${Math.round(MILESTONE_RATIO * 100)}% milestone`}>{money.milestoneMet ? "Met" : "Not met"}</Fact>
               <Fact label="Reserved until">
-                <span className="inline-flex items-center gap-1.5">
-                  {formatListedOn(booking.reservedUntil)}
-                  <HoldChip state={detail.holdState} />
-                </span>
+                {booking.stage === "confirmed" || booking.stage === "cancelled" ? (
+                  <span className="text-zinc-500">{booking.stage === "confirmed" ? "Sold" : "Released"}</span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5">
+                    {formatListedOn(booking.reservedUntil)}
+                    <HoldChip state={detail.holdState} />
+                  </span>
+                )}
               </Fact>
               <Fact label="Agreement sent">{booking.agreementSentOn ? formatListedOn(booking.agreementSentOn) : "Not sent"}</Fact>
               <Fact label="Payment docs">{PAYMENT_DOCS_LABELS[booking.paymentDocsStatus]}</Fact>

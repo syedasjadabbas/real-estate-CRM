@@ -105,14 +105,28 @@ export function AssignClientPanel({ clientId, ownerId, owners }: { clientId: str
   const [value, setValue] = useState(ownerId ?? "");
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [pending, startTransition] = useTransition();
+  // Find a person when the list is long (16 Nov 2026); the current choice always stays listed.
+  const [find, setFind] = useState("");
+  const term = find.trim().toLowerCase();
+  const shownOwners = term ? owners.filter((o) => o.id === value || o.name.toLowerCase().includes(term)) : owners;
   return (
     <PanelCard title="Assignment">
+      {owners.length > 8 ? (
+        <input
+          type="search"
+          value={find}
+          onChange={(e) => setFind(e.target.value)}
+          placeholder="Find a person"
+          aria-label="Find a person to assign"
+          className="mb-2 h-9 w-full rounded-xl border border-zinc-200/80 bg-white px-3 text-xs font-semibold shadow-hairline focus:border-brand/50 focus:outline-none"
+        />
+      ) : null}
       <div className="flex flex-wrap items-end gap-2">
         <Field label="Owner" className="min-w-0 flex-1">
           {(id) => (
             <select id={id} value={value} onChange={(e) => setValue(e.target.value)} className={selectClass} disabled={pending}>
               {ownerId ? null : <option value="">Unassigned</option>}
-              {owners.map((o) => (
+              {shownOwners.map((o) => (
                 <option key={o.id} value={o.id}>
                   {o.name}
                 </option>

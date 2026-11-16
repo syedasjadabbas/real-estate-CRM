@@ -156,4 +156,24 @@ describe.skipIf(!hasTestDb)("FR-027: every To-dos item a count promises can be r
     expect(new Set([...first.rows, ...last.rows].map((r) => r.id)).size).toBe(55);
     expect(await overdueMeetings(db, f.actors.hr, NOW)).toMatchObject({ count: 0, rows: [], page: 1, pageCount: 1 });
   });
+
+  it("search and the agent filter narrow both the list and the counts, within scope (16 Nov 2026)", async () => {
+    const mine = await newLead(f.actors.agent1);
+    const theirs = await newLead(f.actors.agent2);
+    await addFollowUps(mine, 2, () => at(60));
+    await addFollowUps(theirs, 3, () => at(60), {}, f.actors.agent2.id);
+    const [{ code }] = await db.select({ code: leads.code }).from(leads).where(eq(leads.id, theirs));
+    const admin = f.actors.superAdmin;
+
+    expect((await leadTodos(db, admin, f.projectId, "today", NOW)).counts.today).toBe(5);
+    const byAgent = await leadTodos(db, admin, f.projectId, "today", NOW, 1, { owner: f.actors.agent2.id });
+    expect(byAgent.counts.today).toBe(3);
+    expect(new Set(byAgent.items.map((i) => i.leadId))).toEqual(new Set([theirs]));
+    const byCode = await leadTodos(db, admin, f.projectId, "today", NOW, 1, { q: code.toLowerCase() });
+    expect(byCode.counts.today).toBe(3);
+    // An agent can't use the filter to see someone else's leads: their own scope still applies.
+    expect((await leadTodos(db, f.actors.agent1, f.projectId, "today", NOW, 1, { owner: f.actors.agent2.id })).counts.today).toBe(0);
+    // A bad agent id is ignored rather than failing.
+    expect((await leadTodos(db, admin, f.projectId, "today", NOW, 1, { owner: "not-an-id" })).counts.today).toBe(5);
+  });
 });

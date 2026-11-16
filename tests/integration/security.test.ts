@@ -219,8 +219,8 @@ describe.skipIf(!hasTestDb)("Production readiness (PostgreSQL integration)", () 
       const all = await listSignins(db, admin);
       expect(all.total).toBe(3);
       expect(all.rows.map((r) => r.event)).toEqual(["sign_in", "sign_out", "sign_in"]);
-      expect(all.rows[2]).toMatchObject({ name: f.actors.agent1.name, ip: "203.0.113.7", device: "Chrome on Windows" });
-      expect(all.rows[0].device).toBe("Safari on iPhone / iPad");
+      expect(all.rows[2]).toMatchObject({ name: f.actors.agent1.name, ip: "203.0.113.7", device: "Chrome · Windows" });
+      expect(all.rows[0].device).toBe("Unknown browser · iOS");
 
       expect((await listSignins(db, admin, { sq: f.actors.agent1.email })).total).toBe(2);
       expect((await listSignins(db, admin, { sq: "203.0.113" })).total).toBe(1);

@@ -95,20 +95,6 @@ export function BookingForm({ projectId, defaultLeadId, options }: { projectId: 
       setFormError(result.message);
     });
 
-  const select = (key: "leadId" | "unitId", label: string, list: { value: string; label: string }[], empty: string) => (
-    <Field label={label} required error={errors[key]}>
-      {(id, describedBy) => (
-        <select id={id} aria-describedby={describedBy} value={values[key]} onChange={(e) => set({ [key]: e.target.value })} className={selectClass} disabled={pending}>
-          <option value="">{empty}</option>
-          {list.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-      )}
-    </Field>
-  );
   const text = (key: "ratePerSqft" | "tokenAmount" | "reservedUntil", label: string, opts: { required?: boolean; type?: string; placeholder?: string; hint?: string }) => (
     <Field label={label} required={opts.required} error={errors[key]} hint={opts.hint}>
       {(id, describedBy) => (
@@ -175,12 +161,21 @@ export function BookingForm({ projectId, defaultLeadId, options }: { projectId: 
             />
           )}
         </Field>
-        {select(
-          "unitId",
-          "Unit (available)",
-          options.units.map((u) => ({ value: u.id, label: `${u.unitNo}${u.floor ? ` · ${u.floor}` : ""} · ${formatArea(u.areaSqft)}` })),
-          options.units.length ? "Select an available unit…" : "No available whole units",
-        )}
+        <Field label="Unit (available)" required error={errors.unitId}>
+          {(id, describedBy) => (
+            <LeadPicker
+              id={id}
+              describedBy={describedBy}
+              value={values.unitId}
+              onChange={(unitId) => set({ unitId })}
+              options={options.units.map((u) => ({ value: u.id, label: `${u.unitNo}${u.floor ? ` · ${u.floor}` : ""} · ${formatArea(u.areaSqft)}` }))}
+              empty={options.units.length ? "Select an available unit…" : "No available whole units in this project"}
+              noun="units"
+              placeholder="Search unit no. or floor"
+              disabled={pending}
+            />
+          )}
+        </Field>
         {text("reservedUntil", "Reserved until", { type: "date", hint: `Leave blank for ${HOLD_DAYS} days from today. If no payment is recorded by then, the booking is cancelled and the unit becomes Available.` })}
       </FormSection>
       <FormSection title="Price">
@@ -196,7 +191,7 @@ export function BookingForm({ projectId, defaultLeadId, options }: { projectId: 
         <Field
           label="Discount %"
           error={errors.discountPct}
-          hint={options.discountCap >= 100 ? "Any discount" : `Up to ${options.discountCap}%`}
+          hint={options.discountCap >= 100 ? "No limit for your role." : `Up to ${options.discountCap}% for your role; more needs an Admin's approval.`}
         >
           {(id, describedBy) => (
             <Input
