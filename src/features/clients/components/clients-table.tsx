@@ -9,6 +9,7 @@ import type { BookingStage } from "@/modules/bookings/constants";
 import type { ClientSortColumn } from "@/modules/clients/constants";
 import type { ClientListRow } from "@/modules/clients/queries";
 import { RelationshipPill } from "./relationship-pill";
+import { MaskedPhone } from "@/components/ui/masked-phone";
 
 type Column = { key: string; label: string; sort?: ClientSortColumn };
 
@@ -88,7 +89,7 @@ export function ClientsTable({
                     </span>
                   </td>
                   <td className="px-3 py-2.5 text-zinc-700">
-                    <span className="block whitespace-nowrap">{r.phone}</span>
+                    <MaskedPhone phone={r.phone} className="flex" />
                     <span className="block">{r.email ?? "—"}</span>
                   </td>
                   <td className="px-3 py-2.5">

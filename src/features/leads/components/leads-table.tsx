@@ -11,6 +11,7 @@ import { withParams } from "../url";
 import { SourcePill, StagePill } from "./chips";
 import { VerificationBadge } from "./verification";
 import { CopyCodeButton, FavoriteButton, FollowUpButtons } from "./row-actions";
+import { MaskedPhone } from "@/components/ui/masked-phone";
 
 type Column = { key: string; label: string; sort?: SortColumn; className?: string };
 
@@ -148,12 +149,12 @@ export function LeadsTable({
                       <a
                         href={telHref(r.phoneCountryCode, r.phoneNumber)}
                         className="inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand ring-1 ring-brand/20 transition-colors hover:bg-brand hover:text-white"
-                        aria-label={`Call ${r.name} on ${r.phone}`}
-                        title={`Call ${r.phone}`}
+                        aria-label={`Call ${r.name}`}
+                        title={`Call ${r.name}`}
                       >
                         <Phone aria-hidden="true" className="size-3.5" />
                       </a>
-                      <span>{r.phone}</span>
+                      <MaskedPhone phone={r.phone} />
                     </span>
                     <span className="block">{r.email ?? "—"}</span>
                   </td>

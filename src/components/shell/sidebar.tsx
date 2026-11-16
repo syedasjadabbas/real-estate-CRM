@@ -1,6 +1,6 @@
 "use client";
 
-import { Search } from "lucide-react";
+import { ChevronsLeft, ChevronsRight, Search } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
@@ -38,15 +38,20 @@ export function isActive(pathname: string | null, search: URLSearchParams | null
   });
 }
 
-type NavGroupsProps = { groups: NavGroup[]; onNavigate?: () => void };
+type NavGroupsProps = { groups: NavGroup[]; onNavigate?: () => void; collapsed?: boolean };
 
-function NavGroups({ groups, pathname, search, onNavigate }: NavGroupsProps & { pathname: string | null; search: URLSearchParams | null }) {
+function NavGroups({ groups, pathname, search, onNavigate, collapsed = false }: NavGroupsProps & { pathname: string | null; search: URLSearchParams | null }) {
   const hrefs = groups.flatMap((g) => g.items.map((i) => i.href));
   return groups.map((group) => (
     <div key={group.label} className="mb-3">
-      <div className="px-3 py-1 leading-6">
-        <span className="text-[11px] leading-[16.5px] font-black tracking-[0.1em] text-zinc-500 uppercase">{group.label}</span>
-      </div>
+      {collapsed ? (
+        // Icon rail: a thin line stands in for the group name.
+        <div aria-hidden="true" className="mx-auto my-2 h-px w-6 bg-white/10" />
+      ) : (
+        <div className="px-3 py-1 leading-6">
+          <span className="text-[11px] leading-[16.5px] font-black tracking-[0.1em] text-zinc-500 uppercase">{group.label}</span>
+        </div>
+      )}
       <ul className="mt-1 space-y-1">
         {group.items.map((item) => {
           const active = isActive(pathname, search, item.href, hrefs);
@@ -57,8 +62,11 @@ function NavGroups({ groups, pathname, search, onNavigate }: NavGroupsProps & { 
                 href={item.href}
                 onClick={onNavigate}
                 aria-current={active ? "page" : undefined}
+                aria-label={collapsed ? item.label : undefined}
+                title={collapsed ? item.label : undefined}
                 className={cn(
-                  "group flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm leading-5 font-bold transition-colors",
+                  "group flex items-center gap-3 rounded-xl py-2.5 text-sm leading-5 font-bold transition-colors",
+                  collapsed ? "justify-center px-0" : "px-3.5",
                   active
                     ? "bg-[#3d2e06] text-[#f5d27a] ring-1 ring-[#bb8c08]/40"
                     : "text-zinc-300 hover:bg-white/[0.06] hover:text-white",
@@ -71,8 +79,8 @@ function NavGroups({ groups, pathname, search, onNavigate }: NavGroupsProps & { 
                     active ? "text-[#f5d27a]" : "text-zinc-500 group-hover:text-zinc-300",
                   )}
                 />
-                <span className="flex-1 truncate">{item.label}</span>
-                {active ? <span className="size-2 rounded-full bg-[#f5d27a]" /> : null}
+                {collapsed ? null : <span className="flex-1 truncate">{item.label}</span>}
+                {active && !collapsed ? <span className="size-2 rounded-full bg-[#f5d27a]" /> : null}
               </Link>
             </li>
           );
@@ -89,10 +97,16 @@ function ActiveNavGroups(props: NavGroupsProps) {
 export function Sidebar({
   user,
   onNavigate,
+  collapsed = false,
+  onToggleCollapsed,
 }: {
   user: SessionUser | null;
   /** Called after a link is chosen (closes the mobile drawer). */
   onNavigate?: () => void;
+  /** Desktop icon rail (owner, 16 Nov 2026): icons only, names on hover. */
+  collapsed?: boolean;
+  /** Shown on desktop: expands or collapses the menu. */
+  onToggleCollapsed?: () => void;
 }) {
   const [query, setQuery] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
@@ -104,12 +118,15 @@ export function Sidebar({
       const typing = target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
       if (event.key === "/" && !typing) {
         event.preventDefault();
-        searchRef.current?.focus();
+        if (collapsed && onToggleCollapsed) {
+          onToggleCollapsed();
+          setTimeout(() => searchRef.current?.focus(), 320);
+        } else searchRef.current?.focus();
       }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, []);
+  }, [collapsed, onToggleCollapsed]);
 
   const groups = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -132,6 +149,63 @@ export function Sidebar({
       }))
       .filter((group) => group.items.length > 0);
   }, [query, user]);
+
+  const toggleButton = onToggleCollapsed ? (
+    <button
+      type="button"
+      onClick={onToggleCollapsed}
+      aria-label={collapsed ? "Expand menu" : "Collapse menu"}
+      aria-expanded={!collapsed}
+      aria-controls="app-sidebar"
+      title={collapsed ? "Expand menu" : "Collapse menu"}
+      className={cn(
+        "flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] py-2 text-xs font-bold text-zinc-400 transition-colors hover:bg-white/[0.08] hover:text-white",
+        collapsed ? "mx-auto size-10" : "w-full",
+      )}
+    >
+      {collapsed ? <ChevronsRight aria-hidden="true" className="size-4" /> : <ChevronsLeft aria-hidden="true" className="size-4" />}
+      {collapsed ? null : "Collapse menu"}
+    </button>
+  ) : null;
+
+  if (collapsed) {
+    return (
+      <div className="flex h-full flex-col items-stretch">
+        <div className="flex h-20 shrink-0 items-center justify-center border-b border-white/10 px-2">
+          {/* eslint-disable-next-line @next/next/no-img-element -- small static logo, no resizing needed */}
+          <img src={brand.logo.src} width={brand.logo.width} height={brand.logo.height} alt={brand.logo.alt} className="h-8 w-auto max-w-[52px] object-contain" />
+        </div>
+        <div className="shrink-0 px-3 py-3">
+          {/* Searching the menu needs room: this opens the full menu with the search box ready. */}
+          <button
+            type="button"
+            onClick={() => {
+              onToggleCollapsed?.();
+              setTimeout(() => searchRef.current?.focus(), 320);
+            }}
+            aria-label="Search menu"
+            title="Search menu (/)"
+            className="mx-auto flex size-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.06] text-zinc-400 hover:bg-white/10 hover:text-white"
+          >
+            <Search aria-hidden="true" className="size-4" />
+          </button>
+        </div>
+        <nav aria-label="Main" className="flex-1 overflow-y-auto px-3 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <Suspense fallback={<NavGroups groups={groups} pathname={null} search={null} onNavigate={onNavigate} collapsed />}>
+            <ActiveNavGroups groups={groups} onNavigate={onNavigate} collapsed />
+          </Suspense>
+        </nav>
+        <div className="flex shrink-0 flex-col items-center gap-3 border-t border-white/10 p-3">
+          {toggleButton}
+          <span title={user?.name ?? undefined}>
+            <Avatar name={user?.name} presence={Boolean(user)} />
+          </span>
+        </div>
+        {/* Keeps "/" working while collapsed: it expands the menu and focuses the search. */}
+        <input ref={searchRef} type="search" value={query} onChange={(event) => setQuery(event.target.value)} aria-hidden="true" tabIndex={-1} className="sr-only" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full flex-col">
@@ -174,7 +248,8 @@ export function Sidebar({
       </nav>
 
       {/* User card */}
-      <div className="shrink-0 border-t border-white/10 p-3.5">
+      <div className="shrink-0 space-y-2.5 border-t border-white/10 p-3.5">
+        {toggleButton}
         <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-3">
           <div className="flex items-center gap-3">
             <Avatar name={user?.name} presence={Boolean(user)} />

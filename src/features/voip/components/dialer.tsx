@@ -5,6 +5,7 @@ import { useId } from "react";
 import { buttonClasses } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { VOIP_REASON_TEXT, type VoipStatus } from "@/modules/voip/types";
+import { MaskedPhone } from "@/components/ui/masked-phone";
 
 /**
  * Browser-calling panel on the lead page (docs/VOIP_INTEGRATION.md). It never shows a call, a
@@ -14,7 +15,7 @@ import { VOIP_REASON_TEXT, type VoipStatus } from "@/modules/voip/types";
 export function Dialer({ status, telHref, leadName, phone }: { status: VoipStatus; telHref: string; leadName: string; phone: string }) {
   const titleId = useId();
   const phoneCall = (
-    <a href={telHref} className={buttonClasses({ variant: "secondary", size: "lg" })} aria-label={`Call ${leadName} on ${phone} with your phone`}>
+    <a href={telHref} className={buttonClasses({ variant: "secondary", size: "lg" })} aria-label={`Call ${leadName} with your phone`}>
       <Phone aria-hidden="true" className="size-4" />
       Call with phone
     </a>
@@ -34,7 +35,7 @@ export function Dialer({ status, telHref, leadName, phone }: { status: VoipStatu
               <PhoneOff aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-zinc-400" />
               <p>
                 <span className="font-bold text-zinc-800">Browser calling isn&apos;t set up yet.</span> {VOIP_REASON_TEXT[status.reason]} Use
-                your phone to call {phone}.
+                your phone to call <MaskedPhone phone={phone} />.
               </p>
             </div>
           )}

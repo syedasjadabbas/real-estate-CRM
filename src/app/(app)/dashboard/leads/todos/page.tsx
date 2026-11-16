@@ -19,6 +19,7 @@ import { TASK_TYPE_LABELS } from "@/modules/tasks/constants";
 import { canDoTask } from "@/modules/tasks/policy";
 import { assignableUsers, openTodos, overdueTasks, taskFormOptions } from "@/modules/tasks/queries";
 import { AddTodoForm, TodoList } from "@/features/tasks/components/todo-list";
+import { MaskedPhone } from "@/components/ui/masked-phone";
 
 export const metadata: Metadata = { title: "To-dos & overdues" };
 
@@ -253,7 +254,7 @@ export default function TodosPage({ searchParams }: PageProps<"/dashboard/leads/
                       {item.name} <span className="font-semibold tracking-[0.05em] text-zinc-500">{item.code}</span>
                     </Link>
                     <p className="text-zinc-600">
-                      {item.phone} · {item.ownerName ?? "Unassigned"}
+                      <MaskedPhone phone={item.phone} /> · {item.ownerName ?? "Unassigned"}
                       {item.note ? <span className="block text-zinc-700">{item.note}</span> : null}
                     </p>
                   </div>

@@ -3962,3 +3962,30 @@ A second independent check of the three client documents found that agents never
 | Wording | The page no longer says agents may be "full" (maximum load isn't used) or that a "manager" reassigns |
 
 Test added in `ownership-assignment.test.ts` (agents and Admins see the pool, HR doesn't; an Admin assigns from it and the owner is notified). Typecheck and lint pass.
+
+## 85. Phone numbers hidden until shown (16 Nov 2026)
+
+The owner asked for customer phone numbers to be hidden on screen by default, for agents and Admins alike, with a button to show them and hide them again.
+
+| Change | Detail |
+|---|---|
+| Control | `MaskedPhone` (`components/ui/masked-phone.tsx`) shows the number as e.g. "+92 3•• •••••35" (first 3 and last 2 digits) with an eye button: **Show number** / **Hide number**. Every page load starts hidden; each number is shown on its own |
+| Where | Leads table, Pipeline cards, the lead page (Phone fact and the calling panel), Verify, To-dos, Phone overlap, the clients table and the client page |
+| Call buttons | Still dial the full number; their labels and tooltips now say "Call <name>" instead of the number |
+| Additional numbers | On the lead and client forms, phones 2 to 5 are folded away by default: the header shows how many are filled in, **Show** opens them and **Hide** folds them again; the section opens by itself when one of them has an error |
+| Not changed | Printed booking form, receipt and sales order (the full number is needed on paper), edit forms, HR staff phones, CSV downloads and the API |
+
+This keeps numbers off screen for anyone looking over a shoulder. It is not access control: the number is still sent to the browser for people allowed to see the lead. Typecheck and lint pass.
+
+## 86. Sidebar can collapse to an icon rail (16 Nov 2026)
+
+The owner asked for a collapse option in the sidebar, with the full menu shown by default.
+
+| Change | Detail |
+|---|---|
+| Desktop (1024px and wider) | The sidebar starts as the full 256px menu with a **Collapse menu** button above the user card; collapsed, it is a 76px icon rail: the logo, a search button, each page as an icon (its name shows on hover and to screen readers), an **Expand menu** button and the user avatar. The header menu button does the same |
+| Remembered | Each browser remembers whether the menu was left collapsed (local storage, a convenience only); with no saved choice it starts expanded |
+| Search | The rail search button, or the / key, expands the menu and puts the cursor in the menu search |
+| Phones and tablets | Unchanged: the menu button opens the full menu as a drawer |
+
+Before, the menu button hid the whole sidebar on desktop. Typecheck and lint pass.

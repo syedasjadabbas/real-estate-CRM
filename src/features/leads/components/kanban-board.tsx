@@ -9,6 +9,7 @@ import { LEAD_STAGES, PRIORITY_LABELS, STAGE_LABELS, type LeadStage } from "@/mo
 import type { LeadListRow } from "@/modules/leads/queries";
 import { changeStageAction } from "../actions";
 import { formatDateTime } from "../format";
+import { MaskedPhone } from "@/components/ui/masked-phone";
 
 type Column = { stage: LeadStage; total: number; cards: LeadListRow[] };
 type Drag = { card: LeadListRow; x: number; y: number; over: LeadStage | null };
@@ -67,12 +68,12 @@ function KanbanCard({
         <a
           href={telHref(card.phoneCountryCode, card.phoneNumber)}
           className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand ring-1 ring-brand/20 transition-colors hover:bg-brand hover:text-white"
-          aria-label={`Call ${card.name} on ${card.phone}`}
-          title={`Call ${card.phone}`}
+          aria-label={`Call ${card.name}`}
+          title={`Call ${card.name}`}
         >
           <Phone aria-hidden="true" className="size-3" />
         </a>
-        {card.phone}
+        <MaskedPhone phone={card.phone} />
       </p>
       <p className="text-[11px] text-zinc-600">{card.ownerName ?? "Unassigned"}</p>
       <div className="mt-2 flex flex-wrap items-center gap-1.5">

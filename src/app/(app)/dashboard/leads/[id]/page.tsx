@@ -39,6 +39,7 @@ import { Dialer } from "@/features/voip/components/dialer";
 import { getVoipStatus } from "@/modules/voip/service";
 import { assignableUsers, getLeadDetail, leadLookups } from "@/modules/leads/queries";
 import { AppError } from "@/server/errors";
+import { MaskedPhone } from "@/components/ui/masked-phone";
 
 export const metadata: Metadata = { title: "Lead" };
 
@@ -82,7 +83,7 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
           description={`Owner ${lead.ownerName ?? "Unassigned"} · ${lead.projectName}`}
           actions={
             <>
-              <a href={telHref(lead.phoneCountryCode, lead.phoneNumber)} className={buttonClasses({ variant: "primary", size: "lg" })} aria-label={`Call ${lead.name} on ${lead.phone}`}>
+              <a href={telHref(lead.phoneCountryCode, lead.phoneNumber)} className={buttonClasses({ variant: "primary", size: "lg" })} aria-label={`Call ${lead.name}`}>
                 <Phone aria-hidden="true" className="size-4" />
                 Call
               </a>
@@ -103,9 +104,7 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
               <span className="tracking-[0.05em]">{lead.code}</span>
             </Fact>
             <Fact label="Phone">
-              <a href={telHref(lead.phoneCountryCode, lead.phoneNumber)} className="hover:text-brand hover:underline">
-                {lead.phone}
-              </a>
+              <MaskedPhone phone={lead.phone} />
             </Fact>
             <Fact label="Lead">
               <StagePill stage={lead.stage} />

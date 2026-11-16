@@ -75,7 +75,7 @@ export function Header({
         {/* Left: menu toggle + user chip */}
         <div className="flex min-w-0 items-center gap-3">
           <IconButton
-            label={sidebarOpen ? "Hide navigation" : "Show navigation"}
+            label={sidebarOpen ? "Collapse menu" : "Expand menu"}
             aria-expanded={sidebarOpen}
             aria-controls="app-sidebar"
             onClick={onToggleSidebar}

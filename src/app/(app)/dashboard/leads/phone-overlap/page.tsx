@@ -10,6 +10,7 @@ import { formatDateTime } from "@/features/leads/format";
 import { Pagination } from "@/features/leads/components/pagination";
 import { flattenParams } from "@/features/leads/url";
 import { sharedPhoneGroups } from "@/modules/leads/queries";
+import { MaskedPhone } from "@/components/ui/masked-phone";
 
 export const metadata: Metadata = { title: "Shared phone numbers" };
 
@@ -36,7 +37,7 @@ export default function SharedPhonesPage({ searchParams }: PageProps<"/dashboard
             {groups.map((g) => (
               <Card key={g.phoneE164} className="overflow-hidden">
                 <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-3">
-                  <p className="text-sm font-black">{g.phone}</p>
+                  <MaskedPhone phone={g.phone} className="text-sm font-black" />
                   <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[9px] font-black tracking-[0.05em] text-amber-700 uppercase">
                     {g.leads.length} leads
                   </span>

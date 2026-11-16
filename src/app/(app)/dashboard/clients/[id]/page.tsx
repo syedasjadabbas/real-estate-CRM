@@ -24,6 +24,7 @@ import { canSeeItemisedPayments } from "@/modules/finance/policy";
 import { bookingPaymentHistory } from "@/modules/finance/queries";
 import { assignableUsers, leadLookups } from "@/modules/leads/queries";
 import { AppError } from "@/server/errors";
+import { MaskedPhone } from "@/components/ui/masked-phone";
 
 const CLIENT_DOCUMENTS = { title: "Contracts and documents", empty: "No contracts or documents yet.", field: "Upload a contract or document", button: "Upload document", uploaded: "Document uploaded.", noun: "Documents" };
 
@@ -83,7 +84,9 @@ export default async function ClientDetailPage({ params }: PageProps<"/dashboard
 
       <Card className="p-5">
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
-          <Fact label="Phone">{client.phone}</Fact>
+          <Fact label="Phone">
+            <MaskedPhone phone={client.phone} />
+          </Fact>
           <Fact label="Email">{client.email ?? "—"}</Fact>
           <Fact label="Relationship">{relationshipLabel(client.relationship)}</Fact>
           <Fact label="City">{client.cityName ?? "—"}</Fact>
