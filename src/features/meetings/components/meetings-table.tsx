@@ -8,6 +8,7 @@ import type { MeetingSortColumn } from "@/modules/meetings/constants";
 import type { MeetingListRow } from "@/modules/meetings/queries";
 import { MeetingStatusPill } from "./meeting-pills";
 import { MEETING_TYPE_LABELS } from "@/modules/meetings/constants";
+import { Camera } from "lucide-react";
 
 type Column = { label: string; sort?: MeetingSortColumn };
 
@@ -64,6 +65,12 @@ export function MeetingsTable({ rows, params, emptyMessage }: { rows: MeetingLis
                 <td className="max-w-[280px] px-3 py-2.5">
                   <Link href={`/dashboard/meetings/${r.id}`} className="block font-bold break-words hover:text-brand hover:underline">
                     {r.title}
+                    {r.photos ? (
+                      <span className="ml-1.5 inline-flex items-center gap-0.5 rounded-full bg-zinc-100 px-1.5 py-0.5 align-middle text-[10px] font-bold text-zinc-600" title={`${r.photos} meeting photo${r.photos === 1 ? "" : "s"}`}>
+                        <Camera aria-hidden="true" className="size-3" />
+                        {r.photos}
+                      </span>
+                    ) : null}
                   </Link>
                 </td>
                 <td className="px-3 py-2.5 whitespace-nowrap">

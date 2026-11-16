@@ -146,7 +146,7 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
             {callCard ? null : <NotePanel leadId={lead.id} canEdit={detail.permissions.edit} />}
             <RecordingsPanel leadId={lead.id} recordings={recordings} canUpload={detail.permissions.edit} canDelete={actor.role === "super_admin"} canPlay={canPlayRecordings(actor)} />
             <DocumentsPanel leadId={lead.id} documents={documents} canUpload={detail.permissions.edit} />
-            <ReviewsPanel detail={detail} />
+            <ReviewsPanel detail={detail} recordings={recordings} />
             {clientStatus ? <LeadClientPanel leadId={lead.id} status={clientStatus} /> : null}
             {canDoBooking(actor, "view") ? (
               <PanelCard title="Bookings">

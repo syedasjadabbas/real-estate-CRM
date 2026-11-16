@@ -40,13 +40,14 @@ export const PRIORITY_LABELS: Record<LeadPriority, string> = {
 export const INBOUND_LABELS = { manual: "Manual", meta: "Meta", tiktok: "Tiktok", import: "Import" } as const;
 
 /** Follow-up filter windows from the reference pipeline filters. */
-export const FOLLOW_UP_WINDOWS = ["overdue", "1d", "2d", "after2d"] as const;
+export const FOLLOW_UP_WINDOWS = ["overdue", "1d", "2d", "after2d", "upcoming"] as const;
 export type FollowUpWindow = (typeof FOLLOW_UP_WINDOWS)[number];
 export const FOLLOW_UP_WINDOW_LABELS: Record<FollowUpWindow, string> = {
   overdue: "Overdue",
   "1d": "Within 1 day",
   "2d": "Within 2 days",
   after2d: "After 2 days",
+  upcoming: "Any future date",
 };
 
 export const LEAD_VIEWS = ["all", "won", "lost", "regenerated", "favorites", "duplicates", "new"] as const;

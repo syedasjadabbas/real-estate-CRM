@@ -126,7 +126,7 @@ Checked in code. Admins cannot do these:
 
 ### Team Lead (15 Nov 2026)
 
-A Team Lead is an agent an Admin or Super Admin appoints for one team (`teams.team_lead_id`). They keep working as an agent. They also get a read-only **My team** page: the team's members, pipeline, performance and roster. They can't reassign leads or change the team.
+A Team Lead is an agent an Admin or Super Admin appoints for one team (`teams.team_lead_id`). They keep working as an agent. They also get a read-only **My team** page: the team's members, pipeline, performance and roster, and (16 Nov 2026) each agent's win %, follow-up %, agent score, targets met and running targets with progress. Coaching notes and the work profile stay with Admins. They can't reassign leads or change the team.
 
 ### Work profiles and coaching notes (16 Nov 2026)
 

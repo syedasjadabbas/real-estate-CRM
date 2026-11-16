@@ -31,6 +31,9 @@ export type LeadAction =
   | "decideLost"
   | "review";
 
+/** Who may score a call (1–5) in a review: Admins, Super Admins and Managers, not agents (16 Nov 2026). */
+export const canRateCalls = (actor: Pick<Actor, "role">) => actor.role === "admin" || actor.role === "super_admin" || actor.role === "manager";
+
 const ROLE_ACTIONS: Record<Role, LeadAction[]> = {
   super_admin: ["view", "create", "edit", "assign", "markLostDirect", "decideLost", "review"],
   admin: ["view", "create", "edit", "assign", "markLostDirect", "decideLost", "review"],

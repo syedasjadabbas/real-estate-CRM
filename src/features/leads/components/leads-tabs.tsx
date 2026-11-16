@@ -17,7 +17,7 @@ const TABS = [
   { label: "Regenerated", href: "/dashboard/leads/regenerated" },
   { label: "Won", href: "/dashboard/leads/won" },
   { label: "Lost", href: "/dashboard/leads/lost" },
-  { label: "Notes / reviews", href: "/dashboard/leads/reviews" },
+  { label: "Call reviews & notes", href: "/dashboard/leads/reviews" },
   { label: "Imports", href: "/dashboard/leads/import" },
 ];
 

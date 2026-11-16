@@ -12,6 +12,7 @@ import {
   pgSequence,
   pgTable,
   primaryKey,
+  smallint,
   text,
   timestamp,
   uniqueIndex,
@@ -76,7 +77,7 @@ export const leadActivityType = pgEnum("lead_activity_type", [
  */
 export const leadVerification = pgEnum("lead_verification", ["pending", "approved", "rejected"]);
 /** DATA_MODEL.md "files". Only call recordings on leads are uploaded so far (FR-038). */
-export const fileKind = pgEnum("file_kind", ["call_recording", "document", "receipt", "other"]);
+export const fileKind = pgEnum("file_kind", ["call_recording", "document", "receipt", "other", "meeting_photo"]);
 export const followUpStatus = pgEnum("follow_up_status", ["pending", "done", "cancelled"]);
 export const approvalType = pgEnum("approval_type", ["lead_lost"]);
 export const approvalStatus = pgEnum("approval_status", ["pending", "approved", "rejected"]);
@@ -352,6 +353,8 @@ export const files = pgTable(
     bookingId: uuid("booking_id").references((): AnyPgColumn => bookings.id, { onDelete: "restrict" }),
     /** For contracts and other documents kept on the client itself (kind "document", FR-052). */
     clientId: uuid("client_id").references((): AnyPgColumn => clients.id, { onDelete: "restrict" }),
+    /** Photos taken at a meeting (kind "meeting_photo", owner 16 Nov 2026); lead_id is the meeting's lead. */
+    meetingId: uuid("meeting_id").references((): AnyPgColumn => meetings.id, { onDelete: "restrict" }),
     kind: fileKind("kind").notNull(),
     storageKey: text("storage_key").notNull(),
     originalName: text("original_name").notNull(),
@@ -370,6 +373,7 @@ export const files = pgTable(
     uniqueIndex("files_storage_key_uq").on(t.storageKey),
     index("files_lead_created_idx").on(t.leadId, t.createdAt),
     index("files_client_created_idx").on(t.clientId, t.createdAt),
+    index("files_meeting_created_idx").on(t.meetingId, t.createdAt),
     check("files_size_positive", sql`${t.sizeBytes} > 0`),
     check("files_owner", sql`${t.leadId} is not null or ${t.financeEntryId} is not null or ${t.clientId} is not null`),
     check("files_duration_range", sql`${t.durationSec} is null or (${t.durationSec} >= 0 and ${t.durationSec} <= 86400)`),
@@ -426,9 +430,19 @@ export const leadReviews = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
     body: text("body").notNull(),
+    /** Call review score, 1 (poor) to 5 (excellent); Admins, Super Admins and Managers only (16 Nov 2026). */
+    rating: smallint("rating"),
+    /** The call recording this review is about, when one was picked. */
+    recordingId: uuid("recording_id").references((): AnyPgColumn => files.id, { onDelete: "set null" }),
+    /** The lead's owner when the review was written: whose call it rated (Performance averages by this). */
+    agentId: uuid("agent_id").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("lead_reviews_lead_idx").on(t.leadId)],
+  (t) => [
+    index("lead_reviews_lead_idx").on(t.leadId),
+    index("lead_reviews_agent_created_idx").on(t.agentId, t.createdAt),
+    check("lead_reviews_rating", sql`${t.rating} is null or ${t.rating} between 1 and 5`),
+  ],
 );
 
 export const approvals = pgTable(
@@ -1292,6 +1306,8 @@ export const notificationType = pgEnum("notification_type", [
   // An Admin submitted a lead import batch for a Super Admin to approve, and its decision (15 Nov 2026).
   "import_requested",
   "import_decided",
+  // An Admin reviewed a lead's call (or wrote a note on it): the lead's owner is told (16 Nov 2026).
+  "lead_reviewed",
 ]);
 
 /** In-app notifications (DATA_MODEL.md "notifications"). One row per recipient and event key, never duplicated. */

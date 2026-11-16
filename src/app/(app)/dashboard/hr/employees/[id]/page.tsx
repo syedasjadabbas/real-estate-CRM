@@ -25,6 +25,7 @@ import { ROLE_LABELS } from "@/server/auth/types";
 import { getDb } from "@/server/db";
 import { AppError } from "@/server/errors";
 import { EmailWithGmail } from "@/components/ui/gmail-button";
+import { MaskedPhone } from "@/components/ui/masked-phone";
 
 export const metadata: Metadata = { title: "Employee" };
 
@@ -154,7 +155,7 @@ export default async function EmployeePage({ params }: PageProps<"/dashboard/hr/
               <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Fact label="Designation">{e.designation ?? "—"}</Fact>
                 <Fact label="Department">{e.department ?? "—"}</Fact>
-                <Fact label="Phone">{e.phone ?? "—"}</Fact>
+                <Fact label="Phone">{e.phone ? <MaskedPhone phone={e.phone} name={e.name} /> : "—"}</Fact>
                 <Fact label="Joining date">{e.joiningDate ? formatListedOn(e.joiningDate) : "—"}</Fact>
               </dl>
             )}

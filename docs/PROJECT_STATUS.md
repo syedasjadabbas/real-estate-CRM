@@ -3989,3 +3989,85 @@ The owner asked for a collapse option in the sidebar, with the full menu shown b
 | Phones and tablets | Unchanged: the menu button opens the full menu as a drawer |
 
 Before, the menu button hid the whole sidebar on desktop. Typecheck and lint pass.
+
+## 87. Team Leads see their agents' KPIs and targets (16 Nov 2026)
+
+The owner confirmed that a Team Lead should see the KPIs of the agents they lead.
+
+| Change | Detail |
+|---|---|
+| Members table | Adds **Win %** (booked out of leads that ended, in the range), **Follow-up %** (done out of due, in the range; red under 50%), **Score** (agent score with prov.) and **Targets met** (goals reached of goals set, for targets starting in the range) |
+| Targets now | A new panel lists each agent's targets running today (day, week, month and own dates): calls, meetings and sold sq ft as achieved / goal with % or Met, plus custom goals |
+| Unchanged | Still read-only; targets are set by Admins; coaching notes and the work profile stay Admin-only |
+
+Same figures as Performance (`agentMetrics`, `agentScores`, `targetsMetFor`, `currentTargets`). Test added in `team-lead-profile.test.ts`. Typecheck and lint pass.
+
+## 88. Work profile figures open their lists (16 Nov 2026)
+
+The owner asked for every figure on an agent's work profile to be clickable, so an Admin can go straight from a number to what is behind it (what is overdue, what is done).
+
+| Figure | Opens |
+|---|---|
+| Calls, call minutes (cards and team compare) | The Call recordings section on the same page |
+| Meetings held | Meetings, organised by this person, Completed, in the range |
+| Bookings, Bookings made | Bookings by this agent, booked in the range, all projects |
+| Closed won / Open bookings now | Their Closed Won bookings / all their bookings |
+| Win rate, Leads won | Leads → Won, owned by them, decided in the range |
+| Score | Settings → Assignment & scores (how the score works) |
+| Each pipeline stage | Leads owned by them in that stage (Never touched opens New Lead) |
+| Overdue now | The Overdue follow-ups list on the same page |
+| Due later today | To-dos → Today, for that person |
+| Upcoming | Their leads with a follow-up at any future date, soonest first (new follow-up filter **Any future date**) |
+| Done (in range) | Recent activity on the same page |
+| Leads assigned in range / Still open | Their leads added in the range / those in an open stage |
+| CRM sign-ins | Settings → Security sign-in history, filtered to their email and the range |
+| Targets (today, week, month) | Targets, searched to their name, on that period |
+| Attendance rows | Their day-by-day attendance |
+| Lost reasons | Leads → Lost, theirs, for that reason, in the range |
+| Lead sources (leads / won / lost) | Their leads from that source in the range, or only the won or lost ones |
+
+Each clickable row shows a › arrow and a tooltip saying what opens. Left as plain numbers because no list matches them exactly: follow-ups Due, Done on time, Done late, average time to first touch, leave balance. Lead and To-do links open with **project=all**, so a list shows the same leads the profile counted, from every project (still only those the viewer may see); a blue note says so, with a link back to the selected project. Leads → All, Won, Lost and To-dos accept it; the filters keep it. Typecheck and lint pass.
+
+## 89. Talk time in Pipeline by agent (16 Nov 2026)
+
+The owner asked for a talk time column in Performance → Pipeline by agent showing call duration.
+
+| Change | Detail |
+|---|---|
+| Column | **Talk time** after Total: the total length of the agent's call recordings uploaded in the date range, as "1h 05m", "12m 30s" or "45s" ("—" when none has a known length). Hover shows the number of calls and how many have a length; for Admins it opens the agent's work profile at Call recordings for that range |
+| CSV | The pipeline download adds "Talk time <from> to <to>" and "Calls in range", and now takes the page's date range |
+
+The stage counts stay "right now"; only talk time follows the date range, and the table's description says so. Recordings without a stored length aren't counted in talk time. Test updated in `performance.test.ts`.
+
+## 90. Call reviews: score, recording and notification (16 Nov 2026)
+
+The owner asked for an Admin to be able to review an agent's call properly. Notes / reviews on the lead page already took free text; three things were missing.
+
+| Change | Detail |
+|---|---|
+| Score | Admins, Super Admins and Managers can score the call 1 to 5 stars (Poor, Needs work, OK, Good, Excellent). Agents still write notes but can't score; the server refuses a score from them or outside 1 to 5 |
+| Which call | An optional picker lists the lead's call recordings (date, file, uploader); the review shows "Call: <file> · <date>". Only a recording of that lead is accepted |
+| Notification | When someone other than the lead's owner writes a note or review, the owner gets a bell notification ("Call review on <lead> · 4/5" with the first 140 characters) linking to the lead |
+| Performance | New **Call review** column: the average score Admins gave the agent's calls in the date range, with the count ("3.5 / 5 · 2"), sortable and in the CSV ("Call review avg (1-5)", "Call reviews"). A review counts for whoever owned the lead when it was written |
+| Lists | Stars show on the lead page and in Leads → Call reviews & notes |
+| Names | The panel and the Leads tab are now **Call reviews & notes** (was Notes / reviews), so they aren't confused with the private Coaching notes on the work profile. The timeline shows "Call review · 4/5", or "Note added" when there is no score (was "Manager review added") |
+
+Database: migration `0051_call_reviews` adds `rating` (1–5, checked), `recording_id` and `agent_id` to `lead_reviews`, and the `lead_reviewed` notification type. Older reviews have no score. Tests: `call-reviews.test.ts` (new); `performance.test.ts` and `performance-calls.test.ts` updated for the new columns. Typecheck and lint pass.
+
+**Not fixed here:** `performance-first-touch.test.ts` already fails on main (7 of 8): since 6c49de8 a lead an agent adds themselves no longer counts in first touch, and that test creates its leads as the agent.
+
+## 90. Meeting photos (16 Nov 2026)
+
+The owner asked that an agent or Admin running a meeting can upload pictures of it, for Admins and Super Admins to see later.
+
+| Change | Detail |
+|---|---|
+| Where | A **Meeting photos** panel on each meeting's page (Meetings → open a meeting): thumbnails, open full size, save; several photos can be picked at once, and phones offer the camera |
+| Who adds | Anyone who can edit the meeting (its organizer or creator, or an Admin or Super Admin), while it is Scheduled or Completed; not on a Cancelled meeting |
+| Who sees | Anyone who can open the meeting: Admins and Super Admins every meeting's photos, an agent their own meetings'. HR and Accountants have no meetings |
+| Limits | JPG, PNG or WebP, checked by content; up to 10 MB each and 20 per meeting |
+| Remove | The person who added it, or an Admin or Super Admin; the photo is hidden, the stored file kept (as for other files) |
+| Records | Meeting history ("Added a photo · name", "Removed a photo") and the audit log (`meeting.photo_upload`, `meeting.photo_remove`) |
+| List | The meetings list shows a camera with the photo count next to the title |
+
+Data: `file_kind` gains `meeting_photo`, and `files.meeting_id` links a photo to its meeting (its `lead_id` is the meeting's lead); migration `0052_meeting_photos`. Files are private, served by `/api/v1/meeting-photos/:id` after the meeting access check; upload is `POST /api/v1/meetings/:id/photos`. Stored under `meeting-photos/` in the same storage as recordings, so the nightly backup covers them. Tests in `meeting-photos.test.ts`.

@@ -27,6 +27,7 @@ import { requirePageUser } from "@/server/auth/current-user";
 import { ROLE_LABELS } from "@/server/auth/types";
 import { getDb } from "@/server/db";
 import { EmailWithGmail } from "@/components/ui/gmail-button";
+import { MaskedPhone } from "@/components/ui/masked-phone";
 
 export const metadata: Metadata = { title: "Employees" };
 
@@ -136,7 +137,7 @@ export default async function EmployeesPage({ searchParams }: PageProps<"/dashbo
                     <td className="max-w-[220px] px-3 py-3 break-words whitespace-normal">{r.designation ?? none}</td>
                     <td className="max-w-[220px] px-3 py-3 break-words whitespace-normal">{r.department ?? none}</td>
                     <td className="px-3 py-3 whitespace-nowrap">{r.role ? ROLE_LABELS[r.role] : <span className="text-zinc-500">No CRM login</span>}</td>
-                    <td className="px-3 py-3 whitespace-nowrap tabular-nums">{r.phone ?? none}</td>
+                    <td className="px-3 py-3 whitespace-nowrap tabular-nums">{r.phone ? <MaskedPhone phone={r.phone} name={r.name} /> : none}</td>
                     <td className="px-3 py-3 whitespace-nowrap tabular-nums">{r.joiningDate ? formatListedOn(r.joiningDate) : none}</td>
                     <td className="px-3 py-3">
                       <StatusTag tone={r.status === "active" ? "brand" : "neutral"}>{r.status === "active" ? "Active" : "Inactive"}</StatusTag>

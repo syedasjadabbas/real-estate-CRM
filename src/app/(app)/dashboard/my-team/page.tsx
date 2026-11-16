@@ -16,6 +16,8 @@ import { buttonClasses } from "@/components/ui/button";
 import { addDays } from "@/modules/teams/dates";
 import { myTeamView } from "@/modules/teams/my-team";
 import { ROSTER_STATUS_LABELS } from "@/modules/teams/validation";
+import { periodLabel } from "@/modules/targets/period";
+import { TARGET_METRICS } from "@/modules/targets/service";
 import { requirePageUser } from "@/server/auth/current-user";
 import { getDb } from "@/server/db";
 
@@ -25,6 +27,8 @@ const th = "px-3 py-2.5";
 const field = "h-9 rounded-xl border border-zinc-200/80 bg-white px-3 text-xs font-semibold shadow-hairline focus:border-brand/50 focus:outline-none";
 const OPEN_STAGES = LEAD_STAGES.filter((s) => s !== "booked" && s !== "lost_lead");
 const td = "px-3 py-2 whitespace-nowrap";
+const pctText = (v: number | null) => (v === null ? "—" : `${v}%`);
+const PERIOD_NAMES: Record<string, string> = { daily: "Today", weekly: "This week", monthly: "This month", custom: "Own dates" };
 
 /** A Team Lead's read-only view of the team they lead (owner, 15 Nov 2026). */
 export default async function MyTeamPage({ searchParams }: PageProps<"/dashboard/my-team">) {
@@ -52,7 +56,7 @@ export default async function MyTeamPage({ searchParams }: PageProps<"/dashboard
 
   return (
     <PageStack>
-      <PageHeader title={`My team · ${v.team.name}`} icon={Users} description="You are this team's Team Lead. Everything here is view-only; Admins handle approvals and reassigning." />
+      <PageHeader title={`My team · ${v.team.name}`} icon={Users} description="You are this team's Team Lead: your agents' figures, scores and targets. Everything here is view-only; Admins handle approvals, reassigning and targets." />
       {v.teams.length > 1 ? (
         <div className="flex flex-wrap gap-2">
           {v.teams.map((t) => (
@@ -104,6 +108,18 @@ export default async function MyTeamPage({ searchParams }: PageProps<"/dashboard
                 <th scope="col" className={th}>Calls · min</th>
                 <th scope="col" className={th}>Meetings</th>
                 <th scope="col" className={th}>Won · lost</th>
+                <th scope="col" className={th} title="Booked out of leads that ended (booked or lost), in the range">
+                  Win %
+                </th>
+                <th scope="col" className={th} title="Follow-ups done out of those due, in the range">
+                  Follow-up %
+                </th>
+                <th scope="col" className={th} title="Agent score, 0–100: follow-up performance and conversion. prov. = too little history yet">
+                  Score
+                </th>
+                <th scope="col" className={th} title="Goals reached out of goals set, for targets starting in the range">
+                  Targets met
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -126,11 +142,73 @@ export default async function MyTeamPage({ searchParams }: PageProps<"/dashboard
                   <td className={cn(td, "tabular-nums")}>
                     {m.metrics.booked} · {m.metrics.lost}
                   </td>
+                  <td className={cn(td, "tabular-nums")}>{pctText(m.metrics.winPct)}</td>
+                  <td className={cn(td, "tabular-nums", m.metrics.fuPct !== null && m.metrics.fuPct < 50 ? "font-bold text-rose-700" : "")}>{pctText(m.metrics.fuPct)}</td>
+                  <td className={cn(td, "tabular-nums font-bold")}>
+                    {m.score ?? "—"}
+                    {m.scoreProvisional ? <span className="ml-1 text-[10px] font-semibold text-zinc-500">prov.</span> : null}
+                  </td>
+                  <td className={cn(td, "tabular-nums")}>{m.targetsSet ? `${m.targetsMet} of ${m.targetsSet}` : "—"}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+      </PanelCard>
+
+      <PanelCard title="Targets now">
+        {v.members.every((m) => m.targetsNow.length === 0) ? (
+          <p className="text-xs text-zinc-500">No targets are running for this team today. Admins set them on the Targets page.</p>
+        ) : (
+          <div className="overflow-x-auto rounded-xl border border-zinc-200/80">
+            <table className="w-full min-w-max border-collapse text-left text-xs">
+              <thead className="bg-zinc-100">
+                <tr className="border-b border-zinc-200 text-[10px] font-black tracking-[0.05em] text-zinc-600 uppercase">
+                  <th scope="col" className={th}>Agent</th>
+                  <th scope="col" className={th}>Period</th>
+                  {TARGET_METRICS.map((t) => (
+                    <th key={t.key} scope="col" className={th}>
+                      {t.label}
+                    </th>
+                  ))}
+                  <th scope="col" className={th}>Custom goals</th>
+                </tr>
+              </thead>
+              <tbody>
+                {v.members.flatMap((m) =>
+                  m.targetsNow.map((t) => (
+                    <tr key={`${m.id}-${t.period}-${t.start}`} className="border-b border-zinc-100/80 last:border-b-0">
+                      <td className={cn(td, "font-bold")}>{m.name}</td>
+                      <td className={td}>
+                        {PERIOD_NAMES[t.period]}
+                        {t.period === "custom" ? <span className="block text-[10px] text-zinc-500">{periodLabel(t.period, t.start, t.end)}</span> : null}
+                      </td>
+                      {TARGET_METRICS.map((x) => {
+                        const goal = t.goals![x.key];
+                        const got = t.achieved[x.key];
+                        return (
+                          <td key={x.key} className={cn(td, "tabular-nums")}>
+                            {goal > 0 ? (
+                              <span className={got >= goal ? "font-bold text-emerald-700" : ""}>
+                                {got.toLocaleString("en-PK")} / {goal.toLocaleString("en-PK")}
+                                {got >= goal ? " · Met" : ` · ${Math.round((got / goal) * 100)}%`}
+                              </span>
+                            ) : (
+                              <span className="text-zinc-400">—</span>
+                            )}
+                          </td>
+                        );
+                      })}
+                      <td className={td}>
+                        {t.custom.length ? t.custom.map((g) => `${g.name} ${g.achieved}/${g.goal}${g.met ? " ✓" : ""}`).join(" · ") : <span className="text-zinc-400">—</span>}
+                      </td>
+                    </tr>
+                  )),
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </PanelCard>
 
       <PanelCard title={`Team's open leads · ${v.openTotal}`}>

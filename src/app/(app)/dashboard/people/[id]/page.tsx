@@ -1,4 +1,4 @@
-import { CheckCircle2, Download, UserRound } from "lucide-react";
+import { CheckCircle2, ChevronRight, Download, UserRound } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -113,16 +113,36 @@ const JUMPS = [
   ["activity", "Activity"],
 ] as const;
 
-function Row({ label, value, tone }: { label: string; value: ReactNode; tone?: "amber" | "rose" | "brand" }) {
+/**
+ * One figure. With `href` the whole row opens the list behind the number (owner, 16 Nov 2026): the
+ * leads, follow-ups, meetings or bookings it counts, already filtered to this person (and the range).
+ */
+function Row({ label, value, tone, href, hint }: { label: string; value: ReactNode; tone?: "amber" | "rose" | "brand"; href?: string; hint?: string }) {
+  const valueClass = cn("font-black tabular-nums", tone === "amber" && "text-amber-700", tone === "rose" && "text-rose-700", tone === "brand" && "text-brand");
+  if (!href) {
+    return (
+      <div className="flex items-center justify-between gap-3 border-b border-zinc-100 py-1.5 text-xs last:border-b-0">
+        <span className="text-zinc-600">{label}</span>
+        <span className={valueClass}>{value}</span>
+      </div>
+    );
+  }
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-zinc-100 py-1.5 text-xs last:border-b-0">
-      <span className="text-zinc-600">{label}</span>
-      <span className={cn("font-black tabular-nums", tone === "amber" && "text-amber-700", tone === "rose" && "text-rose-700", tone === "brand" && "text-brand")}>{value}</span>
-    </div>
+    <Link
+      href={href}
+      title={hint ?? `Open: ${label}`}
+      className="group -mx-1.5 flex items-center justify-between gap-3 rounded-lg border-b border-zinc-100 px-1.5 py-1.5 text-xs transition-colors last:border-b-0 hover:bg-brand-50/60"
+    >
+      <span className="text-zinc-600 group-hover:text-brand group-hover:underline">{label}</span>
+      <span className="inline-flex items-center gap-1">
+        <span className={valueClass}>{value}</span>
+        <ChevronRight aria-hidden="true" className="size-3 text-zinc-300 group-hover:text-brand" />
+      </span>
+    </Link>
   );
 }
 
-function Targets({ lines, title }: { lines: EmployeeProfile["targets"]["today"]; title: string }) {
+function Targets({ lines, title, href }: { lines: EmployeeProfile["targets"]["today"]; title: string; href: string }) {
   const set = lines.filter((l) => l.target !== null);
   return (
     <div>
@@ -133,6 +153,8 @@ function Targets({ lines, title }: { lines: EmployeeProfile["targets"]["today"];
         set.map((l) => (
           <Row
             key={l.label}
+            href={href}
+            hint="Open on the Targets page"
             label={l.label}
             value={
               <span className="inline-flex items-center gap-1">
@@ -172,6 +194,26 @@ export default async function EmployeeProfilePage({ params, searchParams }: Page
   const isPreset = (from: string) => p.range.from === from && p.range.to === p.today;
   const rangeLabel = p.range.from === p.range.to ? formatListedOn(p.range.from) : `${formatListedOn(p.range.from)} – ${formatListedOn(p.range.to)}`;
   const openLeads = p.pipeline.filter((s) => s.stage !== "booked" && s.stage !== "lost_lead").reduce((n, s) => n + s.count, 0);
+  // Where each figure leads (owner, 16 Nov 2026): the list behind it, filtered to this person.
+  const who = p.person.id;
+  const span = { from: p.range.from, to: p.range.to };
+  const url = (path: string, params: Record<string, string | undefined>) => {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) if (v) q.set(k, v);
+    return `${path}?${q}`;
+  };
+  const OPEN_STAGES = p.pipeline.map((s) => s.stage).filter((s) => s !== "booked" && s !== "lost_lead");
+  const links = {
+    leads: (extra: Record<string, string | undefined> = {}) => url("/dashboard/leads", { owner: who, project: "all", ...extra }),
+    won: url("/dashboard/leads/won", { owner: who, project: "all", dateField: "decided", ...span }),
+    lost: (reason?: string | null) => url("/dashboard/leads/lost", { owner: who, project: "all", dateField: "decided", ...span, lostReason: reason ?? undefined }),
+    todos: (bucket: string) => url("/dashboard/leads/todos", { bucket, owner: who, project: "all" }),
+    meetings: url("/dashboard/meetings", { organizer: who, status: "completed", ...span }),
+    bookings: (extra: Record<string, string | undefined> = {}) => url("/dashboard/bookings", { agent: who, project: "all", ...extra }),
+    signins: url("/dashboard/settings/security", { sq: p.person.email, sevent: "sign_in", sfrom: span.from, sto: span.to }),
+    targets: url("/dashboard/targets", { q: p.person.name }),
+    attendance: `/dashboard/hr/attendance/${who}`,
+  };
 
   return (
     <PageStack>
@@ -238,12 +280,12 @@ export default async function EmployeeProfilePage({ params, searchParams }: Page
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <MiniStat label="Calls" value={<>{m.calls} <Trend now={m.calls} before={p.previous.calls} /></>} caption={`${m.callsVerified} verified · ${m.callsQualified} qualified`} />
-        <MiniStat label="Call minutes" value={m.callMin === null ? "—" : String(m.callMin)} caption={`${m.callsTimed} of ${m.calls} timed`} />
-        <MiniStat label="Meetings held" value={<>{m.meetings} <Trend now={m.meetings} before={p.previous.meetings} /></>} caption="Completed in range" />
-        <MiniStat label="Bookings" value={<>{p.bookings.made} <Trend now={p.bookings.made} before={p.previous.bookingsMade} /></>} caption={p.bookings.made ? formatPrice(p.bookings.value) : "Made in range"} />
-        <MiniStat label="Win rate" value={<>{m.winPct === null ? "—" : `${m.winPct}%`} {m.winPct !== null && p.previous.winPct !== null ? <Trend now={m.winPct} before={p.previous.winPct} suffix="%" /> : null}</>} caption={`${m.booked} won · ${m.lost} lost`} />
-        <MiniStat label="Score" value={p.score ? String(Math.round(p.score.score)) : "—"} caption={p.score?.provisional ? "Provisional" : "Assignment score"} />
+        <MiniStat href="#calls" label="Calls" value={<>{m.calls} <Trend now={m.calls} before={p.previous.calls} /></>} caption={`${m.callsVerified} verified · ${m.callsQualified} qualified`} />
+        <MiniStat href="#calls" label="Call minutes" value={m.callMin === null ? "—" : String(m.callMin)} caption={`${m.callsTimed} of ${m.calls} timed`} />
+        <MiniStat href={links.meetings} label="Meetings held" value={<>{m.meetings} <Trend now={m.meetings} before={p.previous.meetings} /></>} caption="Completed in range" />
+        <MiniStat href={links.bookings(span)} label="Bookings" value={<>{p.bookings.made} <Trend now={p.bookings.made} before={p.previous.bookingsMade} /></>} caption={p.bookings.made ? formatPrice(p.bookings.value) : "Made in range"} />
+        <MiniStat href={links.won} label="Win rate" value={<>{m.winPct === null ? "—" : `${m.winPct}%`} {m.winPct !== null && p.previous.winPct !== null ? <Trend now={m.winPct} before={p.previous.winPct} suffix="%" /> : null}</>} caption={`${m.booked} won · ${m.lost} lost`} />
+        <MiniStat href="/dashboard/settings/assignment" label="Score" value={p.score ? String(Math.round(p.score.score)) : "—"} caption={p.score?.provisional ? "Provisional" : "Assignment score"} />
       </div>
 
       <nav aria-label="Profile sections" className="-mx-1 flex gap-1.5 overflow-x-auto px-1 py-1 print:hidden">
@@ -256,7 +298,7 @@ export default async function EmployeeProfilePage({ params, searchParams }: Page
 
       <p className="-mt-3 text-[11px] text-zinc-500">
         ↑ / ↓ compare with the same number of days just before: {formatListedOn(p.previous.from)}
-        {p.previous.from !== p.previous.to ? ` – ${formatListedOn(p.previous.to)}` : ""}.
+        {p.previous.from !== p.previous.to ? ` – ${formatListedOn(p.previous.to)}` : ""}. Click a figure to open the list behind it.
       </p>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -270,15 +312,19 @@ export default async function EmployeeProfilePage({ params, searchParams }: Page
                 <span className="text-[10px] font-black tracking-[0.1em] text-zinc-500 uppercase">Figure</span>
                 <span className="text-right text-[10px] font-black tracking-[0.1em] text-zinc-500 uppercase">This agent</span>
                 <span className="text-right text-[10px] font-black tracking-[0.1em] text-zinc-500 uppercase">Team avg</span>
-                {[
-                  ["Calls", m.calls, p.teamCompare.avg.calls],
-                  ["Meetings held", m.meetings, p.teamCompare.avg.meetings],
-                  ["Leads won", m.booked, p.teamCompare.avg.booked],
-                  ["Win rate", m.winPct === null ? "—" : `${m.winPct}%`, p.teamCompare.avg.winPct === null ? "—" : `${p.teamCompare.avg.winPct}%`],
-                ].map(([label, mine, avg]) => (
+                {(
+                  [
+                    ["Calls", m.calls, p.teamCompare.avg.calls, "#calls"],
+                    ["Meetings held", m.meetings, p.teamCompare.avg.meetings, links.meetings],
+                    ["Leads won", m.booked, p.teamCompare.avg.booked, links.won],
+                    ["Win rate", m.winPct === null ? "—" : `${m.winPct}%`, p.teamCompare.avg.winPct === null ? "—" : `${p.teamCompare.avg.winPct}%`, links.won],
+                  ] as const
+                ).map(([label, mine, avg, href]) => (
                   <div key={String(label)} className="contents">
                     <span className="border-t border-zinc-100 py-1 text-zinc-600">{label}</span>
-                    <span className="border-t border-zinc-100 py-1 text-right font-black tabular-nums">{mine}</span>
+                    <Link href={href} title={`Open: ${label}`} className="border-t border-zinc-100 py-1 text-right font-black tabular-nums hover:text-brand hover:underline">
+                      {mine}
+                    </Link>
                     <span className="border-t border-zinc-100 py-1 text-right text-zinc-600 tabular-nums">{avg}</span>
                   </div>
                 ))}
@@ -297,41 +343,41 @@ export default async function EmployeeProfilePage({ params, searchParams }: Page
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
         <Section id="pipeline" title={`Pipeline now · ${openLeads} open`}>
           {p.pipeline.map((s) => (
-            <Row key={s.stage} label={STAGE_LABELS[s.stage]} value={s.count} />
+            <Row key={s.stage} label={STAGE_LABELS[s.stage]} value={s.count} href={links.leads({ stage: s.stage })} />
           ))}
-          <Row label="Never touched (open)" value={p.untouched} tone={p.untouched ? "amber" : undefined} />
-          <Link href={`/dashboard/leads?owner=${p.person.id}`} className="mt-2 inline-block text-xs font-bold text-brand hover:underline">
+          <Row label="Never touched (open)" value={p.untouched} tone={p.untouched ? "amber" : undefined} href={links.leads({ stage: "new_lead" })} hint="Open their New Lead leads (never-touched leads are among them)" />
+          <Link href={links.leads()} className="mt-2 inline-block text-xs font-bold text-brand hover:underline">
             Open their leads →
           </Link>
         </Section>
 
         <Section id="follow-ups" title="Follow-ups">
-          <Row label="Overdue now" value={p.followUps.overdue} tone={p.followUps.overdue ? "rose" : undefined} />
-          <Row label="Due later today" value={p.followUps.today} />
-          <Row label="Upcoming" value={p.followUps.upcoming} />
+          <Row label="Overdue now" value={p.followUps.overdue} tone={p.followUps.overdue ? "rose" : undefined} href="#overdue" hint="Show the overdue follow-ups below" />
+          <Row label="Due later today" value={p.followUps.today} href={links.todos("today")} hint="Open today's follow-ups in To-dos" />
+          <Row label="Upcoming" value={p.followUps.upcoming} href={links.leads({ followUp: "upcoming", sort: "next", dir: "asc" })} hint="Open their leads with a follow-up coming up" />
           <p className="mt-3 mb-1 text-[10px] font-black tracking-[0.1em] text-zinc-500 uppercase">In range</p>
           <Row label="Due" value={m.fuDue} />
-          <Row label="Done" value={`${m.fuDone}${m.fuPct === null ? "" : ` (${m.fuPct}%)`}`} />
+          <Row label="Done" value={`${m.fuDone}${m.fuPct === null ? "" : ` (${m.fuPct}%)`}`} href="#activity" hint="See completed follow-ups in Recent activity" />
           <Row label="Done on time" value={p.followUps.doneOnTime} tone="brand" />
           <Row label="Done late" value={p.followUps.doneLate} tone={p.followUps.doneLate ? "amber" : undefined} />
         </Section>
 
         <Section title="Leads, meetings and bookings">
-          <Row label="Leads assigned in range" value={m.leads} />
-          <Row label="Still open of those" value={m.open} />
+          <Row label="Leads assigned in range" value={m.leads} href={links.leads(span)} hint="Open their leads added in this range" />
+          <Row label="Still open of those" value={m.open} href={links.leads({ ...span, stage: OPEN_STAGES.join(",") })} hint="Open those still in an open stage" />
           <Row label="Avg time to first touch" value={m.avgFirstTouchMs === null ? "—" : formatMinutes(Math.round(m.avgFirstTouchMs / 60_000))} />
-          <Row label="Meetings held" value={m.meetings} />
-          <Row label="Bookings made" value={p.bookings.made} />
-          <Row label="Closed won in range" value={p.bookings.won} tone="brand" />
-          <Row label="Open bookings now" value={p.bookings.open} />
-          <Row label="CRM sign-ins" value={m.signIns} />
+          <Row label="Meetings held" value={m.meetings} href={links.meetings} />
+          <Row label="Bookings made" value={p.bookings.made} href={links.bookings(span)} />
+          <Row label="Closed won in range" value={p.bookings.won} tone="brand" href={links.bookings({ stage: "confirmed" })} hint="Open their Closed Won bookings" />
+          <Row label="Open bookings now" value={p.bookings.open} href={links.bookings()} hint="Open all their bookings" />
+          <Row label="CRM sign-ins" value={m.signIns} href={links.signins} hint="Open their sign-ins in Settings → Security" />
         </Section>
 
         <Section id="targets" title="Targets">
           <div className="space-y-3">
-            <Targets title="Today" lines={p.targets.today} />
-            <Targets title="This week" lines={p.targets.week} />
-            <Targets title="This month" lines={p.targets.month} />
+            <Targets title="Today" lines={p.targets.today} href={url("/dashboard/targets", { q: p.person.name, period: "daily" })} />
+            <Targets title="This week" lines={p.targets.week} href={url("/dashboard/targets", { q: p.person.name, period: "weekly" })} />
+            <Targets title="This month" lines={p.targets.month} href={url("/dashboard/targets", { q: p.person.name, period: "monthly" })} />
           </div>
         </Section>
 
@@ -343,11 +389,11 @@ export default async function EmployeeProfilePage({ params, searchParams }: Page
             </span>
           </div>
           <p className="mb-1 text-[10px] font-black tracking-[0.1em] text-zinc-500 uppercase">This month</p>
-          <Row label="Working days so far" value={p.attendance.month.workingDays} />
-          <Row label="Present" value={p.attendance.month.present + p.attendance.month.late} />
-          <Row label="Late" value={p.attendance.month.late} tone={p.attendance.month.late ? "amber" : undefined} />
-          <Row label="Absent" value={p.attendance.month.absent} tone={p.attendance.month.absent ? "rose" : undefined} />
-          <Row label="Hours worked" value={formatMinutes(p.attendance.month.minutes)} />
+          <Row label="Working days so far" value={p.attendance.month.workingDays} href={links.attendance} hint="Open day-by-day attendance" />
+          <Row label="Present" value={p.attendance.month.present + p.attendance.month.late} href={links.attendance} hint="Open day-by-day attendance" />
+          <Row label="Late" value={p.attendance.month.late} tone={p.attendance.month.late ? "amber" : undefined} href={links.attendance} hint="Open day-by-day attendance" />
+          <Row label="Absent" value={p.attendance.month.absent} tone={p.attendance.month.absent ? "rose" : undefined} href={links.attendance} hint="Open day-by-day attendance" />
+          <Row label="Hours worked" value={formatMinutes(p.attendance.month.minutes)} href={links.attendance} hint="Open day-by-day attendance" />
           <Link href={`/dashboard/hr/attendance/${p.person.id}`} className="mt-2 inline-block text-xs font-bold text-brand hover:underline">
             Day-by-day attendance →
           </Link>
@@ -412,7 +458,7 @@ export default async function EmployeeProfilePage({ params, searchParams }: Page
         </Section>
 
         <Section id="lost" title="Why leads were lost">
-          {p.lostByReason.length === 0 ? <p className="text-xs text-zinc-500">No leads lost in this range.</p> : p.lostByReason.map((r) => <Row key={r.reason} label={r.reason} value={r.count} />)}
+          {p.lostByReason.length === 0 ? <p className="text-xs text-zinc-500">No leads lost in this range.</p> : p.lostByReason.map((r) => <Row key={r.reason} label={r.reason} value={r.count} href={links.lost(r.reasonId)} hint={`Open their leads lost for: ${r.reason}`} />)}
         </Section>
 
         <Section title="Lead sources (created in range)">
@@ -426,11 +472,17 @@ export default async function EmployeeProfilePage({ params, searchParams }: Page
                 </span>
               ))}
               {p.bySource.map((r) => (
-                <div key={r.source} className="contents">
+                <div key={r.sourceId} className="contents">
                   <span className="border-t border-zinc-100 py-1">{r.source}</span>
-                  <span className="border-t border-zinc-100 py-1 text-right tabular-nums">{r.leads}</span>
-                  <span className="border-t border-zinc-100 py-1 text-right font-bold text-brand tabular-nums">{r.won}</span>
-                  <span className="border-t border-zinc-100 py-1 text-right text-zinc-600 tabular-nums">{r.lost}</span>
+                  <Link href={links.leads({ ...span, source: r.sourceId })} title={`Open their ${r.source} leads`} className="border-t border-zinc-100 py-1 text-right tabular-nums hover:text-brand hover:underline">
+                    {r.leads}
+                  </Link>
+                  <Link href={links.leads({ ...span, source: r.sourceId, stage: "booked" })} title={`Open their won ${r.source} leads`} className="border-t border-zinc-100 py-1 text-right font-bold text-brand tabular-nums hover:underline">
+                    {r.won}
+                  </Link>
+                  <Link href={links.leads({ ...span, source: r.sourceId, stage: "lost_lead" })} title={`Open their lost ${r.source} leads`} className="border-t border-zinc-100 py-1 text-right text-zinc-600 tabular-nums hover:text-brand hover:underline">
+                    {r.lost}
+                  </Link>
                 </div>
               ))}
             </div>

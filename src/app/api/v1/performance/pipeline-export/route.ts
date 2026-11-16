@@ -7,7 +7,7 @@ import { notFound } from "@/server/errors";
 import { errorResponse, queryObject } from "@/server/http";
 import { getProjectScope } from "@/server/project-scope";
 
-/** GET ?team&q — "Pipeline by agent" as CSV, for the project selected in the header (16 Nov 2026). */
+/** GET ?team&q&from&to — "Pipeline by agent" as CSV (talk time over from–to), for the project selected in the header (16 Nov 2026). */
 export async function GET(req: NextRequest) {
   await connection();
   try {

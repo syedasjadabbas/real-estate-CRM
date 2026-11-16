@@ -159,15 +159,16 @@ export async function employeeProfile(db: Database, actor: Actor, userId: string
     .limit(200);
 
   const lostByReason = await db
-    .select({ reason: lostReasons.name, n: sql<number>`count(*)::int` })
+    .select({ reasonId: leads.lostReasonId, reason: lostReasons.name, n: sql<number>`count(*)::int` })
     .from(leads)
     .leftJoin(lostReasons, eq(lostReasons.id, leads.lostReasonId))
     .where(and(eq(leads.ownerId, userId), eq(leads.stage, "lost_lead"), isNull(leads.deletedAt), gte(leads.stageChangedAt, range.window.start), lt(leads.stageChangedAt, range.window.end)))
-    .groupBy(lostReasons.name)
+    .groupBy(leads.lostReasonId, lostReasons.name)
     .orderBy(desc(sql`count(*)`));
 
   const bySource = await db
     .select({
+      sourceId: leadSources.id,
       source: leadSources.name,
       leads: sql<number>`count(*)::int`,
       won: sql<number>`count(*) filter (where ${leads.stage} = 'booked')::int`,
@@ -176,7 +177,7 @@ export async function employeeProfile(db: Database, actor: Actor, userId: string
     .from(leads)
     .innerJoin(leadSources, eq(leadSources.id, leads.sourceId))
     .where(and(eq(leads.ownerId, userId), isNull(leads.deletedAt), gte(leads.createdAt, range.window.start), lt(leads.createdAt, range.window.end)))
-    .groupBy(leadSources.name)
+    .groupBy(leadSources.id, leadSources.name)
     .orderBy(desc(sql`count(*)`));
 
   // Calls and completed meetings per day (at most the last 31 days of the range).
@@ -232,7 +233,7 @@ export async function employeeProfile(db: Database, actor: Actor, userId: string
     teamCompare,
     overdueList,
     asOf: now,
-    lostByReason: lostByReason.map((r) => ({ reason: r.reason ?? "No reason given", count: r.n })),
+    lostByReason: lostByReason.map((r) => ({ reasonId: r.reasonId, reason: r.reason ?? "No reason given", count: r.n })),
     bySource,
     daily,
     notes,

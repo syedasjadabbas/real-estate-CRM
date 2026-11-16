@@ -1,6 +1,6 @@
 import { leadLink, notify, teamManagersOf } from "@/modules/notifications/service";
 import { assertPhoneEditable, notifyNameChange } from "@/modules/contacts/agent-edits";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { auditClient, logClientActivity } from "@/modules/clients/support";
 import { copyLeadPhonesToClient, findCustomer, leadsWithAnyNumber, lockNumbers, normalizeExtraPhones, replaceLeadPhones, leadPhonesOf } from "@/modules/contacts/phones";
 import { resolveCity } from "@/modules/cities/resolve";
@@ -10,6 +10,7 @@ import {
   budgetRanges,
   followUps,
   leadFavorites,
+  files,
   leadReviews,
   leadSources,
   leads,
@@ -24,7 +25,7 @@ import { generateLeadCode } from "./code";
 import { creationSummary, describeChanges, lostReasonName } from "./history";
 import { STAGE_LABELS } from "./constants";
 import { normalizePhone } from "./phone";
-import { assertCan, canAccessLead, canAssignTo, canDo, leadScope } from "./policy";
+import { assertCan, canAccessLead, canAssignTo, canDo, canRateCalls, leadScope } from "./policy";
 import { chooseOwner, recordAssignment } from "./assignment";
 import { assertStageChange, OPEN_BOOKING_MESSAGE } from "./rules";
 import { assertWorkable, initialVerification, notifyVerifiers } from "./verification";
@@ -547,15 +548,51 @@ export async function setFavorite(db: Database, actor: Actor, leadId: string, fa
   });
 }
 
+/**
+ * A note or call review on a lead (16 Nov 2026). Admins, Super Admins and Managers may score the call
+ * 1–5 and point it at one of the lead's call recordings; the lead's owner is notified when someone
+ * else writes it. The owner at the time is stored, so Performance averages each agent's own calls.
+ */
 export async function addReview(db: Database, actor: Actor, leadId: string, input: unknown) {
   assertCan(actor, "review");
-  const { body } = parse(reviewSchema, input);
+  const { body, rating, recordingId } = parse(reviewSchema, input);
+  if (rating !== null && !canRateCalls(actor)) {
+    throw new AppError("VALIDATION_FAILED", "Only an Admin can score a call.", { fields: { rating: "Only an Admin can score a call" } });
+  }
   return db.transaction(async (tx) => {
     const { lead } = await loadAccessibleLead(tx, actor, leadId);
     assertWorkable(actor, lead);
-    const [review] = await tx.insert(leadReviews).values({ leadId, reviewerId: actor.id, body }).returning({ id: leadReviews.id });
-    await logActivity(tx, { leadId, actorId: actor.id, type: "review", body });
-    await audit(tx, actor, "lead.review", leadId, null, { reviewId: review.id, body });
+    if (recordingId) {
+      const [rec] = await tx
+        .select({ id: files.id })
+        .from(files)
+        .where(and(eq(files.id, recordingId), eq(files.leadId, leadId), eq(files.kind, "call_recording"), isNull(files.deletedAt)))
+        .limit(1);
+      if (!rec) throw new AppError("VALIDATION_FAILED", "Check the highlighted fields.", { fields: { recordingId: "Choose a recording of this lead" } });
+    }
+    const [review] = await tx
+      .insert(leadReviews)
+      .values({ leadId, reviewerId: actor.id, body, rating, recordingId, agentId: lead.ownerId })
+      .returning({ id: leadReviews.id });
+    await logActivity(tx, { leadId, actorId: actor.id, type: "review", body, data: rating !== null ? { rating, recordingId } : recordingId ? { recordingId } : undefined });
+    await audit(tx, actor, "lead.review", leadId, null, { reviewId: review.id, body, rating, recordingId });
+    if (lead.ownerId && lead.ownerId !== actor.id) {
+      const score = rating !== null ? ` · ${rating}/5` : "";
+      await notify(
+        tx,
+        [
+          {
+            userId: lead.ownerId,
+            type: "lead_reviewed",
+            title: `${rating !== null ? "Call review" : "Note"} on ${lead.name}${score}`,
+            body: `${actor.name}: ${body.length > 140 ? `${body.slice(0, 137)}…` : body}`,
+            link: leadLink(leadId),
+            dedupeKey: `lead_reviewed:${review.id}`,
+          },
+        ],
+        actor.id,
+      );
+    }
   });
 }
 

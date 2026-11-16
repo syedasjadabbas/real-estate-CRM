@@ -92,8 +92,8 @@ export async function decideLostAction(approvalId: string, approve: boolean, com
   return run((db, actor) => decideLostRequest(db, actor, approvalId, { approve, comment }));
 }
 
-export async function addReviewAction(leadId: string, body: string) {
-  return run((db, actor) => addReview(db, actor, leadId, { body }));
+export async function addReviewAction(leadId: string, body: string, rating: number | null = null, recordingId: string | null = null) {
+  return run((db, actor) => addReview(db, actor, leadId, { body, rating, recordingId }));
 }
 
 /** Claim an unassigned lead; the first successful claim wins. */

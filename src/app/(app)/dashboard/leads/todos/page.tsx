@@ -77,7 +77,7 @@ export default function TodosPage({ searchParams }: PageProps<"/dashboard/leads/
     const listsMine = bucket === "mine";
     const other = listsTasks || listsMeetings || listsMine;
     const [{ counts: leadCounts, items, page: leadPage, pageCount: leadPages }, overdue, lateMeetings, mine] = await Promise.all([
-      leadTodos(db, actor, projectId, other ? "overdue" : bucket, undefined, other ? 1 : params.page, { q: params.q, owner: params.owner }),
+      leadTodos(db, actor, params.project === "all" ? null : projectId, other ? "overdue" : bucket, undefined, other ? 1 : params.page, { q: params.q, owner: params.owner }),
       overdueTasks(db, actor, undefined, listsTasks ? params.page : 1),
       overdueMeetings(db, actor, undefined, listsMeetings ? params.page : 1),
       openTodos(db, actor, listsMine ? params.page : 1),
@@ -94,6 +94,7 @@ export default function TodosPage({ searchParams }: PageProps<"/dashboard/leads/
       if (key !== "tasks" && key !== "meetings" && key !== "mine") {
         if (params.q) p.set("q", params.q);
         if (params.owner) p.set("owner", params.owner);
+        if (params.project === "all") p.set("project", "all");
       }
       return `/dashboard/leads/todos?${p}`;
     };
@@ -150,6 +151,7 @@ export default function TodosPage({ searchParams }: PageProps<"/dashboard/leads/
         {!other ? (
           <form method="get" action="/dashboard/leads/todos" role="search" aria-label="Filter the lead lists" className="flex flex-wrap items-center gap-2">
             <input type="hidden" name="bucket" value={bucket} />
+            {params.project === "all" ? <input type="hidden" name="project" value="all" /> : null}
             <input
               type="search"
               name="q"

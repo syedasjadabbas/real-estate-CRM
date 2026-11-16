@@ -27,15 +27,16 @@ import { forbidden } from "@/server/errors";
 import { BUSINESS_TIME_ZONE, LEAD_STAGES, PAGE_SIZE, UNATTENDED_HOURS, type LeadStage, NEW_LEAD_HOURS } from "./constants";
 import { formatPhone } from "./phone";
 import { leadPhonesOf } from "@/modules/contacts/phones";
-import { canAccessLead, canDo, leadScope } from "./policy";
+import { canAccessLead, canDo, canRateCalls, leadScope } from "./policy";
 import { followUpLeadActive, hasOpenBooking, loadAccessibleLead, pageWithin, scopeFilter, teamMemberIds } from "./support";
 import { leadListQuerySchema, type LeadListQuery } from "./validation";
 
 const owner = alias(users, "owner");
 const original = alias(leads, "original");
 
-function baseConditions(actor: Actor, members: string[], projectId: string): SQL[] {
-  return [isNull(leads.deletedAt), eq(leads.projectId, projectId), scopeFilter(actor, members)];
+/** `projectId` null = every project (a work-profile link, 16 Nov 2026); the actor's scope still applies. */
+function baseConditions(actor: Actor, members: string[], projectId: string | null): SQL[] {
+  return [isNull(leads.deletedAt), projectId ? eq(leads.projectId, projectId) : sql`true`, scopeFilter(actor, members)];
 }
 
 function searchCondition(q: string | undefined): SQL | undefined {
@@ -81,6 +82,7 @@ function filterConditions(query: LeadListQuery, now: Date): SQL[] {
     if (query.followUp === "1d") out.push(and(gte(f, now), lte(f, inDays(1)))!);
     if (query.followUp === "2d") out.push(and(gte(f, now), lte(f, inDays(2)))!);
     if (query.followUp === "after2d") out.push(gt(f, inDays(2)));
+    if (query.followUp === "upcoming") out.push(gte(f, now));
   }
   const dateCol = query.dateField === "updated" ? leads.updatedAt : query.dateField === "decided" ? leads.stageChangedAt : leads.createdAt;
   if (query.period) {
@@ -201,7 +203,7 @@ const listSelection = {
 
 export type LeadListRow = Awaited<ReturnType<typeof listLeads>>["rows"][number];
 
-export async function listLeads(db: Database, actor: Actor, projectId: string, rawQuery: unknown, now = new Date()) {
+export async function listLeads(db: Database, actor: Actor, projectId: string | null, rawQuery: unknown, now = new Date()) {
   if (!canDo(actor, "view")) throw forbidden();
   const query = leadListQuerySchema.parse(rawQuery ?? {});
   const members = await teamMemberIds(db, actor);
@@ -355,9 +357,20 @@ export async function getLeadDetail(db: Database, actor: Actor, leadId: string) 
       .where(and(eq(approvals.leadId, leadId), eq(approvals.status, "pending")))
       .limit(1),
     db
-      .select({ id: leadReviews.id, body: leadReviews.body, createdAt: leadReviews.createdAt, reviewerName: users.name, reviewerRole: users.role })
+      .select({
+        id: leadReviews.id,
+        body: leadReviews.body,
+        rating: leadReviews.rating,
+        recordingId: leadReviews.recordingId,
+        recordingName: files.originalName,
+        recordingAt: files.createdAt,
+        createdAt: leadReviews.createdAt,
+        reviewerName: users.name,
+        reviewerRole: users.role,
+      })
       .from(leadReviews)
       .innerJoin(users, eq(users.id, leadReviews.reviewerId))
+      .leftJoin(files, and(eq(files.id, leadReviews.recordingId), isNull(files.deletedAt)))
       .where(eq(leadReviews.leadId, leadId))
       .orderBy(desc(leadReviews.createdAt)),
     lead.lostReasonId
@@ -418,6 +431,8 @@ export async function getLeadDetail(db: Database, actor: Actor, leadId: string) 
       lostNeedsBookingCancelled: (canDo(actor, "markLostDirect") || canDo(actor, "requestLost")) && openBooking && workable,
       decideLost: canDo(actor, "decideLost") && Boolean(pendingRequest[0]),
       review: canDo(actor, "review") && workable,
+      /** Score a call 1–5 in a review (Admins, Super Admins, Managers; 16 Nov 2026). */
+      rateCalls: canRateCalls(actor) && workable,
       scheduleFollowUp: canDo(actor, "edit") && !closed && workable,
       verify: verifier && lead.verification === "pending",
       resubmit: lead.verification === "rejected" && (actor.role !== "agent" || lead.ownerId === actor.id),
@@ -444,7 +459,7 @@ export type TodoBucket = (typeof TODO_BUCKETS)[number];
 export async function leadTodos(
   db: Database,
   actor: Actor,
-  projectId: string,
+  projectId: string | null,
   bucket: TodoBucket,
   now = new Date(),
   requestedPage: unknown = 1,
@@ -646,6 +661,7 @@ export async function reviewsFeed(db: Database, actor: Actor, projectId: string,
     .select({
       id: leadReviews.id,
       body: leadReviews.body,
+      rating: leadReviews.rating,
       createdAt: leadReviews.createdAt,
       reviewerName: users.name,
       reviewerRole: users.role,

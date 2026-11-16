@@ -2,7 +2,7 @@
 
 import { extraPhoneSlots } from "@/modules/contacts/constants";
 import { OTHER_CITY } from "@/modules/cities/constants";
-import { Check } from "lucide-react";
+import { Check, Star } from "lucide-react";
 import { useState, useTransition, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -25,6 +25,7 @@ import { formatDateTime } from "../format";
 import { ApprovalActions } from "./approval-actions";
 import { FollowUpForm, textareaClass } from "./follow-up-dialog";
 import { LeadFields, selectClass, type LeadFormValues } from "./lead-fields";
+import { RatingStars } from "./rating-stars";
 
 export function PanelCard({ title, children, className, id }: { title: string; children: ReactNode; className?: string; id?: string }) {
   return (
@@ -329,17 +330,34 @@ export function NotePanel({ leadId, canEdit }: { leadId: string; canEdit: boolea
   );
 }
 
-export function ReviewsPanel({ detail }: { detail: LeadDetail }) {
+/**
+ * Notes and call reviews on a lead. Admins, Super Admins and Managers can also score the call 1–5
+ * and say which recording they listened to; the lead's owner is notified (16 Nov 2026).
+ */
+export function ReviewsPanel({ detail, recordings = [] }: { detail: LeadDetail; recordings?: { id: string; name: string; createdAt: Date | string; uploadedBy: string | null }[] }) {
   const [body, setBody] = useState("");
+  const [rating, setRating] = useState<number | null>(null);
+  const [recordingId, setRecordingId] = useState("");
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [pending, startTransition] = useTransition();
   if (!detail.permissions.review && detail.reviews.length === 0) return null;
+  const rate = detail.permissions.rateCalls;
   return (
-    <PanelCard title="Notes / reviews">
+    <PanelCard title="Call reviews & notes">
       <div className="space-y-3">
         {detail.reviews.length === 0 ? <p className="text-xs text-zinc-500">No reviews yet.</p> : null}
         {detail.reviews.map((r) => (
           <div key={r.id} className="rounded-xl border border-zinc-200/80 px-3 py-2 text-xs shadow-hairline">
+            {r.rating !== null || r.recordingId ? (
+              <p className="mb-1 flex flex-wrap items-center gap-2">
+                {r.rating !== null ? <RatingStars rating={r.rating} /> : null}
+                {r.recordingId ? (
+                  <span className="text-[11px] font-semibold text-zinc-500">
+                    {r.recordingName ? `Call: ${r.recordingName}${r.recordingAt ? ` · ${formatDateTime(r.recordingAt)}` : ""}` : "Call recording (since removed)"}
+                  </span>
+                ) : null}
+              </p>
+            ) : null}
             <p className="whitespace-pre-line text-zinc-800">{r.body}</p>
             <p className="mt-1 text-[11px] text-zinc-500">
               {r.reviewerName} ({ROLE_LABELS[r.reviewerRole]}) · {formatDateTime(r.createdAt)}
@@ -351,22 +369,65 @@ export function ReviewsPanel({ detail }: { detail: LeadDetail }) {
             <label className="sr-only" htmlFor="new-review">
               Note or review
             </label>
-            <textarea id="new-review" rows={2} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Interest, budget, next step, or feedback…" className={textareaClass} disabled={pending} />
+            {rate ? (
+              <div className="space-y-2 rounded-xl bg-zinc-50 p-2.5">
+                <p className="text-[11px] font-bold text-zinc-600">Call review (optional)</p>
+                <div className="flex flex-wrap items-center gap-1" role="radiogroup" aria-label="Score the call, 1 to 5">
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      role="radio"
+                      aria-checked={rating === n}
+                      aria-label={`${n} out of 5`}
+                      title={["Poor", "Needs work", "OK", "Good", "Excellent"][n - 1]}
+                      disabled={pending}
+                      onClick={() => setRating((r) => (r === n ? null : n))}
+                      className="rounded-md p-0.5 hover:bg-amber-50"
+                    >
+                      <Star aria-hidden="true" className={cn("size-5", rating !== null && n <= rating ? "fill-amber-400 text-amber-400" : "text-zinc-300")} />
+                    </button>
+                  ))}
+                  <span className="ml-1 text-[11px] text-zinc-500">{rating === null ? "No score" : `${rating}/5 · ${["Poor", "Needs work", "OK", "Good", "Excellent"][rating - 1]}`}</span>
+                </div>
+                {recordings.length ? (
+                  <>
+                    <label htmlFor="review-recording" className="sr-only">
+                      Which call
+                    </label>
+                    <select id="review-recording" value={recordingId} onChange={(e) => setRecordingId(e.target.value)} className={selectClass} disabled={pending}>
+                      <option value="">Which call? (optional)</option>
+                      {recordings.map((rec) => (
+                        <option key={rec.id} value={rec.id}>
+                          {formatDateTime(rec.createdAt)} · {rec.name}
+                          {rec.uploadedBy ? ` · ${rec.uploadedBy}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                ) : (
+                  <p className="text-[11px] text-zinc-500">No call recordings on this lead yet.</p>
+                )}
+              </div>
+            ) : null}
+            <textarea id="new-review" rows={2} value={body} onChange={(e) => setBody(e.target.value)} placeholder={rate ? "What went well, what to improve, next step…" : "Interest, budget, next step, or feedback…"} className={textareaClass} disabled={pending} />
             <Button
               variant="secondary"
               size="lg"
               disabled={!body.trim() || pending}
               onClick={() =>
                 startTransition(async () => {
-                  const result = await addReviewAction(detail.lead.id, body);
+                  const result = await addReviewAction(detail.lead.id, body, rating, recordingId || null);
                   if (result.ok) {
                     setBody("");
-                    setMsg({ text: "Saved.", ok: true });
+                    setRating(null);
+                    setRecordingId("");
+                    setMsg({ text: detail.lead.ownerId && rate ? "Saved. The lead's owner has been notified." : "Saved.", ok: true });
                   } else setMsg({ text: result.message, ok: false });
                 })
               }
             >
-              Add note / review
+              {rating !== null ? "Save call review" : "Add note / review"}
             </Button>
             <Status message={msg?.text ?? null} ok={msg?.ok} />
           </div>

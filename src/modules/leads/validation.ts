@@ -75,7 +75,18 @@ export const stageChangeSchema = z.object({
 });
 export const assignSchema = z.object({ ownerId: z.uuid("Choose an owner") });
 export const noteSchema = z.object({ body: z.string().trim().min(1, "Write a note").max(4000) });
-export const reviewSchema = z.object({ body: z.string().trim().min(1, "Write a review").max(4000) });
+/** A note or call review. Rating (1–5) and the reviewed recording are optional (16 Nov 2026). */
+export const reviewSchema = z.object({
+  body: z.string().trim().min(1, "Write a review").max(4000),
+  rating: z.coerce.number().int("Pick 1 to 5").min(1, "Pick 1 to 5").max(5, "Pick 1 to 5").nullable().optional().default(null),
+  recordingId: z
+    .string()
+    .trim()
+    .optional()
+    .nullable()
+    .transform((v) => (v ? v : null))
+    .pipe(z.uuid("Choose a recording").nullable()),
+});
 export const followUpSchema = z.object({
   dueAt: z.coerce.date({ error: "Pick a date and time" }),
   note: optionalText(1000),

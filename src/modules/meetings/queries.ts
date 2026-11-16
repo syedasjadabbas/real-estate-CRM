@@ -82,6 +82,8 @@ export async function listMeetings(db: Database, actor: Actor, rawQuery: unknown
       leadName: leads.name,
       leadCode: leads.code,
       leadOwnerId: leads.ownerId,
+      // Meeting photos (16 Nov 2026), shown as a camera count in the list.
+      photos: sql<number>`(select count(*)::int from files f where f.meeting_id = ${meetings.id} and f.kind = 'meeting_photo' and f.deleted_at is null)`,
     })
     .from(meetings)
     .innerJoin(organizer, eq(organizer.id, meetings.organizerId))

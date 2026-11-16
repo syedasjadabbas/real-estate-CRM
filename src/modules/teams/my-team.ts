@@ -2,10 +2,12 @@ import { and, asc, desc, eq, ilike, inArray, isNull, lt, notInArray, or, sql } f
 import { z } from "zod";
 import { dailySheet } from "@/modules/attendance/service";
 import { businessToday } from "@/modules/bookings/today";
+import { agentScores } from "@/modules/leads/assignment";
 import { LEAD_STAGES, type LeadStage } from "@/modules/leads/constants";
 import { pageWithin } from "@/modules/leads/support";
 import { agentMetrics } from "@/modules/performance/service";
 import { resolveRange } from "@/modules/performance/range";
+import { currentTargets, targetsMetFor } from "@/modules/targets/service";
 import type { Actor } from "@/server/auth/types";
 import type { Database } from "@/server/db";
 import { attendanceRecords, followUps, leads, rosterEntries, teamMembers, teams, users } from "@/server/db/schema";
@@ -17,6 +19,9 @@ import type { RosterStatus } from "./validation";
  * each member's pipeline, follow-ups, calls, meetings and today's roster and attendance, and the
  * team's open leads. Nothing here changes data, and the team's leads are listed, not opened: lead
  * pages, approvals and reassignment stay with the agents who own them and with Admins.
+ * Since 16 Nov 2026 (owner) they also see each member's win %, follow-up %, agent score, targets met
+ * in the range, and the targets running now (day, week, month, custom) with progress. Coaching notes
+ * and the work profile stay with Admins.
  */
 export const isTeamLeadOf = (actor: Pick<Actor, "role" | "ledTeamIds">, teamId: string) => actor.role === "agent" && Boolean(actor.ledTeamIds?.includes(teamId));
 
@@ -48,7 +53,12 @@ export async function myTeamView(db: Database, actor: Actor, rawTeamId: string |
   const range = resolveRange(rawQuery.from, rawQuery.to, now);
   const today = businessToday(now);
 
-  const metrics = await agentMetrics(db, members, range.window);
+  const [metrics, scores, targetCounts, running] = await Promise.all([
+    agentMetrics(db, members, range.window),
+    agentScores(db, ids, now),
+    targetsMetFor(db, ids, range.from, range.to),
+    Promise.all(members.map((m) => currentTargets(db, m.id, now))),
+  ]);
   const stageRows = ids.length
     ? await db
         .select({ ownerId: leads.ownerId, stage: leads.stage, n: sql<number>`count(*)::int` })
@@ -104,6 +114,8 @@ export async function myTeamView(db: Database, actor: Actor, rawTeamId: string |
     members: members.map((m) => {
       const pipeline = Object.fromEntries(LEAD_STAGES.map((s) => [s, stageRows.find((r) => r.ownerId === m.id && r.stage === s)?.n ?? 0])) as Record<LeadStage, number>;
       const att = attendance.find((a) => a.userId === m.id);
+      const sc = scores.get(m.id);
+      const tc = targetCounts.get(m.id);
       return {
         id: m.id,
         name: m.name,
@@ -115,6 +127,12 @@ export async function myTeamView(db: Database, actor: Actor, rawTeamId: string |
         roster: (roster.find((r) => r.userId === m.id)?.status ?? null) as RosterStatus | null,
         attendance: sheet.rows.find((r) => r.userId === m.id)?.status ?? "not_yet",
         checkIn: att ? att.checkInAt : null,
+        score: sc ? sc.score : null,
+        scoreProvisional: sc?.provisional ?? false,
+        targetsMet: tc?.met ?? 0,
+        targetsSet: tc?.set ?? 0,
+        // Only periods that have a target set (an unset day, week or month is left out).
+        targetsNow: running[members.indexOf(m)].filter((t) => t.goals),
       };
     }),
     openLeads: openLeads.map((l) => ({ ...l, ownerName: (l.ownerId && nameOf.get(l.ownerId)) || "—", mine: l.ownerId === actor.id })),

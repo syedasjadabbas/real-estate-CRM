@@ -25,6 +25,7 @@ import { getProjectScope } from "@/server/project-scope";
 import { signinRetentionNote } from "@/modules/security/service";
 import { requirePageUser } from "@/server/auth/current-user";
 import { getDb } from "@/server/db";
+import { formatTalkTime } from "@/modules/performance/pipeline-export";
 
 export const metadata: Metadata = { title: "Performance" };
 
@@ -48,6 +49,7 @@ const COLUMNS: { label: string; sort: PerformanceSort; title?: string }[] = [
   { label: "CRM sign-outs", sort: "signOuts", title: "CRM sign-outs logged in the range (authentication activity, not attendance)." },
   { label: "Targets met", sort: "targetsMet", title: "Target goals reached (calls, meetings, sold sq ft), of those set, for targets whose day, week or month starts in the range." },
   { label: "Avg first touch", sort: "avgFirstTouchMs", title: "Average time from creation to first touch, for leads assigned in the range that have been touched." },
+  { label: "Call review", sort: "reviewAvg", title: "Average score (1–5) Admins gave this agent's calls in Call reviews & notes during the range, and how many scored reviews." },
 ];
 
 const pctText = (v: number | null) => (v === null ? "—" : `${v}%`);
@@ -328,6 +330,14 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
                       )}
                     </td>
                     <td className={cn("px-3 py-2.5 text-right whitespace-nowrap tabular-nums", r.avgFirstTouchMs === null && "text-zinc-400")}>{formatDuration(r.avgFirstTouchMs)}</td>
+                    <td className={cn("px-3 py-2.5 text-right whitespace-nowrap tabular-nums", r.reviewAvg === null && "text-zinc-400")}>
+                      {r.reviewAvg === null ? "—" : (
+                        <>
+                          <span className="font-bold text-zinc-800">{r.reviewAvg.toFixed(1)}</span>
+                          <span className="text-zinc-400"> / 5 · {r.reviewCount}</span>
+                        </>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -350,10 +360,10 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
         <div id="pipeline" className="scroll-mt-20">
         <Panel
           title={own ? "Your pipeline" : "Pipeline by agent"}
-          description={`Leads held right now in each stage · ${project.name} · not limited to the date range. Click a number to open those leads.`}
+          description={`Leads held right now in each stage · ${project.name} · not limited to the date range. Talk time is the length of call recordings in the date range. Click a number to open those leads.`}
           actions={
             <a
-              href={`/api/v1/performance/pipeline-export?${new URLSearchParams({ ...(report.team ? { team: report.team } : {}), ...(report.search ? { q: report.search } : {}) })}`}
+              href={`/api/v1/performance/pipeline-export?${new URLSearchParams({ from: report.range.from, to: report.range.to, ...(report.team ? { team: report.team } : {}), ...(report.search ? { q: report.search } : {}) })}`}
               className={buttonClasses({ variant: "secondary", className: "h-[33px] px-3 text-xs" })}
               download
             >
@@ -378,6 +388,9 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
                       </th>
                     ))}
                     <th scope="col" className="px-3 py-3.5 text-right whitespace-nowrap">Total</th>
+                    <th scope="col" className="px-3 py-3.5 text-right whitespace-nowrap" title="Total length of the call recordings uploaded in the date range (only recordings with a known length)">
+                      Talk time
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -408,6 +421,15 @@ export default async function PerformancePage({ searchParams }: PageProps<"/dash
                             </Link>
                           ) : (
                             "0"
+                          )}
+                        </td>
+                        <td className={cn("px-3 py-2.5 text-right font-semibold whitespace-nowrap tabular-nums", !r.callsTimed && "text-zinc-300")} title={`${r.calls} call${r.calls === 1 ? "" : "s"} in range, ${r.callsTimed} with a length`}>
+                          {r.callsTimed && profileLinks ? (
+                            <Link href={`/dashboard/people/${r.userId}?from=${report.range.from}&to=${report.range.to}#calls`} className="text-brand hover:underline">
+                              {formatTalkTime(r.callSeconds, r.callsTimed)}
+                            </Link>
+                          ) : (
+                            formatTalkTime(r.callSeconds, r.callsTimed)
                           )}
                         </td>
                       </tr>

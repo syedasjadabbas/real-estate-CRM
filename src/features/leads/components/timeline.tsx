@@ -113,7 +113,8 @@ function describeLead(a: TimelineActivity, { people }: Context): TimelineDescrip
       return { title: `Details changed: ${fields.join(", ") || "fields"}`, tag: "Update", details };
     }
     case "review":
-      return { title: "Manager review added", tag: "Review" };
+      // Call reviews carry a 1–5 score (16 Nov 2026); a plain note or older review has none.
+      return typeof d.rating === "number" ? { title: `Call review · ${d.rating}/5`, tag: "Call review" } : { title: "Note added", tag: "Note" };
     case "regenerated":
       return { title: "Customer enquired again (re-inquiry)", tag: "Re-inquiry", details: str(d.by) ? [{ label: "Recorded by", value: String(d.by) }] : [] };
     case "lost_requested":

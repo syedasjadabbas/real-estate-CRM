@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createLead } from "@/modules/leads/commands";
 import { performanceContexts, performanceCsv, performanceReport, teamComparison } from "@/modules/performance/service";
-import { pipelineCsv } from "@/modules/performance/pipeline-export";
+import { formatTalkTime, pipelineCsv } from "@/modules/performance/pipeline-export";
 import { loadActor } from "@/server/auth/session-store";
 import { auditLogs, followUps, leadActivities, leads, meetings, projects, signinLogs, teams, users } from "@/server/db/schema";
 import type { Database } from "@/server/db";
@@ -137,6 +137,9 @@ describe.skipIf(!hasTestDb)("Performance (PostgreSQL integration)", () => {
       // No targets set in this test (target goals met: 14 Nov 2026).
       targetsMet: 0,
       targetsSet: 0,
+      // No call reviews scored (16 Nov 2026).
+      reviewAvg: null,
+      reviewCount: 0,
     });
     expect(row(report, f.actors.agent2.id)).toMatchObject({ leads: 1, booked: 1, winPct: 100, fuPct: null });
     expect(report.summary).toMatchObject({ agents: 3, open: 2, booked: 2, lost: 2, winPct: 50, fuDue: 3, fuDone: 2, fuPct: 67, meetings: 2, signIns: 2 });
@@ -187,7 +190,9 @@ describe.skipIf(!hasTestDb)("Performance (PostgreSQL integration)", () => {
     const [p] = await db.select({ id: projects.id, name: projects.name }).from(projects).limit(1);
     const out = await pipelineCsv(db, f.actors.superAdmin, { q: "agent b" }, p);
     const lines = out.body.replace(/^﻿/, "").trim().split("\r\n");
-    expect(lines[0]).toMatch(/^Agent,New Lead,.*,Total$/);
+    expect(lines[0]).toMatch(/^Agent,New Lead,.*,Total,Talk time \d{4}-\d{2}-\d{2} to \d{4}-\d{2}-\d{2},Calls in range$/);
+    // Talk time format (owner, 16 Nov 2026).
+    expect([formatTalkTime(3900, 3), formatTalkTime(750, 2), formatTalkTime(45, 1), formatTalkTime(0, 0)]).toEqual(["1h 05m", "12m 30s", "45s", "—"]);
     expect(lines.slice(1).map((l) => l.split(",")[0])).toEqual(["Agent B"]);
     const [log] = await db.select().from(auditLogs).where(eq(auditLogs.action, "performance.pipeline_export"));
     expect(log).toMatchObject({ actorId: f.actors.superAdmin.id, entityId: p.id });
@@ -210,8 +215,8 @@ describe.skipIf(!hasTestDb)("Performance (PostgreSQL integration)", () => {
     expect(asc.rows.at(-1)?.name).toBe("Agent Outside");
     expect((await performanceReport(db, f.actors.superAdmin, {}, NOW)).range).toEqual({ from: "2026-09-29", to: "2026-10-29" });
     const csv = performanceCsv(byWin).split("\n");
-    expect(csv[0]).toBe("Agent,Score,From,To,Open leads,Booked,Lost,Win %,Calls,Call min,F/U due,F/U done,F/U %,Meetings,CRM sign-ins,CRM sign-outs,Avg first touch (min),Targets met,Target goals set");
-    expect(csv[1]).toMatch(/^Agent B,\d+,2026-10-01,2026-10-29,0,1,0,100,0,,0,0,,0,0,0,,0,0$/);
+    expect(csv[0]).toBe("Agent,Score,From,To,Open leads,Booked,Lost,Win %,Calls,Call min,F/U due,F/U done,F/U %,Meetings,CRM sign-ins,CRM sign-outs,Avg first touch (min),Targets met,Target goals set,Call review avg (1-5),Call reviews");
+    expect(csv[1]).toMatch(/^Agent B,\d+,2026-10-01,2026-10-29,0,1,0,100,0,,0,0,,0,0,0,,0,0,,0$/);
     expect(byWin.page).toBe(1);
     expect(byWin.pageCount).toBe(1);
   });

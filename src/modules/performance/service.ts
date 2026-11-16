@@ -1,6 +1,6 @@
-import { and, asc, eq, gte, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import type { Database } from "@/server/db";
-import { followUps, leads, meetings, signinLogs, teamMembers, teams, users } from "@/server/db/schema";
+import { followUps, leadReviews, leads, meetings, signinLogs, teamMembers, teams, users } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
 import { forbidden } from "@/server/errors";
 import { agentScores } from "@/modules/leads/assignment";
@@ -80,6 +80,10 @@ export type AgentMetrics = {
   /** Target goals reached, of those set, for targets whose period starts in the range (14 Nov 2026). */
   targetsMet: number;
   targetsSet: number;
+  /** Average 1–5 call review score Admins gave this agent in the range, to 1 decimal; null with none (16 Nov 2026). */
+  reviewAvg: number | null;
+  /** How many scored call reviews that average is over. */
+  reviewCount: number;
 };
 
 const n = (v: unknown) => Number(v ?? 0);
@@ -97,7 +101,7 @@ const assignedAt = sql`coalesce(
 export async function agentMetrics(db: Database, agents: { id: string; name: string }[], window: { start: Date; end: Date }): Promise<AgentMetrics[]> {
   const ids = agents.map((a) => a.id);
   if (ids.length === 0) return [];
-  const [leadRows, fuRows, meetingRows, signRows, callStats] = await Promise.all([
+  const [leadRows, fuRows, meetingRows, signRows, callStats, reviewRows] = await Promise.all([
     db
       .select({
         userId: leads.ownerId,
@@ -134,6 +138,12 @@ export async function agentMetrics(db: Database, agents: { id: string; name: str
       .where(and(inArray(signinLogs.userId, ids), gte(signinLogs.at, window.start), lt(signinLogs.at, window.end)))
       .groupBy(signinLogs.userId),
     callStatsByUser(db, ids, window),
+    // Scored call reviews, counted for the agent who owned the lead when it was reviewed.
+    db
+      .select({ userId: leadReviews.agentId, avg: sql<string>`avg(${leadReviews.rating})`, n: sql<number>`count(*)::int` })
+      .from(leadReviews)
+      .where(and(inArray(leadReviews.agentId, ids), isNotNull(leadReviews.rating), gte(leadReviews.createdAt, window.start), lt(leadReviews.createdAt, window.end)))
+      .groupBy(leadReviews.agentId),
   ]);
   return agents.map((a) => {
     const l = leadRows.find((r) => r.userId === a.id);
@@ -145,6 +155,7 @@ export async function agentMetrics(db: Database, agents: { id: string; name: str
     const fuDue = n(f?.due);
     const fuDone = n(f?.done);
     const c = callStats.get(a.id) ?? NO_CALLS;
+    const rv = reviewRows.find((r) => r.userId === a.id);
     return {
       userId: a.id,
       name: a.name,
@@ -170,6 +181,8 @@ export async function agentMetrics(db: Database, agents: { id: string; name: str
       scoreProvisional: false,
       targetsMet: 0,
       targetsSet: 0,
+      reviewAvg: rv ? Math.round(Number(rv.avg) * 10) / 10 : null,
+      reviewCount: n(rv?.n),
     };
   });
 }
@@ -363,9 +376,9 @@ export function performanceCsv(report: PerformanceReport) {
     const s = v === null ? "" : String(v);
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  const header = ["Agent", "Score", "From", "To", "Open leads", "Booked", "Lost", "Win %", "Calls", "Call min", "F/U due", "F/U done", "F/U %", "Meetings", "CRM sign-ins", "CRM sign-outs", "Avg first touch (min)", "Targets met", "Target goals set"];
+  const header = ["Agent", "Score", "From", "To", "Open leads", "Booked", "Lost", "Win %", "Calls", "Call min", "F/U due", "F/U done", "F/U %", "Meetings", "CRM sign-ins", "CRM sign-outs", "Avg first touch (min)", "Targets met", "Target goals set", "Call review avg (1-5)", "Call reviews"];
   const lines = report.allRows.map((r) =>
-    [r.name, r.score, report.range.from, report.range.to, r.open, r.booked, r.lost, r.winPct, r.calls, r.callMin, r.fuDue, r.fuDone, r.fuPct, r.meetings, r.signIns, r.signOuts, r.avgFirstTouchMs === null ? null : Math.round(r.avgFirstTouchMs / 60_000), r.targetsMet, r.targetsSet].map(esc).join(","),
+    [r.name, r.score, report.range.from, report.range.to, r.open, r.booked, r.lost, r.winPct, r.calls, r.callMin, r.fuDue, r.fuDone, r.fuPct, r.meetings, r.signIns, r.signOuts, r.avgFirstTouchMs === null ? null : Math.round(r.avgFirstTouchMs / 60_000), r.targetsMet, r.targetsSet, r.reviewAvg, r.reviewCount].map(esc).join(","),
   );
   return [header.join(","), ...lines].join("\n") + "\n";
 }

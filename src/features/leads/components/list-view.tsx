@@ -11,7 +11,7 @@ import { assignableUsers, leadLookups, listLeads } from "@/modules/leads/queries
 import type { Actor } from "@/server/auth/types";
 import { leadsContext } from "../context";
 import { formatDateTime } from "../format";
-import { flattenParams, type SearchParams } from "../url";
+import { flattenParams, withParams, type SearchParams } from "../url";
 import { LeadsTable } from "./leads-table";
 import { LeadsToolbar } from "./leads-toolbar";
 import { Pagination } from "./pagination";
@@ -62,8 +62,10 @@ export async function LeadsListView({
 }) {
   return withLeadsAccess(async ({ actor, db, projectId }) => {
     const params = flattenParams(await searchParams);
+    // "All projects" (owner, 16 Nov 2026): a work profile counts every project, so its links open this.
+    const allProjects = params.project === "all";
     const [result, lookups, agents] = await Promise.all([
-      listLeads(db, actor, projectId, { ...params, view }),
+      listLeads(db, actor, allProjects ? null : projectId, { ...params, view }),
       leadLookups(db),
       // Admins and Super Admins filter the list by agent (15 Nov 2026); agents only see their own.
       leadScope(actor.role) === "all" ? assignableUsers(db, actor) : Promise.resolve([]),
@@ -90,6 +92,14 @@ export async function LeadsListView({
           <p role="note" className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-900">
             Opened from the dashboard: {result.teamName ? `${result.teamName} · ` : ""}
             {result.query.createdFrom ? `created ${formatDateTime(result.query.createdFrom)} to ${formatDateTime(result.query.createdTo)}` : "the selected days"}. Clear the filters to see all leads.
+          </p>
+        ) : null}
+        {allProjects ? (
+          <p role="note" className="flex flex-wrap items-center gap-x-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-900">
+            Showing leads from all projects, as counted on the work profile.
+            <Link href={withParams(pathname, params, { project: null, page: null })} className="font-bold text-sky-800 underline">
+              Show only the selected project
+            </Link>
           </p>
         ) : null}
         <LeadsToolbar params={params} total={result.total} lookups={lookups} agents={agents} />

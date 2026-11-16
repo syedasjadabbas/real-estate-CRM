@@ -173,7 +173,7 @@ Assignment weights and thresholds are `app_settings` keys `assignment.*` (defaul
 ### files (REF)
 `owner_type` (lead / booking / client / expense / income), `owner_id`, `kind` enum(`call_recording`,`document`,`receipt`,`other`), `storage_key`, `mime`, `size_bytes`, `duration_sec` (audio), `uploaded_by`. AI fields for later: `ai_status`, `ai_summary` jsonb.
 
-As built, a file points to its owner through separate nullable columns: `lead_id`, `finance_entry_id`, `payment_id`, `client_id` and, since migration 0039 (14 Nov 2026), `booking_id` (transfer screenshots an agent attaches to a booking before Accounts posts the payment, kind `receipt`). Deleting hides the file (`deleted_at`, `deleted_by_id`); nothing is erased.
+As built, a file points to its owner through separate nullable columns: `lead_id`, `finance_entry_id`, `payment_id`, `client_id` and, since migration 0039 (14 Nov 2026), `booking_id` (transfer screenshots an agent attaches to a booking before Accounts posts the payment, kind `receipt`). Since migration 0052 (16 Nov 2026), `meeting_id` links meeting photos (kind `meeting_photo`; `lead_id` is the meeting's lead). Deleting hides the file (`deleted_at`, `deleted_by_id`); nothing is erased.
 
 ### rotation_state (REF-I)
 `team_id`, `project_id`, `last_user_id`, `updated_at`.

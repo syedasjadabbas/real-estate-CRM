@@ -6,10 +6,13 @@ import { employeeProfileCsv } from "@/modules/people/export";
 import { addEmployeeNote } from "@/modules/people/notes";
 import { setTeamLead, setTeamMembers } from "@/modules/teams/commands";
 import { myTeamView } from "@/modules/teams/my-team";
+import { setTarget } from "@/modules/targets/service";
+import { businessToday } from "@/modules/bookings/today";
 import { loadActor } from "@/server/auth/session-store";
 import type { Actor } from "@/server/auth/types";
 import type { Database } from "@/server/db";
-import { auditLogs, files, followUps, leads, teamMembers, teams, users } from "@/server/db/schema";
+import { auditLogs, files, followUps, leads, projects, teamMembers, teams, users } from "@/server/db/schema";
+import { listLeads } from "@/modules/leads/queries";
 import { AppError } from "@/server/errors";
 import { connectTestDb, hasTestDb, leadInput, resetDb, seedFixture, type Fixture } from "../support/db";
 
@@ -82,6 +85,35 @@ describe.skipIf(!hasTestDb)("Team Lead and employee profile (owner, 15 Nov 2026)
     expect(overdue).toMatchObject({ openTotal: 2, leadMatches: 1, leadPage: { page: 1, pageCount: 1 } });
     // An agent outside the team is ignored rather than leaking their leads.
     expect((await myTeamView(db, lead, undefined, { lagent: admin.id })).leadMatches).toBe(2);
+  });
+
+  it("a Team Lead sees each agent's win %, follow-up %, score and the targets running now (16 Nov 2026)", async () => {
+    await setTeamLead(db, admin, teamId, { userId: f.actors.agent1.id });
+    const lead = await reload(f.actors.agent1);
+    await setTarget(db, admin, { userId: f.actors.agent2.id, period: "monthly", anchor: businessToday(new Date()), calls: 20, meetings: 4 });
+
+    const v = await myTeamView(db, lead, undefined);
+    const them = v.members.find((m) => m.id === f.actors.agent2.id)!;
+    expect(typeof them.score).toBe("number");
+    expect(them).toHaveProperty("scoreProvisional", true);
+    expect(them.metrics).toHaveProperty("winPct");
+    expect(them.metrics).toHaveProperty("fuPct");
+    expect(them.targetsNow.map((t) => t.period)).toEqual(["monthly"]);
+    expect(them.targetsNow[0]).toMatchObject({ goals: { calls: 20, meetings: 4 }, achieved: { calls: 0, meetings: 0 } });
+    // No target for the Team Lead themself: nothing listed for them.
+    expect(v.members.find((m) => m.id === f.actors.agent1.id)!.targetsNow).toEqual([]);
+  });
+
+  it("work-profile links list an agent's leads from every project, like the profile counts (16 Nov 2026)", async () => {
+    const [other] = await db.insert(projects).values({ name: "Second Project" }).returning({ id: projects.id });
+    const a = await createLead(db, f.actors.agent2, leadInput(f, { phoneNumber: "0300-6666601" }));
+    const b = await createLead(db, f.actors.agent2, { ...leadInput(f, { phoneNumber: "0300-6666602" }), projectId: other.id });
+    if (a.outcome !== "created" || b.outcome !== "created") throw new Error("setup");
+    const ids = async (projectId: string | null) => (await listLeads(db, admin, projectId, { owner: f.actors.agent2.id })).rows.map((r) => r.id).sort();
+    expect(await ids(f.projectId)).toEqual([a.leadId]);
+    expect(await ids(null)).toEqual([a.leadId, b.leadId].sort());
+    // The agent's own scope still applies across projects: another agent sees none of them.
+    expect((await listLeads(db, f.actors.agent1, null, { owner: f.actors.agent2.id })).rows).toEqual([]);
   });
 
   it("Admins and Super Admins open an agent's full profile: calls, minutes, pipeline, follow-ups", async () => {

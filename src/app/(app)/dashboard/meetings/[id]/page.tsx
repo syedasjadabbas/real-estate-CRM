@@ -17,6 +17,8 @@ import { requirePageUser } from "@/server/auth/current-user";
 import { getDb } from "@/server/db";
 import { AppError } from "@/server/errors";
 import { MEETING_TYPE_LABELS } from "@/modules/meetings/constants";
+import { MeetingPhotos } from "@/features/meetings/components/meeting-photos";
+import { listMeetingPhotos, type MeetingPhoto } from "@/modules/meetings/photos";
 
 export const metadata: Metadata = { title: "Meeting" };
 
@@ -54,6 +56,10 @@ function historyText(h: MeetingDetail["history"][number], names: Record<string, 
       return `Completed${d.movedLead ? " · lead moved to Meeting Done" : ""}${note}`;
     case "cancel":
       return `Cancelled${note}`;
+    case "photo_upload":
+      return `Added a photo · ${String(d.name ?? "")}`;
+    case "photo_remove":
+      return `Removed a photo · ${String(d.name ?? "")}`;
     default:
       return h.action;
   }
@@ -64,8 +70,10 @@ export default async function MeetingDetailPage({ params, searchParams }: PagePr
   if (!canDoMeeting(actor, "view")) return <RestrictedState />;
   const [{ id }, { saved }] = await Promise.all([params, searchParams]);
   let detail: MeetingDetail;
+  let photos: MeetingPhoto[];
   try {
     detail = await getMeetingDetail(getDb(), actor, id);
+    photos = await listMeetingPhotos(getDb(), actor, id);
   } catch (error) {
     if (error instanceof AppError && error.code === "NOT_FOUND") notFound();
     throw error;
@@ -156,6 +164,11 @@ export default async function MeetingDetailPage({ params, searchParams }: PagePr
         </div>
         <div className="min-w-0 space-y-6">
           <MeetingStatusPanel meetingId={meeting.id} status={meeting.status} leadStage={lead?.stage ?? null} canEdit={detail.canEdit} />
+          <MeetingPhotos
+            meetingId={meeting.id}
+            photos={photos.map((p) => ({ id: p.id, name: p.name, createdAt: p.createdAt.toISOString(), uploadedBy: p.uploadedBy, canRemove: p.canRemove }))}
+            canUpload={detail.canEdit && meeting.status !== "cancelled"}
+          />
         </div>
       </div>
     </section>

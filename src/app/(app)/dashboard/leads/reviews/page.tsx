@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/shell/page-header";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StagePill } from "@/features/leads/components/chips";
+import { RatingStars } from "@/features/leads/components/rating-stars";
 import { ScopeNotice, withLeadsAccess } from "@/features/leads/components/list-view";
 import { formatDateTime } from "@/features/leads/format";
 import { Pagination } from "@/features/leads/components/pagination";
@@ -21,7 +22,7 @@ export default function ReviewsPage({ searchParams }: PageProps<"/dashboard/lead
       <section className="space-y-6" aria-label="Reviews">
         <PageHeader
           as="h2"
-          title="Notes / reviews"
+          title="Call reviews & notes"
           description={actor.role === "agent" ? "Notes and reviews on leads assigned to you, yours and your Admins'." : "Notes and reviews written by agents and Admins on leads in your scope, newest first."}
         />
         <ScopeNotice actor={actor} />
@@ -37,6 +38,7 @@ export default function ReviewsPage({ searchParams }: PageProps<"/dashboard/lead
                   </Link>
                   <StagePill stage={r.stage} />
                 </div>
+                {r.rating !== null ? <RatingStars rating={r.rating} className="mt-2" /> : null}
                 <p className="mt-2 text-sm whitespace-pre-line text-zinc-800">{r.body}</p>
                 <p className="mt-2 text-[11px] text-zinc-500">
                   {r.reviewerName} ({ROLE_LABELS[r.reviewerRole]}) · {formatDateTime(r.createdAt)}
