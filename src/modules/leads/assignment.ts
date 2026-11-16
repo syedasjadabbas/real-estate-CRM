@@ -17,6 +17,7 @@ import {
 } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
 import { AppError, forbidden } from "@/server/errors";
+import { getAttendanceSettings } from "@/modules/attendance/service";
 import { agentScore, DEFAULT_ASSIGNMENT_SETTINGS, type AgentStats, type AssignmentSettings } from "./assignment-score";
 import type { Tx } from "./support";
 
@@ -207,19 +208,17 @@ export async function chooseOwner(tx: Tx, actor: Actor, projectId: string, now =
     .where(and(eq(teams.isActive, true), managedOnly ? eq(teams.managerId, actor.id) : undefined))
     .orderBy(asc(teams.id))
     .for("share");
+  // Weekly days off come from HR's attendance setting, the same one the roster and attendance use
+  // (owner, 16 Nov 2026); the old per-team weekend column is no longer read.
+  const hrWeekend = (await getAttendanceSettings(tx)).weekendDays.includes(weekday);
   const members = await tx
-    .select({ id: users.id, name: users.name, weekendDays: teams.weekendDays })
+    .select({ id: users.id, name: users.name })
     .from(users)
     .innerJoin(teamMembers, eq(teamMembers.userId, users.id))
     .innerJoin(teams, eq(teams.id, teamMembers.teamId))
     .where(and(eq(users.role, "agent"), eq(users.status, "active"), eq(teams.isActive, true), managedOnly ? eq(teams.managerId, actor.id) : undefined));
   const agents = new Map<string, { name: string; weekend: boolean }>();
-  for (const m of members) {
-    const weekend = m.weekendDays.includes(weekday);
-    const prior = agents.get(m.id);
-    // On weekend only if every team they are in has today as a weekend day.
-    agents.set(m.id, { name: m.name, weekend: prior ? prior.weekend && weekend : weekend });
-  }
+  for (const m of members) agents.set(m.id, { name: m.name, weekend: hrWeekend });
   const order = [...agents.entries()]
     .map(([id, a]) => ({ id, name: a.name, weekend: a.weekend }))
     .sort((x, y) => x.name.localeCompare(y.name) || x.id.localeCompare(y.id));
@@ -242,12 +241,12 @@ export async function chooseOwner(tx: Tx, actor: Actor, projectId: string, now =
     let why: string | null = null;
     if (leave.has(a.id) || status === "on_leave") why = "On leave today";
     else if (status === "leads_off") why = "Leads off in today's roster";
-    else if (!status && a.weekend) why = "Team weekend";
+    else if (!status && a.weekend) why = "Weekly day off (not on today's roster)";
     if (why) excluded.push({ userId: a.id, name: a.name, reason: why });
     return !why;
   });
   const breakdown = { method: "rotation", previousAgentId: pointer[0]?.value ?? null, order: available.map((a) => a.name), excluded };
-  if (available.length === 0) return { ownerId: null, reason: "No available agent: every agent is on leave, leads off or on their weekend", breakdown };
+  if (available.length === 0) return { ownerId: null, reason: "No available agent: every agent is on leave, leads off or on their weekly day off", breakdown };
 
   // The next agent after the previous one in the full name order (so a returning agent takes their
   // usual place); past the end, back to the first.

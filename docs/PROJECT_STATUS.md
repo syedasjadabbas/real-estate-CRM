@@ -3926,3 +3926,14 @@ Committed (`df6291e`).
 Committed (`d2c7a7a`). The Backups page (Super Admin) now explains itself: a plain warning when backups are late (amber on a developer's computer, red on the live server), a separate **off-site copy** warning and card, "Keeps the last 30 days, plus one a month for 12 months", one plain sentence per run with the server message under Details, and plain names (Tidy-up, Worked, Nightly, Run by hand). Technical commands are folded under "Technical details".
 
 **Checks for §76–§81:** typecheck and lint pass after each change; the affected integration and unit tests were run and pass (tasks, meetings, bookings, team-lead, performance, audit, cities, security, todos-paging, leads, backups). Each page was checked in the browser as Admin; Backups is Super Admin only and was checked by tests and on the owner's Super Admin login.
+
+## 82. Four small fixes found while updating the docs (16 Nov 2026)
+
+| Fix | Detail |
+|---|---|
+| Rotation and days off | Lead rotation now uses HR's weekly day off (HR → Attendance), the same setting as the roster and attendance, instead of the old per-team weekend column the team form no longer edits. An agent on their day off is skipped unless today's roster marks them in the office; if nobody is working, the lead waits for an Admin (owner's choice). The Assignment page text says so |
+| Score tooltip | Performance → Score now says it's the agent score and doesn't decide who gets leads |
+| Booking refusal message | "Agents can move a booking up to Complete Down Payment; an Admin takes it further" (was "up to Sales order") |
+| Dashboard Avg / owner | Aging vs Meetings: completed meetings per owner in the band, one decimal (it divided leads by owners) |
+
+Typecheck and lint pass; rotation, lead assignment, imports, dashboard and bookings tests pass, with a new test for the day-off rule.

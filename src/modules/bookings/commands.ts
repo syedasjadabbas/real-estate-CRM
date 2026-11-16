@@ -245,7 +245,7 @@ export async function decideDiscount(db: Database, actor: Actor, bookingId: stri
 }
 
 /**
- * FR-082: one step forward at a time (decision 29 Oct 2026). Agents may go up to Sales order;
+ * FR-082: one step forward at a time (decision 29 Oct 2026). Agents may go up to Complete Down Payment;
  * Confirmed needs the confirm permission and sets unit → Booked, lead → Booked, and links or
  * creates the client (FR-050).
  */
@@ -291,7 +291,7 @@ export async function advanceBooking(db: Database, actor: Actor, bookingId: stri
       proofName = proof.name;
     }
     if (!canMoveTo(actor, toStage)) {
-      throw forbidden(toStage === "confirmed" ? "Only managers and admins can confirm bookings." : "Agents can move bookings up to Sales order.");
+      throw forbidden(toStage === "confirmed" ? "Only an Admin or Super Admin can mark a booking Closed Won." : "Agents can move a booking up to Complete Down Payment; an Admin takes it further.");
     }
 
     let clientId = booking.clientId;

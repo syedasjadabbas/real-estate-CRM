@@ -34,7 +34,7 @@ export default async function AssignmentSettingsPage() {
           <ul className="list-disc space-y-1 pl-5">
             <li>
               Skipped today, and back in the rotation when they return: agents on approved leave, marked &quot;Leads off&quot; in today&apos;s team roster, or on
-              their team&apos;s weekend day (unless the roster says they&apos;re working).
+              the weekly day off set in HR → Attendance (unless the roster says they&apos;re working).
             </li>
             <li>A returning customer goes back to the agent who handled them before.</li>
             <li>If no agent is available, the lead waits without an owner for an Admin to assign.</li>

@@ -160,7 +160,8 @@ describe.skipIf(!hasTestDb)("Dashboard analytics (PostgreSQL integration)", () =
     expect(health.meetingsDone).toBe(1);
     // Aging vs meetings (15 Nov 2026): open leads touched at least once, so the untouched ones are left out.
     // a1 (1 completed meeting) and the outside agent's lead, both new this week, two owners.
-    expect(health.rows).toEqual([{ age: "0–7 days", buckets: [2, 0, 0, 0, 0], leads: 2, meetings: 1, avgPerOwner: 1 }]);
+    // Avg / owner = completed meetings per owner in the band (16 Nov 2026): 1 meeting, 2 owners.
+    expect(health.rows).toEqual([{ age: "0–7 days", buckets: [2, 0, 0, 0, 0], leads: 2, meetings: 1, avgPerOwner: 0.5 }]);
   });
 
   it("fills meeting mix, meetings vs bookings and the insight tiles (15 Nov 2026)", async () => {

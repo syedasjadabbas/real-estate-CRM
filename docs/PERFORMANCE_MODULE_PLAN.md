@@ -255,6 +255,6 @@ What the page does now, after the changes of 14–16 Nov 2026. Where this differ
 **Call lengths**
 - Since 15 Nov 2026 the server measures each recording's length from the file itself (MP3, M4A, AAC, OGG Vorbis / Opus, WAV) and ignores any length the browser sends. A file it can't read still counts as a call, with the length shown as unknown.
 
-**Known wording issue:** the Score column's tooltip still says the score is used "as automatic assignment uses it". Since 13 Nov 2026 new leads go by equal rotation and the score no longer chooses owners. The tooltip should be reworded.
+**Fixed 16 Nov 2026:** the Score column's tooltip now says it's the agent score (workload, follow-up performance, conversion, availability) and that it doesn't decide who gets leads.
 
 **Still not available:** the Critical flag (Q-L8), AI call scoring and Pipeline pressure.

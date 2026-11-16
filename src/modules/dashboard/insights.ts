@@ -124,6 +124,6 @@ export async function agingRows(db: Database, openLeadWhere: SQL | undefined, no
     const buckets: AgingRow["buckets"] = [0, 0, 0, 0, 0];
     for (const r of inBand) buckets[bucketOf(r.meetings)]++;
     const owners = new Set(inBand.map((r) => r.ownerId ?? "none")).size;
-    return { age: band.label, buckets, leads: inBand.length, meetings: inBand.reduce((n, r) => n + r.meetings, 0), avgPerOwner: owners ? Math.round(inBand.length / owners) : 0 };
+    return { age: band.label, buckets, leads: inBand.length, meetings: inBand.reduce((n, r) => n + r.meetings, 0), avgPerOwner: owners ? Math.round((inBand.reduce((n, r) => n + r.meetings, 0) / owners) * 10) / 10 : 0 };
   }).filter((r) => r.leads > 0);
 }

@@ -28,6 +28,8 @@ describe.skipIf(!hasTestDb)("Lead assignment: equal rotation (PostgreSQL integra
     await resetDb(db);
     f = await seedFixture(db);
     order = [f.actors.agent1.id, f.actors.agent2.id, f.actors.outsideAgent.id];
+    // No weekly day off, so these tests don't depend on which day they run (HR's default is Sunday off).
+    await db.insert(appSettings).values({ key: "attendance.weekend_days", value: "" });
   });
 
   let phoneSeq = 0;
@@ -47,6 +49,17 @@ describe.skipIf(!hasTestDb)("Lead assignment: equal rotation (PostgreSQL integra
     const [m] = await db.select({ teamId: teamMembers.teamId }).from(teamMembers).where(eq(teamMembers.userId, userId));
     await db.insert(rosterEntries).values({ teamId: m.teamId, userId, date: businessToday(new Date()), status });
   };
+
+  it("skips agents on HR's weekly day off unless today's roster has them working (16 Nov 2026)", async () => {
+    const weekday = new Date(`${businessToday(new Date())}T00:00:00Z`).getUTCDay();
+    await db.update(appSettings).set({ value: String(weekday) }).where(eq(appSettings.key, "attendance.weekend_days"));
+    // Everyone is off today: the lead waits without an owner for an Admin.
+    expect((await add()).ownerId).toBeNull();
+    // Agent B is rostered in the office today, so only they are in the rotation.
+    const [m] = await db.select({ teamId: teamMembers.teamId }).from(teamMembers).where(eq(teamMembers.userId, f.actors.agent2.id));
+    await db.insert(rosterEntries).values({ teamId: m.teamId, userId: f.actors.agent2.id, date: businessToday(new Date()), status: "in_office" });
+    expect(await owners(2)).toEqual([f.actors.agent2.id, f.actors.agent2.id]);
+  });
 
   it("hands leads out one each, in name order, and loops back to the first agent", async () => {
     expect(await owners(7)).toEqual([...order, ...order, order[0]]);

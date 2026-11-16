@@ -85,7 +85,7 @@ export function PipelineHealth({ data }: { data: PipelineHealthData | null }) {
                     ))}
                     <TD align="right" className="bg-zinc-50/80 font-black tabular-nums">{formatInt(row.leads)}</TD>
                     <TD align="right" className="tabular-nums">{formatInt(row.meetings)}</TD>
-                    <TD align="right" className="tabular-nums">{formatInt(row.avgPerOwner)}</TD>
+                    <TD align="right" className="tabular-nums" title="Completed meetings per lead owner in this age band">{row.avgPerOwner.toLocaleString("en-US", { maximumFractionDigits: 1 })}</TD>
                   </TR>
                 ))}
                 <TR className="bg-zinc-50/80 font-black">

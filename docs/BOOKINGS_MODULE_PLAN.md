@@ -51,7 +51,7 @@ Added safeguards (not business rules): rate and token are fixed after creation (
 |---|---|---|---|---|---|---|
 | Super Admin / Admin | all | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Manager | team | team leads | ✓ | ✓ | ✓ | ✓ |
-| Agent | own | own leads | up to Sales order | — | — | — |
+| Agent | own | own leads | up to Complete Down Payment | — | — | — |
 | Accountant | all (read) | — | — | — | — | — |
 | HR | — | — | — | — | — | — |
 
@@ -121,4 +121,4 @@ What Bookings does now, after the changes of 14–16 Nov 2026 (owner's decisions
 **New booking**
 - The unit is chosen with a **searchable picker** (the same picker as the lead search), searching unit number or floor.
 
-**Known wording issue:** the server's refusal message for an agent moving too far still says "Agents can move bookings up to Sales order". The actual limit is Complete Down Payment.
+**Fixed 16 Nov 2026:** an agent moving a booking too far now sees "Agents can move a booking up to Complete Down Payment; an Admin takes it further."

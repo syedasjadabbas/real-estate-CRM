@@ -304,7 +304,7 @@ What Teams and Targets do now, after the changes of 13–16 Nov 2026. Where this
 
 **Rotation**
 - New leads go to agents by **equal rotation** (Settings → Assignment & agent scores). Agents on approved leave, marked "Leads off" in today's roster, or on a weekly day off without a roster entry are skipped and rejoin when back. This answers TQ3.
-- Known gap: rotation still reads the old per-team weekend column, which the team form no longer edits. The roster and attendance use the HR setting.
+- Fixed 16 Nov 2026: rotation now uses the HR weekly day off (HR → Attendance), the same as the roster and attendance, instead of the old per-team weekend column. An agent on their day off is skipped unless today's roster marks them in the office; if nobody is working, the lead waits for an Admin.
 
 **Targets**
 - **Custom dates** period (migration `0048_custom_target_period`): any From–To range up to a year, for example a campaign. Running custom targets show on the agent's My Targets card.

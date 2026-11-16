@@ -4,7 +4,7 @@ import { AGENT_MAX_STAGE, FORWARD_PATH, type BookingStage } from "./constants";
 
 /**
  * Bookings authorization: the PROPOSED matrix in USER_ROLES_AND_PERMISSIONS.md, approved 29 Oct 2026.
- *   create F/F/T/O/—/—  ·  change stage F/F/T/O (up to Sales order)/—/R  ·  confirm / cancel F/F/T/—/—/—
+ *   create F/F/T/O/—/—  ·  change stage F/F/T/O (up to Complete Down Payment)/—/R  ·  confirm / cancel F/F/T/—/—/—
  * Record scope follows the booking's sales agent (own / team / all); accountants read everything.
  */
 export type BookingScope = "all" | "team" | "own" | "none";
