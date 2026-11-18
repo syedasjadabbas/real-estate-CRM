@@ -126,7 +126,10 @@ describe.skipIf(!hasTestDb)("Team Lead and employee profile (owner, 15 Nov 2026)
     ]);
     await db.insert(followUps).values({ leadId: created.leadId, assigneeId: a1.id, dueAt: new Date(Date.now() - 86_400_000), createdById: a1.id });
 
-    for (const actor of [a1, f.actors.hr, f.actors.manager]) expect((await errorOf(employeeProfile(db, actor, a1.id)))?.code).toBe("FORBIDDEN");
+    for (const actor of [a1, f.actors.manager]) expect((await errorOf(employeeProfile(db, actor, a1.id)))?.code).toBe("FORBIDDEN");
+    // HR opens profiles read-only since 18 Nov 2026: figures yes, lead-level detail and coaching notes no.
+    const hrView = await employeeProfile(db, f.actors.hr, a1.id);
+    expect(hrView.recordings).toEqual([]);
     const p = await employeeProfile(db, admin, a1.id);
     expect(p.person.name).toBe(a1.name);
     expect(p.metrics).toMatchObject({ calls: 2, callsVerified: 1, callsQualified: 1, callMin: 2 });

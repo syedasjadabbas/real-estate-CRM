@@ -1,9 +1,9 @@
-import { mkdtemp, rm, stat } from "node:fs/promises";
+﻿import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { and, eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { advanceBooking, createBooking } from "@/modules/bookings/commands";
+import { createBooking } from "@/modules/bookings/commands";
 import { listDocuments, openDocument } from "@/modules/documents/service";
 import { openRecording } from "@/modules/recordings/service";
 import { recordPayment, requestReversal, decideReversal } from "@/modules/finance/commands";
@@ -71,7 +71,7 @@ describe.skipIf(!hasTestDb)("Payment proofs (Q33, PostgreSQL integration)", () =
     if (lead.outcome !== "created") throw new Error("lead");
     bookingLeadId = lead.leadId;
     const { bookingId } = await createBooking(db, f.actors.agent1, { projectId: f.projectId, leadId: lead.leadId, unitId, ratePerSqft: "25000", tokenAmount: "500000" });
-    await advanceBooking(db, f.actors.superAdmin, bookingId, { toStage: "token_pending" });
+    // A new booking starts at Token (Negotiation and Token pending merged into it, 14 Nov 2026).
     const cashId = (await listPaymentMethods(db, { activeOnly: true })).find((m) => m.name === "Cash")!.id;
     ({ paymentId } = await recordPayment(db, accountant, { bookingId, type: "token", amount: "500000", receivedOn: "2026-11-01", methodId: cashId, reference: "CASH-1" }));
   });

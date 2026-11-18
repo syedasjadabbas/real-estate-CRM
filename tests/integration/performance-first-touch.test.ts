@@ -27,9 +27,12 @@ describe.skipIf(!hasTestDb)("FR-028: first touch in the Performance report (Post
     f = await seedFixture(db);
   });
 
-  /** A lead owned by `owner`, created at `at`, first touched `touchHours` later (or never). */
+  /**
+   * A lead an Admin assigned to `owner`, created at `at`, first touched `touchHours` later (or never).
+   * Since 16 Nov 2026 first touch counts only leads someone else gave the agent, not their own.
+   */
   const lead = async (owner: Actor, at: Date, touchHours: number | null) => {
-    const r = await createLead(db, owner, leadInput(f));
+    const r = await createLead(db, f.actors.superAdmin, leadInput(f, { ownerId: owner.id }));
     if (r.outcome !== "created") throw new Error("setup");
     await db
       .update(leads)
@@ -87,12 +90,13 @@ describe.skipIf(!hasTestDb)("FR-028: first touch in the Performance report (Post
     await lead(f.actors.agent1, INSIDE, 1.5);
     const r = await report();
     const [header, ...lines] = performanceCsv(r).trim().split("\n");
-    // Targets met and goals set follow it (14 Nov 2026).
-    expect(header.endsWith(",CRM sign-outs,Avg first touch (min),Targets met,Target goals set")).toBe(true);
+    // Found by name: more columns follow it since (targets, call reviews, attendance).
+    const col = header.split(",").indexOf("Avg first touch (min)");
+    expect(header).toContain(",CRM sign-outs,Avg first touch (min),Targets met,Target goals set");
     const index = r.allRows.findIndex((x) => x.userId === f.actors.agent1.id);
-    expect(lines[index].split(",").at(-3)).toBe("90");
+    expect(lines[index].split(",")[col]).toBe("90");
     const blank = r.allRows.findIndex((x) => x.userId === f.actors.agent2.id);
-    expect(lines[blank].split(",").at(-3)).toBe("");
+    expect(lines[blank].split(",")[col]).toBe("");
   });
 
   it("keeps report scope: an agent sees only their own row", async () => {

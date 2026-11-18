@@ -126,7 +126,9 @@ export default async function MyTeamPage({ searchParams }: PageProps<"/dashboard
               {v.members.map((m) => (
                 <tr key={m.id} className="border-b border-zinc-100/80 last:border-b-0">
                   <td className={cn(td, "font-bold")}>
-                    {m.name}
+                    <Link href={`/dashboard/my-team/${m.id}?${new URLSearchParams({ from: v.range.from, to: v.range.to })}`} className="hover:text-brand hover:underline" title="Open this agent's KPIs">
+                      {m.name}
+                    </Link>
                     {m.isMe ? <span className="ml-1.5 text-[10px] font-semibold text-zinc-500">(you)</span> : null}
                   </td>
                   <td className={td}>

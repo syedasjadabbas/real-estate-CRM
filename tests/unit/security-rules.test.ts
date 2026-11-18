@@ -65,7 +65,12 @@ describe("attendance separation (C1)", () => {
   it("derives no hours, durations, lateness or absences from sign-in logs", () => {
     for (const p of ["src/modules/performance/service.ts", "src/modules/workplace/service.ts"]) {
       // Code only: comments may explain what is deliberately not computed.
-      const code = read(p).replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+      // Since 16 Nov 2026 Performance shows attendance taken from check-ins (attendanceTotals in the
+      // attendance module, never sign-in logs); those lines are allowed and left out of the check.
+      const code = read(p)
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/\/\/.*$/gm, "")
+        .replace(/^.*(\battendanceTotals\b|\battendance\.get\b|\batt[A-Z]\w*|"Days present").*$/gm, "");
       expect(code).not.toMatch(/duration|hoursWorked|workingHours|\blate(ness)?\b|absent|absence|present\b|attendance\s*[:=]/i);
     }
   });

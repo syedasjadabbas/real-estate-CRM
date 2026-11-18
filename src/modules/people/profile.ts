@@ -20,7 +20,15 @@ import { z } from "zod";
  * assigned) use the chosen dates, exactly as Performance does; the pipeline, follow-ups due now,
  * attendance and leave are current.
  */
-export const canViewProfiles = (actor: Pick<Actor, "role">) => actor.role === "admin" || actor.role === "super_admin";
+export const canViewProfiles = (actor: Pick<Actor, "role">) => actor.role === "admin" || actor.role === "super_admin" || actor.role === "hr";
+
+/**
+ * HR opens work profiles read-only (owner, 18 Nov 2026): the figures, pipeline counts, targets and
+ * attendance, but no lead-level detail (customer names in calls, overdue follow-ups, activity) and no
+ * coaching notes. Admins and Super Admins see everything.
+ */
+export const canSeeLeadDetail = (actor: Pick<Actor, "role">) => actor.role === "admin" || actor.role === "super_admin";
+export const canSeeCoachingNotes = canSeeLeadDetail;
 
 const querySchema = z.object({ from: z.iso.date().optional().catch(undefined), to: z.iso.date().optional().catch(undefined) });
 
@@ -95,7 +103,8 @@ export async function employeeProfile(db: Database, actor: Actor, userId: string
     .from(bookings)
     .where(and(eq(bookings.agentId, userId), ne(bookings.stage, "cancelled")));
 
-  const recordings = await db
+  const leadDetail = canSeeLeadDetail(actor);
+  const recordings = !leadDetail ? [] : await db
     .select({ id: files.id, name: files.originalName, durationSec: files.durationSec, createdAt: files.createdAt, leadId: leads.id, leadName: leads.name, leadCode: leads.code })
     .from(files)
     .innerJoin(leads, eq(leads.id, files.leadId))
@@ -103,7 +112,7 @@ export async function employeeProfile(db: Database, actor: Actor, userId: string
     .orderBy(desc(files.createdAt))
     .limit(200);
 
-  const activity = await db
+  const activity = !leadDetail ? [] : await db
     .select({ id: leadActivities.id, type: leadActivities.type, data: leadActivities.data, createdAt: leadActivities.createdAt, leadId: leads.id, leadName: leads.name, leadCode: leads.code })
     .from(leadActivities)
     .innerJoin(leads, eq(leads.id, leadActivities.leadId))
@@ -150,7 +159,7 @@ export async function employeeProfile(db: Database, actor: Actor, userId: string
     }
   }
 
-  const overdueList = await db
+  const overdueList = !leadDetail ? [] : await db
     .select({ id: followUps.id, dueAt: followUps.dueAt, note: followUps.note, leadId: leads.id, leadName: leads.name, leadCode: leads.code })
     .from(followUps)
     .innerJoin(leads, eq(leads.id, followUps.leadId))
@@ -201,7 +210,7 @@ export async function employeeProfile(db: Database, actor: Actor, userId: string
 
   const author = users;
   // Private coaching notes are never shown to the person they are about (an Admin opening their own profile).
-  const notes = userId === actor.id ? [] : await db
+  const notes = userId === actor.id || !canSeeCoachingNotes(actor) ? [] : await db
     .select({ id: employeeNotes.id, body: employeeNotes.body, createdAt: employeeNotes.createdAt, authorId: employeeNotes.authorId, authorName: author.name })
     .from(employeeNotes)
     .leftJoin(author, eq(author.id, employeeNotes.authorId))
@@ -237,6 +246,8 @@ export async function employeeProfile(db: Database, actor: Actor, userId: string
     bySource,
     daily,
     notes,
+    /** False for HR: lead names, call and activity lists and every link into sales pages are left out. */
+    leadDetail,
   };
 }
 

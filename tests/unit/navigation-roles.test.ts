@@ -39,8 +39,8 @@ const pageAllows: Record<string, (actor: { role: Role }) => boolean> = {
   "/dashboard/tasks": (a) => canDoTask(a, "view"),
   "/dashboard/meetings": (a) => canDoMeeting(a, "view"),
   "/dashboard/targets": (a) => canViewTargets(a),
-  // Agents (own roster) and HR (read-only) can still open Teams by address, but the menu leaves it out for them.
-  "/dashboard/teams": (a) => (canViewTeams(a) || canViewOwnRoster(a)) && a.role !== "agent" && a.role !== "hr",
+  // Agents can still open Teams by address (own roster), but the menu leaves it out for them. HR sees it, read-only (18 Nov 2026).
+  "/dashboard/teams": (a) => (canViewTeams(a) || canViewOwnRoster(a)) && a.role !== "agent",
   "/dashboard/performance": (a) => canViewPerformance(a),
 };
 
@@ -54,7 +54,7 @@ describe("sidebar links follow page permissions", () => {
   it("HR and accountants no longer see sales modules they can't open", () => {
     // Each menu entry by its own role list, as the sidebar filters them (a link may appear in two groups).
     const visible = (role: Role) => items.filter((i) => !i.roles || i.roles.includes(role)).map((i) => i.label);
-    expect(visible("hr")).toEqual(["Dashboard", "My workplace", "HR", "Tasks"]);
+    expect(visible("hr")).toEqual(["Dashboard", "My workplace", "HR", "Teams", "Tasks"]);
     // HR is for HR, Admins and Super Admins (13 Nov 2026); accountants keep My workplace for their leave.
     expect(visible("accountant")).toEqual(["Dashboard", "Clients", "Projects", "Inventory", "My workplace", "Bookings", "Finance", "Tasks"]);
     // Agents: no HR; their Reports group holds My performance and My workplace.

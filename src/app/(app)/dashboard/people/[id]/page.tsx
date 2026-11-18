@@ -142,7 +142,7 @@ function Row({ label, value, tone, href, hint }: { label: string; value: ReactNo
   );
 }
 
-function Targets({ lines, title, href }: { lines: EmployeeProfile["targets"]["today"]; title: string; href: string }) {
+function Targets({ lines, title, href }: { lines: EmployeeProfile["targets"]["today"]; title: string; href?: string }) {
   const set = lines.filter((l) => l.target !== null);
   return (
     <div>
@@ -169,7 +169,7 @@ function Targets({ lines, title, href }: { lines: EmployeeProfile["targets"]["to
   );
 }
 
-/** Admins and Super Admins: everything about one employee's work (owner, 15 Nov 2026). */
+/** Admins and Super Admins: everything about one employee's work (owner, 15 Nov 2026). HR: the same figures, read-only, without lead detail or coaching notes (18 Nov 2026). */
 export default async function EmployeeProfilePage({ params, searchParams }: PageProps<"/dashboard/people/[id]">) {
   const actor = await requirePageUser();
   if (!canViewProfiles(actor)) return <RestrictedState />;
@@ -203,7 +203,10 @@ export default async function EmployeeProfilePage({ params, searchParams }: Page
     return `${path}?${q}`;
   };
   const OPEN_STAGES = p.pipeline.map((s) => s.stage).filter((s) => s !== "booked" && s !== "lost_lead");
-  const links = {
+  // HR can't open leads, bookings, meetings, targets or security: those figures show without links.
+  const sales = p.leadDetail;
+  const salesLink = <T,>(v: T): T | undefined => (sales ? v : undefined);
+  const salesLinks = {
     leads: (extra: Record<string, string | undefined> = {}) => url("/dashboard/leads", { owner: who, project: "all", ...extra }),
     won: url("/dashboard/leads/won", { owner: who, project: "all", dateField: "decided", ...span }),
     lost: (reason?: string | null) => url("/dashboard/leads/lost", { owner: who, project: "all", dateField: "decided", ...span, lostReason: reason ?? undefined }),
@@ -214,6 +217,19 @@ export default async function EmployeeProfilePage({ params, searchParams }: Page
     targets: url("/dashboard/targets", { q: p.person.name }),
     attendance: `/dashboard/hr/attendance/${who}`,
   };
+  const links = {
+    leads: (extra: Record<string, string | undefined> = {}) => salesLink(salesLinks.leads(extra)),
+    won: salesLink(salesLinks.won),
+    lost: (reason?: string | null) => salesLink(salesLinks.lost(reason)),
+    todos: (bucket: string) => salesLink(salesLinks.todos(bucket)),
+    meetings: salesLink(salesLinks.meetings),
+    bookings: (extra: Record<string, string | undefined> = {}) => salesLink(salesLinks.bookings(extra)),
+    signins: salesLink(salesLinks.signins),
+    targets: salesLink(salesLinks.targets),
+    attendance: salesLinks.attendance,
+  };
+  const targetsHref = (period: string) => salesLink(url("/dashboard/targets", { q: p.person.name, period }));
+  const jumps = JUMPS.filter(([id]) => (id !== "notes" || (actor.id !== p.person.id && sales)) && (sales || !["calls", "overdue", "activity"].includes(id)));
 
   return (
     <PageStack>
@@ -280,16 +296,16 @@ export default async function EmployeeProfilePage({ params, searchParams }: Page
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <MiniStat href="#calls" label="Calls" value={<>{m.calls} <Trend now={m.calls} before={p.previous.calls} /></>} caption={`${m.callsVerified} verified · ${m.callsQualified} qualified`} />
-        <MiniStat href="#calls" label="Call minutes" value={m.callMin === null ? "—" : String(m.callMin)} caption={`${m.callsTimed} of ${m.calls} timed`} />
+        <MiniStat href={salesLink("#calls")} label="Calls" value={<>{m.calls} <Trend now={m.calls} before={p.previous.calls} /></>} caption={`${m.callsVerified} verified · ${m.callsQualified} qualified`} />
+        <MiniStat href={salesLink("#calls")} label="Call minutes" value={m.callMin === null ? "—" : String(m.callMin)} caption={`${m.callsTimed} of ${m.calls} timed`} />
         <MiniStat href={links.meetings} label="Meetings held" value={<>{m.meetings} <Trend now={m.meetings} before={p.previous.meetings} /></>} caption="Completed in range" />
         <MiniStat href={links.bookings(span)} label="Bookings" value={<>{p.bookings.made} <Trend now={p.bookings.made} before={p.previous.bookingsMade} /></>} caption={p.bookings.made ? formatPrice(p.bookings.value) : "Made in range"} />
         <MiniStat href={links.won} label="Win rate" value={<>{m.winPct === null ? "—" : `${m.winPct}%`} {m.winPct !== null && p.previous.winPct !== null ? <Trend now={m.winPct} before={p.previous.winPct} suffix="%" /> : null}</>} caption={`${m.booked} won · ${m.lost} lost`} />
-        <MiniStat href="/dashboard/settings/assignment" label="Score" value={p.score ? String(Math.round(p.score.score)) : "—"} caption={p.score?.provisional ? "Provisional" : "Assignment score"} />
+        <MiniStat href={salesLink("/dashboard/settings/assignment")} label="Score" value={p.score ? String(Math.round(p.score.score)) : "—"} caption={p.score?.provisional ? "Provisional" : "Assignment score"} />
       </div>
 
       <nav aria-label="Profile sections" className="-mx-1 flex gap-1.5 overflow-x-auto px-1 py-1 print:hidden">
-        {JUMPS.filter(([id]) => id !== "notes" || actor.id !== p.person.id).map(([id, label]) => (
+        {jumps.map(([id, label]) => (
           <a key={id} href={`#${id}`} className="shrink-0 rounded-full border border-zinc-200 bg-white px-3 py-1 text-[11px] font-bold text-zinc-700 hover:border-brand hover:text-brand">
             {label}
           </a>
@@ -298,7 +314,7 @@ export default async function EmployeeProfilePage({ params, searchParams }: Page
 
       <p className="-mt-3 text-[11px] text-zinc-500">
         ↑ / ↓ compare with the same number of days just before: {formatListedOn(p.previous.from)}
-        {p.previous.from !== p.previous.to ? ` – ${formatListedOn(p.previous.to)}` : ""}. Click a figure to open the list behind it.
+        {p.previous.from !== p.previous.to ? ` – ${formatListedOn(p.previous.to)}` : ""}. {sales ? "Click a figure to open the list behind it." : "View-only for HR: lead lists, calls and coaching notes stay with Admins."}
       </p>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -314,7 +330,7 @@ export default async function EmployeeProfilePage({ params, searchParams }: Page
                 <span className="text-right text-[10px] font-black tracking-[0.1em] text-zinc-500 uppercase">Team avg</span>
                 {(
                   [
-                    ["Calls", m.calls, p.teamCompare.avg.calls, "#calls"],
+                    ["Calls", m.calls, p.teamCompare.avg.calls, salesLink("#calls")],
                     ["Meetings held", m.meetings, p.teamCompare.avg.meetings, links.meetings],
                     ["Leads won", m.booked, p.teamCompare.avg.booked, links.won],
                     ["Win rate", m.winPct === null ? "—" : `${m.winPct}%`, p.teamCompare.avg.winPct === null ? "—" : `${p.teamCompare.avg.winPct}%`, links.won],
@@ -322,9 +338,13 @@ export default async function EmployeeProfilePage({ params, searchParams }: Page
                 ).map(([label, mine, avg, href]) => (
                   <div key={String(label)} className="contents">
                     <span className="border-t border-zinc-100 py-1 text-zinc-600">{label}</span>
-                    <Link href={href} title={`Open: ${label}`} className="border-t border-zinc-100 py-1 text-right font-black tabular-nums hover:text-brand hover:underline">
-                      {mine}
-                    </Link>
+                    {href ? (
+                      <Link href={href} title={`Open: ${label}`} className="border-t border-zinc-100 py-1 text-right font-black tabular-nums hover:text-brand hover:underline">
+                        {mine}
+                      </Link>
+                    ) : (
+                      <span className="border-t border-zinc-100 py-1 text-right font-black tabular-nums">{mine}</span>
+                    )}
                     <span className="border-t border-zinc-100 py-1 text-right text-zinc-600 tabular-nums">{avg}</span>
                   </div>
                 ))}
@@ -346,18 +366,20 @@ export default async function EmployeeProfilePage({ params, searchParams }: Page
             <Row key={s.stage} label={STAGE_LABELS[s.stage]} value={s.count} href={links.leads({ stage: s.stage })} />
           ))}
           <Row label="Never touched (open)" value={p.untouched} tone={p.untouched ? "amber" : undefined} href={links.leads({ stage: "new_lead" })} hint="Open their New Lead leads (never-touched leads are among them)" />
-          <Link href={links.leads()} className="mt-2 inline-block text-xs font-bold text-brand hover:underline">
-            Open their leads →
-          </Link>
+          {sales ? (
+            <Link href={salesLinks.leads()} className="mt-2 inline-block text-xs font-bold text-brand hover:underline">
+              Open their leads →
+            </Link>
+          ) : null}
         </Section>
 
         <Section id="follow-ups" title="Follow-ups">
-          <Row label="Overdue now" value={p.followUps.overdue} tone={p.followUps.overdue ? "rose" : undefined} href="#overdue" hint="Show the overdue follow-ups below" />
+          <Row label="Overdue now" value={p.followUps.overdue} tone={p.followUps.overdue ? "rose" : undefined} href={salesLink("#overdue")} hint="Show the overdue follow-ups below" />
           <Row label="Due later today" value={p.followUps.today} href={links.todos("today")} hint="Open today's follow-ups in To-dos" />
           <Row label="Upcoming" value={p.followUps.upcoming} href={links.leads({ followUp: "upcoming", sort: "next", dir: "asc" })} hint="Open their leads with a follow-up coming up" />
           <p className="mt-3 mb-1 text-[10px] font-black tracking-[0.1em] text-zinc-500 uppercase">In range</p>
           <Row label="Due" value={m.fuDue} />
-          <Row label="Done" value={`${m.fuDone}${m.fuPct === null ? "" : ` (${m.fuPct}%)`}`} href="#activity" hint="See completed follow-ups in Recent activity" />
+          <Row label="Done" value={`${m.fuDone}${m.fuPct === null ? "" : ` (${m.fuPct}%)`}`} href={salesLink("#activity")} hint="See completed follow-ups in Recent activity" />
           <Row label="Done on time" value={p.followUps.doneOnTime} tone="brand" />
           <Row label="Done late" value={p.followUps.doneLate} tone={p.followUps.doneLate ? "amber" : undefined} />
         </Section>
@@ -375,9 +397,9 @@ export default async function EmployeeProfilePage({ params, searchParams }: Page
 
         <Section id="targets" title="Targets">
           <div className="space-y-3">
-            <Targets title="Today" lines={p.targets.today} href={url("/dashboard/targets", { q: p.person.name, period: "daily" })} />
-            <Targets title="This week" lines={p.targets.week} href={url("/dashboard/targets", { q: p.person.name, period: "weekly" })} />
-            <Targets title="This month" lines={p.targets.month} href={url("/dashboard/targets", { q: p.person.name, period: "monthly" })} />
+            <Targets title="Today" lines={p.targets.today} href={targetsHref("daily")} />
+            <Targets title="This week" lines={p.targets.week} href={targetsHref("weekly")} />
+            <Targets title="This month" lines={p.targets.month} href={targetsHref("monthly")} />
           </div>
         </Section>
 
@@ -402,6 +424,7 @@ export default async function EmployeeProfilePage({ params, searchParams }: Page
           <Row label="Taken · pending" value={`${p.leave.granted} · ${p.leave.pending}`} />
         </Section>
 
+        {sales ? (
         <Section id="calls" title={`Call recordings in range · ${m.calls}`}>
           <FilterList
             empty="No recordings in this range."
@@ -425,9 +448,11 @@ export default async function EmployeeProfilePage({ params, searchParams }: Page
           />
           {m.calls > p.recordings.length ? <p className="mt-1 text-[11px] text-zinc-500">Only the latest {p.recordings.length} can be searched here.</p> : null}
         </Section>
+        ) : null}
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        {sales ? (
         <Section id="overdue" title={`Overdue follow-ups · ${p.followUps.overdue}`}>
           <FilterList
             empty="Nothing overdue."
@@ -456,6 +481,7 @@ export default async function EmployeeProfilePage({ params, searchParams }: Page
           />
           {p.followUps.overdue > p.overdueList.length ? <p className="mt-1 text-[11px] text-zinc-500">Only the oldest {p.overdueList.length} can be searched here.</p> : null}
         </Section>
+        ) : null}
 
         <Section id="lost" title="Why leads were lost">
           {p.lostByReason.length === 0 ? <p className="text-xs text-zinc-500">No leads lost in this range.</p> : p.lostByReason.map((r) => <Row key={r.reason} label={r.reason} value={r.count} href={links.lost(r.reasonId)} hint={`Open their leads lost for: ${r.reason}`} />)}
@@ -474,15 +500,25 @@ export default async function EmployeeProfilePage({ params, searchParams }: Page
               {p.bySource.map((r) => (
                 <div key={r.sourceId} className="contents">
                   <span className="border-t border-zinc-100 py-1">{r.source}</span>
-                  <Link href={links.leads({ ...span, source: r.sourceId })} title={`Open their ${r.source} leads`} className="border-t border-zinc-100 py-1 text-right tabular-nums hover:text-brand hover:underline">
-                    {r.leads}
-                  </Link>
-                  <Link href={links.leads({ ...span, source: r.sourceId, stage: "booked" })} title={`Open their won ${r.source} leads`} className="border-t border-zinc-100 py-1 text-right font-bold text-brand tabular-nums hover:underline">
-                    {r.won}
-                  </Link>
-                  <Link href={links.leads({ ...span, source: r.sourceId, stage: "lost_lead" })} title={`Open their lost ${r.source} leads`} className="border-t border-zinc-100 py-1 text-right text-zinc-600 tabular-nums hover:text-brand hover:underline">
-                    {r.lost}
-                  </Link>
+                  {sales ? (
+                    <>
+                      <Link href={salesLinks.leads({ ...span, source: r.sourceId })} title={`Open their ${r.source} leads`} className="border-t border-zinc-100 py-1 text-right tabular-nums hover:text-brand hover:underline">
+                        {r.leads}
+                      </Link>
+                      <Link href={salesLinks.leads({ ...span, source: r.sourceId, stage: "booked" })} title={`Open their won ${r.source} leads`} className="border-t border-zinc-100 py-1 text-right font-bold text-brand tabular-nums hover:underline">
+                        {r.won}
+                      </Link>
+                      <Link href={salesLinks.leads({ ...span, source: r.sourceId, stage: "lost_lead" })} title={`Open their lost ${r.source} leads`} className="border-t border-zinc-100 py-1 text-right text-zinc-600 tabular-nums hover:text-brand hover:underline">
+                        {r.lost}
+                      </Link>
+                    </>
+                  ) : (
+                    <>
+                      <span className="border-t border-zinc-100 py-1 text-right tabular-nums">{r.leads}</span>
+                      <span className="border-t border-zinc-100 py-1 text-right font-bold text-brand tabular-nums">{r.won}</span>
+                      <span className="border-t border-zinc-100 py-1 text-right text-zinc-600 tabular-nums">{r.lost}</span>
+                    </>
+                  )}
                 </div>
               ))}
             </div>
@@ -490,12 +526,13 @@ export default async function EmployeeProfilePage({ params, searchParams }: Page
         </Section>
       </div>
 
-      {actor.id !== p.person.id ? (
+      {actor.id !== p.person.id && sales ? (
         <Section id="notes" title={`Coaching notes · ${p.notes.length}`}>
           <CoachingNotes userId={p.person.id} notes={p.notes} meId={actor.id} canDeleteAny={actor.role === "super_admin"} canWrite />
         </Section>
       ) : null}
 
+      {sales ? (
       <Section id="activity" title="Recent activity">
         <FilterList
           empty="No activity recorded yet."
@@ -525,6 +562,7 @@ export default async function EmployeeProfilePage({ params, searchParams }: Page
             })}
         />
       </Section>
+      ) : null}
     </PageStack>
   );
 }

@@ -5,7 +5,7 @@ import type { Actor } from "@/server/auth/types";
 import type { Database } from "@/server/db";
 import { auditLogs, employeeNotes, users } from "@/server/db/schema";
 import { forbidden, notFound } from "@/server/errors";
-import { canViewProfiles } from "./profile";
+import { canSeeCoachingNotes } from "./profile";
 
 /**
  * Private coaching notes on an employee's work profile (owner, 16 Nov 2026). Admins and Super Admins
@@ -14,7 +14,7 @@ import { canViewProfiles } from "./profile";
 const noteSchema = z.object({ body: z.string().trim().min(1, "Write a note").max(2000, "Use at most 2,000 characters") }).strict();
 
 export async function addEmployeeNote(db: Database, actor: Actor, userId: string, input: unknown) {
-  if (!canViewProfiles(actor)) throw forbidden();
+  if (!canSeeCoachingNotes(actor)) throw forbidden();
   const { body } = parse(noteSchema, input);
   if (!/^[0-9a-f-]{36}$/i.test(userId)) throw notFound("Person");
   if (userId === actor.id) throw forbidden("You can't keep notes on yourself.");
@@ -26,7 +26,7 @@ export async function addEmployeeNote(db: Database, actor: Actor, userId: string
 }
 
 export async function deleteEmployeeNote(db: Database, actor: Actor, id: string) {
-  if (!canViewProfiles(actor)) throw forbidden();
+  if (!canSeeCoachingNotes(actor)) throw forbidden();
   if (!/^[0-9a-f-]{36}$/i.test(id)) throw notFound("Note");
   const [note] = await db.select().from(employeeNotes).where(eq(employeeNotes.id, id)).limit(1);
   if (!note) throw notFound("Note");

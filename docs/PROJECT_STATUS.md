@@ -4145,3 +4145,21 @@ The owner supplied the client's booking form (`MZ_Marketing_Townhouse_Booking_Fo
 | Contact line | `brand.contact` in `config/brand.ts` (address from the template) |
 
 It still records nothing and issues no number. The receipt and sales order keep their own layouts with the new logo (§94).
+
+## Team Lead: one agent's KPIs (18 Nov 2026)
+
+The owner asked for a short page where a Team Lead sees one agent's whole performance. On **My team**, each agent's name now opens **<name> · KPIs** (/dashboard/my-team/<agent>), view-only, with the same date presets and custom dates.
+
+| Section | Shows |
+|---|---|
+| Top cards | Calls, meetings held, won (each with ↑ / ↓ against the same length of time before), win %, follow-up %, agent score |
+| Right now | Open leads, overdue follow-ups, follow-ups due later today, bookings made and Closed Won in the range, average first touch, call review average, rank in the team by won, and the team's per-agent averages |
+| Pipeline now | Leads per stage |
+| Targets now | Running daily, weekly, monthly and own-date targets with progress and custom goals |
+| Attendance | Today's status and check-in, and this month's working days, present, late and absent |
+
+Only for an active agent in a team the viewer leads (anyone else reads as not found); other agents and Admins are refused (Admins use the work profile). No coaching notes, phone numbers or lead details. Module teams/team-agent.ts; test team-agent-kpis.test.ts. Typecheck and lint pass.
+
+## HR sees Teams in the menu (18 Nov 2026)
+
+Answering the earlier open question (does HR see teams, or only employees?), the owner said **both**. HR could already open Teams read-only (every team, the daily reports and the duty roster; canViewTeams and seesAllTeams include HR), but the sidebar hid it since 15 Nov. The **Teams** entry now shows for HR again. Nothing else changed: HR still can't create teams, change members, pick Team Leads or edit the roster. Test: navigation-roles.test.ts.
