@@ -4119,3 +4119,29 @@ In the "Phone number already exists" box on Add lead, **Save as duplicate** now 
 Checked against the quotation, which lists **Attendance** under Performance. The agent table now has an **Attendance** column: days present (on time or late) of the working days in the selected range, e.g. "18 / 20", with late and absent days under it and the full breakdown on hover. Same day rules as HR → Attendance (weekly days off, company holidays and approved leave aren't working days; today isn't absent until it's over), through `attendanceTotals` in `attendance/service.ts`. Sortable; the CSV adds Working days, Days present, Days late, Days absent and Days on leave. Tests in `performance.test.ts` and `performance-calls.test.ts`.
 
 **Recent leads is not a gap:** the quotation lists it under Dashboard, but the client asked for it to be removed on 10 Nov 2026 (`DASHBOARD_PLAN.md`); New leads in the sidebar replaces it. A panel added by mistake during this check was taken out again, and `dashboard.test.ts` still guards that it stays removed.
+
+## 94. Original MZ Marketing logo (18 Nov 2026)
+
+The owner supplied the original logo (white "MZ" with the gold bird, on black) and asked for it everywhere, including the printed receipt and sales order.
+
+| Where | Now |
+|---|---|
+| Files | `public/brand/mz-mark.png` (black removed, for dark backgrounds) and `mz-mark-on-light.png` (same mark with charcoal letters, for white backgrounds); `src/app/icon.png` and `apple-icon.png` (the square original) replace the old gold "MZ" tile. The earlier wordmark (`mz-logo.png`, from the website) is removed. `config/brand.ts` holds both |
+| Sidebar | The mark with "MZ Marketing" and "Real Estate CRM" beside it; the mark alone when collapsed |
+| Sign-in page | The mark with "MZ Marketing · Your Project Partner" |
+| Printed booking form, provisional receipt, sales order | The mark beside the company name in the header |
+| Proposal / payment plan print | The mark above the title |
+
+## 95. Booking form in the client's template (18 Nov 2026)
+
+The owner supplied the client's booking form (`MZ_Marketing_Townhouse_Booking_Form_New_Logo.pdf`, kept outside the repo) and asked for it to be the printed booking form. This answers Q-B5 (final booking form layout) and replaces the demo layout.
+
+| Part | Detail |
+|---|---|
+| Layout | A4, as the template: black header with the MZ mark, copy badge, "TOWNHOUSE DEVELOPMENT / BOOKING FORM"; gold section bars; peach fill-in boxes; contact footer with Page 1 of 2. Page 2 is the 15 Terms & Conditions, the buyer acknowledgement and the office-use box |
+| Copies | Prints Buyer, Developer and Marketing copies together (6 pages), or one copy from the buttons on the page (`?copy=buyer`, `developer`, `marketing`) |
+| Filled from the CRM | Booking ref (BK- and the first 8 characters of the booking id, until a numbering rule is agreed), booking date, project, unit no., block, covered area, buyer name (the client, else the lead), mobile, email, total price, booking amount (the token), balance, payment plan tick (Instalment when the project's plan has instalments), lead-source tick (mapped from the CRM source) and sales executive |
+| Left to write by hand | Father's / husband's name, CNIC, nationality, occupation, mailing address, residential status and country, joint buyer, payment mode, cheque or transaction no., bank, referred by, and everything on page 2 apart from the buyer's name |
+| Contact line | `brand.contact` in `config/brand.ts` (address from the template) |
+
+It still records nothing and issues no number. The receipt and sales order keep their own layouts with the new logo (§94).

@@ -173,7 +173,7 @@ export function Sidebar({
       <div className="flex h-full flex-col items-stretch">
         <div className="flex h-20 shrink-0 items-center justify-center border-b border-white/10 px-2">
           {/* eslint-disable-next-line @next/next/no-img-element -- small static logo, no resizing needed */}
-          <img src={brand.logo.src} width={brand.logo.width} height={brand.logo.height} alt={brand.logo.alt} className="h-8 w-auto max-w-[52px] object-contain" />
+          <img src={brand.logo.src} width={brand.logo.width} height={brand.logo.height} alt={brand.logo.alt} className="h-9 w-auto max-w-[52px] object-contain" />
         </div>
         <div className="shrink-0 px-3 py-3">
           {/* Searching the menu needs room: this opens the full menu with the search box ready. */}
@@ -210,10 +210,13 @@ export function Sidebar({
   return (
     <div className="flex h-full flex-col">
       {/* Brand: the MZ Marketing logo (16 Nov 2026) */}
-      <div className="flex h-20 shrink-0 flex-col justify-center border-b border-white/10 px-6">
+      <div className="flex h-20 shrink-0 items-center gap-3 border-b border-white/10 px-5">
         {/* eslint-disable-next-line @next/next/no-img-element -- small static logo, no resizing needed */}
-        <img src={brand.logo.src} width={brand.logo.width} height={brand.logo.height} alt={brand.logo.alt} className="h-9 w-auto max-w-full object-contain object-left" />
-        <p className="mt-1 truncate text-[10px] leading-3 font-bold tracking-[0.15em] text-zinc-500 uppercase">{brand.tagline}</p>
+        <img src={brand.logo.src} width={brand.logo.width} height={brand.logo.height} alt="" className="h-11 w-auto shrink-0 object-contain" />
+        <div className="min-w-0">
+          <p className="truncate text-[15px] leading-5 font-black tracking-[-0.01em] text-white">{brand.displayName}</p>
+          <p className="mt-0.5 truncate text-[10px] leading-3 font-bold tracking-[0.15em] text-[#c9a46a] uppercase">{brand.tagline}</p>
+        </div>
       </div>
 
       {/* Menu search */}

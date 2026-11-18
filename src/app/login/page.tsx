@@ -33,10 +33,14 @@ export default function LoginPage() {
         <div aria-hidden="true" className="pointer-events-none absolute -bottom-40 -left-24 size-[26rem] rounded-full bg-black/25 blur-3xl" />
 
         <div className="relative flex items-center gap-4">
-          {/* The gold logo sits on white so it stays visible on this gold panel. */}
-          <span className="inline-flex rounded-2xl bg-white px-4 py-2.5 shadow-lg shadow-black/10">
+          {/* The mark with charcoal letters sits on white so it stays clear on this gold panel. */}
+          <span className="inline-flex items-center gap-2.5 rounded-2xl bg-white px-3.5 py-2 shadow-lg shadow-black/10">
             {/* eslint-disable-next-line @next/next/no-img-element -- small static logo */}
-            <img src={brand.logo.src} width={brand.logo.width} height={brand.logo.height} alt={brand.logo.alt} className="h-10 w-auto" />
+            <img src={brand.logoOnLight.src} width={brand.logoOnLight.width} height={brand.logoOnLight.height} alt={brand.logoOnLight.alt} className="h-11 w-auto" />
+            <span className="text-sm leading-4 font-black text-zinc-900">
+              {brand.displayName}
+              <span className="block text-[10px] font-semibold text-zinc-500">{brand.slogan}</span>
+            </span>
           </span>
           <p className="text-xs font-bold tracking-[0.15em] text-white/80 uppercase">{brand.tagline}</p>
         </div>
@@ -70,7 +74,7 @@ export default function LoginPage() {
         <div className="relative w-full max-w-[400px]">
           <div className="lg:hidden">
             {/* eslint-disable-next-line @next/next/no-img-element -- small static logo */}
-            <img src={brand.logo.src} width={brand.logo.width} height={brand.logo.height} alt={brand.logo.alt} className="h-11 w-auto" />
+            <img src={brand.logoOnLight.src} width={brand.logoOnLight.width} height={brand.logoOnLight.height} alt={brand.logoOnLight.alt} className="h-12 w-auto" />
             <p className="mt-1.5 text-[10px] font-bold tracking-[0.15em] text-zinc-500 uppercase">{brand.tagline}</p>
           </div>
 

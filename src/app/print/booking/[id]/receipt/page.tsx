@@ -86,9 +86,13 @@ export default async function ProvisionalReceiptDemo({ params }: PageProps<"/pri
         </p>
 
         <header className="relative flex flex-wrap items-start justify-between gap-4 border-b-2 border-[#bb8c08] pb-4">
-          <div>
-            <p className="text-2xl font-black tracking-[-0.025em]">{brand.name}</p>
-            <p className="text-xs text-zinc-500">Real Estate · {detail.projectName}</p>
+          <div className="flex items-center gap-3">
+            {/* eslint-disable-next-line @next/next/no-img-element -- the company mark, printed as is */}
+            <img src={brand.logoOnLight.src} width={brand.logoOnLight.width} height={brand.logoOnLight.height} alt={brand.logoOnLight.alt} className="h-14 w-auto" />
+            <div>
+              <p className="text-2xl font-black tracking-[-0.025em]">{brand.name}</p>
+              <p className="text-xs text-zinc-500">Real Estate · {detail.projectName}</p>
+            </div>
           </div>
           <div className="text-right">
             <p className="text-xl font-black tracking-[-0.02em] text-[#bb8c08]">PROVISIONAL RECEIPT</p>
