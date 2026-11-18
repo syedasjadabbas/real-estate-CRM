@@ -56,7 +56,9 @@ export default async function LeavePage({ searchParams }: PageProps<"/dashboard/
   const stepNote = (r: LeaveRow) =>
     r.approvalPath === "senior"
       ? "Super Admin approval"
-      : `Step ${r.currentStep} of 2 · ${STAFF_STEP_LABELS[r.currentStep === 1 ? settings.staffStep1 : settings.staffStep2]}`;
+      : settings.staffStep2 === "none"
+        ? STAFF_STEP_LABELS[settings.staffStep1]
+        : `Step ${r.currentStep} of 2 · ${STAFF_STEP_LABELS[r.currentStep === 1 ? settings.staffStep1 : settings.staffStep2]}`;
 
   return (
     <PageStack>
@@ -117,7 +119,9 @@ export default async function LeavePage({ searchParams }: PageProps<"/dashboard/
               actor.role === "super_admin"
                 ? "Leave you record is approved at once."
                 : actor.role === "admin"
-                  ? "Leave you record for agents, accountants and staff without a login is approved at once; for HR and Admins it goes to a Super Admin."
+                  ? settings.hrPath === "staff"
+                    ? "Leave you record for agents, accountants, HR and staff without a login is approved at once; for Admins it goes to a Super Admin."
+                    : "Leave you record for agents, accountants and staff without a login is approved at once; for HR and Admins it goes to a Super Admin."
                   : "Leave you record goes through the normal approvals."
             }
           />
@@ -234,7 +238,7 @@ export default async function LeavePage({ searchParams }: PageProps<"/dashboard/
 
       {canManageLeaveSettings(actor) ? (
         <PanelCard title="Leave settings">
-          <LeaveSettingsForm annualDays={settings.annualDays} staffStep1={settings.staffStep1} staffStep2={settings.staffStep2} prorationMethod={settings.prorationMethod} />
+          <LeaveSettingsForm annualDays={settings.annualDays} staffStep1={settings.staffStep1} staffStep2={settings.staffStep2} hrPath={settings.hrPath} prorationMethod={settings.prorationMethod} />
         </PanelCard>
       ) : null}
     </PageStack>

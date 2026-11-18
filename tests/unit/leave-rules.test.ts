@@ -20,9 +20,11 @@ describe("leave rules (questionnaire Q4–Q17)", () => {
     expect(proratedAllowance(30, "2026-12-31", 2026).days).toBe(0); // 0.08 days rounds to 0
   });
 
-  it("routes managers, HR, admins and super admins to Super Admin approval (Q7); others to the staff steps (Q6)", () => {
-    expect(ROLES.filter((r) => approvalPathFor(r) === "senior")).toEqual(["super_admin", "admin", "manager", "hr"]);
-    expect(ROLES.filter((r) => approvalPathFor(r) === "staff")).toEqual(["agent", "accountant"]);
+  it("routes Admins, managers and Super Admins to a Super Admin; agents, accountants and (by default) HR to the staff steps (18 Nov 2026)", () => {
+    expect(ROLES.filter((r) => approvalPathFor(r) === "senior")).toEqual(["super_admin", "admin", "manager"]);
+    expect(ROLES.filter((r) => approvalPathFor(r) === "staff")).toEqual(["agent", "hr", "accountant"]);
+    // HR's leave can be sent to a Super Admin instead (setting).
+    expect(approvalPathFor("hr", "senior")).toBe("senior");
   });
 
   it("detects overlapping ranges", () => {

@@ -6,7 +6,7 @@ import { decideLeave, leaveBalances, leaveOverview, leavePeople, recordLeave } f
 import { loadActor } from "@/server/auth/session-store";
 import type { Actor } from "@/server/auth/types";
 import type { Database } from "@/server/db";
-import { auditLogs, leaveRequests, users } from "@/server/db/schema";
+import { appSettings, auditLogs, leaveRequests, users } from "@/server/db/schema";
 import { AppError } from "@/server/errors";
 import { connectTestDb, hasTestDb, resetDb, seedFixture, type Fixture } from "../support/db";
 
@@ -34,6 +34,13 @@ describe.skipIf(!hasTestDb)("Recording leave for someone (15 Nov 2026)", () => {
   beforeEach(async () => {
     await resetDb(db);
     f = await seedFixture(db);
+    // These tests check the two-step chain: set the earlier rules (HR, then Admin; HR's leave to a Super Admin; 30 days).
+    await db.insert(appSettings).values([
+      { key: "leave.annual_days", value: "30" },
+      { key: "leave.staff_step1", value: "hr" },
+      { key: "leave.staff_step2", value: "admin" },
+      { key: "leave.hr_path", value: "senior" },
+    ]);
     const [u] = await db.insert(users).values({ name: "Zed Admin", email: "admin@test.local", role: "admin", passwordHash: "x" }).returning();
     admin = await loadActor(db, { id: u.id, name: u.name, email: u.email, role: u.role });
   });

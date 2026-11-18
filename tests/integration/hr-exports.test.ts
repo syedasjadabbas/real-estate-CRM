@@ -4,7 +4,7 @@ import { checkIn, checkOut } from "@/modules/attendance/service";
 import { instantOf } from "@/modules/attendance/rules";
 import { hrExport } from "@/modules/hr/exports";
 import { submitLeave } from "@/modules/leave/service";
-import { auditLogs, users } from "@/server/db/schema";
+import { appSettings, auditLogs, users } from "@/server/db/schema";
 import type { Database } from "@/server/db";
 import { AppError } from "@/server/errors";
 import { toCsv } from "@/server/csv";
@@ -41,6 +41,13 @@ describe.skipIf(!hasTestDb)("HR CSV downloads (15 Nov 2026)", () => {
   beforeEach(async () => {
     await resetDb(db);
     f = await seedFixture(db);
+    // These tests check the two-step chain: set the earlier rules (HR, then Admin; HR's leave to a Super Admin; 30 days).
+    await db.insert(appSettings).values([
+      { key: "leave.annual_days", value: "30" },
+      { key: "leave.staff_step1", value: "hr" },
+      { key: "leave.staff_step2", value: "admin" },
+      { key: "leave.hr_path", value: "senior" },
+    ]);
     await db.update(users).set({ createdAt: new Date("2026-10-01T00:00:00+05:00") });
   });
 

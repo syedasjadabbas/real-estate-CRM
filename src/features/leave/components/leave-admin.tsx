@@ -5,7 +5,19 @@ import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
 import { selectClass } from "@/features/leads/components/lead-fields";
 import { cn } from "@/lib/cn";
-import { PRORATION_METHODS, STAFF_STEP_APPROVERS, STAFF_STEP_LABELS, type ProrationMethod, type StaffStepApprover } from "@/modules/leave/rules";
+import {
+  HR_PATH_LABELS,
+  HR_PATHS,
+  PRORATION_METHODS,
+  STAFF_STEP_APPROVERS,
+  STAFF_STEP_LABELS,
+  STAFF_STEP2_LABELS,
+  STAFF_STEP2_OPTIONS,
+  type HrPath,
+  type ProrationMethod,
+  type StaffStep2,
+  type StaffStepApprover,
+} from "@/modules/leave/rules";
 import { cancelApprovedLeaveAction, decideLeaveAction, decideLeaveCancellationAction, updateLeaveSettingsAction } from "../actions";
 
 type Msg = { text: string; ok: boolean } | null;
@@ -81,35 +93,44 @@ export function CancelApprovedLeave({ id, name }: { id: string; name: string }) 
   );
 }
 
-/** Admin / Super Admin: allowance and the two staff approval steps (Q4, Q6; the order is the client's decision, C-4). */
+/**
+ * Admin / Super Admin, any time: the yearly allowance, who approves staff leave (one or two steps) and
+ * where HR's leave goes (owner, 18 Nov 2026). Admins' leave always goes to a Super Admin.
+ */
 export function LeaveSettingsForm({
   annualDays,
   staffStep1,
   staffStep2,
+  hrPath,
   prorationMethod,
 }: {
   annualDays: number;
   staffStep1: StaffStepApprover;
-  staffStep2: StaffStepApprover | null;
+  staffStep2: StaffStep2;
+  hrPath: HrPath;
   prorationMethod: ProrationMethod;
 }) {
-  const [v, setV] = useState({ annualDays: String(annualDays), staffStep1: staffStep1 as string, staffStep2: staffStep2 as string, prorationMethod: prorationMethod as string });
+  const [v, setV] = useState({ annualDays: String(annualDays), staffStep1: staffStep1 as string, staffStep2: staffStep2 as string, hrPath: hrPath as string, prorationMethod: prorationMethod as string });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState<Msg>(null);
   const [pending, startTransition] = useTransition();
-  const step = (key: "staffStep1" | "staffStep2", label: string) => (
-    <Field label={label} error={errors[key]}>
+  const pick = (key: "staffStep1" | "staffStep2" | "hrPath", label: string, options: readonly string[], labels: Record<string, string>, hint?: string) => (
+    <Field label={label} error={errors[key]} hint={hint}>
       {(id, d) => (
         <select id={id} aria-describedby={d} className={selectClass} value={v[key]} disabled={pending} onChange={(e) => setV((s) => ({ ...s, [key]: e.target.value }))}>
-          {STAFF_STEP_APPROVERS.map((a) => (
+          {options.map((a) => (
             <option key={a} value={a}>
-              {STAFF_STEP_LABELS[a]}
+              {labels[a]}
             </option>
           ))}
         </select>
       )}
     </Field>
   );
+  const oneStep = v.staffStep2 === "none";
+  const staffWho = v.hrPath === "staff" ? "Agents', accountants' and HR's" : "Agents' and accountants'";
+  const first = STAFF_STEP_LABELS[v.staffStep1 as StaffStepApprover] ?? v.staffStep1;
+  const second = STAFF_STEP2_LABELS[v.staffStep2 as StaffStep2] ?? v.staffStep2;
   return (
     <form
       noValidate
@@ -118,7 +139,7 @@ export function LeaveSettingsForm({
       onSubmit={(e) => {
         e.preventDefault();
         startTransition(async () => {
-          const r = await updateLeaveSettingsAction({ annualDays: v.annualDays, staffStep1: v.staffStep1, staffStep2: v.staffStep2, prorationMethod: v.prorationMethod });
+          const r = await updateLeaveSettingsAction({ annualDays: v.annualDays, staffStep1: v.staffStep1, staffStep2: v.staffStep2, hrPath: v.hrPath, prorationMethod: v.prorationMethod });
           if (r.ok) {
             setErrors({});
             setMsg({ text: r.data.changed.length ? "Leave settings saved." : "No changes to save.", ok: true });
@@ -129,12 +150,13 @@ export function LeaveSettingsForm({
         });
       }}
     >
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Field label="Annual allowance (days)" error={errors.annualDays} hint="The same for everyone.">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Field label="Annual allowance (days)" error={errors.annualDays} hint="The same for everyone, per calendar year.">
           {(id, d) => <Input id={id} aria-describedby={d} inputMode="numeric" value={v.annualDays} disabled={pending} onChange={(e) => setV((s) => ({ ...s, annualDays: e.target.value }))} />}
         </Field>
-        {step("staffStep1", "Staff approval: first step")}
-        {step("staffStep2", "Staff approval: second step")}
+        {pick("staffStep1", "Staff leave approved by", STAFF_STEP_APPROVERS, STAFF_STEP_LABELS)}
+        {pick("staffStep2", "Then a second approval", STAFF_STEP2_OPTIONS, STAFF_STEP2_LABELS, "Choose No second step for one approval only.")}
+        {pick("hrPath", "HR's own leave goes to", HR_PATHS, HR_PATH_LABELS)}
       </div>
       {(Object.keys(PRORATION_METHODS) as ProrationMethod[]).length > 1 ? (
         <Field label="Proration for joiners" error={errors.prorationMethod}>
@@ -154,14 +176,15 @@ export function LeaveSettingsForm({
           <p className="text-[10px] font-black tracking-[0.1em] text-zinc-500 uppercase">Proration for joiners</p>
           <p className="text-sm text-zinc-800">
             Someone who joins during the year gets a share of the allowance for the days left in the year, rounded to the nearest half day. Example: joining on 1 July gives
-            about 15 of 30 days.
+            about half the allowance.
           </p>
           <p className="text-[11px] text-amber-800">Temporary method until the company confirms theirs; it can be changed here then.</p>
         </div>
       )}
       <p className="text-[11px] text-zinc-500">
-        Agents&apos; and accountants&apos; leave needs two approvals by two different people: HR first, then an Admin, unless you change the order above. HR&apos;s and Admins&apos;
-        leave is approved by a Super Admin, and a Super Admin&apos;s own leave is approved automatically. Nobody approves their own leave.
+        {staffWho} leave {oneStep ? `is approved by: ${first}.` : `needs two approvals by two different people: ${first} first, then ${second}.`}{" "}
+        {v.hrPath === "staff" ? "Admins'" : "HR's and Admins'"} leave is approved by a Super Admin, and a Super Admin&apos;s own leave is approved automatically. Nobody
+        approves their own leave. Changes apply to new requests and to the next decision on requests already waiting.
       </p>
       <div className="flex flex-wrap items-center justify-end gap-3">
         <Status msg={msg} />

@@ -28,12 +28,17 @@ import {
   yearOf,
   type LeaveStatus,
   type StaffStepApprover,
+  DEFAULT_HR_PATH,
+  HR_PATHS,
+  STAFF_STEP2_OPTIONS,
+  type HrPath,
+  type StaffStep2,
 } from "./rules";
 
 type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 type DbOrTx = Database | Tx;
 
-const KEYS = { annualDays: "leave.annual_days", staffStep1: "leave.staff_step1", staffStep2: "leave.staff_step2", prorationMethod: "leave.proration_method" } as const;
+const KEYS = { annualDays: "leave.annual_days", staffStep1: "leave.staff_step1", staffStep2: "leave.staff_step2", hrPath: "leave.hr_path", prorationMethod: "leave.proration_method" } as const;
 const requester = alias(users, "leave_requester");
 /** The HR record of staff without a CRM login (leave recorded for them, 15 Nov 2026). */
 const recordPerson = alias(employeeProfiles, "leave_record_person");
@@ -55,18 +60,21 @@ export const canCancelApprovedLeave = (actor: Pick<Actor, "role">) => actor.role
 
 // ─── Settings ────────────────────────────────────────────────────────────────
 
-export type LeaveSettings = { annualDays: number; staffStep1: StaffStepApprover; staffStep2: StaffStepApprover; prorationMethod: ProrationMethod };
+export type LeaveSettings = { annualDays: number; staffStep1: StaffStepApprover; staffStep2: StaffStep2; hrPath: HrPath; prorationMethod: ProrationMethod };
 
 export async function getLeaveSettings(db: DbOrTx): Promise<LeaveSettings> {
   const rows = await db.select().from(appSettings).where(inArray(appSettings.key, Object.values(KEYS)));
   const get = (k: string) => rows.find((r) => r.key === k)?.value ?? null;
   const step = (v: string | null) => (STAFF_STEP_APPROVERS as readonly string[]).includes(v ?? "") ? (v as StaffStepApprover) : null;
+  const step2 = (v: string | null) => (STAFF_STEP2_OPTIONS as readonly string[]).includes(v ?? "") ? (v as StaffStep2) : null;
+  const hrPath = get(KEYS.hrPath);
   const annual = Number(get(KEYS.annualDays));
   const method = get(KEYS.prorationMethod);
   return {
     annualDays: Number.isFinite(annual) && annual > 0 ? annual : DEFAULT_ANNUAL_DAYS,
     staffStep1: step(get(KEYS.staffStep1)) ?? DEFAULT_STAFF_STEP1,
-    staffStep2: step(get(KEYS.staffStep2)) ?? DEFAULT_STAFF_STEP2,
+    staffStep2: step2(get(KEYS.staffStep2)) ?? DEFAULT_STAFF_STEP2,
+    hrPath: (HR_PATHS as readonly string[]).includes(hrPath ?? "") ? (hrPath as HrPath) : DEFAULT_HR_PATH,
     prorationMethod: method && method in PRORATION_METHODS ? (method as ProrationMethod) : DEFAULT_PRORATION_METHOD,
   };
 }
@@ -75,12 +83,13 @@ const settingsSchema = z
   .object({
     annualDays: z.coerce.number("Enter a number").int("Use whole days").min(1, "At least 1 day").max(366, "At most 366 days"),
     staffStep1: z.enum(STAFF_STEP_APPROVERS, "Choose the first approver").optional().default(DEFAULT_STAFF_STEP1),
-    staffStep2: z.enum(STAFF_STEP_APPROVERS, "Choose the second approver").optional().default(DEFAULT_STAFF_STEP2),
+    staffStep2: z.enum(STAFF_STEP2_OPTIONS, "Choose the second approver").optional().default(DEFAULT_STAFF_STEP2),
+    hrPath: z.enum(HR_PATHS, "Choose who approves HR's leave").optional().default(DEFAULT_HR_PATH),
     prorationMethod: z.enum(Object.keys(PRORATION_METHODS) as [ProrationMethod, ...ProrationMethod[]]).optional().default(DEFAULT_PRORATION_METHOD),
   })
   .strict();
 
-/** Admins only. Staff steps default to HR then Admin (owner, 15 Nov 2026). */
+/** Admins and Super Admins, any time. Defaults (owner, 18 Nov 2026): 12 days a year; staff leave (agents, accountants, HR) approved by an Admin in one step; Admins' leave by a Super Admin. */
 export async function updateLeaveSettings(db: Database, actor: Actor, input: unknown) {
   if (!canManageLeaveSettings(actor)) throw forbidden();
   const data = parse(settingsSchema, input);
@@ -177,13 +186,14 @@ export async function submitLeave(db: Database, actor: Actor, input: unknown) {
       .where(and(eq(leaveRequests.userId, actor.id), inArray(leaveRequests.status, HOLDING_STATUSES), sql`${leaveRequests.startDate} <= ${data.endDate} and ${data.startDate} <= ${leaveRequests.endDate}`))
       .limit(1);
     if (clash.length) throw fieldError("startDate", "You already have leave requested or approved on some of these days.");
+    const settings = await getLeaveSettings(tx);
     const balance = held ? null : await leaveBalance(tx, actor.id, yearOf(data.startDate));
     if (balance && days > balance.remaining) {
       throw fieldError("endDate", `This is ${days} day${days === 1 ? "" : "s"}, but only ${Math.max(0, balance.remaining)} remain for ${balance.year}.`);
     }
     const [row] = await tx
       .insert(leaveRequests)
-      .values({ userId: actor.id, type: data.type, startDate: data.startDate, endDate: data.endDate, days, reason: data.reason, approvalPath: approvalPathFor(actor.role) })
+      .values({ userId: actor.id, type: data.type, startDate: data.startDate, endDate: data.endDate, days, reason: data.reason, approvalPath: approvalPathFor(actor.role, settings.hrPath) })
       .returning({ id: leaveRequests.id });
     await audit(tx, actor, "leave.request", row.id, { type: data.type, startDate: data.startDate, endDate: data.endDate, days, held });
     // A Super Admin has nobody above them: their own leave is approved on submission, with an audit entry
@@ -254,7 +264,7 @@ export async function recordLeave(db: Database, actor: Actor, input: unknown) {
       const [u] = await tx.select({ id: users.id, role: users.role, status: users.status }).from(users).where(eq(users.id, id)).for("update");
       if (!u || u.status !== "active") throw fieldError("person", "Choose an active person");
       subject = { userId: u.id };
-      approvalPath = approvalPathFor(u.role);
+      approvalPath = approvalPathFor(u.role, (await getLeaveSettings(tx)).hrPath);
     } else {
       const [r] = await tx.select({ id: employeeProfiles.id, userId: employeeProfiles.userId, status: employeeProfiles.status }).from(employeeProfiles).where(eq(employeeProfiles.id, id)).for("update");
       if (!r || r.userId || r.status !== "active") throw fieldError("person", "Choose an active person");
@@ -333,7 +343,8 @@ export async function canDecideStep(db: DbOrTx, actor: Actor, request: { id: str
   if (request.status !== "pending" || actor.id === request.userId) return false;
   if (isCrossYear(request)) return false;
   if (request.approvalPath === "senior") return actor.role === "super_admin";
-  const approver = request.currentStep === 1 ? settings.staffStep1 : settings.staffStep2;
+  // With no second step configured, a request still at step 2 (from before the change) goes to the first step's approver.
+  const approver = request.currentStep === 1 || settings.staffStep2 === "none" ? settings.staffStep1 : settings.staffStep2;
   if (request.currentStep === 2 && (await stepOneApproverId(db, request.id)) === actor.id) return false;
   if (approver === "hr") return actor.role === "hr";
   if (approver === "admin") return actor.role === "admin" || actor.role === "super_admin";
@@ -364,7 +375,7 @@ async function writeRoster(tx: Tx, actor: Actor, request: { id: string; userId: 
   return inserted.length;
 }
 
-/** Approve or reject the current step. A staff request needs both configured steps (Q6). */
+/** Approve or reject the current step. A staff request needs every configured step: one, or two when a second step is set. */
 export async function decideLeave(db: Database, actor: Actor, id: string, input: unknown) {
   const data = parse(decisionSchema, input);
   return db.transaction(async (tx) => {
@@ -383,7 +394,7 @@ export async function decideLeave(db: Database, actor: Actor, id: string, input:
       throw error;
     }
     const now = new Date();
-    const finalStep = request.approvalPath === "senior" || request.currentStep === 2;
+    const finalStep = request.approvalPath === "senior" || request.currentStep === 2 || settings.staffStep2 === "none";
     if (!data.approve) {
       await tx.update(leaveRequests).set({ status: "rejected", decidedAt: now, updatedAt: now }).where(eq(leaveRequests.id, id));
       await audit(tx, actor, "leave.reject", id, { step: request.currentStep, comment: data.comment });

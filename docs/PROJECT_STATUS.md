@@ -4180,3 +4180,18 @@ Owner's attendance rule confirmed: people mark attendance themselves with **Chec
 | Data | Notification types `attendance_check_in` and `attendance_check_out`; migration `0053_attendance_notifications` |
 
 Test in `attendance.test.ts`.
+
+## Leave rules: 12 days, Admins approve staff, Super Admin approves Admins (18 Nov 2026)
+
+The client's answer to "who accepts whose leave": staff leave is accepted by Admins, Admins' leave by a Super Admin, and 12 annual leaves. Every rule stays editable by Admins and Super Admins at any time in **HR → Leave → Leave settings** (audited as app.setting).
+
+| Setting | New default | Options |
+|---|---|---|
+| Annual allowance | **12 days** (was 30) | Any whole number 1 to 366; joiners still get a share for the rest of the year |
+| Staff leave approved by | **Admin or Super Admin** (was HR) | HR, the agent's team Admin, or Admin or Super Admin |
+| Then a second approval | **No second step** (was Admin) | None, HR, team Admin, or Admin or Super Admin; with two steps the two approvers must be different people |
+| HR's own leave goes to | **The staff steps**, so an Admin approves it (HR used to go to a Super Admin) | The staff steps, or a Super Admin |
+
+Unchanged: Admins' (and the legacy Manager role's) leave goes to a Super Admin; a Super Admin's own leave is approved on submission; nobody approves their own leave. A request already waiting at step 2 when the second step is switched off goes to the first step's approver. Settings saved earlier in a database keep their saved values; only unset ones take the new defaults.
+
+Tests: leave-rules-2026-11.test.ts (new defaults, Admin leave to Super Admin, changing every rule); the older leave, recorded-leave and HR export tests now set the earlier two-step rules themselves. The client documents (user guide, workflow, requirements) still describe HR-then-Admin and 30 days and need updating.

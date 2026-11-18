@@ -19,7 +19,7 @@ import {
 } from "@/modules/leave/service";
 import { businessToday } from "@/modules/bookings/today";
 import { loadActor } from "@/server/auth/session-store";
-import { auditLogs, employeeProfiles, leads, leaveDecisions, leaveRequests, rosterEntries, teamMembers, teams, users } from "@/server/db/schema";
+import { appSettings, auditLogs, employeeProfiles, leads, leaveDecisions, leaveRequests, rosterEntries, teamMembers, teams, users } from "@/server/db/schema";
 import type { Database } from "@/server/db";
 import type { Actor } from "@/server/auth/types";
 import { AppError } from "@/server/errors";
@@ -51,6 +51,13 @@ describe.skipIf(!hasTestDb)("Leave (questionnaire Q4–Q19, PostgreSQL integrati
   beforeEach(async () => {
     await resetDb(db);
     f = await seedFixture(db);
+    // These tests check the two-step chain: set the earlier rules (HR, then Admin; HR's leave to a Super Admin; 30 days).
+    await db.insert(appSettings).values([
+      { key: "leave.annual_days", value: "30" },
+      { key: "leave.staff_step1", value: "hr" },
+      { key: "leave.staff_step2", value: "admin" },
+      { key: "leave.hr_path", value: "senior" },
+    ]);
     const [u] = await db.insert(users).values({ name: "Zed Admin", email: "admin@test.local", role: "admin", passwordHash: "x" }).returning();
     admin = await loadActor(db, { id: u.id, name: u.name, email: u.email, role: u.role });
   });
@@ -282,7 +289,7 @@ describe.skipIf(!hasTestDb)("Leave (questionnaire Q4–Q19, PostgreSQL integrati
       const [u] = await db.insert(users).values({ name, email, role, passwordHash: "x" }).returning();
       return loadActor(db, { id: u.id, name: u.name, email: u.email, role: u.role });
     };
-    const steps = (staffStep1: string, staffStep2: string) => updateLeaveSettings(db, admin, { annualDays: 30, staffStep1, staffStep2 });
+    const steps = (staffStep1: string, staffStep2: string) => updateLeaveSettings(db, admin, { annualDays: 30, staffStep1, staffStep2, hrPath: "senior" });
     const approvals = async (id: string) =>
       (await db.select().from(leaveDecisions).where(and(eq(leaveDecisions.requestId, id), eq(leaveDecisions.kind, "approval")))).sort((a, b) => (a.step ?? 0) - (b.step ?? 0));
     const state = async (id: string) => (await db.select({ status: leaveRequests.status, currentStep: leaveRequests.currentStep }).from(leaveRequests).where(eq(leaveRequests.id, id)))[0];

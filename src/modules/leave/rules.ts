@@ -3,13 +3,14 @@ import type { Role } from "@/server/auth/types";
 /**
  * Leave rules from the client questionnaire (2 Nov 2026). Pure functions, dates as "YYYY-MM-DD".
  * - Q8: calendar days, inclusive (weekends and holidays count).
- * - Q4: the same allowance for everyone (setting, default 30 days; value to confirm, C-7).
+ * - Q4: the same allowance for everyone (setting; 12 days by default since 18 Nov 2026).
  * - Q13: prorated for joiners. The METHOD is not defined yet (C-10); see `proratedAllowance`.
  * - Q14: no carry-forward; each calendar year starts again (leave year to confirm, C-11).
  * - Q17: a request spanning two calendar years is accepted but HELD: it counts against neither
  *   year and can't be approved until the client confirms how its days are deducted (C-13).
  */
-export const DEFAULT_ANNUAL_DAYS = 30;
+/** 12 days a year (owner, 18 Nov 2026); Admins and Super Admins can change it in the leave settings. */
+export const DEFAULT_ANNUAL_DAYS = 12;
 export const LEAVE_TYPES = ["annual", "medical"] as const;
 export type LeaveType = (typeof LEAVE_TYPES)[number];
 export const LEAVE_TYPE_LABELS: Record<LeaveType, string> = { annual: "Annual", medical: "Medical (CPL)" };
@@ -69,9 +70,20 @@ export function proratedAllowance(annualDays: number, joiningDate: string | null
   return { days: m.allowance(annualDays, joiningDate, year), prorated: true, provisional: m.provisional };
 }
 
-/** Q7: leave of managers, HR, admins and super admins is approved by a Super Admin; others follow the two staff steps (Q6). */
-export function approvalPathFor(role: Role): "senior" | "staff" {
-  return role === "agent" || role === "accountant" ? "staff" : "senior";
+/**
+ * Whose leave follows the staff steps and whose goes to a Super Admin (owner, 18 Nov 2026): agents,
+ * accountants and HR are staff (approved by Admins by default); Admins, the legacy Manager role and
+ * Super Admins go to a Super Admin. Where HR's leave goes is a setting (`hrPath`).
+ */
+export const HR_PATHS = ["staff", "senior"] as const;
+export type HrPath = (typeof HR_PATHS)[number];
+export const HR_PATH_LABELS: Record<HrPath, string> = { staff: "The staff steps (like agents)", senior: "A Super Admin" };
+export const DEFAULT_HR_PATH: HrPath = "staff";
+
+export function approvalPathFor(role: Role, hrPath: HrPath = DEFAULT_HR_PATH): "senior" | "staff" {
+  if (role === "agent" || role === "accountant") return "staff";
+  if (role === "hr") return hrPath;
+  return "senior";
 }
 
 /** Who may approve a staff step. The client has not said who approves first and second (C-4): an admin sets them. */
@@ -79,8 +91,13 @@ export const STAFF_STEP_APPROVERS = ["team_manager", "hr", "admin"] as const;
 export type StaffStepApprover = (typeof STAFF_STEP_APPROVERS)[number];
 export const STAFF_STEP_LABELS: Record<StaffStepApprover, string> = { team_manager: "The agent's team admin", hr: "HR", admin: "Admin or Super Admin" };
 /** Agents' and accountants' leave: HR first, then an Admin (owner, 15 Nov 2026). Admins can change the order. */
-export const DEFAULT_STAFF_STEP1: StaffStepApprover = "hr";
-export const DEFAULT_STAFF_STEP2: StaffStepApprover = "admin";
+/** The second step can be left out, so one approval is enough (owner, 18 Nov 2026: Admins approve staff leave). */
+export const STAFF_STEP2_OPTIONS = [...STAFF_STEP_APPROVERS, "none"] as const;
+export type StaffStep2 = (typeof STAFF_STEP2_OPTIONS)[number];
+export const STAFF_STEP2_LABELS: Record<StaffStep2, string> = { ...STAFF_STEP_LABELS, none: "No second step" };
+
+export const DEFAULT_STAFF_STEP1: StaffStepApprover = "admin";
+export const DEFAULT_STAFF_STEP2: StaffStep2 = "none";
 
 export function overlaps(a: { startDate: string; endDate: string }, b: { startDate: string; endDate: string }) {
   return a.startDate <= b.endDate && b.startDate <= a.endDate;
