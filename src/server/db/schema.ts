@@ -77,7 +77,9 @@ export const leadActivityType = pgEnum("lead_activity_type", [
  */
 export const leadVerification = pgEnum("lead_verification", ["pending", "approved", "rejected"]);
 /** DATA_MODEL.md "files". Only call recordings on leads are uploaded so far (FR-038). */
-export const fileKind = pgEnum("file_kind", ["call_recording", "document", "receipt", "other", "meeting_photo"]);
+// whatsapp_call / whatsapp_chat: screenshots of a WhatsApp call (counts as a call, with the length the agent
+// enters) or chat with the customer (proof and a touch), owner 18 Nov 2026.
+export const fileKind = pgEnum("file_kind", ["call_recording", "document", "receipt", "other", "meeting_photo", "whatsapp_call", "whatsapp_chat"]);
 export const followUpStatus = pgEnum("follow_up_status", ["pending", "done", "cancelled"]);
 export const approvalType = pgEnum("approval_type", ["lead_lost"]);
 export const approvalStatus = pgEnum("approval_status", ["pending", "approved", "rejected"]);

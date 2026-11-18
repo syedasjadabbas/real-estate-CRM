@@ -41,6 +41,8 @@ import { assignableUsers, getLeadDetail, leadLookups } from "@/modules/leads/que
 import { AppError } from "@/server/errors";
 import { MaskedPhone } from "@/components/ui/masked-phone";
 import { EmailWithGmail } from "@/components/ui/gmail-button";
+import { WhatsappPanel } from "@/features/whatsapp/components/whatsapp-panel";
+import { listWhatsapp } from "@/modules/whatsapp/service";
 
 export const metadata: Metadata = { title: "Lead" };
 
@@ -66,7 +68,7 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
     const { lead } = detail;
     // "Update after call" replaces the separate stage, note and schedule-follow-up forms (14 Nov 2026).
     const callCard = detail.permissions.edit && detail.permissions.scheduleFollowUp;
-    const [lookups, owners, clientStatus, leadBookings, leadMeetings, recordings, documents] = await Promise.all([
+    const [lookups, owners, clientStatus, leadBookings, leadMeetings, recordings, documents, whatsapp] = await Promise.all([
       leadLookups(db),
       assignableUsers(db, actor),
       clientStatusForLead(db, actor, lead),
@@ -74,6 +76,7 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
       meetingsForLead(db, actor, lead.id),
       listRecordings(db, actor, lead.id),
       listDocuments(db, actor, lead.id),
+      listWhatsapp(db, actor, lead.id),
     ]);
 
     return (
@@ -145,6 +148,11 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
             <FollowUpsPanel detail={detail} canSchedule={!callCard} />
             {callCard ? null : <NotePanel leadId={lead.id} canEdit={detail.permissions.edit} />}
             <RecordingsPanel leadId={lead.id} recordings={recordings} canUpload={detail.permissions.edit} canDelete={actor.role === "super_admin"} canPlay={canPlayRecordings(actor)} />
+            <WhatsappPanel
+              leadId={lead.id}
+              rows={whatsapp.map((w) => ({ id: w.id, kind: w.kind, name: w.name, durationSec: w.durationSec, createdAt: w.createdAt.toISOString(), uploadedBy: w.uploadedBy }))}
+              canUpload={detail.permissions.edit}
+            />
             <DocumentsPanel leadId={lead.id} documents={documents} canUpload={detail.permissions.edit} />
             <ReviewsPanel detail={detail} recordings={recordings} />
             {clientStatus ? <LeadClientPanel leadId={lead.id} status={clientStatus} /> : null}

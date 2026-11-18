@@ -1,4 +1,5 @@
 import { and, eq, gte, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
+import { CALL_KINDS } from "@/modules/performance/calls";
 import type { Database } from "@/server/db";
 import { bookings, files, leadActivities, leads, meetings } from "@/server/db/schema";
 import { addDays } from "./dates";
@@ -38,7 +39,7 @@ export async function crmDayFigures(db: Database, agentIds: string[], date: stri
     db
       .select({ id: files.uploadedById, n: sql<number>`count(*)::int` })
       .from(files)
-      .where(and(inArray(files.uploadedById, agentIds), eq(files.kind, "call_recording"), isNull(files.deletedAt), gte(files.createdAt, from), lt(files.createdAt, to)))
+      .where(and(inArray(files.uploadedById, agentIds), inArray(files.kind, [...CALL_KINDS]), isNull(files.deletedAt), gte(files.createdAt, from), lt(files.createdAt, to)))
       .groupBy(files.uploadedById),
     db
       .select({ id: meetings.organizerId, n: sql<number>`count(*)::int` })

@@ -1,11 +1,12 @@
-import { and, eq, gte, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
+import { and, gte, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import type { Database } from "@/server/db";
 import { files } from "@/server/db/schema";
 
 /**
  * Calls (client confirmation 10 Nov 2026: "Calls = uploaded recordings linked to a lead (one recording = one call)").
  *
- * - A call is a row in `files` with kind = 'call_recording', lead_id not null and deleted_at null
+ * - A call is a row in `files` with kind = 'call_recording' or 'whatsapp_call' (a screenshot of a WhatsApp call,
+ *   whose length the agent enters; owner, 18 Nov 2026), lead_id not null and deleted_at null
  *   (a recording hidden by a Super Admin no longer counts).
  * - It is attributed to its uploader (`uploaded_by_id`) and counted by `created_at` (upload time) inside the
  *   window [start, end). Callers pass only the agents already in their scope (Performance P11 / targetScope).
@@ -14,6 +15,9 @@ import { files } from "@/server/db/schema";
  * - Call quality (FR-152): duration ≥ 30 s = verified, ≥ 60 s = qualified (a qualified call is also verified).
  *   Calls with no duration still count as calls but fall in neither bucket.
  */
+/** The file kinds that count as one call each. */
+export const CALL_KINDS = ["call_recording", "whatsapp_call"] as const;
+
 export const VERIFIED_CALL_SEC = 30;
 export const QUALIFIED_CALL_SEC = 60;
 
@@ -53,7 +57,7 @@ export async function callStatsByUser(db: Database, userIds: string[], window: {
     .from(files)
     .where(
       and(
-        eq(files.kind, "call_recording"),
+        inArray(files.kind, [...CALL_KINDS]),
         isNotNull(files.leadId),
         isNull(files.deletedAt),
         inArray(files.uploadedById, userIds),

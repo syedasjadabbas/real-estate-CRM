@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, gte, inArray, isNull, lt, ne, notInArray, sql } from "drizzle-orm";
+import { CALL_KINDS } from "@/modules/performance/calls";
 import { myAttendance } from "@/modules/attendance/service";
 import { businessToday } from "@/modules/bookings/today";
 import { agentScores } from "@/modules/leads/assignment";
@@ -108,7 +109,7 @@ export async function employeeProfile(db: Database, actor: Actor, userId: string
     .select({ id: files.id, name: files.originalName, durationSec: files.durationSec, createdAt: files.createdAt, leadId: leads.id, leadName: leads.name, leadCode: leads.code })
     .from(files)
     .innerJoin(leads, eq(leads.id, files.leadId))
-    .where(and(eq(files.uploadedById, userId), eq(files.kind, "call_recording"), isNull(files.deletedAt), gte(files.createdAt, range.window.start), lt(files.createdAt, range.window.end)))
+    .where(and(eq(files.uploadedById, userId), inArray(files.kind, [...CALL_KINDS]), isNull(files.deletedAt), gte(files.createdAt, range.window.start), lt(files.createdAt, range.window.end)))
     .orderBy(desc(files.createdAt))
     .limit(200);
 
@@ -197,7 +198,7 @@ export async function employeeProfile(db: Database, actor: Actor, userId: string
     db
       .select({ d: day(files.createdAt), n: sql<number>`count(*)::int` })
       .from(files)
-      .where(and(eq(files.uploadedById, userId), eq(files.kind, "call_recording"), isNull(files.deletedAt), gte(files.createdAt, chartStart), lt(files.createdAt, range.window.end)))
+      .where(and(eq(files.uploadedById, userId), inArray(files.kind, [...CALL_KINDS]), isNull(files.deletedAt), gte(files.createdAt, chartStart), lt(files.createdAt, range.window.end)))
       .groupBy(sql`1`),
     db
       .select({ d: day(meetings.startsAt), n: sql<number>`count(*)::int` })

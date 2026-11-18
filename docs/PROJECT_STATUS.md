@@ -4209,3 +4209,17 @@ The client's answer to "who accepts whose leave": staff leave is accepted by Adm
 Unchanged: Admins' (and the legacy Manager role's) leave goes to a Super Admin; a Super Admin's own leave is approved on submission; nobody approves their own leave. A request already waiting at step 2 when the second step is switched off goes to the first step's approver. Settings saved earlier in a database keep their saved values; only unset ones take the new defaults.
 
 Tests: leave-rules-2026-11.test.ts (new defaults, Admin leave to Super Admin, changing every rule); the older leave, recorded-leave and HR export tests now set the earlier two-step rules themselves. The client documents (user guide, workflow, requirements) still describe HR-then-Admin and 30 days and need updating.
+
+## 98. WhatsApp calls and chats as screenshots (18 Nov 2026)
+
+Owner's answer on WhatsApp calls and messages: **screenshots**. Decisions: a WhatsApp call screenshot **counts as a call**; chat screenshots are **proof and count as a touch**, not a call.
+
+| Part | Detail |
+|---|---|
+| Lead page | A **WhatsApp** panel (next to Documents): choose *WhatsApp call* (one screenshot from the call log + the call length typed in, e.g. 3:25) or *WhatsApp chat* (one or more screenshots). Thumbnails open full size |
+| Calls | A call screenshot counts as one call everywhere a recording does: Performance (calls, call minutes, verified ≥ 30 s / qualified ≥ 60 s, talk time), Targets, the daily report and the work profile (`CALL_KINDS` in `performance/calls.ts`). The length is what the agent types, so Admins can open the screenshot to check it |
+| Chats | Kept on the lead and its timeline; like any file they mark the lead as contacted (first touch) and refresh its last activity. Not a call |
+| Rules | JPG, PNG or WebP checked by content, up to 10 MB; upload by anyone who may edit the lead, viewing by anyone who may see it (same as documents); audited `lead.whatsapp_call_upload` / `lead.whatsapp_chat_upload` |
+| Data | File kinds `whatsapp_call` and `whatsapp_chat` (migration `0055_whatsapp_screenshots`), stored under `whatsapp/`; served by `/api/v1/whatsapp/:id`, uploaded with `POST /api/v1/leads/:id/whatsapp` |
+
+Tests in `whatsapp-screenshots.test.ts`. This changes the client's call definition of 10 Nov ("one recording = one call") to recordings **or** WhatsApp call screenshots.

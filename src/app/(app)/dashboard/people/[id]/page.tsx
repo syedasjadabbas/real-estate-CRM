@@ -425,7 +425,7 @@ export default async function EmployeeProfilePage({ params, searchParams }: Page
         </Section>
 
         {sales ? (
-        <Section id="calls" title={`Call recordings in range · ${m.calls}`}>
+        <Section id="calls" title={`Calls in range (recordings and WhatsApp) · ${m.calls}`}>
           <FilterList
             empty="No recordings in this range."
             tags={["Under 30s", "30s to 1 min", "Over 1 min"]}

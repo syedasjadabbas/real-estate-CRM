@@ -17,9 +17,9 @@ import { audit, loadAccessibleLead, logActivity, touchValues } from "@/modules/l
  * HR and accountants: none. Out-of-scope leads and files are 404. A Super Admin may hide a call
  * recording (Q53); hidden files behave as missing, and the stored file is kept.
  */
-export type LeadFileKind = "call_recording" | "document";
-const FOLDER: Record<LeadFileKind, string> = { call_recording: "recordings", document: "documents" };
-const LABEL: Record<LeadFileKind, string> = { call_recording: "Recording", document: "Document" };
+export type LeadFileKind = "call_recording" | "document" | "whatsapp_call" | "whatsapp_chat";
+const FOLDER: Record<LeadFileKind, string> = { call_recording: "recordings", document: "documents", whatsapp_call: "whatsapp", whatsapp_chat: "whatsapp" };
+const LABEL: Record<LeadFileKind, string> = { call_recording: "Recording", document: "Document", whatsapp_call: "WhatsApp call", whatsapp_chat: "WhatsApp chat" };
 
 const uploader = alias(users, "file_uploader");
 
@@ -61,7 +61,7 @@ export async function saveLeadFile(
         uploadedById: actor.id,
       });
       await tx.update(leads).set(touchValues(current, now)).where(eq(leads.id, lead.id));
-      await logActivity(tx, { leadId: lead.id, actorId: actor.id, type: "file_uploaded", body: file.name, data: { fileId: id, kind: file.kind, ...(file.kind === "call_recording" ? { durationSec: file.durationSec ?? null } : {}) } });
+      await logActivity(tx, { leadId: lead.id, actorId: actor.id, type: "file_uploaded", body: file.name, data: { fileId: id, kind: file.kind, ...(file.kind === "call_recording" || file.kind === "whatsapp_call" ? { durationSec: file.durationSec ?? null } : {}) } });
       await audit(tx, actor, file.auditAction, lead.id, null, { fileId: id, name: file.name, sizeBytes: file.bytes.byteLength, sha256 });
       return { id, name: file.name, sizeBytes: file.bytes.byteLength, durationSec: file.durationSec ?? null };
     });

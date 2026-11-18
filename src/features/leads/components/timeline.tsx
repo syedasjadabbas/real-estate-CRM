@@ -134,6 +134,12 @@ function describeLead(a: TimelineActivity, { people }: Context): TimelineDescrip
     }
     case "file_uploaded": {
       const details: TimelineDetail[] = a.body ? [{ label: "File", value: a.body }] : [];
+      // WhatsApp screenshots (18 Nov 2026): a call counts as a call; a chat is proof of the conversation.
+      if (d.kind === "whatsapp_call") {
+        const len = typeof d.durationSec === "number" ? ` · ${formatClock(d.durationSec)}` : "";
+        return { title: `WhatsApp call (screenshot)${len}`, tag: "Call", details };
+      }
+      if (d.kind === "whatsapp_chat") return { title: "WhatsApp chat screenshot added", tag: "WhatsApp", details };
       if (d.kind === "call_recording" && "durationSec" in d) details.push({ label: "Call length", value: d.durationSec === null ? "unknown (couldn't be read from the file)" : formatClock(Number(d.durationSec)) });
       const length = d.kind === "call_recording" && typeof d.durationSec === "number" ? ` · ${formatClock(d.durationSec)}` : "";
       return { title: `${d.kind === "document" ? "Document" : "Call recording"} uploaded${length}`, tag: d.kind === "document" ? "File" : "Call", details };
