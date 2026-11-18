@@ -18,7 +18,7 @@ import { flattenParams } from "@/features/leads/url";
 import { cn } from "@/lib/cn";
 import { ATTENDANCE_STATUS_LABELS, formatMinutes } from "@/modules/attendance/rules";
 import { STAGE_LABELS } from "@/modules/leads/constants";
-import { canViewProfiles, employeeProfile, type EmployeeProfile } from "@/modules/people/profile";
+import { canSeeLeadDetail, canViewProfiles, employeeProfile, type EmployeeProfile } from "@/modules/people/profile";
 import { formatClock } from "@/modules/recordings/validation";
 import { addDays } from "@/modules/teams/dates";
 import { requirePageUser } from "@/server/auth/current-user";
@@ -204,7 +204,7 @@ export default async function EmployeeProfilePage({ params, searchParams }: Page
   };
   const OPEN_STAGES = p.pipeline.map((s) => s.stage).filter((s) => s !== "booked" && s !== "lost_lead");
   // HR can't open leads, bookings, meetings, targets or security: those figures show without links.
-  const sales = p.leadDetail;
+  const sales = canSeeLeadDetail(actor);
   const salesLink = <T,>(v: T): T | undefined => (sales ? v : undefined);
   const salesLinks = {
     leads: (extra: Record<string, string | undefined> = {}) => url("/dashboard/leads", { owner: who, project: "all", ...extra }),

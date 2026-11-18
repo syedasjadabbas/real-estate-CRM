@@ -4163,3 +4163,9 @@ Only for an active agent in a team the viewer leads (anyone else reads as not fo
 ## HR sees Teams in the menu (18 Nov 2026)
 
 Answering the earlier open question (does HR see teams, or only employees?), the owner said **both**. HR could already open Teams read-only (every team, the daily reports and the duty roster; canViewTeams and seesAllTeams include HR), but the sidebar hid it since 15 Nov. The **Teams** entry now shows for HR again. Nothing else changed: HR still can't create teams, change members, pick Team Leads or edit the roster. Test: navigation-roles.test.ts.
+
+## HR opens work profiles, read-only (18 Nov 2026)
+
+The owner chose to let HR see one employee's KPIs: HR → Employees (or HR → Find employee) now shows **Work profile** for agents and Admins. HR sees the same figures as an Admin (calls, meetings, won and lost, win %, follow-ups, pipeline counts, bookings, score, targets, team comparison, attendance and leave, lost reasons and sources, daily chart) for any dates, and can print or download the CSV.
+
+Left out for HR: customer names and lead lists (the call recordings, overdue follow-ups and recent activity sections), every link into Leads, Bookings, Meetings, Targets or Security (the figures show without links), and coaching notes, which HR can neither read nor write. The CSV leaves the same out. Admins and Super Admins see everything as before. canViewProfiles now includes HR; canSeeLeadDetail and canSeeCoachingNotes stay Admin and Super Admin (people/profile.ts). Test: hr-work-profile.test.ts.
