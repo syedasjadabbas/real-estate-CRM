@@ -98,6 +98,9 @@ export default async function SalesOrderDemo({ params }: PageProps<"/print/booki
           <div className="text-right">
             <p className="text-xl font-black tracking-[-0.02em] text-[#bb8c08]">SALES ORDER</p>
             <p className="text-xs text-zinc-600">
+              Booking no: <span className="font-bold">{detail.ref ?? "—"}</span>
+            </p>
+            <p className="text-xs text-zinc-600">
               Order no: <span className="font-bold">DEMO (not issued)</span>
             </p>
             <p className="text-xs text-zinc-600">Date: {formatDateTime(new Date())}</p>

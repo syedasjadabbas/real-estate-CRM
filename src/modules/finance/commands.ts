@@ -11,7 +11,7 @@ import { isUniqueViolation, teamMemberIds, type DbOrTx } from "@/modules/leads/s
 import { PAYABLE_STAGES } from "./constants";
 import { netPaid, toPaisa } from "./ledger";
 import { assertCanFinance } from "./policy";
-import { financeSettingsSchema, paymentMethodSchema, recordPaymentSchema, reversalDecisionSchema, reversalRequestSchema } from "./validation";
+import { financeSettingsSchema, nextBookingNumberSchema, paymentMethodSchema, recordPaymentSchema, reversalDecisionSchema, reversalRequestSchema } from "./validation";
 
 const fieldError = (field: string, message: string) => new AppError("VALIDATION_FAILED", "Check the highlighted fields.", { fields: { [field]: message } });
 const isId = (v: string) => /^[0-9a-f-]{36}$/i.test(v);
@@ -206,6 +206,23 @@ export async function updateFinanceSettings(db: Database, actor: Actor, input: u
       changed.push(key);
     }
     return { changed };
+  });
+}
+
+/**
+ * The number the next booking gets (owner, 18 Nov 2026: the Super Admin sets it, e.g. to continue the
+ * client's own series). It must be above every number already used, so no two bookings share one.
+ */
+export async function setNextBookingNumber(db: Database, actor: Actor, input: unknown) {
+  assertCanFinance(actor, "settings");
+  const { next } = parse(nextBookingNumberSchema, input);
+  return db.transaction(async (tx) => {
+    const [{ max }] = await tx.select({ max: sql<number | null>`max(${bookings.refNo})` }).from(bookings);
+    if (max !== null && next <= Number(max)) throw fieldError("next", `Bookings up to ${max} already exist; choose ${Number(max) + 1} or more.`);
+    const [{ before }] = (await tx.execute<{ before: string }>(sql`select (case when is_called then last_value + 1 else last_value end)::text as before from booking_ref_no_seq`)).rows;
+    await tx.execute(sql`select setval('booking_ref_no_seq', ${next}, false)`);
+    await audit(tx, actor, "finance.booking_number_next", "finance_setting", "booking_ref_no_seq", { next: Number(before) }, { next });
+    return { next };
   });
 }
 

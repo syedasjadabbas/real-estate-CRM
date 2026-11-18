@@ -4223,3 +4223,15 @@ Owner's answer on WhatsApp calls and messages: **screenshots**. Decisions: a Wha
 | Data | File kinds `whatsapp_call` and `whatsapp_chat` (migration `0055_whatsapp_screenshots`), stored under `whatsapp/`; served by `/api/v1/whatsapp/:id`, uploaded with `POST /api/v1/leads/:id/whatsapp` |
 
 Tests in `whatsapp-screenshots.test.ts`. This changes the client's call definition of 10 Nov ("one recording = one call") to recordings **or** WhatsApp call screenshots.
+
+## 99. Super Admin edits leave days, grace periods and booking numbering (18 Nov 2026)
+
+The three values still marked "to be confirmed" by the client are now settings the Super Admin changes in the app, so no code change is needed when the client decides.
+
+| Setting | Where | Detail |
+|---|---|---|
+| Annual leave days | HR → Leave → Settings | Already a setting (Admin or Super Admin); default 12 days |
+| Payment grace periods | Finance → Settings → Payment grace periods | Instalment grace (default 5 days), down payment due after (7 days), down payment grace (3 days). Empty = the standard value. Used for overdue amounts and aging on Outstanding and in the reports (`paymentTerms`, `finance/views.ts`). Up to 90 days each |
+| Booking numbering | Finance → Settings → Booking numbering | Every booking gets a permanent number from `booking_ref_no_seq`, shown as prefix + 4 digits (default **BK-0013**). The Super Admin sets the prefix and the next number (must be above the highest used; audited `finance.booking_number_next`). Existing bookings were numbered in creation order by migration `0056_booking_numbers` |
+
+The booking number shows on the bookings list (and the booking lists on lead, client and unit pages), the booking page title, the printed booking form (Booking ref. no.), receipt and sales order, and the bookings search finds it ("12", "0012" or "BK-0012"). Finance settings stay Super Admin only for changes. Tests in `booking-numbers-terms.test.ts`.

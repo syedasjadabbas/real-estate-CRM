@@ -12,19 +12,43 @@ export const PAYMENT_TYPE_LABELS: Record<PaymentType, string> = {
 /** Booking stages that accept payments: every stage from Token to Closed Won; never Cancelled. */
 export const PAYABLE_STAGES = ["token_pending", "down_payment", "agreement_pending", "confirmed"] as const;
 
-/** Finance setting keys. Values default to empty: the receipt format is pending client confirmation (Q-F3). */
-export const SETTING_KEYS = ["receipt_prefix", "reversal_prefix"] as const;
+/**
+ * Finance setting keys. Receipt / reversal prefixes default to empty. The booking prefix and the
+ * payment terms (owner, 18 Nov 2026: the Super Admin edits them) default to the values below when empty.
+ */
+export const SETTING_KEYS = ["receipt_prefix", "reversal_prefix", "booking_prefix", "installment_grace_days", "down_payment_due_days", "down_payment_grace_days"] as const;
+export const DEFAULT_BOOKING_PREFIX = "BK-";
+/** A booking number is padded to at least this many digits: BK-0012. */
+export const BOOKING_REF_DIGITS = 4;
+/** "BK-0012", or null for a booking without a number. */
+export function bookingRef(prefix: string | null | undefined, refNo: number | null | undefined) {
+  if (refNo === null || refNo === undefined) return null;
+  return `${prefix || DEFAULT_BOOKING_PREFIX}${String(refNo).padStart(BOOKING_REF_DIGITS, "0")}`;
+}
 export type SettingKey = (typeof SETTING_KEYS)[number];
 
 /**
- * When an unpaid amount becomes overdue (client confirmations, 10 Nov 2026). The client marked the
- * grace periods "to be confirmed", so they live here, in one place.
+ * When an unpaid amount becomes overdue (client confirmations, 10 Nov 2026). These are the defaults;
+ * since 18 Nov 2026 the Super Admin can change them in Finance → Settings (`paymentTerms`).
  * - Installments are due on the 10th; after 5 days' grace they are overdue from the 16th.
  * - The down payment is due 7 days after the booking, plus 3 days' grace.
  */
 export const INSTALLMENT_GRACE_DAYS = 5;
 export const DOWN_PAYMENT_DUE_DAYS = 7;
 export const DOWN_PAYMENT_GRACE_DAYS = 3;
+export const MAX_TERM_DAYS = 90;
+
+export type PaymentTerms = { installmentGraceDays: number; downPaymentDueDays: number; downPaymentGraceDays: number };
+
+/** The payment terms in force: the saved settings, or the defaults when a setting is empty. */
+export function paymentTerms(settings: Partial<Record<SettingKey, string>>): PaymentTerms {
+  const num = (v: string | undefined, fallback: number) => (v !== undefined && /^\d{1,3}$/.test(v) && Number(v) <= MAX_TERM_DAYS ? Number(v) : fallback);
+  return {
+    installmentGraceDays: num(settings.installment_grace_days, INSTALLMENT_GRACE_DAYS),
+    downPaymentDueDays: num(settings.down_payment_due_days, DOWN_PAYMENT_DUE_DAYS),
+    downPaymentGraceDays: num(settings.down_payment_grace_days, DOWN_PAYMENT_GRACE_DAYS),
+  };
+}
 
 /** Aging of the oldest overdue amount, in days past the end of its grace period. */
 export const AGING_BUCKETS = [

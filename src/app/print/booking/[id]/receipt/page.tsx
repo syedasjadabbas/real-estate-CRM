@@ -97,6 +97,9 @@ export default async function ProvisionalReceiptDemo({ params }: PageProps<"/pri
           <div className="text-right">
             <p className="text-xl font-black tracking-[-0.02em] text-[#bb8c08]">PROVISIONAL RECEIPT</p>
             <p className="text-xs text-zinc-600">
+              Booking no: <span className="font-bold">{detail.ref ?? "—"}</span>
+            </p>
+            <p className="text-xs text-zinc-600">
               Receipt no: <span className="font-bold">DEMO (not issued)</span>
             </p>
             <p className="text-xs text-zinc-600">Date: {formatDateTime(booking.createdAt)}</p>

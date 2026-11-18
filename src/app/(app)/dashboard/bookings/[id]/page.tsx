@@ -75,14 +75,14 @@ export default async function BookingDetailPage({ params, searchParams }: PagePr
     <section className="space-y-6" aria-label={`Booking for ${lead.name}`}>
       <PageHeader
         as="h2"
-        title={`${lead.name} · Unit ${unit.unitNo}`}
+        title={`${detail.ref ? `${detail.ref} · ` : ""}${lead.name} · Unit ${unit.unitNo}`}
         description={`${detail.projectName} · Sales agent ${detail.agentName ?? "—"} · Created ${formatDateTime(booking.createdAt)}`}
         actions={
           <>
             <BookingStagePill stage={booking.stage} />
             {/* Demo printable booking form until the client sends its template (owner, 14 Nov 2026). */}
             <Link href={`/print/booking/${booking.id}/form`} className={buttonClasses({ variant: "secondary", size: "lg" })}>
-              Booking form (demo)
+              Booking form
             </Link>
             <Link href="/dashboard/bookings" className={buttonClasses({ variant: "secondary", size: "lg" })}>
               <ArrowLeft aria-hidden="true" className="size-4" />

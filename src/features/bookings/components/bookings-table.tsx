@@ -62,6 +62,7 @@ export function BookingsTable({ rows, emptyMessage, params = {} }: { rows: Booki
             {rows.map((r) => (
               <tr key={r.id} className="border-b border-zinc-100/80 bg-white align-top last:border-b-0 hover:bg-zinc-50/60">
                 <td className="max-w-[220px] px-3 py-2.5">
+                  {r.ref ? <span className="block text-[10px] font-black tracking-[0.05em] text-zinc-500">{r.ref}</span> : null}
                   <span className="block font-bold">{r.leadName}</span>
                   <span className="block text-[11px] font-bold tracking-[0.05em] text-zinc-500">{r.leadCode}</span>
                 </td>

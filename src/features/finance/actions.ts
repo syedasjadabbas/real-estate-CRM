@@ -6,6 +6,7 @@ import {
   decideReversal,
   recordPayment,
   requestReversal,
+  setNextBookingNumber,
   setPaymentMethodActive,
   updateFinanceSettings,
 } from "@/modules/finance/commands";
@@ -46,6 +47,10 @@ export async function decideReversalAction(requestId: string, approve: boolean, 
 
 export async function updateFinanceSettingsAction(input: Record<string, string>) {
   return run((db, actor) => updateFinanceSettings(db, actor, input));
+}
+
+export async function setNextBookingNumberAction(next: string) {
+  return run((db, actor) => setNextBookingNumber(db, actor, { next }));
 }
 
 export async function addPaymentMethodAction(name: string) {

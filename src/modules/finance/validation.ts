@@ -42,7 +42,15 @@ export const reversalDecisionSchema = z.object({
   note: optionalText(1000),
 });
 
-/** Prefixes only (the final receipt format is pending client confirmation, Q-F3). */
+const days = (label: string) =>
+  z
+    .string()
+    .trim()
+    .regex(/^\d{0,3}$/, `${label}: enter whole days`)
+    .refine((v) => v === "" || Number(v) <= 90, `${label}: at most 90 days`)
+    .optional();
+
+/** Prefixes and payment terms (Super Admin). */
 export const financeSettingsSchema = z.object({
   receipt_prefix: z
     .string()
@@ -56,6 +64,21 @@ export const financeSettingsSchema = z.object({
     .max(20)
     .regex(/^[A-Za-z0-9\-/ ]*$/, "Use letters, numbers, spaces, - or /")
     .optional(),
+  booking_prefix: z
+    .string()
+    .trim()
+    .max(20)
+    .regex(/^[A-Za-z0-9\-/ ]*$/, "Use letters, numbers, spaces, - or /")
+    .optional(),
+  // Payment terms in days (owner, 18 Nov 2026); empty = the default.
+  installment_grace_days: days("Instalment grace"),
+  down_payment_due_days: days("Down payment due"),
+  down_payment_grace_days: days("Down payment grace"),
+});
+
+/** The number the next booking gets (Super Admin). Must be above every number already used. */
+export const nextBookingNumberSchema = z.object({
+  next: z.coerce.number("Enter a number").int("Use a whole number").min(1, "At least 1").max(9_999_999, "At most 9,999,999"),
 });
 
 export const paymentMethodSchema = z.object({ name: z.string().trim().min(2, "Name is required").max(40) });

@@ -333,7 +333,7 @@ export default async function BookingFormPage({ params, searchParams }: PageProp
   const copies = wanted ? COPIES.filter((c) => c.key === wanted) : COPIES;
 
   const d: FormData = {
-    ref: `BK-${booking.id.slice(0, 8).toUpperCase()}`,
+    ref: detail.ref ?? "",
     bookedOn: formatListedOn(businessToday(booking.createdAt)),
     project: detail.projectName,
     unitNo: unit.unitNo,

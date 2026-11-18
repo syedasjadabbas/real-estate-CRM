@@ -527,10 +527,15 @@ export const units = pgTable(
  * Finance module (decision 29 Oct 2026). The partial unique index is the database backstop for
  * "one active booking per unit"; the guarded unit transition is the first line of defence.
  */
+/** Booking numbers (owner, 18 Nov 2026): handed out in order, never reused; shown with the prefix from Finance settings. */
+export const bookingRefSeq = pgSequence("booking_ref_no_seq", { startWith: 1, increment: 1 });
+
 export const bookings = pgTable(
   "bookings",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    /** The booking's number (e.g. 12, shown as "BK-0012"); set from `booking_ref_no_seq` when the booking is made. */
+    refNo: integer("ref_no"),
     projectId: uuid("project_id")
       .notNull()
       .references(() => projects.id, { onDelete: "restrict" }),
@@ -571,6 +576,7 @@ export const bookings = pgTable(
   },
   (t) => [
     uniqueIndex("bookings_one_active_per_unit_uq").on(t.unitId).where(sql`${t.stage} <> 'cancelled'`),
+    uniqueIndex("bookings_ref_no_uq").on(t.refNo),
     index("bookings_project_stage_idx").on(t.projectId, t.stage),
     index("bookings_agent_idx").on(t.agentId),
     index("bookings_lead_idx").on(t.leadId),

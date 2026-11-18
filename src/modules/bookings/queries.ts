@@ -5,7 +5,7 @@ import { unitPricePerSqft } from "@/modules/tasks/plan";
 import { discountCap } from "@/modules/tasks/policy";
 import { alias } from "drizzle-orm/pg-core";
 import type { Database } from "@/server/db";
-import { bookingStageHistory, bookings, clients, leads, projects, units, users } from "@/server/db/schema";
+import { bookingStageHistory, bookings, clients, financeSettings, leads, projects, units, users } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
 import { forbidden, notFound } from "@/server/errors";
 import { canAccessClient } from "@/modules/clients/policy";
@@ -19,6 +19,7 @@ import { businessToday } from "./today";
 import { bookingListQuerySchema, type BookingSortColumn } from "./validation";
 import { inTeam, onDays, teamFilterOptions } from "@/server/list-filters";
 import { CURRENT_STAGES } from "./constants";
+import { bookingRef } from "@/modules/finance/constants";
 
 const agent = alias(users, "agent");
 
@@ -40,6 +41,9 @@ function searchCondition(q: string | undefined): SQL | undefined {
   const term = `%${q.replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
   const digits = q.replace(/\D/g, "").replace(/^0+/, "");
   const parts: SQL[] = [ilike(leads.name, term), ilike(leads.code, term), ilike(units.unitNo, term)];
+  // The booking number: "12", "0012" or "BK-0012" all find booking 12 (18 Nov 2026).
+  const num = q.match(/(\d+)\s*$/);
+  if (num) parts.push(eq(bookings.refNo, Number(num[1])));
   if (digits.length >= 3) parts.push(ilike(leads.phoneE164, `%${digits}%`));
   return or(...parts);
 }
@@ -70,6 +74,7 @@ function holdState(b: { stage: (typeof bookings.$inferSelect)["stage"]; reserved
 
 const rowSelection = {
   id: bookings.id,
+  refNo: bookings.refNo,
   stage: bookings.stage,
   totalSale: bookings.totalSale,
   reservedUntil: bookings.reservedUntil,
@@ -97,7 +102,13 @@ const BOOKING_SORTS: Record<BookingSortColumn, SQL> = {
   updatedAt: sql`${bookings.updatedAt}`,
 };
 
-/** FR-085 list: search (lead, code, phone, unit), project (header project by default, or all), stage. */
+/** The booking-number prefix from Finance settings (empty = the default "BK-"). */
+export async function bookingPrefix(db: Database) {
+  const [row] = await db.select({ value: financeSettings.value }).from(financeSettings).where(eq(financeSettings.key, "booking_prefix")).limit(1);
+  return row?.value ?? "";
+}
+
+/** FR-085 list: search (lead, code, phone, unit, booking number), project (header project by default, or all), stage. */
 export async function listBookings(db: Database, actor: Actor, rawQuery: unknown, defaultProjectId: string | null, today: string) {
   if (!canDoBooking(actor, "view")) throw forbidden();
   const query = bookingListQuerySchema.parse(rawQuery ?? {});
@@ -145,14 +156,14 @@ export async function listBookings(db: Database, actor: Actor, rawQuery: unknown
   };
 }
 
-async function withMoney<T extends { id: string; totalSale: number; stage: (typeof bookings.$inferSelect)["stage"]; reservedUntil: string | null }>(
+async function withMoney<T extends { id: string; refNo: number | null; totalSale: number; stage: (typeof bookings.$inferSelect)["stage"]; reservedUntil: string | null }>(
   db: Database,
   rows: T[],
   today: string,
 ) {
-  const paid = await netPaidByBooking(db, rows.map((r) => r.id));
+  const [paid, prefix] = await Promise.all([netPaidByBooking(db, rows.map((r) => r.id)), bookingPrefix(db)]);
   // The map has an entry for every booking with any payment row (even one later reversed).
-  return rows.map((r) => ({ ...r, ...money(r.totalSale, paid.get(r.id) ?? 0), holdOverdue: holdOverdue(r, today), holdState: holdState(r, today, paid.has(r.id)) }));
+  return rows.map((r) => ({ ...r, ref: bookingRef(prefix, r.refNo), ...money(r.totalSale, paid.get(r.id) ?? 0), holdOverdue: holdOverdue(r, today), holdState: holdState(r, today, paid.has(r.id)) }));
 }
 
 export async function getBookingDetail(db: Database, actor: Actor, bookingId: string, today: string) {
@@ -201,6 +212,8 @@ export async function getBookingDetail(db: Database, actor: Actor, bookingId: st
     projectName: b.projectName,
     agentName: b.agentName,
     client: b.client?.id ? { id: b.client.id, name: b.client.name, visible: canAccessClient(actor, b.client.ownerId, members) } : null,
+    /** "BK-0012": the booking's number with the prefix from Finance settings (18 Nov 2026). */
+    ref: bookingRef(await bookingPrefix(db), b.booking.refNo),
     money: money(b.booking.totalSale, await netPaid(db, b.booking.id)),
     holdOverdue: holdOverdue(b.booking, today),
     holdState: holdState(b.booking, today, (await netPaidByBooking(db, [b.booking.id])).has(b.booking.id)),

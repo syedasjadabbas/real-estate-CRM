@@ -10,12 +10,10 @@ import { canAccessBooking } from "@/modules/bookings/policy";
 import { businessToday } from "@/modules/bookings/today";
 import { teamMemberIds } from "@/modules/leads/support";
 import {
+  paymentTerms,
   addDays,
   agingBucket,
   daysBetween,
-  DOWN_PAYMENT_DUE_DAYS,
-  DOWN_PAYMENT_GRACE_DAYS,
-  INSTALLMENT_GRACE_DAYS,
   OUTSTANDING_PAGE_SIZE,
   OUTSTANDING_SORT_COLUMNS,
   PAYABLE_STAGES,
@@ -145,9 +143,10 @@ const bookingDaySql = (createdAt: SQL | typeof bookings.createdAt) => sql`(${cre
 /**
  * FR-203 "overdue vs schedule", by the client's rule (10 Nov 2026). The schedule is the booking's
  * payment plan: its most recent Payment-plan task that isn't cancelled.
- * - An installment (due on the 10th) is overdue once its INSTALLMENT_GRACE_DAYS have passed.
- * - The down payment (row 1, which carries no date) is due DOWN_PAYMENT_DUE_DAYS after the booking
- *   was created and is overdue once DOWN_PAYMENT_GRACE_DAYS more have passed.
+ * - An installment (due on the 10th) is overdue once its grace days have passed.
+ * - The down payment (row 1, which carries no date) is due some days after the booking was created
+ *   and is overdue once its grace days more have passed. The days are the payment terms in Finance
+ *   settings (`paymentTerms`; Super Admin, 18 Nov 2026).
  * - Other rows without a date (plans saved before due dates existed) are not counted and are
  *   reported separately. A booking without a plan has no schedule: its figures are null.
  * `dueToDate` is the total that is past its grace period today; `items` are those scheduled
@@ -164,6 +163,7 @@ export async function scheduleDueByBooking(db: Database, bookingIds: string[], t
     .where(and(inArray(tasks.bookingId, bookingIds), eq(tasks.type, "payment_plan"), ne(tasks.status, "cancelled")))
     .orderBy(tasks.bookingId, desc(tasks.createdAt));
   if (!plans.length) return out;
+  const terms = paymentTerms(await getFinanceSettings(db));
   const rows = await db
     .select({ taskId: taskInstallmentRows.taskId, seq: taskInstallmentRows.seq, amount: taskInstallmentRows.amount, dueOn: taskInstallmentRows.dueOn })
     .from(taskInstallmentRows)
@@ -172,8 +172,8 @@ export async function scheduleDueByBooking(db: Database, bookingIds: string[], t
     const items: Item[] = [];
     let undatedRows = 0;
     for (const r of rows.filter((x) => x.taskId === p.taskId)) {
-      if (r.dueOn) items.push({ amount: r.amount, overdueFrom: addDays(r.dueOn, INSTALLMENT_GRACE_DAYS + 1) });
-      else if (r.seq === 1) items.push({ amount: r.amount, overdueFrom: addDays(p.bookingDay, DOWN_PAYMENT_DUE_DAYS + DOWN_PAYMENT_GRACE_DAYS + 1) });
+      if (r.dueOn) items.push({ amount: r.amount, overdueFrom: addDays(r.dueOn, terms.installmentGraceDays + 1) });
+      else if (r.seq === 1) items.push({ amount: r.amount, overdueFrom: addDays(p.bookingDay, terms.downPaymentDueDays + terms.downPaymentGraceDays + 1) });
       else undatedRows += 1;
     }
     items.sort((a, b) => a.overdueFrom.localeCompare(b.overdueFrom));
@@ -266,6 +266,7 @@ function outstandingAgents(db: Database) {
 export async function listOutstanding(db: Database, actor: Actor, rawQuery: unknown, today = businessToday()) {
   if (!canDoFinance(actor, "viewAll")) throw forbidden();
   const q = outstandingListSchema.parse(rawQuery ?? {});
+  const terms = paymentTerms(await getFinanceSettings(db));
   const planId = sql`(select t.id from tasks t where t.booking_id = ${bookings.id} and t.type = 'payment_plan' and t.status <> 'cancelled' order by t.created_at desc limit 1)`;
   const base = db
     .select({
@@ -277,8 +278,8 @@ export async function listOutstanding(db: Database, actor: Actor, rawQuery: unkn
       paid: sql<string>`(select coalesce(sum(case when p.kind = 'payment' then p.amount else -p.amount end), 0) from booking_payments p where p.booking_id = ${bookings.id})`.as("paid"),
       // Same rule as scheduleDueByBooking: past the grace period today (tests hold the two equal).
       due: sql<string | null>`case when ${planId} is null then null else (select coalesce(sum(r.amount), 0) from task_installment_rows r where r.task_id = ${planId} and (
-        (r.due_on is not null and r.due_on + ${INSTALLMENT_GRACE_DAYS}::int < ${today}::date)
-        or (r.due_on is null and r.seq = 1 and ${bookingDaySql(bookings.createdAt)} + ${DOWN_PAYMENT_DUE_DAYS + DOWN_PAYMENT_GRACE_DAYS}::int < ${today}::date))) end`.as("due"),
+        (r.due_on is not null and r.due_on + ${terms.installmentGraceDays}::int < ${today}::date)
+        or (r.due_on is null and r.seq = 1 and ${bookingDaySql(bookings.createdAt)} + ${terms.downPaymentDueDays + terms.downPaymentGraceDays}::int < ${today}::date))) end`.as("due"),
     })
     .from(bookings)
     .innerJoin(leads, eq(leads.id, bookings.leadId))

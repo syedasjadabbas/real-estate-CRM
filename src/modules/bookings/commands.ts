@@ -143,7 +143,7 @@ export async function createBooking(db: Database, actor: Actor, input: unknown) 
     };
     let created: { id: string };
     try {
-      [created] = await tx.transaction((sp) => sp.insert(bookings).values(values).returning({ id: bookings.id }));
+      [created] = await tx.transaction((sp) => sp.insert(bookings).values({ ...values, refNo: sql`nextval('booking_ref_no_seq')` }).returning({ id: bookings.id }));
     } catch (error) {
       if (isUniqueViolation(error, "bookings_one_active_per_unit_uq")) throw new AppError("CONFLICT", "This unit already has an active booking.");
       throw error;
