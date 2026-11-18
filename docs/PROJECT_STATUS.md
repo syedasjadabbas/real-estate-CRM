@@ -4169,3 +4169,14 @@ Answering the earlier open question (does HR see teams, or only employees?), the
 The owner chose to let HR see one employee's KPIs: HR → Employees (or HR → Find employee) now shows **Work profile** for agents and Admins. HR sees the same figures as an Admin (calls, meetings, won and lost, win %, follow-ups, pipeline counts, bookings, score, targets, team comparison, attendance and leave, lost reasons and sources, daily chart) for any dates, and can print or download the CSV.
 
 Left out for HR: customer names and lead lists (the call recordings, overdue follow-ups and recent activity sections), every link into Leads, Bookings, Meetings, Targets or Security (the figures show without links), and coaching notes, which HR can neither read nor write. The CSV leaves the same out. Admins and Super Admins see everything as before. canViewProfiles now includes HR; canSeeLeadDetail and canSeeCoachingNotes stay Admin and Super Admin (people/profile.ts). Test: hr-work-profile.test.ts.
+
+## 96. HR is notified of every check-in and check-out (18 Nov 2026)
+
+Owner's attendance rule confirmed: people mark attendance themselves with **Check in** / **Check out** on My workplace, and HR corrects a missed day (HR → Attendance → the person → that day). New: HR is told each time.
+
+| Change | Detail |
+|---|---|
+| Notifications | Every active HR member gets a bell notification for each check-in ("Ali Khan checked in at 09:32 · late") and check-out ("… checked out at 18:05 · 8h 33m worked"); late uses the office late cut-off (09:15 by default). It opens that person's attendance, where a missed day can be corrected. HR staff aren't told about their own |
+| Data | Notification types `attendance_check_in` and `attendance_check_out`; migration `0053_attendance_notifications` |
+
+Test in `attendance.test.ts`.

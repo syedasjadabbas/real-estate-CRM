@@ -372,6 +372,13 @@
       "when": 1794827289438,
       "tag": "0052_meeting_photos",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1794997289157,
+      "tag": "0053_attendance_notifications",
+      "breakpoints": true
     }
   ]
 }

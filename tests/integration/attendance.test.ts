@@ -4,7 +4,7 @@ import { dayStatus, DEFAULT_ATTENDANCE_SETTINGS, instantOf, localTime } from "@/
 import { hrDashboard } from "@/modules/attendance/hr-dashboard";
 import { checkIn, checkOut, correctAttendance, dailySheet, monthlySummary, myAttendance, personAttendance, updateAttendanceSettings } from "@/modules/attendance/service";
 import { hrExport } from "@/modules/hr/exports";
-import { holidays, leaveRequests, auditLogs, users } from "@/server/db/schema";
+import { holidays, leaveRequests, auditLogs, notifications, users } from "@/server/db/schema";
 import type { Database } from "@/server/db";
 import { AppError } from "@/server/errors";
 import { connectTestDb, hasTestDb, resetDb, seedFixture, type Fixture } from "../support/db";
@@ -61,6 +61,26 @@ describe.skipIf(!hasTestDb)("Attendance (PostgreSQL integration)", () => {
     expect((await errorOf(checkOut(db, a, instantOf("2026-11-17", "18:20"))))?.message).toMatch(/already checked out/);
     const mine = await myAttendance(db, a, instantOf("2026-11-17", "19:00"));
     expect(mine).toMatchObject({ status: "late", checkIn: "09:40", checkOut: "18:10", minutes: 510 });
+  });
+
+  it("tells every HR member about each check-in and check-out, but not about their own (18 Nov 2026)", async () => {
+    const a = f.actors.agent1;
+    const hr = f.actors.hr;
+    await checkIn(db, a, instantOf("2026-11-17", "09:40"));
+    await checkOut(db, a, instantOf("2026-11-17", "18:10"));
+    const sent = await db.select().from(notifications).where(eq(notifications.userId, hr.id));
+    expect(sent.map((n) => [n.type, n.body, n.link]).sort()).toEqual(
+      [
+        ["attendance_check_in", `${a.name} checked in at 09:40 · late.`, `/dashboard/hr/attendance/${a.id}`],
+        ["attendance_check_out", `${a.name} checked out at 18:10 · 8h 30m worked.`, `/dashboard/hr/attendance/${a.id}`],
+      ].sort(),
+    );
+    // On time is not marked late; nobody else is told; HR's own check-in tells no one when there's one HR member.
+    await checkIn(db, f.actors.agent2, instantOf("2026-11-17", "09:05"));
+    expect((await db.select().from(notifications).where(eq(notifications.userId, hr.id))).find((n) => n.body?.includes("09:05"))?.body).toBe(`${f.actors.agent2.name} checked in at 09:05.`);
+    expect(await db.select().from(notifications).where(eq(notifications.userId, f.actors.superAdmin.id))).toEqual([]);
+    await checkIn(db, hr, instantOf("2026-11-17", "09:00"));
+    expect((await db.select().from(notifications).where(eq(notifications.userId, hr.id))).some((n) => n.body?.startsWith(hr.name))).toBe(false);
   });
 
   it("builds the daily sheet and monthly summary with leave and holidays; only HR and admins see it", async () => {

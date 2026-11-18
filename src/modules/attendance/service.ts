@@ -1,6 +1,7 @@
 import { and, asc, between, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 import { businessToday } from "@/modules/bookings/today";
+import { notify } from "@/modules/notifications/service";
 import { GRANTED_STATUSES } from "@/modules/leave/rules";
 import { parseTask as parse } from "@/modules/tasks/support";
 import type { Actor } from "@/server/auth/types";
@@ -12,6 +13,7 @@ import {
   HHMM,
   datesOfMonth,
   dayStatus,
+  formatMinutes,
   instantOf,
   localDate,
   localTime,
@@ -95,6 +97,15 @@ export async function updateAttendanceSettings(db: Database, actor: Actor, input
 
 // ─── Check in / out ──────────────────────────────────────────────────────────
 
+/**
+ * HR hears about every check-in and check-out (owner, 18 Nov 2026), so a missed one can be chased and
+ * corrected the same day. Every active HR member except the person themself; it opens their attendance.
+ */
+async function tellHr(tx: Tx, actor: Actor, item: { type: "attendance_check_in" | "attendance_check_out"; title: string; body: string; dedupeKey: string }) {
+  const hr = await tx.select({ id: users.id }).from(users).where(and(eq(users.role, "hr"), eq(users.status, "active")));
+  await notify(tx, hr.map((u) => ({ userId: u.id, ...item, link: `/dashboard/hr/attendance/${actor.id}` })), actor.id);
+}
+
 async function audit(tx: Tx, actor: Actor, action: string, id: string, after: Record<string, unknown>, before: Record<string, unknown> | null = null) {
   await tx.insert(auditLogs).values({ actorId: actor.id, ip: actor.ip ?? null, action, entity: "attendance_record", entityId: id, before, after });
 }
@@ -113,6 +124,13 @@ export async function checkIn(db: Database, actor: Actor, now = new Date()) {
       throw new AppError("BUSINESS_RULE", `You already checked in today at ${localTime(existing.checkInAt)}.`);
     }
     await audit(tx, actor, "attendance.check_in", row.id, { date, at: now.toISOString() });
+    const late = localTime(now) > (await getAttendanceSettings(tx)).lateAfter;
+    await tellHr(tx, actor, {
+      type: "attendance_check_in",
+      title: `Checked in · ${actor.name}`,
+      body: `${actor.name} checked in at ${localTime(now)}${late ? " · late" : ""}.`,
+      dedupeKey: `attendance_in:${row.id}`,
+    });
     return { id: row.id, date, checkInAt: now };
   });
 }
@@ -130,7 +148,14 @@ export async function checkOut(db: Database, actor: Actor, now = new Date()) {
     if (row.checkOutAt) throw new AppError("BUSINESS_RULE", `You already checked out today at ${localTime(row.checkOutAt)}.`);
     await tx.update(attendanceRecords).set({ checkOutAt: now, updatedAt: now }).where(eq(attendanceRecords.id, row.id));
     await audit(tx, actor, "attendance.check_out", row.id, { date, at: now.toISOString() });
-    return { id: row.id, date, checkOutAt: now, minutes: workedMinutes(row.checkInAt, now) };
+    const minutes = workedMinutes(row.checkInAt, now);
+    await tellHr(tx, actor, {
+      type: "attendance_check_out",
+      title: `Checked out · ${actor.name}`,
+      body: `${actor.name} checked out at ${localTime(now)}${minutes === null ? "" : ` · ${formatMinutes(minutes)} worked`}.`,
+      dedupeKey: `attendance_out:${row.id}`,
+    });
+    return { id: row.id, date, checkOutAt: now, minutes };
   });
 }
 
