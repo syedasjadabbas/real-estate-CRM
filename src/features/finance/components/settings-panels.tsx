@@ -146,7 +146,7 @@ export function BookingNumberPanel({ prefix, next, highest, canEdit }: { prefix:
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [pending, startTransition] = useTransition();
-  const shown = `${value.trim() || "BK-"}${String(Number(nextValue) || next).padStart(4, "0")}`;
+  const shown = `${value.trim() || "MZ-"}${String(Number(nextValue) || next).padStart(4, "0")}`;
   const save = () =>
     startTransition(async () => {
       const saved: string[] = [];
@@ -170,8 +170,8 @@ export function BookingNumberPanel({ prefix, next, highest, canEdit }: { prefix:
           Every booking gets the next number when it is made; numbers are never reused. It shows on the bookings list, the booking page and the printed booking form, receipt and sales order.
           {highest ? ` The highest number so far is ${highest}.` : ""}
         </p>
-        <Field label="Prefix" error={errors.booking_prefix} hint="Empty means BK-">
-          {(id, d) => <Input id={id} aria-describedby={d} value={value} placeholder="BK-" disabled={!canEdit || pending} onChange={(e) => setValue(e.target.value)} />}
+        <Field label="Prefix" error={errors.booking_prefix} hint="Empty means MZ-">
+          {(id, d) => <Input id={id} aria-describedby={d} value={value} placeholder="MZ-" disabled={!canEdit || pending} onChange={(e) => setValue(e.target.value)} />}
         </Field>
         <Field label="Next booking number" error={errors.next} hint="Must be above the highest number so far">
           {(id, d) => <Input id={id} aria-describedby={d} inputMode="numeric" value={nextValue} disabled={!canEdit || pending} onChange={(e) => setNextValue(e.target.value)} />}

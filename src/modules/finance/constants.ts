@@ -17,10 +17,11 @@ export const PAYABLE_STAGES = ["token_pending", "down_payment", "agreement_pendi
  * payment terms (owner, 18 Nov 2026: the Super Admin edits them) default to the values below when empty.
  */
 export const SETTING_KEYS = ["receipt_prefix", "reversal_prefix", "booking_prefix", "installment_grace_days", "down_payment_due_days", "down_payment_grace_days"] as const;
-export const DEFAULT_BOOKING_PREFIX = "BK-";
-/** A booking number is padded to at least this many digits: BK-0012. */
+/** The client's format, MZ-0001 (owner confirmed 18 Nov 2026); the Super Admin can change it in Finance settings. */
+export const DEFAULT_BOOKING_PREFIX = "MZ-";
+/** A booking number is padded to at least this many digits: MZ-0012. */
 export const BOOKING_REF_DIGITS = 4;
-/** "BK-0012", or null for a booking without a number. */
+/** "MZ-0012", or null for a booking without a number. */
 export function bookingRef(prefix: string | null | undefined, refNo: number | null | undefined) {
   if (refNo === null || refNo === undefined) return null;
   return `${prefix || DEFAULT_BOOKING_PREFIX}${String(refNo).padStart(BOOKING_REF_DIGITS, "0")}`;

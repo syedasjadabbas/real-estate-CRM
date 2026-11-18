@@ -4235,3 +4235,5 @@ The three values still marked "to be confirmed" by the client are now settings t
 | Booking numbering | Finance → Settings → Booking numbering | Every booking gets a permanent number from `booking_ref_no_seq`, shown as prefix + 4 digits (default **BK-0013**). The Super Admin sets the prefix and the next number (must be above the highest used; audited `finance.booking_number_next`). Existing bookings were numbered in creation order by migration `0056_booking_numbers` |
 
 The booking number shows on the bookings list (and the booking lists on lead, client and unit pages), the booking page title, the printed booking form (Booking ref. no.), receipt and sales order, and the bookings search finds it ("12", "0012" or "BK-0012"). Finance settings stay Super Admin only for changes. Tests in `booking-numbers-terms.test.ts`.
+
+**18 Nov 2026, client format confirmed:** booking numbers default to **MZ-0001** (`DEFAULT_BOOKING_PREFIX = "MZ-"`); the Super Admin can still change the prefix and next number in Finance → Settings. Annual leave stays at the 12-day default. Each MZ Avenue Homes floor is sold as its own unit (confirmed).

@@ -534,7 +534,7 @@ export const bookings = pgTable(
   "bookings",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    /** The booking's number (e.g. 12, shown as "BK-0012"); set from `booking_ref_no_seq` when the booking is made. */
+    /** The booking's number (e.g. 12, shown as "MZ-0012"); set from `booking_ref_no_seq` when the booking is made. */
     refNo: integer("ref_no"),
     projectId: uuid("project_id")
       .notNull()

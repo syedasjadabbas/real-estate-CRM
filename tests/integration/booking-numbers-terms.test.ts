@@ -48,19 +48,24 @@ describe.skipIf(!hasTestDb)("Booking numbers and payment grace periods (owner, 1
   it("numbers bookings in order with the prefix, and the Super Admin sets the prefix and the next number", async () => {
     const first = await book();
     const second = await book();
-    expect([first, second]).toEqual([expect.stringMatching(/^BK-\d{4}$/), expect.stringMatching(/^BK-\d{4}$/)]);
+    // The client's format by default: MZ-0001 (18 Nov 2026).
+    expect([first, second]).toEqual([expect.stringMatching(/^MZ-\d{4}$/), expect.stringMatching(/^MZ-\d{4}$/)]);
     expect(Number(second!.slice(3))).toBe(Number(first!.slice(3)) + 1);
 
-    await updateFinanceSettings(db, f.actors.superAdmin, { booking_prefix: "MZ-" });
+    // The Super Admin can still change the prefix.
+    await updateFinanceSettings(db, f.actors.superAdmin, { booking_prefix: "AV-" });
     const used = Number(second!.slice(3));
     // The next number can't reuse one already given.
     expect((await errorOf(setNextBookingNumber(db, f.actors.superAdmin, { next: used })))?.fields?.next).toMatch(/already exist/);
-    await setNextBookingNumber(db, f.actors.superAdmin, { next: 500 });
-    expect(await book()).toBe("MZ-0500");
+    // The sequence isn't reset between test runs, so jump ahead of whatever is in use.
+    const next = used + 100;
+    const expected = `AV-${String(next).padStart(4, "0")}`;
+    await setNextBookingNumber(db, f.actors.superAdmin, { next });
+    expect(await book()).toBe(expected);
 
     // Search finds it by number; the list shows the number.
-    const found = await listBookings(db, f.actors.superAdmin, { q: "MZ-0500", project: "all" }, null, businessToday());
-    expect(found.rows.map((r) => r.ref)).toEqual(["MZ-0500"]);
+    const found = await listBookings(db, f.actors.superAdmin, { q: expected, project: "all" }, null, businessToday());
+    expect(found.rows.map((r) => r.ref)).toEqual([expected]);
     // Only a Super Admin changes numbering.
     expect((await errorOf(setNextBookingNumber(db, f.actors.agent1, { next: 900 })))?.code).toBe("FORBIDDEN");
   });

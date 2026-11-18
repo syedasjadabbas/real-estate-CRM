@@ -41,7 +41,7 @@ function searchCondition(q: string | undefined): SQL | undefined {
   const term = `%${q.replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
   const digits = q.replace(/\D/g, "").replace(/^0+/, "");
   const parts: SQL[] = [ilike(leads.name, term), ilike(leads.code, term), ilike(units.unitNo, term)];
-  // The booking number: "12", "0012" or "BK-0012" all find booking 12 (18 Nov 2026).
+  // The booking number: "12", "0012" or "MZ-0012" all find booking 12 (18 Nov 2026).
   const num = q.match(/(\d+)\s*$/);
   if (num) parts.push(eq(bookings.refNo, Number(num[1])));
   if (digits.length >= 3) parts.push(ilike(leads.phoneE164, `%${digits}%`));
@@ -102,7 +102,7 @@ const BOOKING_SORTS: Record<BookingSortColumn, SQL> = {
   updatedAt: sql`${bookings.updatedAt}`,
 };
 
-/** The booking-number prefix from Finance settings (empty = the default "BK-"). */
+/** The booking-number prefix from Finance settings (empty = the default "MZ-"). */
 export async function bookingPrefix(db: Database) {
   const [row] = await db.select({ value: financeSettings.value }).from(financeSettings).where(eq(financeSettings.key, "booking_prefix")).limit(1);
   return row?.value ?? "";
@@ -212,7 +212,7 @@ export async function getBookingDetail(db: Database, actor: Actor, bookingId: st
     projectName: b.projectName,
     agentName: b.agentName,
     client: b.client?.id ? { id: b.client.id, name: b.client.name, visible: canAccessClient(actor, b.client.ownerId, members) } : null,
-    /** "BK-0012": the booking's number with the prefix from Finance settings (18 Nov 2026). */
+    /** "MZ-0012": the booking's number with the prefix from Finance settings (18 Nov 2026). */
     ref: bookingRef(await bookingPrefix(db), b.booking.refNo),
     money: money(b.booking.totalSale, await netPaid(db, b.booking.id)),
     holdOverdue: holdOverdue(b.booking, today),
