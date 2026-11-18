@@ -4181,6 +4181,20 @@ Owner's attendance rule confirmed: people mark attendance themselves with **Chec
 
 Test in `attendance.test.ts`.
 
+## 97. Missed-meeting alerts (18 Nov 2026)
+
+Owner's answer to "meetings in the past / missed meetings: who is alerted and when": **the very next day, the agent and their Admin.**
+
+| Rule | Detail |
+|---|---|
+| When | From the day after the meeting (Pakistan time) while it is still Scheduled, i.e. not marked Completed or Cancelled |
+| Who | The meeting's organizer ("Your meeting "…" on 17 Nov, 15:00 still has no outcome. Mark it completed or cancelled.") and the Admin of each active team the organizer is in ("Ali's meeting …") |
+| Once | One alert per meeting time; rescheduling it and missing it again alerts again. Opening the alert goes to the meeting to record the outcome |
+| Range | Meetings due in the last 30 days (`MISSED_MEETING_DAYS`); older ones stay in To-dos → Overdue → Meetings |
+| How | Created when the person's notifications are read (`syncMissedMeetings`, like follow-up reminders), so no scheduled job is needed. Type `meeting_missed`, migration `0054_meeting_missed_alerts` |
+
+Tests in `notifications.test.ts`.
+
 ## Leave rules: 12 days, Admins approve staff, Super Admin approves Admins (18 Nov 2026)
 
 The client's answer to "who accepts whose leave": staff leave is accepted by Admins, Admins' leave by a Super Admin, and 12 annual leaves. Every rule stays editable by Admins and Super Admins at any time in **HR → Leave → Leave settings** (audited as app.setting).

@@ -1311,6 +1311,8 @@ export const notificationType = pgEnum("notification_type", [
   // Someone checked in or out on My workplace: every active HR member is told (owner, 18 Nov 2026).
   "attendance_check_in",
   "attendance_check_out",
+  // A meeting still Scheduled the day after it was due: its organizer and their team Admin (owner, 18 Nov 2026).
+  "meeting_missed",
 ]);
 
 /** In-app notifications (DATA_MODEL.md "notifications"). One row per recipient and event key, never duplicated. */

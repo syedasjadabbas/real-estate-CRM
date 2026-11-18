@@ -1,7 +1,9 @@
-import { and, count, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Database } from "@/server/db";
-import { appSettings, auditLogs, followUps, leads, notifications, teamMembers, teams } from "@/server/db/schema";
+import { alias } from "drizzle-orm/pg-core";
+import { appSettings, auditLogs, followUps, leads, meetings, notifications, teamMembers, teams, users } from "@/server/db/schema";
+import { businessToday } from "@/modules/bookings/today";
 import type { Actor } from "@/server/auth/types";
 import { forbidden, notFound } from "@/server/errors";
 import { followUpLeadActive, type DbOrTx } from "@/modules/leads/support";
@@ -159,6 +161,52 @@ export async function syncTargetsMet(db: Database, actor: Actor, now = new Date(
   return notify(db, items, null);
 }
 
+// ─── Missed meetings ──────────────────────────────────────────────────────────
+
+/** How far back a missed meeting still raises an alert (older ones are left to the To-dos list). */
+export const MISSED_MEETING_DAYS = 30;
+
+const organizerUser = alias(users, "missed_meeting_organizer");
+const meetingWhen = (d: Date) => d.toLocaleString("en-GB", { timeZone: "Asia/Karachi", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false });
+
+/**
+ * Missed-meeting alerts (owner, 18 Nov 2026): a meeting still Scheduled after the day it was due alerts,
+ * from the very next day, its organizer and the Admin of their team. Created when the person's
+ * notifications are read (no scheduler), once per meeting time: a rescheduled meeting that is missed
+ * again alerts again. Only meetings due in the last `MISSED_MEETING_DAYS` days.
+ */
+export async function syncMissedMeetings(db: DbOrTx, actor: Actor, now = new Date()) {
+  const todayStart = new Date(`${businessToday(now)}T00:00:00+05:00`);
+  const since = new Date(todayStart.getTime() - MISSED_MEETING_DAYS * 86_400_000);
+  const missed = and(eq(meetings.status, "scheduled"), lt(meetings.startsAt, todayStart), gte(meetings.startsAt, since));
+  // Meetings the actor organised, and meetings organised by members of teams the actor is the Admin of.
+  const ledTeams = db.select({ userId: teamMembers.userId }).from(teamMembers).innerJoin(teams, eq(teams.id, teamMembers.teamId)).where(and(eq(teams.managerId, actor.id), eq(teams.isActive, true)));
+  const rows = await db
+    .select({ id: meetings.id, title: meetings.title, startsAt: meetings.startsAt, organizerId: meetings.organizerId, organizerName: organizerUser.name, leadName: leads.name })
+    .from(meetings)
+    .innerJoin(leads, eq(leads.id, meetings.leadId))
+    .innerJoin(organizerUser, eq(organizerUser.id, meetings.organizerId))
+    .where(and(missed, or(eq(meetings.organizerId, actor.id), inArray(meetings.organizerId, ledTeams))));
+  if (rows.length === 0) return 0;
+  return notify(
+    db,
+    rows.map((m) => {
+      const mine = m.organizerId === actor.id;
+      return {
+        userId: actor.id,
+        type: "meeting_missed" as const,
+        title: `Missed meeting · ${m.leadName}`,
+        body: mine
+          ? `Your meeting "${m.title}" on ${meetingWhen(m.startsAt)} still has no outcome. Mark it completed or cancelled.`
+          : `${m.organizerName}'s meeting "${m.title}" on ${meetingWhen(m.startsAt)} still has no outcome.`,
+        link: `/dashboard/meetings/${m.id}`,
+        dedupeKey: `meeting_missed:${m.id}:${m.startsAt.toISOString()}`,
+      };
+    }),
+    null,
+  );
+}
+
 // ─── Reading ──────────────────────────────────────────────────────────────────
 
 const listSchema = z.object({
@@ -171,6 +219,7 @@ export async function listNotifications(db: Database, actor: Actor, input: unkno
   const query = listSchema.parse(input ?? {});
   await syncFollowUpReminders(db, actor, now);
   await syncTargetsMet(db, actor, now);
+  await syncMissedMeetings(db, actor, now);
   const own = eq(notifications.userId, actor.id);
   const where = query.unread ? and(own, isNull(notifications.readAt)) : own;
   const [[{ total }], [{ unread }]] = await Promise.all([

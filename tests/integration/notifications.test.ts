@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { assignLead, changeStage, createLead, decideLostRequest, markLost, scheduleFollowUp, completeFollowUp } from "@/modules/leads/commands";
 import { listNotifications, markAllRead, markRead, reminderMinutes, updateReminderMinutes } from "@/modules/notifications/service";
-import { approvals, auditLogs, followUps, notifications, users } from "@/server/db/schema";
+import { approvals, auditLogs, followUps, meetings, notifications, users } from "@/server/db/schema";
 import { loadActor } from "@/server/auth/session-store";
 import type { Database } from "@/server/db";
 import type { Actor } from "@/server/auth/types";
@@ -106,6 +106,48 @@ describe.skipIf(!hasTestDb)("Notifications (PostgreSQL integration)", () => {
       const sent = await db.select({ userId: notifications.userId, type: notifications.type }).from(notifications);
       expect(sent.map((n) => n.userId).sort()).toEqual([admin.id, f.actors.superAdmin.id].sort());
       expect(new Set(sent.map((n) => n.type))).toEqual(new Set(["lost_requested"]));
+    });
+  });
+
+  describe("missed meetings (18 Nov 2026)", () => {
+    const DAY = 86_400_000;
+    const meeting = async (organizer: Actor, startsAt: Date, status: "scheduled" | "completed" = "scheduled") => {
+      const leadId = await lead(organizer);
+      const [m] = await db
+        .insert(meetings)
+        .values({ title: "Site visit", startsAt, organizerId: organizer.id, leadId, status, completedAt: status === "completed" ? startsAt : null })
+        .returning({ id: meetings.id });
+      return m.id;
+    };
+    const missedOf = async (actor: Actor) => (await mine(actor)).filter((n) => n.type === "meeting_missed");
+
+    it("alerts the organizer and their team Admin from the next day, once, with a link to the meeting", async () => {
+      const id = await meeting(f.actors.agent1, new Date(Date.now() - DAY));
+      const [agentAlert] = await missedOf(f.actors.agent1);
+      expect(agentAlert).toMatchObject({ link: `/dashboard/meetings/${id}` });
+      expect(agentAlert.body).toMatch(/^Your meeting "Site visit" on .* still has no outcome/);
+      // Team 1's Admin (the fixture's manager) hears too; another agent and an unrelated Admin don't.
+      const [adminAlert] = await missedOf(f.actors.manager);
+      expect(adminAlert.body).toMatch(new RegExp(`^${f.actors.agent1.name}'s meeting "Site visit"`));
+      expect(await missedOf(f.actors.agent2)).toEqual([]);
+      expect(await missedOf(admin)).toEqual([]);
+      // Reading again doesn't repeat it.
+      expect(await missedOf(f.actors.agent1)).toHaveLength(1);
+    });
+
+    it("leaves alone meetings due today, held meetings, and ones missed over 30 days ago; a rescheduled miss alerts again", async () => {
+      const today = await meeting(f.actors.agent1, new Date(Date.now() - 60_000));
+      await meeting(f.actors.agent1, new Date(Date.now() - 2 * DAY), "completed");
+      await meeting(f.actors.agent1, new Date(Date.now() - 31 * DAY));
+      // A meeting earlier today isn't missed yet unless today began before it (it always did); only past days count.
+      const todays = (await missedOf(f.actors.agent1)).filter((n) => n.link === `/dashboard/meetings/${today}`);
+      expect(todays).toEqual([]);
+      expect(await missedOf(f.actors.agent1)).toEqual([]);
+
+      const id = await meeting(f.actors.agent1, new Date(Date.now() - 2 * DAY));
+      expect(await missedOf(f.actors.agent1)).toHaveLength(1);
+      await db.update(meetings).set({ startsAt: new Date(Date.now() - DAY) }).where(eq(meetings.id, id));
+      expect(await missedOf(f.actors.agent1)).toHaveLength(2);
     });
   });
 
