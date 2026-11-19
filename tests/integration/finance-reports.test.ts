@@ -202,9 +202,9 @@ describe.skipIf(!hasTestDb)("Finance reports FR-205 (PostgreSQL integration)", (
     await db.update(users).set({ name: "=HYPERLINK(\"x\")" }).where(eq(users.id, f.actors.agent1.id));
     const col = await exportReport(db, accountant, { report: "collections", from: "2026-10-01", to: "2026-10-31" });
     expect(col.filename).toBe("collections-2026-10-01-to-2026-10-31.csv");
-    expect(col.body.split("\n")[0]).toBe("Project,From,To,Receipts,Received (PKR),Reversals,Reversed (PKR),Net collected (PKR)");
-    expect(col.body).toContain("Test Project,2026-10-01,2026-10-31,1,500000,0,0,500000");
-    expect(col.body).toContain("Total,2026-10-01,2026-10-31,1,500000,0,0,500000");
+    expect(col.body.split("\n")[0]).toBe("Project,From,To,Receipts,Received (PKR),Reversals,Reversed (PKR),Refunds,Refunded (PKR),Net collected (PKR)");
+    expect(col.body).toContain("Test Project,2026-10-01,2026-10-31,1,500000,0,0,0,0,500000");
+    expect(col.body).toContain("Total,2026-10-01,2026-10-31,1,500000,0,0,0,0,500000");
     const agents = await exportReport(db, admin, { report: "outstanding_agent" });
     expect(agents.body).toContain(`"'=HYPERLINK(""x"")"`);
     const audits = await db.select().from(auditLogs).where(eq(auditLogs.action, "finance.report_export"));

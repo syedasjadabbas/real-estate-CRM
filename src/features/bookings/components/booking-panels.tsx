@@ -23,10 +23,15 @@ function Status({ msg }: { msg: { text: string; ok: boolean } | null }) {
 
 /** Next-stage move (one step, optional note) and cancel with a required reason. */
 export function BookingStagePanel({ detail, signedForms = [], proofs = [] }: { detail: BookingDetail; signedForms?: StageFile[]; proofs?: StageFile[] }) {
-  const { booking, permissions } = detail;
+  const { booking, permissions, money } = detail;
   const [reason, setReason] = useState("");
+  const [deduction, setDeduction] = useState("");
+  const paid = money.paid;
+  const fmt = (n: number) => `PKR ${new Intl.NumberFormat("en-US").format(n)}`;
+  const refundPreview = paid > 0 && deduction.trim() !== "" && Number.isFinite(Number(deduction.replace(/,/g, ""))) ? Math.max(0, paid - Number(deduction.replace(/,/g, ""))) : null;
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [cancelError, setCancelError] = useState<string | undefined>();
+  const [deductionError, setDeductionError] = useState<string | undefined>();
   const [pending, startTransition] = useTransition();
   const next = permissions.nextStage as BookingStage | null;
   const closed = booking.stage === "confirmed" || booking.stage === "cancelled";
@@ -38,6 +43,11 @@ export function BookingStagePanel({ detail, signedForms = [], proofs = [] }: { d
           <p className="text-xs text-zinc-600">
             This booking is {BOOKING_STAGE_LABELS[booking.stage].toLowerCase()}
             {booking.stage === "cancelled" && booking.cancelledReason ? `: ${booking.cancelledReason}` : "."}
+            {booking.stage === "cancelled" && booking.refundDue !== null ? (
+              <span className="mt-1 block font-semibold text-zinc-800">
+                Deduction kept {fmt(booking.refundDeduction ?? 0)} · refund due {fmt(booking.refundDue)} (Accounts pays it in Finance → Refunds).
+              </span>
+            ) : null}
           </p>
         ) : (
           // Every open stage shows its steps; only the move itself depends on the role (owner, 14 Nov 2026).
@@ -69,20 +79,37 @@ export function BookingStagePanel({ detail, signedForms = [], proofs = [] }: { d
                 />
               )}
             </Field>
+            {paid > 0 ? (
+              <div className="space-y-1.5 rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+                <p className="text-xs text-amber-900">
+                  <b>{fmt(paid)}</b> has been received on this booking. Enter what is kept as a deduction; the rest is refunded to the buyer by Accounts.
+                </p>
+                <Field label="Deduction kept (PKR)" required error={deductionError}>
+                  {(id, describedBy) => <Input id={id} aria-describedby={describedBy} inputMode="numeric" value={deduction} placeholder="0 for a full refund" disabled={pending} onChange={(e) => setDeduction(e.target.value)} />}
+                </Field>
+                {refundPreview !== null ? <p className="text-xs font-semibold text-zinc-800">Refund due to the buyer: {fmt(refundPreview)}</p> : null}
+              </div>
+            ) : null}
             <Button
               variant="secondary"
               size="lg"
               className="border-rose-200 text-rose-700 hover:bg-rose-50"
-              disabled={!reason.trim() || pending}
+              disabled={!reason.trim() || (paid > 0 && deduction.trim() === "") || pending}
               onClick={() =>
                 startTransition(async () => {
-                  const result = await cancelBookingAction(booking.id, reason);
+                  const result = await cancelBookingAction(booking.id, reason, paid > 0 ? deduction : undefined);
                   if (result.ok) {
                     setReason("");
+                    setDeduction("");
                     setCancelError(undefined);
-                    setMsg({ text: "Booking cancelled. The unit is available again.", ok: true });
+                    setDeductionError(undefined);
+                    setMsg({
+                      text: result.data.refundDue !== null ? `Booking cancelled; the unit is available again. Refund due: ${fmt(result.data.refundDue)}.` : "Booking cancelled. The unit is available again.",
+                      ok: true,
+                    });
                   } else {
                     setCancelError(result.fields?.reason);
+                    setDeductionError(result.fields?.deduction);
                     setMsg({ text: result.message, ok: false });
                   }
                 })

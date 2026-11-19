@@ -6,7 +6,7 @@ import type { Actor } from "@/server/auth/types";
 import { forbidden, notFound } from "@/server/errors";
 import { bookingScope, canAccessBooking } from "@/modules/bookings/policy";
 import { teamMemberIds } from "@/modules/leads/support";
-import { PAYMENT_PAGE_SIZE, PAYMENT_SORT_COLUMNS, PAYMENT_TYPES, SETTING_KEYS, type PaymentSortColumn, type SettingKey } from "./constants";
+import { PAYMENT_PAGE_SIZE, REFUND_PREFIX, PAYMENT_SORT_COLUMNS, PAYMENT_TYPES, SETTING_KEYS, type PaymentSortColumn, type SettingKey } from "./constants";
 import { canDoFinance, canSeeItemisedPayments } from "./policy";
 import { z } from "zod";
 
@@ -27,7 +27,8 @@ export function receiptLabel(prefix: string, floor: string | null | undefined, r
   return `${prefix}${code ? `${code}-` : ""}${receiptNo}`;
 }
 
-export function formatReceipt(settings: Record<SettingKey, string>, row: { kind: string; receiptNo: number | null; reversalRef: number | null; floor?: string | null }) {
+export function formatReceipt(settings: Record<SettingKey, string>, row: { kind: string; receiptNo: number | null; reversalRef: number | null; refundRef?: number | null; floor?: string | null }) {
+  if (row.kind === "refund") return `${REFUND_PREFIX}${row.refundRef}`;
   return row.kind === "payment" ? receiptLabel(settings.receipt_prefix, row.floor, row.receiptNo) : `${settings.reversal_prefix}${row.reversalRef}`;
 }
 
@@ -54,6 +55,7 @@ const paymentSelection = {
   note: bookingPayments.note,
   receiptNo: bookingPayments.receiptNo,
   reversalRef: bookingPayments.reversalRef,
+  refundRef: bookingPayments.refundRef,
   reversalOfId: bookingPayments.reversalOfId,
   originalReceiptNo: original.receiptNo,
   recordedAt: bookingPayments.recordedAt,
@@ -141,7 +143,7 @@ const listQuerySchema = z.object({
  * Posted, then Reversed, then Reversal.
  */
 const PAYMENT_SORTS: Record<PaymentSortColumn, SQL> = {
-  ref: sql`array[(${bookingPayments.kind} <> 'payment')::int, coalesce(${bookingPayments.receiptNo}, ${bookingPayments.reversalRef})]`,
+  ref: sql`array[(case ${bookingPayments.kind}::text when 'payment' then 0 when 'reversal' then 1 else 2 end), coalesce(${bookingPayments.receiptNo}, ${bookingPayments.reversalRef}, ${bookingPayments.refundRef})]`,
   receivedOn: sql`${bookingPayments.receivedOn}`,
   lead: sql`lower(${leads.name})`,
   unit: sql`lower(${units.unitNo})`,
@@ -149,7 +151,7 @@ const PAYMENT_SORTS: Record<PaymentSortColumn, SQL> = {
   type: sql`${bookingPayments.type}::text`,
   method: sql`lower(${paymentMethods.name})`,
   amount: sql`case when ${bookingPayments.kind} = 'payment' then ${bookingPayments.amount} else -${bookingPayments.amount} end`,
-  status: sql`case when ${bookingPayments.kind} <> 'payment' then 2 when exists (select 1 from booking_payments r where r.reversal_of_id = ${bookingPayments.id}) then 1 else 0 end`,
+  status: sql`case when ${bookingPayments.kind}::text = 'refund' then 3 when ${bookingPayments.kind} <> 'payment' then 2 when exists (select 1 from booking_payments r where r.reversal_of_id = ${bookingPayments.id}) then 1 else 0 end`,
   recorded: sql`${bookingPayments.recordedAt}`,
 };
 

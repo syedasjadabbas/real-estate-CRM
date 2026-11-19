@@ -10,6 +10,7 @@ import { clientActivities, leadActivities, leads } from "@/server/db/schema";
 import type { Database } from "@/server/db";
 import type { Actor } from "@/server/auth/types";
 import { connectTestDb, hasTestDb, leadInput, resetDb, seedFixture, type Fixture } from "../support/db";
+import { postDownPayment } from "../support/down-payment";
 
 const PATH = ["down_payment", "agreement_pending"];
 
@@ -44,7 +45,10 @@ describe.skipIf(!hasTestDb)("FR-025: everything reaches the lead's timeline (Pos
     return createBooking(db, actor, { projectId: f.projectId, leadId, unitId, ratePerSqft: "25,000", tokenAmount: "500000", reservedUntil: "2099-01-01" });
   };
   const confirm = async (bookingId: string) => {
-    for (const toStage of [...PATH, "confirmed"]) await advanceBooking(db, f.actors.manager, bookingId, { toStage });
+    for (const toStage of [...PATH, "confirmed"]) {
+      if (toStage === "confirmed") await postDownPayment(db, f.actors.superAdmin, bookingId);
+      await advanceBooking(db, f.actors.manager, bookingId, { toStage });
+    }
   };
 
   it("a new lead records its client on the lead, by the person who added it", async () => {

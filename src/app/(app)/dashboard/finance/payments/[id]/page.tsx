@@ -1,3 +1,4 @@
+import { PAYMENT_KIND_LABELS } from "@/modules/finance/constants";
 import { ArrowLeft } from "lucide-react";
 import { listBookingProofs } from "@/modules/bookings/proofs";
 import type { Metadata } from "next";
@@ -56,13 +57,14 @@ export default async function PaymentDetailPage({ params }: PageProps<"/dashboar
   // The agent's transfer screenshots on the booking, to check against this payment (14 Nov 2026).
   const bookingProofs = await listBookingProofs(getDb(), actor, booking.id).catch(() => []);
   const isReversal = entry.kind === "reversal";
+  const kindLabel = PAYMENT_KIND_LABELS[entry.kind];
   const back = canDoFinance(actor, "viewAll") ? "/dashboard/finance" : "/dashboard/finance/approvals";
 
   return (
-    <section className="space-y-6" aria-label={isReversal ? `Reversal ${entry.label}` : `Receipt ${entry.label}`}>
+    <section className="space-y-6" aria-label={`${kindLabel} ${entry.label}`}>
       <PageHeader
         as="h2"
-        title={isReversal ? `Reversal ${entry.label}` : `Receipt ${entry.label}`}
+        title={`${kindLabel} ${entry.label}`}
         description={`${booking.leadName} (${booking.leadCode}) · Unit ${booking.unitNo} · ${booking.projectName}`}
         actions={
           <Link href={back} className={buttonClasses({ variant: "secondary", size: "lg" })}>

@@ -4237,3 +4237,19 @@ The three values still marked "to be confirmed" by the client are now settings t
 The booking number shows on the bookings list (and the booking lists on lead, client and unit pages), the booking page title, the printed booking form (Booking ref. no.), receipt and sales order, and the bookings search finds it ("12", "0012" or "BK-0012"). Finance settings stay Super Admin only for changes. Tests in `booking-numbers-terms.test.ts`.
 
 **18 Nov 2026, client format confirmed:** booking numbers default to **MZ-0001** (`DEFAULT_BOOKING_PREFIX = "MZ-"`); the Super Admin can still change the prefix and next number in Finance → Settings. Annual leave stays at the 12-day default. Each MZ Avenue Homes floor is sold as its own unit (confirmed).
+
+## 100. Finance completed to the quotation scope (19 Nov 2026)
+
+Owner decisions (19 Nov 2026) and what was built:
+
+| Area | Rule | Where |
+|---|---|---|
+| Refund on cancellation (Q-F10) | An Admin or Super Admin cancels a paid booking and enters the deduction kept (0 to the amount paid). Refund due = paid − deduction. Accounts records each payment back (date, method, reference) as a `refund` ledger row with its own **RF-n** reference; refunds lower net paid, count on the day paid and never exceed the refund due | Booking page (cancel panel), Finance → Refunds; `bookings/commands.ts` `cancelBooking`, `finance/refunds.ts` |
+| Closed Won | Allowed only once Accounts has posted at least the down payment (project payment plan %, default from proposal settings). Existing bookings are unchanged | `advanceBooking` |
+| Developer transfers | Each receipt (not reversed) is due to the developer 10 working days after it was received, skipping the weekly days off (HR settings) and company holidays. Accounts ticks the receipts a bank transfer covered and records it; the tracker shows Pending / Due soon (≤ 2 working days) / Overdue, and each transfer On time or Late. The ledger stays append-only: links are kept in `developer_transfer_receipts` | Finance → Developer transfers; `finance/transfers.ts` |
+| Reports | Collections by project now split reversals and refunds; new daily collections by project, unit and agent; refunds & reversals; commissions (received = income in "Commission", paid to agents = expense in "Agent commissions", by month and payee; earned/payable is not calculated, out of scope). All have audited CSV exports | Finance → Reports; `finance/reports.ts` |
+| Categories | The client's income (Commission; Marketing / service fees; Other income) and expense lists (Advertising … Miscellaneous) are seeded | Migration `0057_finance_refunds_transfers` |
+
+Migrations: `0057_finance_refunds_transfers` (refund kind, refund columns and sequence, `developer_transfers`, categories), `0058_developer_transfer_receipts`. Tests: `finance-refunds-transfers.test.ts`; booking tests now post the down payment before Closed Won (`tests/support/down-payment.ts`).
+
+Out of scope (quotation): advanced accounting, tax, bank integrations, payment gateways, automated commission calculation.

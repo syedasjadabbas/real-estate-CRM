@@ -101,7 +101,8 @@ export const bookingStage = pgEnum("booking_stage", [
 ]);
 export const discountStatus = pgEnum("discount_status", ["none", "pending", "approved", "rejected"]);
 export const paymentDocsStatus = pgEnum("payment_docs_status", ["not_submitted", "submitted", "verified"]);
-export const bookingPaymentKind = pgEnum("booking_payment_kind", ["payment", "reversal"]);
+// refund: money paid back to the buyer after a paid booking is cancelled, net of the deduction kept (owner, 19 Nov 2026).
+export const bookingPaymentKind = pgEnum("booking_payment_kind", ["payment", "reversal", "refund"]);
 export const bookingPaymentType = pgEnum("booking_payment_type", ["token", "down_payment", "installment", "other"]);
 export const reversalRequestStatus = pgEnum("reversal_request_status", ["pending", "approved", "rejected"]);
 /** "custom": any From–To range, e.g. a campaign (owner, 15 Nov 2026). */
@@ -561,6 +562,13 @@ export const bookings = pgTable(
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
     cancelledReason: text("cancelled_reason"),
     /**
+     * Cancelling a booking that had received money (client rule: refund after a variable deduction,
+     * owner 19 Nov 2026): what the company keeps, and the refund owed to the buyer (paid minus deduction).
+     * Accounts pays the refund later as `refund` rows in booking_payments.
+     */
+    refundDeduction: numeric("refund_deduction", { precision: 15, scale: 2, mode: "number" }),
+    refundDue: numeric("refund_due", { precision: 15, scale: 2, mode: "number" }),
+    /**
      * Discount on the inventory price (owner, 14 Nov 2026). Agents give up to the cap (5%) themselves;
      * more needs an Admin or Super Admin: the booking is held at the cap with the asked % pending, and
      * a rejection keeps it at the cap.
@@ -611,6 +619,8 @@ export const bookingStageHistory = pgTable(
 
 /** Receipt numbers for posted payments: sequential, never reused; gaps allowed (proposed Q-F3 default). */
 export const receiptNoSeq = pgSequence("booking_payment_receipt_no_seq", { startWith: 1, increment: 1 });
+/** Refund references (19 Nov 2026), like reversal references. */
+export const refundRefSeq = pgSequence("booking_payment_refund_ref_seq", { startWith: 1, increment: 1 });
 /** Separate reference numbers for reversals, which also point at the original receipt. */
 export const reversalRefSeq = pgSequence("booking_payment_reversal_ref_seq", { startWith: 1, increment: 1 });
 
@@ -635,6 +645,7 @@ export const bookingPayments = pgTable(
     note: text("note"),
     receiptNo: integer("receipt_no"),
     reversalRef: integer("reversal_ref"),
+    refundRef: integer("refund_ref"),
     reversalOfId: uuid("reversal_of_id").references((): AnyPgColumn => bookingPayments.id, { onDelete: "restrict" }),
     reversalRequestId: uuid("reversal_request_id").references((): AnyPgColumn => paymentReversalRequests.id, { onDelete: "restrict" }),
     idempotencyKey: text("idempotency_key"),
@@ -646,6 +657,7 @@ export const bookingPayments = pgTable(
   (t) => [
     uniqueIndex("booking_payments_receipt_no_uq").on(t.receiptNo),
     uniqueIndex("booking_payments_reversal_ref_uq").on(t.reversalRef),
+    uniqueIndex("booking_payments_refund_ref_uq").on(t.refundRef),
     uniqueIndex("booking_payments_one_reversal_uq").on(t.reversalOfId),
     uniqueIndex("booking_payments_idempotency_uq").on(t.recordedById, t.idempotencyKey),
     index("booking_payments_booking_idx").on(t.bookingId, t.receivedOn),
@@ -654,8 +666,9 @@ export const bookingPayments = pgTable(
     // A payment has a receipt number and a method; a reversal has its own reference, the original and a reason.
     check(
       "booking_payments_kind_fields",
-      sql`(${t.kind} = 'payment' and ${t.receiptNo} is not null and ${t.methodId} is not null and ${t.reversalOfId} is null and ${t.reversalRef} is null)
-       or (${t.kind} = 'reversal' and ${t.reversalRef} is not null and ${t.reversalOfId} is not null and ${t.note} is not null and ${t.receiptNo} is null)`,
+      sql`(${t.kind} = 'payment' and ${t.receiptNo} is not null and ${t.methodId} is not null and ${t.reversalOfId} is null and ${t.reversalRef} is null and ${t.refundRef} is null)
+       or (${t.kind} = 'reversal' and ${t.reversalRef} is not null and ${t.reversalOfId} is not null and ${t.note} is not null and ${t.receiptNo} is null and ${t.refundRef} is null)
+       or (${t.kind}::text = 'refund' and ${t.refundRef} is not null and ${t.methodId} is not null and ${t.receiptNo} is null and ${t.reversalOfId} is null and ${t.reversalRef} is null)`,
     ),
   ],
 );
@@ -735,6 +748,45 @@ export const financeEntries = pgTable(
     check("finance_entries_void_reason", sql`(${t.voidedAt} is null) = (${t.voidReason} is null)`),
     check("finance_entries_text_lengths", sql`coalesce(length(${t.reference}), 0) <= 120 and coalesce(length(${t.payee}), 0) <= 120 and coalesce(length(${t.note}), 0) <= 1000`),
   ],
+);
+
+/**
+ * Money passed on to the developer (client rule: within 10 working days of receipt; owner 19 Nov 2026).
+ * Accounts records one transfer and ticks the receipts it covers (developer_transfer_receipts; the
+ * payment ledger itself stays append-only).
+ */
+export const developerTransfers = pgTable(
+  "developer_transfers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    transferredOn: date("transferred_on").notNull(),
+    amount: numeric("amount", { precision: 15, scale: 2, mode: "number" }).notNull(),
+    reference: text("reference"),
+    note: text("note"),
+    recordedById: uuid("recorded_by_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("developer_transfers_date_idx").on(t.transferredOn),
+    check("developer_transfers_amount_positive", sql`${t.amount} > 0`),
+    check("developer_transfers_text", sql`coalesce(length(${t.reference}), 0) <= 120 and coalesce(length(${t.note}), 0) <= 1000`),
+  ],
+);
+
+/** Which receipts each developer transfer covered; a receipt is transferred at most once. */
+export const developerTransferReceipts = pgTable(
+  "developer_transfer_receipts",
+  {
+    transferId: uuid("transfer_id")
+      .notNull()
+      .references(() => developerTransfers.id, { onDelete: "restrict" }),
+    paymentId: uuid("payment_id")
+      .notNull()
+      .references(() => bookingPayments.id, { onDelete: "restrict" }),
+  },
+  (t) => [primaryKey({ columns: [t.paymentId] }), index("developer_transfer_receipts_transfer_idx").on(t.transferId)],
 );
 
 /** Configurable finance display settings (receipt / reversal prefixes; final format pending Q-F3). */

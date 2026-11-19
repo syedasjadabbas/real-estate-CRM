@@ -207,7 +207,7 @@ describe.skipIf(!hasTestDb)("End-to-end workflows (PostgreSQL integration)", () 
     const before = (await db.select().from(auditLogs).where(eq(auditLogs.action, "finance.report_export"))).length;
     const csv = await exportReport(db, accountant, { report: "collections", ...range });
     expect(csv.body).toContain("Total,");
-    expect(csv.body).toContain(",1500000,1,1000000,500000");
+    expect(csv.body).toContain(",1500000,1,1000000,0,0,500000");
     await exportReport(db, f.actors.superAdmin, { report: "outstanding_agent" });
     const exports = await db.select().from(auditLogs).where(eq(auditLogs.action, "finance.report_export"));
     expect(exports.length).toBe(before + 2);

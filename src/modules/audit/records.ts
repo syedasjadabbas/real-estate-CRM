@@ -85,7 +85,7 @@ export async function recordNames(db: Database, rows: { entity: string; entityId
       .innerJoin(bookings, eq(bookings.id, bookingPayments.bookingId))
       .innerJoin(leads, eq(leads.id, bookings.leadId))
       .where(inArray(bookingPayments.id, list));
-    for (const r of rows) set("payment", r.id, `${r.kind === "payment" ? "Payment" : "Reversal"} PKR ${Math.round(r.amount).toLocaleString("en-US")} · ${r.lead}`, `/dashboard/finance/payments/${r.id}`);
+    for (const r of rows) set("payment", r.id, `${r.kind === "payment" ? "Payment" : r.kind === "refund" ? "Refund" : "Reversal"} PKR ${Math.round(r.amount).toLocaleString("en-US")} · ${r.lead}`, `/dashboard/finance/payments/${r.id}`);
   });
   run("unit", async (list) => {
     const rows = await db.select({ id: units.id, unit: units.unitNo, project: projects.name }).from(units).innerJoin(projects, eq(projects.id, units.projectId)).where(inArray(units.id, list));

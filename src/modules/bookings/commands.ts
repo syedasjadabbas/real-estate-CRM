@@ -2,6 +2,7 @@ import { and, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import { canDoFinance } from "@/modules/finance/policy";
 import { notify } from "@/modules/notifications/service";
 import { getProposalSettings } from "@/modules/tasks/settings";
+import { resolvePaymentPlan } from "@/modules/projects/payment-plan";
 import { unitPricePerSqft } from "@/modules/tasks/plan";
 import { discountCap } from "@/modules/tasks/policy";
 import { assertWorkable } from "@/modules/leads/verification";
@@ -296,6 +297,20 @@ export async function advanceBooking(db: Database, actor: Actor, bookingId: stri
 
     let clientId = booking.clientId;
     if (toStage === "confirmed") {
+      // Closed Won needs the down payment posted by Accounts (owner, 19 Nov 2026): agents move the earlier
+      // stages on the amounts they report, but a sale is closed only on money Finance has recorded.
+      const [project] = await tx.select({ paymentPlan: projects.paymentPlan }).from(projects).where(eq(projects.id, booking.projectId)).limit(1);
+      const plan = resolvePaymentPlan(project?.paymentPlan, await getProposalSettings(tx));
+      const required = Math.round(booking.totalSale * plan.downPaymentPct) / 100;
+      const posted = await netPaid(tx, booking.id);
+      if (Math.round(posted * 100) < Math.round(required * 100)) {
+        const fmt = (n: number) => `PKR ${new Intl.NumberFormat("en-US").format(Math.round(n))}`;
+        throw new AppError(
+          "BUSINESS_RULE",
+          `Closed Won needs the down payment posted in Finance first: ${fmt(posted)} of ${fmt(required)} (${plan.downPaymentPct}% of the price) has been recorded.`,
+          { details: { posted, required } },
+        );
+      }
       await transitionUnitStatus(tx, { unitId: booking.unitId, from: ["reserved"], to: "booked", actorId: actor.id, ip: actor.ip ?? null, source: "booking", reason: "Booking confirmed" });
       const lead = await setLeadStage(tx, actor, booking.leadId, "booked", "Booking confirmed");
       clientId = (await ensureClientForLead(tx, actor, lead, booking.id)).clientId;
@@ -348,27 +363,31 @@ export async function rejectBookingPayment(db: Database, actor: Actor, bookingId
 
 export async function cancelBooking(db: Database, actor: Actor, bookingId: string, input: unknown) {
   assertCanBooking(actor, "cancel");
-  const { reason } = parse(cancelSchema, input);
+  const { reason, deduction } = parse(cancelSchema, input);
   return db.transaction(async (tx) => {
     const booking = await loadAccessibleBooking(tx, actor, bookingId, true);
     if (CLOSED_STAGES.includes(booking.stage)) {
       throw new AppError("BUSINESS_RULE", `A ${BOOKING_STAGE_LABELS[booking.stage].toLowerCase()} booking can't be cancelled.`);
     }
-    // Proposed Q-F10 default: money received can't be cancelled away silently. Refund / credit / retention
-    // rules are not approved yet, so a booking with net payments can't be cancelled at all for now.
+    // Money received (client rule, owner 19 Nov 2026): the buyer is refunded after a variable deduction.
+    // The Admin enters what is kept; the rest is the refund due, which Accounts pays out in Finance.
     const paid = await netPaid(tx, booking.id);
+    let refund: { refundDeduction: number; refundDue: number } | null = null;
     if (paid > 0) {
-      throw new AppError(
-        "BUSINESS_RULE",
-        `PKR ${new Intl.NumberFormat("en-US").format(paid)} has been received on this booking. It can't be cancelled until a refund, credit or retention is approved (rules pending).`,
-        { details: { paid } },
-      );
+      const fmt = (n: number) => `PKR ${new Intl.NumberFormat("en-US").format(n)}`;
+      if (deduction === undefined) {
+        throw new AppError("VALIDATION_FAILED", `${fmt(paid)} has been received. Enter the deduction kept (0 for a full refund).`, { fields: { deduction: "Enter the deduction kept (0 for a full refund)" }, details: { paid } });
+      }
+      if (Math.round(deduction * 100) > Math.round(paid * 100)) {
+        throw new AppError("VALIDATION_FAILED", `The deduction can't be more than the ${fmt(paid)} received.`, { fields: { deduction: `At most ${fmt(paid)}` } });
+      }
+      refund = { refundDeduction: deduction, refundDue: Math.round((paid - deduction) * 100) / 100 };
     }
-    await writeStage(tx, booking.id, booking.stage, "cancelled", { cancelledAt: new Date(), cancelledReason: reason });
+    await writeStage(tx, booking.id, booking.stage, "cancelled", { cancelledAt: new Date(), cancelledReason: reason, ...(refund ?? {}) });
     await transitionUnitStatus(tx, { unitId: booking.unitId, from: ["reserved"], to: "available", actorId: actor.id, ip: actor.ip ?? null, source: "booking", reason: `Booking cancelled: ${reason}` });
     await tx.insert(bookingStageHistory).values({ bookingId: booking.id, fromStage: booking.stage, toStage: "cancelled", actorId: actor.id, note: reason });
-    await auditBooking(tx, actor, "booking.cancel", booking.id, { stage: booking.stage }, { stage: "cancelled", reason });
-    return { from: booking.stage };
+    await auditBooking(tx, actor, "booking.cancel", booking.id, { stage: booking.stage }, { stage: "cancelled", reason, ...(refund ? { paid, ...refund } : {}) });
+    return { from: booking.stage, refundDue: refund?.refundDue ?? null };
   });
 }
 

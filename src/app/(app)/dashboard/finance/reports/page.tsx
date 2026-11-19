@@ -10,7 +10,7 @@ import { formatPrice } from "@/features/inventory/format";
 import { PanelCard } from "@/features/leads/components/detail-panels";
 import { flattenParams } from "@/features/leads/url";
 import { canDoFinance } from "@/modules/finance/policy";
-import { collectionsByProject, outstandingBy } from "@/modules/finance/reports";
+import { collectionsByProject, commissionReport, dailyCollections, outstandingBy, refundsAndReversals } from "@/modules/finance/reports";
 import { requirePageUser } from "@/server/auth/current-user";
 import { getDb } from "@/server/db";
 
@@ -67,7 +67,15 @@ export default async function FinanceReportsPage({ searchParams }: PageProps<"/d
   if (!canDoFinance(actor, "viewAll")) return <RestrictedState />;
   const params = flattenParams(await searchParams);
   const db = getDb();
-  const [collections, byProject, byAgent, ie] = await Promise.all([collectionsByProject(db, actor, params), outstandingBy(db, actor, "project"), outstandingBy(db, actor, "agent"), incomeExpenseByMonth(db, actor, params)]);
+  const [collections, daily, returns, byProject, byAgent, ie, commissions] = await Promise.all([
+    collectionsByProject(db, actor, params),
+    dailyCollections(db, actor, params),
+    refundsAndReversals(db, actor, params),
+    outstandingBy(db, actor, "project"),
+    outstandingBy(db, actor, "agent"),
+    incomeExpenseByMonth(db, actor, params),
+    commissionReport(db, actor, params),
+  ]);
   const { from, to } = collections.range;
   const c = collections.totals;
 
@@ -76,7 +84,7 @@ export default async function FinanceReportsPage({ searchParams }: PageProps<"/d
       <PageHeader
         as="h2"
         title="Reports"
-        description="Collections by project for a date range, and outstanding balances by project and by sales agent. Totals are computed from the payment ledger; every CSV export is audited."
+        description="Collections (by project, and daily by unit and agent), refunds & reversals, outstanding balances with aging, income vs expense and commissions. Totals are computed from the ledger and recorded entries; every CSV export is audited."
       />
 
       <PanelCard title="Collections by project">
@@ -94,23 +102,67 @@ export default async function FinanceReportsPage({ searchParams }: PageProps<"/d
           </button>
           <span className="ml-auto">{exportLink("collections", `&from=${from}&to=${to}`)}</span>
         </form>
-        <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-4">
           <MiniStat label="Received" value={formatPrice(c.received)} caption={`${c.receipts} receipts`} />
           <MiniStat label="Reversed" value={formatPrice(c.reversed)} caption={`${c.reversals} reversals`} />
+          <MiniStat label="Refunded" value={formatPrice(c.refunded)} caption={`${c.refunds} refunds`} />
           <MiniStat label="Net collected" value={formatPrice(c.net)} caption={`${from} to ${to}`} />
         </div>
         {collections.rows.length === 0 ? (
           <EmptyState size="sm">No payments or reversals dated in this range.</EmptyState>
         ) : (
           <Table
-            head={["Project", "Receipts", "Received", "Reversals", "Reversed", "Net collected"]}
-            rows={collections.rows.map((r) => [r.project, r.receipts, formatPrice(r.received), r.reversals, formatPrice(r.reversed), formatPrice(r.net)])}
-            foot={["Total", c.receipts, formatPrice(c.received), c.reversals, formatPrice(c.reversed), formatPrice(c.net)]}
+            head={["Project", "Receipts", "Received", "Reversals", "Reversed", "Refunds", "Refunded", "Net collected"]}
+            rows={collections.rows.map((r) => [r.project, r.receipts, formatPrice(r.received), r.reversals, formatPrice(r.reversed), r.refunds, formatPrice(r.refunded), formatPrice(r.net)])}
+            foot={["Total", c.receipts, formatPrice(c.received), c.reversals, formatPrice(c.reversed), c.refunds, formatPrice(c.refunded), formatPrice(c.net)]}
           />
         )}
         <p className="mt-3 text-[11px] text-zinc-500">
-          Each ledger entry counts on its own date: payments add, reversals subtract. Refunds and credits on cancellation are not defined yet (client question Q-F10).
+          Each ledger entry counts on its own date (the period it was processed): receipts add, reversals and refunds subtract. Booking collections are kept apart from company income.
         </p>
+      </PanelCard>
+
+      <PanelCard title={`Daily collections by unit and agent · ${from} to ${to}`}>
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <p className="text-[11px] text-zinc-500">Same date range as above, one line per day, unit and agent.</p>
+          {exportLink("daily_collections", `&from=${from}&to=${to}`)}
+        </div>
+        {daily.rows.length === 0 ? (
+          <EmptyState size="sm">Nothing collected in this range.</EmptyState>
+        ) : (
+          <Table
+            head={["Date", "Project", "Unit", "Agent", "Received", "Reversed / refunded", "Net"]}
+            rows={daily.rows.map((r) => [r.day, r.project, r.unitNo, r.agent, formatPrice(r.received), formatPrice(r.returned), formatPrice(r.net)])}
+            foot={["Total", "", "", "", formatPrice(daily.totals.received), formatPrice(daily.totals.returned), formatPrice(daily.totals.net)]}
+          />
+        )}
+      </PanelCard>
+
+      <PanelCard title={`Refunds & reversals · ${from} to ${to}`}>
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <p className="text-[11px] text-zinc-500">
+            {returns.totals.reversals} reversal{returns.totals.reversals === 1 ? "" : "s"} ({formatPrice(returns.totals.reversed)}) · {returns.totals.refunds} refund{returns.totals.refunds === 1 ? "" : "s"} ({formatPrice(returns.totals.refunded)})
+          </p>
+          {exportLink("refunds_reversals", `&from=${from}&to=${to}`)}
+        </div>
+        {returns.rows.length === 0 ? (
+          <EmptyState size="sm">No refunds or reversals in this range.</EmptyState>
+        ) : (
+          <Table
+            head={["Reference", "Date", "Type", "Buyer · unit", "Of receipt", "Amount"]}
+            rows={returns.rows.map((r) => [
+              <a key="ref" href={`/dashboard/finance/payments/${r.id}`} className="hover:underline">
+                {r.ref}
+              </a>,
+              r.date,
+              r.kindLabel,
+              `${r.leadName} · ${r.project} ${r.unitNo}`,
+              r.ofReceipt ?? "—",
+              formatPrice(r.amount),
+            ])}
+            foot={["Total", "", "", "", "", formatPrice(returns.totals.reversed + returns.totals.refunded)]}
+          />
+        )}
       </PanelCard>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
@@ -152,6 +204,31 @@ export default async function FinanceReportsPage({ searchParams }: PageProps<"/d
           rows={ie.months.map((m) => [m.month, formatPrice(m.income), formatPrice(m.expense), formatPrice(m.net)])}
           foot={["Total", formatPrice(ie.totals.income), formatPrice(ie.totals.expense), formatPrice(ie.totals.net)]}
         />
+      </PanelCard>
+
+      <PanelCard title={`Commissions · ${commissions.year}`}>
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <p className="text-[11px] text-zinc-500">
+            From recorded entries: commission received is income in the “Commission” category; paid to agents is expense in “Agent commissions”. Uses the year above.
+          </p>
+          {exportLink("commissions", `&year=${commissions.year}`)}
+        </div>
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+          <Table
+            head={["Month", "Received", "Paid to agents", "Net"]}
+            rows={commissions.months.map((m) => [m.month, formatPrice(m.received), formatPrice(m.paid), formatPrice(m.net)])}
+            foot={["Total", formatPrice(commissions.totals.received), formatPrice(commissions.totals.paid), formatPrice(commissions.totals.net)]}
+          />
+          {commissions.payees.length === 0 ? (
+            <EmptyState size="sm">No agent commissions paid this year.</EmptyState>
+          ) : (
+            <Table
+              head={["Paid to", "Entries", "Amount"]}
+              rows={commissions.payees.map((p) => [p.payee, p.entries, formatPrice(p.paid)])}
+              foot={["Total", commissions.payees.reduce((n, p) => n + p.entries, 0), formatPrice(commissions.totals.paid)]}
+            />
+          )}
+        </div>
       </PanelCard>
     </section>
   );

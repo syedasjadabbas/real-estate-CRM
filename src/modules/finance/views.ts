@@ -41,6 +41,7 @@ export async function getPaymentDetail(db: Database, actor: Actor, paymentId: st
     note: bookingPayments.note,
     receiptNo: bookingPayments.receiptNo,
     reversalRef: bookingPayments.reversalRef,
+    refundRef: bookingPayments.refundRef,
     reversalOfId: bookingPayments.reversalOfId,
     recordedAt: bookingPayments.recordedAt,
     recordedByName: recorder.name,
@@ -70,8 +71,9 @@ export async function getPaymentDetail(db: Database, actor: Actor, paymentId: st
   // Managers see payments of their team's bookings only; elsewhere the payment looks missing.
   if (!canDoFinance(actor, "viewAll") && !canAccessBooking(actor, booking.agentId, await teamMemberIds(db, actor))) throw notFound("Payment");
 
-  const originalId = row.kind === "payment" ? row.id : row.reversalOfId!;
-  const [original] = row.kind === "payment" ? [row] : await load(eq(bookingPayments.id, originalId));
+  // A refund stands on its own (no receipt behind it); a reversal points back to its receipt.
+  const originalId = row.kind === "reversal" ? row.reversalOfId! : row.id;
+  const [original] = row.kind === "reversal" ? await load(eq(bookingPayments.id, originalId)) : [row];
   const [reversal] = await load(eq(bookingPayments.reversalOfId, originalId));
   const settings = await getFinanceSettings(db);
   const label = (r: typeof row) => formatReceipt(settings, { ...r, floor: booking.floor });

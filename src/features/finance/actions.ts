@@ -11,6 +11,8 @@ import {
   updateFinanceSettings,
 } from "@/modules/finance/commands";
 import { addCategory, createEntry, setCategoryActive, updateEntry, voidEntry } from "@/modules/finance/entries";
+import { recordRefund } from "@/modules/finance/refunds";
+import { recordTransfer } from "@/modules/finance/transfers";
 import { requireActor } from "@/server/auth/current-user";
 import { getDb } from "@/server/db";
 import { toActionError, type ActionResult } from "@/server/errors";
@@ -35,6 +37,16 @@ export async function recordPaymentAction(
   input: Record<string, unknown>,
 ): Promise<ActionResult<{ paymentId: string; receiptNo: number; replayed: boolean }>> {
   return run((db, actor) => recordPayment(db, actor, input));
+}
+
+/** Accounts pays back (part of) the refund owed on a cancelled booking. */
+export async function recordRefundAction(bookingId: string, input: Record<string, string>) {
+  return run((db, actor) => recordRefund(db, actor, bookingId, input));
+}
+
+/** Accounts records one transfer to the developer covering the ticked receipts. */
+export async function recordTransferAction(input: { transferredOn: string; reference: string; note: string; paymentIds: string[] }) {
+  return run((db, actor) => recordTransfer(db, actor, input));
 }
 
 export async function requestReversalAction(paymentId: string, reason: string) {

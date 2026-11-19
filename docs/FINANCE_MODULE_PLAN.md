@@ -271,3 +271,7 @@ Verification:
 - the range defaults and a reversed range is swapped;
 - permissions (super admin, admin, accountant allowed; manager, agent, HR refused);
 - the CSV content, the formula neutralising and the export audit.
+
+## 12. Refunds, developer transfers, Closed Won rule and remaining reports (19 Nov 2026)
+
+Q-F10 is resolved: a paid booking is cancelled with a deduction kept, and the rest is refunded by Accounts as `refund` rows (RF-n). The cancel block on net paid > 0 described in §3 and §9 is replaced by this rule. Closed Won now needs the down payment posted. Receipts are tracked against the 10-working-day developer transfer deadline. Reports add daily collections by unit and agent, refunds & reversals, and commissions from recorded entries. Details: PROJECT_STATUS.md §100.

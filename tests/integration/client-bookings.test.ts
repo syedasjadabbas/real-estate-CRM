@@ -14,6 +14,7 @@ import type { Database } from "@/server/db";
 import type { Actor } from "@/server/auth/types";
 import { AppError } from "@/server/errors";
 import { connectTestDb, hasTestDb, leadInput, resetDb, seedFixture, type Fixture } from "../support/db";
+import { postDownPayment } from "../support/down-payment";
 
 const errorCode = async (p: Promise<unknown>) => {
   try {
@@ -64,7 +65,10 @@ describe.skipIf(!hasTestDb)("F-13: a client's open bookings and payments (FR-051
   const clientCount = async () => (await db.select({ id: clients.id }).from(clients)).length;
   const pay = (bookingId: string, amount: string, type = "token") => recordPayment(db, accountant, { bookingId, type, amount, receivedOn: TODAY, methodId: cashId });
   const toConfirmed = async (bookingId: string) => {
-    for (const toStage of PATH) await advanceBooking(db, f.actors.manager, bookingId, { toStage });
+    for (const toStage of PATH) {
+      if (toStage === "confirmed") await postDownPayment(db, f.actors.superAdmin, bookingId);
+      await advanceBooking(db, f.actors.manager, bookingId, { toStage });
+    }
   };
   const existingClient = async (leadId: string) => (await convertLeadToClient(db, f.actors.superAdmin, { leadId })).clientId;
 
@@ -181,12 +185,13 @@ describe.skipIf(!hasTestDb)("F-13: a client's open bookings and payments (FR-051
       expect((await bookingsFor(db, f.actors.superAdmin, { clientId })).map((b) => b.id)).toEqual([next.bookingId]);
     });
 
-    it("a booking with money still can't be cancelled", async () => {
+    it("a booking with money is cancelled only with the deduction kept (refund rule, 19 Nov 2026)", async () => {
       const leadId = await newLead();
       await existingClient(leadId);
       const { bookingId } = await book(leadId);
       await pay(bookingId, "1000");
-      expect(await errorCode(cancelBooking(db, f.actors.manager, bookingId, { reason: "x y z" }))).toBe("BUSINESS_RULE");
+      expect(await errorCode(cancelBooking(db, f.actors.manager, bookingId, { reason: "x y z" }))).toBe("VALIDATION_FAILED");
+      expect(await errorCode(cancelBooking(db, f.actors.manager, bookingId, { reason: "x y z", deduction: "0" }))).toBe("ok");
     });
   });
 
@@ -254,6 +259,7 @@ describe.skipIf(!hasTestDb)("F-13: a client's open bookings and payments (FR-051
         const leadId = await newLead();
         const { bookingId } = await book(leadId);
         for (const toStage of PATH.slice(0, -1)) await advanceBooking(db, f.actors.manager, bookingId, { toStage });
+        await postDownPayment(db, f.actors.superAdmin, bookingId);
         const before = await clientCount();
         const results = await Promise.allSettled([advanceBooking(db, f.actors.manager, bookingId, { toStage: "confirmed" }), convertLeadToClient(db, f.actors.superAdmin, { leadId })]);
         expect(results[0].status).toBe("fulfilled");

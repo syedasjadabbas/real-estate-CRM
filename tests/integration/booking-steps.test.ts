@@ -7,6 +7,7 @@ import type { Database } from "@/server/db";
 import { AppError } from "@/server/errors";
 import { bookingMode } from "../support/approved-leads";
 import { connectTestDb, hasTestDb, leadInput, resetDb, seedFixture, type Fixture } from "../support/db";
+import { postDownPayment } from "../support/down-payment";
 
 const fieldOf = async (p: Promise<unknown>) => {
   try {
@@ -58,7 +59,8 @@ describe.skipIf(!hasTestDb)("Booking steps (PostgreSQL integration)", () => {
     await file("document");
     expect(await fieldOf(advanceBooking(db, f.actors.agent1, bookingId, { toStage: "agreement_pending", amount: 1_500_000, proofFileId: await file("receipt") }))).toBe("ok");
 
-    // Complete Down Payment → Closed Won: signed again in this stage.
+    // Complete Down Payment → Closed Won: Accounts has posted the down payment, and the form is signed again in this stage.
+    await postDownPayment(db, f.actors.superAdmin, bookingId);
     expect(await fieldOf(advanceBooking(db, f.actors.superAdmin, bookingId, { toStage: "confirmed" }))).toBe("signedForm");
     await file("document");
     expect(await fieldOf(advanceBooking(db, f.actors.superAdmin, bookingId, { toStage: "confirmed" }))).toBe("ok");

@@ -14,6 +14,7 @@ import type { Database } from "@/server/db";
 import type { Actor } from "@/server/auth/types";
 import { AppError } from "@/server/errors";
 import { connectTestDb, hasTestDb, leadInput, resetDb, seedFixture, type Fixture } from "../support/db";
+import { postDownPayment } from "../support/down-payment";
 
 const errorOf = async (p: Promise<unknown>) => {
   try {
@@ -60,7 +61,11 @@ describe.skipIf(!hasTestDb)("Bookings module (PostgreSQL integration)", () => {
   const statusOf = async (unitId: string) => (await db.select().from(units).where(eq(units.id, unitId)))[0].status;
   const leadStage = async (leadId: string) => (await db.select().from(leads).where(eq(leads.id, leadId)))[0].stage;
   const advanceTo = async (actor: Actor, bookingId: string, stages: readonly string[]) => {
-    for (const s of stages.filter((x) => !["token_pending", "token_received", "provisional_receipt", "sales_order", "booking_form"].includes(x))) await advanceBooking(db, actor, bookingId, { toStage: s });
+    for (const s of stages.filter((x) => !["token_pending", "token_received", "provisional_receipt", "sales_order", "booking_form"].includes(x))) {
+      // Closed Won needs the down payment posted in Finance first.
+      if (s === "confirmed") await postDownPayment(db, f.actors.superAdmin, bookingId);
+      await advanceBooking(db, actor, bookingId, { toStage: s });
+    }
   };
 
   describe("create and reservation", () => {
@@ -179,6 +184,7 @@ describe.skipIf(!hasTestDb)("Bookings module (PostgreSQL integration)", () => {
       const leadId = await leadOf(f.actors.agent1, { email: "buyer@example.com" });
       const { bookingId } = await book(f.actors.agent1, leadId, unitId);
       await advanceTo(f.actors.manager, bookingId, PATH);
+      await postDownPayment(db, f.actors.superAdmin, bookingId);
       const result = await advanceBooking(db, f.actors.manager, bookingId, { toStage: "confirmed", note: "All documents in" });
 
       expect(await statusOf(unitId)).toBe("booked");

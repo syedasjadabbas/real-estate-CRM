@@ -1,5 +1,11 @@
 /** Payment types from DATA_MODEL.md §9 / FR-202 (token, down payment, installment) plus "other". */
 export const PAYMENT_TYPES = ["token", "down_payment", "installment", "other"] as const;
+
+/** Ledger row kinds as people read them (refund added 19 Nov 2026). */
+export const PAYMENT_KIND_LABELS = { payment: "Receipt", reversal: "Reversal", refund: "Refund" } as const;
+export type PaymentKind = keyof typeof PAYMENT_KIND_LABELS;
+/** Refund references read RF-1, RF-2 … */
+export const REFUND_PREFIX = "RF-";
 export type PaymentType = (typeof PAYMENT_TYPES)[number];
 
 export const PAYMENT_TYPE_LABELS: Record<PaymentType, string> = {

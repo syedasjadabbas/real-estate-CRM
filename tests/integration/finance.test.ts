@@ -15,6 +15,7 @@ import type { Database } from "@/server/db";
 import type { Actor, Role } from "@/server/auth/types";
 import { AppError } from "@/server/errors";
 import { connectTestDb, hasTestDb, leadInput, resetDb, seedFixture, type Fixture } from "../support/db";
+import { postDownPayment } from "../support/down-payment";
 
 const errorOf = async (p: Promise<unknown>) => {
   try {
@@ -59,7 +60,10 @@ describe.skipIf(!hasTestDb)("Finance F1: booking payments (PostgreSQL integratio
     const lead = await createLead(db, owner, leadInput(f));
     if (lead.outcome !== "created") throw new Error("setup");
     const { bookingId } = await createBooking(db, owner, { projectId: f.projectId, leadId: lead.leadId, unitId, ratePerSqft: "25000", tokenAmount: "500000" });
-    for (const s of stages.filter((x) => !["token_pending", "token_received", "provisional_receipt", "sales_order", "booking_form"].includes(x))) await advanceBooking(db, f.actors.superAdmin, bookingId, { toStage: s });
+    for (const s of stages.filter((x) => !["token_pending", "token_received", "provisional_receipt", "sales_order", "booking_form"].includes(x))) {
+      if (s === "confirmed") await postDownPayment(db, f.actors.superAdmin, bookingId);
+      await advanceBooking(db, f.actors.superAdmin, bookingId, { toStage: s });
+    }
     return bookingId;
   };
   const pay = (bookingId: string, amount: string, extra: Record<string, unknown> = {}, actor: Actor = accountant) =>
@@ -238,11 +242,12 @@ describe.skipIf(!hasTestDb)("Finance F1: booking payments (PostgreSQL integratio
   });
 
   describe("bookings integration and settings", () => {
-    it("blocks cancelling a booking with net payments; allows it once every payment is reversed", async () => {
+    it("needs the deduction to cancel a booking with net payments; not once every payment is reversed", async () => {
       const bookingId = await bookingAt();
       const { paymentId } = await pay(bookingId, "500000");
       const blocked = await errorOf(cancelBooking(db, f.actors.manager, bookingId, { reason: "Buyer withdrew" }));
-      expect(blocked?.code).toBe("BUSINESS_RULE");
+      expect(blocked?.code).toBe("VALIDATION_FAILED");
+      expect(blocked?.fields).toHaveProperty("deduction");
       expect(blocked?.details).toMatchObject({ paid: 500_000 });
 
       const { requestId } = await requestReversal(db, accountant, paymentId, { reason: "Recorded on the wrong booking" });

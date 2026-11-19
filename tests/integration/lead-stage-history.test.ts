@@ -11,6 +11,7 @@ import type { Database } from "@/server/db";
 import type { Actor } from "@/server/auth/types";
 import { AppError } from "@/server/errors";
 import { connectTestDb, hasTestDb, leadInput, resetDb, seedFixture, type Fixture } from "../support/db";
+import { postDownPayment } from "../support/down-payment";
 
 const errorCode = async (p: Promise<unknown>) => {
   try {
@@ -145,7 +146,10 @@ describe.skipIf(!hasTestDb)("FR-021: every stage change is on the timeline as fr
     const { unitId } = await createUnit(db, f.actors.superAdmin, { projectId: f.projectId, unitNo: `H-${unitCounter}`, areaSqft: "500", basePrice: "1000000" });
     const { bookingId } = await createBooking(db, f.actors.agent1, { projectId: f.projectId, leadId, unitId, ratePerSqft: "2000", tokenAmount: "20000" });
     expect((await moves(leadId))[0]).toMatchObject({ from: "meeting_done", to: "booking_in_process" });
-    for (const toStage of ["down_payment", "agreement_pending", "confirmed"]) await advanceBooking(db, f.actors.manager, bookingId, { toStage });
+    for (const toStage of ["down_payment", "agreement_pending", "confirmed"]) {
+      if (toStage === "confirmed") await postDownPayment(db, f.actors.superAdmin, bookingId);
+      await advanceBooking(db, f.actors.manager, bookingId, { toStage });
+    }
     expect((await moves(leadId))[0]).toMatchObject({ from: "booking_in_process", to: "booked" });
     expect(await moves(leadId)).toHaveLength(4);
   });

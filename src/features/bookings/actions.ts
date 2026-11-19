@@ -35,8 +35,8 @@ export async function rejectBookingPaymentAction(bookingId: string, reason: stri
   return run((db, actor) => rejectBookingPayment(db, actor, bookingId, { reason }));
 }
 
-export async function cancelBookingAction(bookingId: string, reason: string) {
-  return run((db, actor) => cancelBooking(db, actor, bookingId, { reason }));
+export async function cancelBookingAction(bookingId: string, reason: string, deduction?: string) {
+  return run((db, actor) => cancelBooking(db, actor, bookingId, { reason, ...(deduction !== undefined ? { deduction } : {}) }));
 }
 
 export async function updateBookingAction(bookingId: string, input: Record<string, unknown>) {

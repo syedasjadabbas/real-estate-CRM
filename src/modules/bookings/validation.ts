@@ -54,6 +54,12 @@ export const advanceSchema = z.object({
 
 export const cancelSchema = z.object({
   reason: z.string().trim().min(3, "Give a reason (at least 3 characters)").max(1000),
+  /** Kept from the money received when a paid booking is cancelled (client rule, 19 Nov 2026); PKR, 0 = full refund. */
+  deduction: z
+    .union([z.string(), z.number()])
+    .optional()
+    .transform((v) => (v === undefined || v === "" ? undefined : Number(String(v).replace(/,/g, ""))))
+    .pipe(z.number("Enter the deduction in PKR").min(0, "The deduction can't be negative").max(1e12).optional()),
 });
 
 /** Overview fields that may change after creation. Rate and token are fixed (cancel and rebook to change them). */

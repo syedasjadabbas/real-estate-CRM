@@ -13,6 +13,8 @@ async function RoleTabs() {
     canDoFinance(actor, "record") ? { href: "/dashboard/finance/record", label: "Record payment" } : null,
     canDoFinance(actor, "viewAll") || canDoFinance(actor, "decideReversal") ? { href: "/dashboard/finance/approvals", label: "Reversal approvals" } : null,
     canDoFinance(actor, "viewAll") ? { href: "/dashboard/finance/outstanding", label: "Outstanding" } : null,
+    canDoFinance(actor, "viewAll") ? { href: "/dashboard/finance/refunds", label: "Refunds" } : null,
+    canDoFinance(actor, "viewAll") ? { href: "/dashboard/finance/transfers", label: "Developer transfers" } : null,
     canDoFinance(actor, "viewAll") ? { href: "/dashboard/finance/entries", label: "Income & expenses" } : null,
     canDoFinance(actor, "viewAll") ? { href: "/dashboard/finance/reports", label: "Reports" } : null,
     canDoFinance(actor, "viewAll") ? { href: "/dashboard/finance/settings", label: "Settings" } : null,

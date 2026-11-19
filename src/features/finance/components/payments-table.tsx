@@ -4,7 +4,7 @@ import { formatListedOn, formatPrice } from "@/features/inventory/format";
 import { SortTh } from "@/features/leads/components/sort-header";
 import { formatDateTime } from "@/features/leads/format";
 import { cn } from "@/lib/cn";
-import { PAYMENT_TYPE_LABELS, type PaymentSortColumn } from "@/modules/finance/constants";
+import { PAYMENT_KIND_LABELS, PAYMENT_TYPE_LABELS, type PaymentSortColumn } from "@/modules/finance/constants";
 import type { PaymentListRow } from "@/modules/finance/queries";
 
 const COLUMNS: { label: string; sort: PaymentSortColumn }[] = [
@@ -38,12 +38,13 @@ export function PaymentsTable({ rows, emptyMessage, params, sort, dir }: { rows:
           </thead>
           <tbody>
             {rows.map((r) => {
-              const reversal = r.kind === "reversal";
+              const reversal = r.kind !== "payment";
+        const kindLabel = PAYMENT_KIND_LABELS[r.kind];
               return (
                 <tr key={r.id} className="border-b border-zinc-100/80 bg-white align-top last:border-b-0 hover:bg-zinc-50/60">
                   <td className="px-3 py-2.5 whitespace-nowrap">
-                    <span className="font-bold tracking-[0.02em] text-zinc-900">{reversal ? `Reversal ${r.displayRef}` : `Receipt ${r.displayRef}`}</span>
-                    {reversal && r.originalReceipt ? <span className="block text-[11px] text-zinc-500">of receipt {r.originalReceipt}</span> : null}
+                    <span className="font-bold tracking-[0.02em] text-zinc-900">{`${kindLabel} ${r.displayRef}`}</span>
+                    {r.kind === "reversal" && r.originalReceipt ? <span className="block text-[11px] text-zinc-500">of receipt {r.originalReceipt}</span> : null}
                   </td>
                   <td className="px-3 py-2.5 whitespace-nowrap text-zinc-700">{formatListedOn(r.receivedOn)}</td>
                   <td className="max-w-[200px] px-3 py-2.5 font-bold">{r.leadName}</td>
@@ -62,7 +63,7 @@ export function PaymentsTable({ rows, emptyMessage, params, sort, dir }: { rows:
                         reversal ? "bg-rose-50 text-rose-700" : r.reversed ? "bg-zinc-100 text-zinc-500" : "bg-brand-50 text-brand-700",
                       )}
                     >
-                      {reversal ? "Reversal" : r.reversed ? "Reversed" : "Posted"}
+                      {reversal ? kindLabel : r.reversed ? "Reversed" : "Posted"}
                     </span>
                   </td>
                   <td className="px-3 py-2.5 whitespace-nowrap text-zinc-600">
