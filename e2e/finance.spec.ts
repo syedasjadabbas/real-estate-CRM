@@ -27,11 +27,11 @@ test("the accountant sees today's collections and exports them as CSV", async ({
   const [download] = await Promise.all([page.waitForEvent("download"), page.locator(`a[href="/api/v1/finance/reports/export?report=collections&from=${today}&to=${today}"]`).click()]);
   expect(download.suggestedFilename()).toBe(`collections-${today}-to-${today}.csv`);
   const lines = (await readFile(await download.path(), "utf8")).trim().split("\n");
-  expect(lines[0]).toBe("Project,From,To,Receipts,Received (PKR),Reversals,Reversed (PKR),Net collected (PKR)");
+  expect(lines[0]).toBe("Project,From,To,Receipts,Received (PKR),Reversals,Reversed (PKR),Refunds,Refunded (PKR),Net collected (PKR)");
   const total = lines.at(-1)!.split(",");
   expect(total[0]).toBe("Total");
   expect(Number(total[3])).toBe(1);
-  expect(Number(total[7])).toBe(500_000);
+  expect(Number(total[9])).toBe(500_000);
   await expect.poll(() => auditCount("finance.report_export", "collections")).toBe(exportsBefore + 1);
 });
 

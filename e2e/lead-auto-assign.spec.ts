@@ -25,7 +25,8 @@ test("a manager's Auto-assign gives the lead to their team, and the lead opens @
 
   // Before the fix this could be another team's agent, and this page a 404.
   await expect(page.getByRole("heading", { name })).toBeVisible();
-  await expect(page.getByText(/^Auto-assigned/).first()).toBeVisible();
+  // The timeline names the automatic assignment ("Assigned automatically to <agent>").
+  await expect(page.getByText(/^Assigned automatically to /).first()).toBeVisible();
   expect([s.users.agent1.id, s.users.agent2.id]).toContain(await leadOwnerId(leadId));
   await ctx.close();
 });

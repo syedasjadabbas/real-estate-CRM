@@ -4,7 +4,7 @@ import { expect, login, selectTestProject, unique, uniquePhone } from "./support
 
 /** F-3: editing a lead's phone runs the same duplicate check as creating a lead. */
 
-test("editing a lead's phone to another lead's number is refused; a new number is saved @mobile", async ({ page }) => {
+test("editing a lead's phone to another lead's number is refused; a new number is saved @mobile", async ({ page, browser }) => {
   const takenNumber = uniquePhone();
   const original = await createLeadFor("agent1", unique("E2E Phone Owner"), "manager", { phoneNumber: takenNumber });
   const leadId = await createLeadFor("agent1", unique("E2E Phone Edit"));
@@ -12,8 +12,20 @@ test("editing a lead's phone to another lead's number is refused; a new number i
   const before = await leadPhone(leadId);
   const updatesBefore = await auditCount("lead.update", leadId);
 
+  // Agents never change phone numbers (owner, 14 Nov 2026): the lead's owner sees the field locked.
+  const agentCtx = await browser.newContext();
+  await selectTestProject(agentCtx);
+  const agent = await agentCtx.newPage();
+  await login(agent, "agent1");
+  await agent.goto(`/dashboard/leads/${leadId}`);
+  const agentForm = agent.getByRole("form", { name: "Lead details" });
+  await expect(agentForm.getByLabel("Mobile number")).toBeDisabled();
+  await expect(agentForm.getByText("Phone numbers can only be changed by an Admin.")).toBeVisible();
+  await agentCtx.close();
+
+  // An Admin (the merged Manager role) edits it.
   await selectTestProject(page.context());
-  await login(page, "agent1");
+  await login(page, "manager");
   await page.goto(`/dashboard/leads/${leadId}`);
   const form = page.getByRole("form", { name: "Lead details" });
   const mobile = form.getByLabel("Mobile number");

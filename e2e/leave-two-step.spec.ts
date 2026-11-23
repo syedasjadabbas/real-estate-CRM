@@ -1,14 +1,16 @@
 import { test } from "@playwright/test";
+import { DEFAULT_STAFF_STEP1, DEFAULT_STAFF_STEP2 } from "@/modules/leave/rules";
 import { leaveApprovals, setStaffLeaveSteps } from "./support/data";
 import { api, expect, login, seed, unique } from "./support/seed";
 
 /**
  * F-6: a staff request's two approval steps need two different people, even when both steps are
- * the same role. The step order is a client decision (C-4), so the test sets Admin / Admin only for
- * itself and clears it again afterwards (the default is "not set").
+ * the same role. The default since 18 Nov 2026 is one Admin step (step 2 "none"), so the test sets
+ * Admin / Admin only for itself and puts the defaults back afterwards (the settings no longer take
+ * "not set").
  */
 test.afterEach(async () => {
-  await setStaffLeaveSteps(null, null);
+  await setStaffLeaveSteps(DEFAULT_STAFF_STEP1, DEFAULT_STAFF_STEP2);
 });
 
 test("two-step staff leave: the step 1 Admin can't approve step 2; a Super Admin completes it", async ({ browser }) => {

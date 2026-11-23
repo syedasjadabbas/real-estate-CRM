@@ -17,11 +17,15 @@ for (const role of ["superAdmin", "admin", "manager", "agent1"] satisfies Role[]
     await expect(page.getByText("need call recordings, which the CRM does not capture yet")).toHaveCount(0);
     // Calls now come from recordings (10 Nov 2026): no "not available" wording on the call charts or footnote.
     await expect(page.getByText(OLD_CALLS_NOTE, { exact: false })).toHaveCount(0);
-    await expect(page.getByText("Call quality", { exact: true })).toBeVisible();
+    await expect(page.getByText(/^Call quality/).first()).toBeVisible();
     // Ranking charts are for Admins; an agent sees only their own figures (13 Nov 2026).
-    for (const title of ["Call volume leaders", "Calls vs meetings"]) await expect(page.getByText(title, { exact: true })).toHaveCount(role === "agent1" ? 0 : 1);
+    // Call volume leaders appears only once recordings exist in the range; Calls vs meetings always does.
+    const hasCalls = (await page.getByText("Call quality", { exact: true }).count()) > 0;
+    await expect(page.getByText("Calls vs meetings", { exact: true })).toHaveCount(role === "agent1" ? 0 : 1);
+    await expect(page.getByText("Call volume leaders", { exact: true })).toHaveCount(role === "agent1" || !hasCalls ? 0 : 1);
     await expect(page.getByText(role === "agent1" ? "Your performance" : "Team at a glance", { exact: true })).toBeVisible();
-    await expect(page.getByText("count as calls but are not in either bucket", { exact: false })).toBeVisible();
+    // The bucket note sits under the Call quality chart, which needs recordings in the range.
+    if (await page.getByText("Call quality", { exact: true }).count()) await expect(page.getByText("count as calls but are not in either bucket", { exact: false })).toBeVisible();
     await expect(page.getByText("which the CRM does not capture")).toHaveCount(0);
     // The sign-in note beside it is unchanged.
     await expect(page.getByText("They are not attendance", { exact: false })).toBeVisible();
@@ -65,7 +69,7 @@ test("Performance sorting, paging and CSV export still work", async ({ page }) =
   await expect(page.getByText(/^Page 1 of \d+ · \d+ total$/)).toBeVisible();
   await page.getByRole("link", { name: "Sort by Booked" }).click();
   await page.waitForURL(/sort=booked/);
-  await expect(page.getByRole("columnheader", { name: /Booked/ })).toHaveAttribute("aria-sort", /ascending|descending/);
+  await expect(page.getByRole("columnheader", { name: "Sort by Booked", exact: true })).toHaveAttribute("aria-sort", /ascending|descending/);
   await expect(page.getByText("Leads are counted under their current owner", { exact: false })).toBeVisible();
 
   const csv = await page.request.get("/api/v1/performance/export");

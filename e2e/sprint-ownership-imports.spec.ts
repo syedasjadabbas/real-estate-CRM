@@ -20,13 +20,18 @@ test("a lead takes extra numbers, and a returning customer goes to their origina
   const name = unique("Five Phones");
   const second = uniquePhone();
   await fillLead(page, name, uniquePhone());
+  // Numbers 2-5 are folded under "Additional numbers" (16 Nov 2026).
+  await page.getByRole("button", { name: /Additional numbers/ }).click();
   await page.getByLabel("Phone 2", { exact: true }).fill("12");
   await page.getByRole("button", { name: "Create lead" }).click();
   await expect(page.getByText("Enter a valid phone number").first()).toBeVisible();
   await page.getByLabel("Phone 2", { exact: true }).fill(second);
   await page.getByRole("button", { name: "Create lead" }).click();
   await page.waitForURL(/\/dashboard\/leads\/[0-9a-f-]{36}$/);
-  await expect(page.getByRole("form", { name: "Lead details" }).getByLabel("Phone 2", { exact: true })).not.toHaveValue("");
+  const details = page.getByRole("form", { name: "Lead details" });
+  await expect(details.getByRole("button", { name: /Additional numbers/ })).toContainText("1 added");
+  await details.getByRole("button", { name: /Additional numbers/ }).click();
+  await expect(details.getByLabel("Phone 2", { exact: true })).not.toHaveValue("");
 
   // Another agent records the same customer, reached on the second number, in the other project.
   const other = await browser.newContext();
@@ -105,16 +110,21 @@ test("admins tune assignment; My Teams shows each agent's score; won and lost ha
   await selectTestProject(context);
   await login(page, "admin");
   await page.goto("/dashboard/settings/assignment");
-  const workload = page.getByLabel("Workload and capacity %");
-  await expect(workload).toHaveValue("40");
+  // 13 Nov 2026: new leads go round in equal turns with no weights; the weights now only shape the agent score.
+  await expect(page.getByText("next agent in turn", { exact: false })).toBeVisible();
+  await expect(page.getByLabel("Workload and capacity %")).toHaveCount(0);
+  const form = page.getByRole("form", { name: "Agent score settings" });
+  const performance = form.getByLabel("Performance %", { exact: true });
+  const current = await performance.inputValue();
+  const bumped = String(Number(current) >= 90 ? Number(current) - 10 : Number(current) + 10);
   await expect(async () => {
-    await workload.fill("50");
-    await page.getByRole("button", { name: "Save settings" }).click();
+    await performance.fill(bumped);
+    await form.getByRole("button", { name: "Save settings" }).click();
     await expect(page.getByText("The four weights must add up to 100").first()).toBeVisible({ timeout: 2_000 });
   }).toPass();
-  await workload.fill("40");
-  await page.getByRole("button", { name: "Save settings" }).click();
-  await expect(page.getByText("Assignment settings saved.")).toBeVisible();
+  await performance.fill(current);
+  await form.getByRole("button", { name: "Save settings" }).click();
+  await expect(form.getByRole("status")).toHaveText("Score settings saved. Scores update straight away.");
 
   await page.goto("/dashboard/teams");
   await page.getByRole("link", { name: "Team 1" }).first().click();

@@ -1,8 +1,8 @@
 import { test } from "@playwright/test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
-import { createAvailableUnit } from "./support/data";
-import { api, expect, login, seed, selectTestProject, unique, uniquePhone } from "./support/seed";
+import { convertLeadFor, createAvailableUnit, createLeadFor } from "./support/data";
+import { api, expect, login, seed, selectTestProject, unique } from "./support/seed";
 
 /**
  * V1 audit: journeys that had only been set up through services, driven through their real pages,
@@ -67,12 +67,13 @@ test("a manager saves a daily report, and the figures persist", async ({ page, c
     await page.waitForURL(/team=/, { timeout: 2_000 });
   }).toPass();
   const leads = page.getByLabel("Agent A Leads");
-  const save = page.getByRole("button", { name: "Save report" });
+  // The report is confirmed (15 Nov 2026): "Confirm report", or "Update report" once today's is in.
+  const save = page.getByRole("button", { name: /^(Confirm|Update) report$/ });
   await expect(leads).toBeEditable();
   await expect(async () => {
     await leads.fill("7");
     await save.click({ timeout: 1_000 });
-    await expect(page.getByText("Daily report saved.")).toBeVisible({ timeout: 2_000 });
+    await expect(page.getByText("Daily report confirmed.")).toBeVisible({ timeout: 2_000 });
   }).toPass();
   await page.reload();
   await expect(page.getByLabel("Agent A Leads")).toHaveValue("7");
@@ -81,15 +82,12 @@ test("a manager saves a daily report, and the figures persist", async ({ page, c
 test("a client's note reaches its history and persists", async ({ page, context }) => {
   const name = unique("Audit Client");
   const note = unique("Audit client note");
+  // Clients come from leads (the manual client page was removed 15 Nov 2026): every lead gets one.
+  const clientId = await convertLeadFor(await createLeadFor("agent1", name));
   await selectTestProject(context);
   await login(page, "superAdmin");
-  await page.goto("/dashboard/clients/new");
-  await expect(async () => {
-    await page.getByLabel("Name").fill(name);
-    await page.getByLabel("Mobile number").fill(uniquePhone());
-    await page.getByRole("button", { name: "Create client" }).click();
-    await page.waitForURL(/\/dashboard\/clients\/[0-9a-f-]{36}$/, { timeout: 3_000 });
-  }).toPass();
+  await page.goto(`/dashboard/clients/${clientId}`);
+  await expect(page.getByRole("heading", { name }).first()).toBeVisible();
   const box = page.getByLabel("New note");
   const add = page.getByRole("button", { name: "Add note" });
   await expect(async () => {
@@ -110,8 +108,9 @@ test("a proposal's print page shows the customer, unit and payment plan", async 
   await login(page, "agent1");
   await page.goto("/dashboard/tasks/new");
   await expect(async () => {
-    await page.getByLabel("Title").fill(unique("Audit Proposal"));
-    await page.getByLabel("Type").selectOption("proposal");
+    // "Title *": the proposal template also has "Prepared by (title)" and "Project name (print title)".
+    await page.getByRole("textbox", { name: /^Title\b/ }).fill(unique("Audit Proposal"));
+    await page.getByRole("combobox", { name: /^Type\b/ }).selectOption("proposal");
     await expect(page.getByLabel("Customer name")).toBeVisible({ timeout: 1_000 });
   }).toPass();
   await page.getByLabel("Customer name").fill(customer);

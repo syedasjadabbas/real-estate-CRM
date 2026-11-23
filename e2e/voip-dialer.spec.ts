@@ -18,7 +18,9 @@ test("with no calling provider, the lead page says browser calling isn't set up 
   await expect(phoneCall).toHaveAttribute("href", /^tel:\+92\d+$/);
   // Nothing pretends a call can be placed in the browser.
   await expect(dialer.locator("[data-voip-mount]")).toHaveCount(0);
-  await expect(dialer.getByRole("button")).toHaveCount(0);
+  // The only button is the masked number's "Show phone number" (numbers are hidden until shown); none places a call.
+  await expect(dialer.getByRole("button")).toHaveCount(1);
+  await expect(dialer.getByRole("button", { name: "Show phone number" })).toHaveCount(1);
 
   // The status API reports the same, and never more than the provider name.
   const r = await api<Record<string, unknown>>(page, "/api/v1/voip/status");

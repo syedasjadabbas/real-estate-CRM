@@ -1,5 +1,5 @@
 import { test, type Locator, type Page } from "@playwright/test";
-import { createLeadFor } from "./support/data";
+import { convertLeadFor, createLeadFor } from "./support/data";
 import { api, expect, login, seed, selectTestProject, unique, uniquePhone } from "./support/seed";
 
 /** FR-042: the Cities settings screen, "Other" on lead and client forms, and records keeping a deactivated city. */
@@ -16,6 +16,14 @@ async function addCity(page: Page, name: string) {
   const r = await api<{ cityId: string }>(page, "/api/v1/lookups/cities", { method: "POST", data: { name } });
   expect(r.status).toBe(201);
   return r.data.cityId;
+}
+/** Switches the city list's "Show" filter to All (it opens on Active); retried in case the page hydrated late. */
+async function showAllCities(page: Page) {
+  const all = page.getByRole("group", { name: "Show" }).getByRole("button", { name: /^All/ });
+  await expect(async () => {
+    await all.click();
+    await expect(all).toHaveAttribute("aria-pressed", "true", { timeout: 1_000 });
+  }).toPass();
 }
 /** Refills if the page hydrated after typing (Add enables only once React has the text). */
 async function typeNewCity(page: Page, name: string) {
@@ -63,8 +71,12 @@ test("an admin adds, renames, deactivates and reactivates a city, and bad names 
   await expect(cityRow(page, renamed)).toBeVisible();
 
   await page.getByRole("button", { name: `Deactivate ${renamed}` }).click();
+  await expect(page.getByRole("status").filter({ hasText: `${renamed} deactivated.` })).toBeVisible();
+  // The list shows active cities by default; "All" shows the deactivated one too, tagged Inactive.
+  await showAllCities(page);
   await expect(cityRow(page, renamed)).toContainText("Inactive");
   await page.reload();
+  await showAllCities(page);
   await expect(cityRow(page, renamed)).toContainText("Inactive");
   await page.getByRole("button", { name: `Activate ${renamed}` }).click();
   await expect(page.getByRole("button", { name: `Deactivate ${renamed}` })).toBeVisible();
@@ -104,29 +116,33 @@ test("a lead takes a typed city under Other, refusing a phone number, and lists 
   await expect(page.getByRole("link", { name })).toHaveCount(0);
 });
 
-test("a client takes a typed city, and an edit moves it to a list city", async ({ page }) => {
+test("a client takes a typed city from its lead, and an edit moves it to a list city", async ({ page }) => {
   await login(page, "superAdmin");
   const listed = cityName();
   await addCity(page, listed);
   const name = unique("City Client");
   const typed = cityName();
 
-  await page.goto("/dashboard/clients/new");
-  await page.getByLabel("Name").fill(name);
-  await page.getByLabel("Mobile number").fill(uniquePhone());
-  await chooseOther(page);
-  await typedCity(page).fill("+92 300 1234567");
-  await page.getByRole("button", { name: "Create client" }).click();
-  await expect(page.getByText("Enter a city name, not a number or phone number")).toBeVisible();
-  await typedCity(page).fill(typed);
-  await page.getByRole("button", { name: "Create client" }).click();
-  await page.waitForURL(/\/dashboard\/clients\/[0-9a-f-]{36}$/);
+  // "Add client" was removed (15 Nov 2026): every lead's client is made with the lead and takes its city.
+  const leadId = await createLeadFor("agent1", name, "manager", { cityId: "other", cityOther: typed });
+  const clientId = await convertLeadFor(leadId);
+  await page.goto(`/dashboard/clients/${clientId}`);
   await expect(page.getByText(typed).first()).toBeVisible();
 
-  // Scoped: the router can keep the /new form mounted but hidden after the redirect.
   const details = page.getByRole("form", { name: "Client details" });
+  await expect(citySelect(details)).toHaveValue("other");
+  await expect(details.getByLabel("City name")).toHaveValue(typed);
+  const save = details.getByRole("button", { name: "Save changes" });
+  // A phone number typed as the city is refused on the client form too.
+  await expect(async () => {
+    await details.getByLabel("City name").fill("+92 300 1234567");
+    await expect(save).toBeEnabled({ timeout: 1_000 });
+  }).toPass();
+  await save.click();
+  await expect(page.getByText("Enter a city name, not a number or phone number")).toBeVisible();
+
   await citySelect(details).selectOption({ label: listed });
-  await details.getByRole("button", { name: "Save changes" }).click();
+  await save.click();
   await expect(page.getByText("Changes saved.")).toBeVisible();
   await page.reload();
   await expect(page.getByText(listed).first()).toBeVisible();

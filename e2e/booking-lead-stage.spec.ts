@@ -34,14 +34,11 @@ test("a lead with an open booking can't be marked lost or moved until the bookin
   await selectTestProject(page.context());
   await login(page, "manager");
 
-  // Mark lost on the lead page is refused; nothing changes.
+  // Mark lost on the lead page isn't offered: the Lost lead card explains the booking must be cancelled first.
   await page.goto(`/dashboard/leads/${leadId}`);
-  await expect(async () => {
-    await page.getByLabel("Lost reason").selectOption({ index: 1 });
-    await expect(page.getByRole("button", { name: "Mark lost" })).toBeEnabled({ timeout: 1_000 });
-  }).toPass();
-  await page.getByRole("button", { name: "Mark lost" }).click();
-  await expect(page.getByRole("alert").filter({ hasText: OPEN_BOOKING })).toBeVisible();
+  await expect(page.getByText("This lead has an open booking. Cancel the booking first (this releases the unit), then the lead can be marked lost.")).toBeVisible();
+  await expect(page.getByLabel("Lost reason")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Mark lost" })).toHaveCount(0);
   expect(await leadStage(leadId)).toBe("booking_in_process");
   expect(await bookingState(bookingId)).toEqual({ stage: "token_pending", unitStatus: "reserved" });
 

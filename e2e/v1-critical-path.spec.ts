@@ -1,4 +1,4 @@
-import { test, type Page } from "@playwright/test";
+import { test, type Browser, type Page } from "@playwright/test";
 import { createAvailableUnit, createLeadFor, leadStage } from "./support/data";
 import { api, expect, login, seed, selectTestProject, unique, uniquePhone } from "./support/seed";
 
@@ -56,14 +56,14 @@ test("a lead goes from reassignment to meeting, booking, payment, confirmation a
   await page.goto("/dashboard/meetings");
   await expect(page.getByRole("link", { name: title }).first()).toBeVisible();
 
-  // Book the unit.
+  // Book the unit. The price comes from inventory (500 sq ft at PKR 20,000); the token needs its proof (14 Nov 2026).
   await page.goto(`/dashboard/bookings/new?project=${seed().projectId}`);
   await expect(async () => {
     await choose(page, "Lead", name);
     await choose(page, "Unit (available)", unitNo);
-    await page.getByLabel("Per sq ft rate (PKR)").fill("25,000");
     await page.getByLabel("Token amount (PKR)").fill("500,000");
-    await expect(page.getByText("PKR 12,500,000").first()).toBeVisible({ timeout: 1_000 });
+    await page.getByLabel("Token payment proof").setInputFiles({ name: "token.png", mimeType: "image/png", buffer: png });
+    await expect(page.getByText("PKR 10,000,000").first()).toBeVisible({ timeout: 1_000 });
   }).toPass();
   await page.getByRole("button", { name: "Create booking" }).click();
   await page.waitForURL(/\/dashboard\/bookings\/[0-9a-f-]{36}$/);
@@ -76,62 +76,102 @@ test("a lead goes from reassignment to meeting, booking, payment, confirmation a
   await page.goto(`/dashboard/bookings/new?project=${seed().projectId}`);
   await expect(combo(page, "Unit (available)").locator("option", { hasText: unitNo })).toHaveCount(0);
 
-  // A booking starts at Token, which already takes payments.
+  // A booking starts at Token, which already takes payments. The accountant posts the token.
+  await postPayment(browser, name, "Token", "500,000");
 
-  // The accountant posts the token. Dated last year, so other specs' current-period totals don't move.
-  const accountantContext = await browser.newContext();
-  const accountant = await accountantContext.newPage();
-  await login(accountant, "accountant");
-  await accountant.goto("/dashboard/finance/record");
-  const lastYear = `${new Date().getFullYear() - 1}-06-15`;
-  await expect(async () => {
-    await choose(accountant, "Booking", name);
-    await expect(accountant.getByText("PKR 12,500,000").first()).toBeVisible({ timeout: 1_000 });
-  }).toPass();
-  await combo(accountant, "Type").selectOption({ label: "Token" });
-  await accountant.getByLabel("Amount (PKR)").fill("500,000");
-  await accountant.getByLabel("Received on").fill(lastYear);
-  await combo(accountant, "Method").selectOption({ label: "Cash" });
-  await accountant.getByRole("button", { name: "Post payment" }).click();
-  await accountant.waitForURL(/\/dashboard\/finance\/payments\/[0-9a-f-]{36}/);
-  await expect(accountant.getByText("PKR 500,000").first()).toBeVisible();
-  await accountantContext.close();
-
-  // The manager walks the booking through each stage to Closed Won.
+  // The manager walks the booking through the stages (14 Nov 2026): Token → Partial Down Payment
+  // (amount + proof) → Complete Down Payment (signed booking form, then amount + proof).
   await page.goto(bookingUrl);
-  const confirm = page.getByRole("button", { name: "Close as Won" });
-  const move = page.getByRole("button", { name: /^Move to / });
-  for (let i = 0; i < 12; i++) {
-    // Wait for the next action to render before deciding: the last stage offers Confirm instead.
-    await expect(move.or(confirm)).toBeVisible();
-    if (await confirm.isVisible()) break;
-    const label = (await move.textContent())!.replace("Move to ", "");
-    await move.click();
-    await expect(page.getByText(`Moved to ${label}.`)).toBeVisible();
-  }
-  await confirm.click();
-  await expect(page.getByText("Moved to Closed Won.")).toBeVisible();
+  await stageMove(page, "partial down payment", "Partial Down Payment", "1,000,000");
+  await uploadSignedForm(page, "form-partial.png");
+  await stageMove(page, "complete down payment", "Complete Down Payment", "1,000,000");
+  await uploadSignedForm(page, "form-complete.png");
+
+  // Closed Won needs the down payment posted by Accounts (19 Nov 2026): only the token is posted so far.
+  const closeWon = page.getByRole("button", { name: "Close as Won" });
+  await expect(closeWon).toBeEnabled();
+  await closeWon.click();
+  await expect(page.getByRole("alert").filter({ hasText: "Closed Won needs the down payment posted in Finance first" })).toBeVisible();
+  expect(await leadStage(leadId)).toBe("booking_in_process");
+
+  // Accounts posts the rest of the down payment (25% of PKR 10,000,000, less the token), then the manager closes it.
+  await postPayment(browser, name, "Down payment", "2,000,000");
+  await page.reload();
+  await expect(closeWon).toBeEnabled();
+  await closeWon.click();
+  // Closing swaps the steps for the closed note.
+  await expect(page.getByText("This booking is closed won.")).toBeVisible();
   expect(await leadStage(leadId)).toBe("booked");
 
-  // The lead's history shows the sale, and the buyer is a client.
+  // The lead's history shows the sale, and the buyer is a client (every lead has one from the start).
   await page.goto(`/dashboard/leads/${leadId}`);
   await expect(page.getByText("Reassigned").first()).toBeVisible();
-  await expect(page.getByText("Client created from the confirmed booking")).toBeVisible();
+  await expect(page.getByText("Moved to Booked").first()).toBeVisible();
   await page.goto(`/dashboard/clients?q=${encodeURIComponent(name)}`);
   await expect(page.getByRole("link", { name }).first()).toBeVisible();
 });
+
+/** A 1×1 PNG, accepted as a payment proof or a signed form scan. */
+const png = Buffer.from("89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8ffff3f0005fe02fea7d6a4b30000000049454e44ae426082", "hex");
+
+/** The accountant posts a cash payment on the buyer's booking. Dated last year, so other specs' current-period totals don't move. */
+async function postPayment(browser: Browser, buyer: string, type: string, amount: string) {
+  const context = await browser.newContext();
+  const accountant = await context.newPage();
+  await login(accountant, "accountant");
+  await accountant.goto("/dashboard/finance/record");
+  await expect(async () => {
+    await choose(accountant, "Booking", buyer);
+    await expect(accountant.getByText("PKR 10,000,000").first()).toBeVisible({ timeout: 1_000 });
+  }).toPass();
+  await combo(accountant, "Type").selectOption({ label: type });
+  await accountant.getByLabel("Amount (PKR)").fill(amount);
+  await accountant.getByLabel("Received on").fill(`${new Date().getFullYear() - 1}-06-15`);
+  await combo(accountant, "Method").selectOption({ label: "Cash" });
+  await accountant.getByRole("button", { name: "Post payment" }).click();
+  await accountant.waitForURL(/\/dashboard\/finance\/payments\/[0-9a-f-]{36}/);
+  await expect(accountant.getByText(`PKR ${amount}`).first()).toBeVisible();
+  await context.close();
+}
+
+/** On the booking page: enters the amount received with its proof and moves to the next stage. */
+async function stageMove(page: Page, payment: string, stage: string, amount: string) {
+  const move = page.getByRole("button", { name: `Move to ${stage}` });
+  await expect(async () => {
+    await page.getByLabel(`Amount received for the ${payment}`).fill(amount);
+    await page.getByLabel("Payment proof", { exact: true }).setInputFiles({ name: `${stage.replace(/\s+/g, "-").toLowerCase()}.png`, mimeType: "image/png", buffer: png });
+    await expect(move).toBeEnabled({ timeout: 1_000 });
+  }).toPass();
+  await move.click();
+  await expect(page.getByText(`Moved to ${stage}.`)).toBeVisible();
+}
+
+/** On the booking page: uploads the booking form signed by the client for the current stage. */
+async function uploadSignedForm(page: Page, fileName: string) {
+  const upload = page.getByRole("button", { name: "Upload", exact: true });
+  await expect(async () => {
+    await page.getByLabel("Signed booking form", { exact: true }).setInputFiles({ name: fileName, mimeType: "image/png", buffer: png });
+    await expect(upload).toBeEnabled({ timeout: 1_000 });
+  }).toPass();
+  await upload.click();
+  await expect(page.getByText("Signed booking form uploaded.")).toBeVisible();
+}
 
 test("a task can be created and appears in the task list", async ({ page, context }) => {
   const title = unique("V1 Task");
   await selectTestProject(context);
   await login(page, "manager");
+  // Tasks are printables since 14 Nov 2026 (general to-dos live on Leads → To-dos): a proposal needs its customer.
   await page.goto("/dashboard/tasks/new");
   await expect(async () => {
-    await page.getByLabel("Title").fill(title);
+    // "Title *": the proposal template also has "Prepared by (title)" and "Project name (print title)".
+    await page.getByRole("textbox", { name: /^Title\b/ }).fill(title);
+    await page.getByLabel("Customer name").fill(unique("V1 Task Customer"));
+    await page.getByLabel("First installment month").fill("2026-12");
     await page.getByRole("button", { name: "Create task" }).click();
     await page.waitForURL(/\/dashboard\/tasks\/[0-9a-f-]{36}/, { timeout: 3_000 });
   }).toPass();
-  await page.goto("/dashboard/tasks");
+  await page.goto(`/dashboard/tasks?q=${encodeURIComponent(title)}`);
   await expect(page.getByRole("link", { name: title }).first()).toBeVisible();
 });
 

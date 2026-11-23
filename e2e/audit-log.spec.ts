@@ -6,7 +6,8 @@ import { api, expect, login, seed, selectTestProject, unique } from "./support/s
 
 test("a note added on a lead appears in the Admin's audit log; search, filters and sorting work @mobile", async ({ browser }) => {
   const note = unique("Audit note");
-  const leadId = await createLeadFor("agent1", unique("Audit Lead"));
+  const leadName = unique("Audit Lead");
+  const leadId = await createLeadFor("agent1", leadName);
 
   // The agent adds a note through the lead page.
   const agentCtx = await browser.newContext();
@@ -42,7 +43,8 @@ test("a note added on a lead appears in the Admin's audit log; search, filters a
   const row = table.getByRole("row").filter({ hasText: "lead.note" });
   await expect(row).toHaveCount(1);
   await expect(row).toContainText(seed().users.agent1.name);
-  await expect(row.getByRole("link", { name: leadId })).toHaveAttribute("href", `/dashboard/leads/${leadId}`);
+  // The record cell names the lead (with its code) and links to it (16 Nov 2026); the raw id shows only for a deleted record.
+  await expect(row.getByRole("link", { name: leadName })).toHaveAttribute("href", `/dashboard/leads/${leadId}`);
   await row.getByText("View changes").click();
   await expect(row.getByText(note)).toBeVisible();
   // No trusted proxy in this test server: no IP is recorded, and none is invented.
@@ -56,7 +58,8 @@ test("a note added on a lead appears in the Admin's audit log; search, filters a
   await filters.getByRole("button", { name: "Apply" }).click();
   await adm.waitForURL(/action=lead\.note/);
   await expect(table.getByRole("row").filter({ hasText: note.slice(0, 10) }).first()).toBeVisible();
-  const actions = await table.locator("tbody tr td:nth-child(3)").allTextContents();
+  // The Action cell shows a readable label above the raw action key.
+  const actions = await table.locator("tbody tr td:nth-child(3) span.font-mono").allTextContents();
   expect(new Set(actions)).toEqual(new Set(["lead.note"]));
 
   await adm.getByRole("link", { name: "Sort by Time" }).click();

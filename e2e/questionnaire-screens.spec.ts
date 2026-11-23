@@ -30,27 +30,36 @@ test("HR adds an employee without a CRM login, finds them in the directory and e
   await expect(row).toContainText("Inactive");
 });
 
-test("an admin sets a team's weekend days; the roster month view shades them", async ({ page }) => {
+test("the roster month view shades HR's weekly days off; teams no longer set their own", async ({ page }) => {
+  // Weekly days off became one HR setting (Attendance) on 15 Nov 2026; the team form lost its weekday boxes.
   const teamName = unique("E2E Weekend Team");
   const teamId = await createTeamWithAgent(teamName);
   await login(page, "admin");
   await page.goto(`/dashboard/teams?tab=teams&team=${teamId}`);
+  await page.getByRole("tablist", { name: "Team sections" }).getByRole("tab", { name: "Details" }).click();
   const form = page.getByRole("form", { name: "Edit team" });
-  await form.getByLabel("Fri").check();
-  await form.getByLabel("Sat").check();
-  await form.getByRole("button", { name: "Save team" }).click();
-  await expect(form.getByRole("status").filter({ hasText: "Team saved." })).toBeVisible();
+  await expect(form.getByRole("button", { name: "Save team" })).toBeVisible();
+  await expect(form.getByRole("checkbox", { name: /^(Fri|Friday|Sat|Saturday)$/ })).toHaveCount(0);
 
-  // November 2026: the 6th is a Friday, the 7th a Saturday, the 9th a Monday.
+  // Read the current setting rather than changing it (rotation and finance use it too).
+  await page.goto("/dashboard/hr/attendance");
+  const settings = page.getByRole("form", { name: "Attendance settings" });
+  const weekdays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const off: number[] = [];
+  for (const [i, label] of weekdays.entries()) if (await settings.getByRole("checkbox", { name: label, exact: true }).isChecked()) off.push(i);
+
+  // November 2026 starts on a Sunday, so weekday w falls on the (w + 1)th.
   await page.goto(`/dashboard/teams?tab=roster&team=${teamId}&view=month&month=2026-11`);
-  await expect(page.getByText("Shaded columns are this team's weekend.")).toBeVisible();
   const header = (day: number) => page.getByRole("columnheader", { name: String(day), exact: true });
-  await expect(header(6)).toHaveAttribute("title", "Team weekend");
-  await expect(header(7)).toHaveAttribute("title", "Team weekend");
-  await expect(header(9)).not.toHaveAttribute("title", "Team weekend");
-
-  await page.goto(`/dashboard/teams?tab=roster&team=${teamId}&view=day&date=2026-11-06`);
-  await expect(page.getByText(`This day is a weekend for ${teamName}.`)).toBeVisible();
+  for (let w = 0; w < 7; w++) {
+    if (off.includes(w)) await expect(header(w + 1)).toHaveAttribute("title", "Weekly day off");
+    else await expect(header(w + 1)).not.toHaveAttribute("title", "Weekly day off");
+  }
+  if (off.length) {
+    await expect(page.getByText("Shaded columns are weekly days off.", { exact: false })).toBeVisible();
+    await page.goto(`/dashboard/teams?tab=roster&team=${teamId}&view=day&date=2026-11-0${off[0] + 1}`);
+    await expect(page.getByText("This day is a weekly day off.")).toBeVisible();
+  }
 });
 
 test("a proposal needs the first installment month; installments are due on the 10th", async ({ page }) => {
@@ -59,7 +68,8 @@ test("a proposal needs the first installment month; installments are due on the 
   await selectTestProject(page.context());
   await login(page, "agent1");
   await page.goto("/dashboard/tasks/new");
-  await page.getByLabel("Title").fill(unique("E2E Proposal"));
+  // "Title" alone also matches the proposal's "Prepared by (title)" and "Project name (print title)".
+  await page.getByLabel(/^Title\b/).fill(unique("E2E Proposal"));
   await page.getByLabel("Type").selectOption("proposal");
   await page.getByLabel("Customer name").fill("E2E Customer");
   await page.getByLabel("Project", { exact: true }).selectOption(seed().projectId);
@@ -98,5 +108,7 @@ test("the unit picker offers only Available units for proposals (Q48)", async ({
 test("Admins see the proposal price reconciliation report in Tasks settings (Q47)", async ({ page }) => {
   await login(page, "admin");
   await page.goto("/dashboard/tasks/settings");
-  await expect(page.getByRole("heading", { name: "Proposal price reconciliation (Q47)" })).toBeVisible();
+  // Renamed in plain wording: the report is "Proposals with changed prices" on Proposal settings.
+  await expect(page.getByRole("heading", { name: "Proposal settings" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Proposals with changed prices" })).toBeVisible();
 });

@@ -61,7 +61,8 @@ test("an agent uploads a call recording; only Managers, Admins and Super Admins 
   await agent.goto(`/dashboard/leads/${leadId}`);
   await expect(agent.getByText("No call recordings yet.")).toBeVisible();
   await (await chooseFile(agent, "Upload a recording", "Upload recording", { name: fileName, mimeType: "audio/wav", buffer: silentWav() })).click();
-  await expect(agent.getByRole("status").filter({ hasText: "Recording uploaded." })).toBeVisible();
+  // The upload reads the call length from the file (one second of silence) and reports it.
+  await expect(agent.getByRole("status").filter({ hasText: "Recording uploaded · call length 0:01." })).toBeVisible();
   // Q52 (confirmed 10 Nov 2026): the agent sees the recording listed, with no player and no Save link.
   await expect(agent.locator("ul li").filter({ hasText: fileName })).toBeVisible();
   await expect(agent.getByText("Recordings are played by Managers, Admins and Super Admins.")).toBeVisible();

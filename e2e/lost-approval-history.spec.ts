@@ -23,9 +23,15 @@ test("a manager approves a lost request and the timeline shows the move @mobile"
   await manager.getByRole("button", { name: "Approve" }).click();
   await expect(manager.getByRole("button", { name: "Approve" })).toHaveCount(0);
 
-  await expect(manager.getByText("New Lead → Lost Lead")).toBeVisible();
-  await expect(manager.getByText("Stage changed to Lost Lead · Not interested")).toBeVisible();
-  await expect(manager.getByText("Lost request approved")).toBeVisible();
+  // Two timeline entries: the stage move itself, and the decision (which also names the move it made).
+  const entry = (title: string) => manager.getByRole("listitem").filter({ has: manager.getByText(title, { exact: true }) });
+  const moved = entry("Moved to Lost Lead");
+  await expect(moved).toHaveCount(1);
+  await expect(moved).toContainText("New Lead → Lost Lead");
+  await expect(moved).toContainText("Not interested");
+  const decision = entry("Lost request approved: lead closed as lost");
+  await expect(decision).toHaveCount(1);
+  await expect(decision).toContainText("New Lead → Lost Lead");
   await ctx.close();
 });
 
