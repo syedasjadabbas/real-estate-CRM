@@ -32,6 +32,16 @@ export function since(value: Date | string | null | undefined, now = Date.now())
   return formatDuration(now - new Date(value).getTime());
 }
 
+export type FollowUpStatus = "Overdue" | "Due today" | "Upcoming";
+const businessDay = new Intl.DateTimeFormat("en-CA", { timeZone: BUSINESS_TIME_ZONE });
+
+/** Where a follow-up stands (client, 24 Nov 2026): past its time, later today, or on a later day (Pakistan time). */
+export function followUpStatus(value: Date | string, now = Date.now()): FollowUpStatus {
+  const at = new Date(value);
+  if (at.getTime() < now) return "Overdue";
+  return businessDay.format(at) === businessDay.format(now) ? "Due today" : "Upcoming";
+}
+
 /** Value for <input type="datetime-local"> in the business time zone. */
 export function toLocalInputValue(date: Date) {
   const parts = new Intl.DateTimeFormat("en-CA", {

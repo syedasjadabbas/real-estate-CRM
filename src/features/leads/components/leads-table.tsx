@@ -6,14 +6,14 @@ import { cn } from "@/lib/cn";
 import { INBOUND_LABELS, PRIORITY_LABELS, type SortColumn } from "@/modules/leads/constants";
 import { telHref } from "@/modules/leads/phone";
 import type { LeadListRow } from "@/modules/leads/queries";
-import { formatDateTime, since } from "../format";
+import { followUpStatus, formatDateTime, since, type FollowUpStatus } from "../format";
 import { withParams } from "../url";
 import { SourcePill, StagePill } from "./chips";
-import { LeadContact } from "./lead-contact";
-import { LogButton } from "./log-button";
+import { ViewContact } from "./lead-contact";
+import { LeadRowMenu } from "./lead-row-menu";
 import { OtherProjects } from "./other-projects";
 import { VerificationBadge } from "./verification";
-import { CopyCodeButton, FavoriteButton, FollowUpButtons } from "./row-actions";
+import { FavoriteButton } from "./row-actions";
 
 type Column = { key: string; label: string; sort?: SortColumn; className?: string };
 
@@ -49,6 +49,12 @@ const ADMIN_MORE: Column[] = [
   { key: "created", label: "Created", sort: "createdAt" },
   { key: "modified", label: "Modified", sort: "modified" },
 ];
+
+const FOLLOW_UP_TONES: Record<FollowUpStatus, string> = {
+  Overdue: "bg-rose-100 text-rose-700",
+  "Due today": "bg-amber-100 text-amber-800",
+  Upcoming: "bg-zinc-100 text-zinc-600",
+};
 
 function SortHeader({ column, pathname, params, defaultSort }: { column: Column; pathname: string; params: Record<string, string>; defaultSort: SortColumn | null }) {
   if (!column.sort) return <>{column.label}</>;
@@ -130,7 +136,6 @@ export function LeadsTable({
           </thead>
           <tbody>
             {rows.map((r) => {
-              const overdue = r.nextFollowUpAt && new Date(r.nextFollowUpAt).getTime() < now;
               const closed = r.stage === "lost_lead" || r.stage === "booked";
               const text = (key: string, value: ReactNode, className = "whitespace-nowrap text-zinc-700") => (
                 <td key={key} className={cn("px-3 py-2.5", className)}>
@@ -154,11 +159,8 @@ export function LeadsTable({
                         🔥
                       </span>
                     ) : null}
-                    <span className="mb-1 flex items-center gap-1">
-                      <span className="text-[11px] font-bold tracking-[0.05em] text-zinc-500">{r.code}</span>
-                      <CopyCodeButton code={r.code} />
-                    </span>
-                    <LeadContact phone={r.phone} email={r.email} name={r.name} tel={telHref(r.phoneCountryCode, r.phoneNumber)} />
+                    <span className="block text-[11px] font-bold tracking-[0.05em] text-zinc-500">{r.code}</span>
+                    <ViewContact phone={r.phone} email={r.email} name={r.name} code={r.code} tel={telHref(r.phoneCountryCode, r.phoneNumber)} />
                     {r.isRegenerated ? <span className={cn(badge, "bg-sky-50 text-sky-700")}>Regenerated</span> : null}
                     {r.duplicateOfId ? <span className={cn(badge, "bg-amber-50 text-amber-800")}>Duplicate</span> : null}
                   </td>
@@ -191,23 +193,32 @@ export function LeadsTable({
                     <span className="font-semibold text-amber-700">Not contacted yet</span>
                   ),
                 ),
-                next: text("next", r.nextFollowUpAt ? formatDateTime(r.nextFollowUpAt) : null, cn("whitespace-nowrap", overdue ? "font-semibold text-rose-600" : "text-zinc-900")),
+                next: text(
+                  "next",
+                  r.nextFollowUpAt && !closed ? (
+                    <>
+                      <span className={cn("block w-fit rounded-full px-2 py-0.5 text-[10px] leading-4 font-black tracking-[0.04em] uppercase", FOLLOW_UP_TONES[followUpStatus(r.nextFollowUpAt, now)])}>
+                        {followUpStatus(r.nextFollowUpAt, now)}
+                      </span>
+                      <span className="mt-1 block text-zinc-800">{formatDateTime(r.nextFollowUpAt)}</span>
+                    </>
+                  ) : null,
+                ),
                 agent: text("agent", r.ownerName ?? "Unassigned", "whitespace-nowrap text-zinc-800"),
                 actions: (
                   <td key="actions" className="px-3 py-2.5">
-                    <div className="flex items-start gap-2">
-                      <div className="flex flex-col gap-1.5 py-0.5">
-                        <Link
-                          href={`/dashboard/leads/${r.id}`}
-                          aria-label={`Open ${r.name}`}
-                          className="rounded-lg border border-zinc-200/80 bg-white px-2.5 py-1 text-center text-[10px] leading-[13px] font-black tracking-[0.025em] text-zinc-700 uppercase hover:bg-zinc-50"
-                        >
-                          Open
-                        </Link>
-                        {/* An agent can't work a lead until it is verified. */}
-                        <LogButton leadId={r.id} leadName={r.name} stage={r.stage} disabled={!canEdit || closed || (!showAgent && r.verification !== "approved")} />
-                      </div>
-                      <FollowUpButtons leadId={r.id} leadName={r.name} hasPending={Boolean(r.nextFollowUpAt)} disabled={!canEdit || closed} />
+                    <div className="flex items-center gap-2">
+                      <Link
+                        href={`/dashboard/leads/${r.id}`}
+                        aria-label={`Open lead ${r.name}`}
+                        className="inline-flex h-8 items-center rounded-lg bg-brand px-3 text-[11px] font-black whitespace-nowrap text-white shadow-hairline hover:bg-brand-700"
+                      >
+                        Open Lead
+                      </Link>
+                      {/* An agent can't log on a lead until it is verified. */}
+                      {canEdit && !closed ? (
+                        <LeadRowMenu leadId={r.id} leadName={r.name} stage={r.stage} hasPending={Boolean(r.nextFollowUpAt)} canLog={showAgent || r.verification === "approved"} />
+                      ) : null}
                     </div>
                   </td>
                 ),

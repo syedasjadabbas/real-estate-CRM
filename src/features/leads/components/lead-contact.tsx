@@ -1,59 +1,96 @@
 "use client";
 
-import { Eye, EyeOff, MessageCircle, Phone } from "lucide-react";
-import { useState } from "react";
-import { GmailButton } from "@/components/ui/gmail-button";
-import { maskPhone, whatsappHref } from "@/components/ui/masked-phone";
+import { Check, Contact, Copy, Mail, MessageCircle, Phone } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { gmailComposeHref } from "@/components/ui/gmail-button";
+import { whatsappHref } from "@/components/ui/masked-phone";
+import { Modal } from "@/components/ui/modal";
 
-/** "shahida@gmail.com" → "sh•••@gmail.com". */
-export function maskEmail(email: string) {
-  const at = email.indexOf("@");
-  if (at < 1) return "•••";
-  return `${email.slice(0, Math.min(2, at - 1))}•••${email.slice(at)}`;
+const action =
+  "inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-zinc-200/80 bg-white px-3 text-xs font-bold text-zinc-800 hover:bg-zinc-50 focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:outline-none";
+
+function CopyButton({ value, label }: { value: string; label: string }) {
+  const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
+  return (
+    <button
+      type="button"
+      aria-label={`Copy ${label}`}
+      className={action}
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(value);
+          setState("copied");
+        } catch {
+          setState("failed");
+        }
+        setTimeout(() => setState("idle"), 1500);
+      }}
+    >
+      {state === "copied" ? <Check aria-hidden="true" className="size-3.5 text-brand" /> : <Copy aria-hidden="true" className="size-3.5" />}
+      {state === "copied" ? "Copied" : state === "failed" ? "Can't copy" : "Copy"}
+    </button>
+  );
 }
 
-const round = "inline-flex size-6 shrink-0 items-center justify-center rounded-full transition-colors";
+function Detail({ label, value, children }: { label: string; value: string; children: ReactNode }) {
+  return (
+    <div className="rounded-2xl border border-zinc-200/80 bg-zinc-50/50 p-4">
+      <p className="text-[10px] font-black tracking-[0.1em] text-zinc-500 uppercase">{label}</p>
+      <p className="mt-1 text-base font-bold break-all tabular-nums select-text">{value}</p>
+      <div className="mt-3 flex flex-wrap gap-2">{children}</div>
+    </div>
+  );
+}
 
 /**
- * A lead's phone and email in the leads list, both hidden until the one eye button on the left shows them
- * (client, 23 Nov 2026). Hidden again on every page load; it keeps them off screen, it isn't access control.
+ * A lead's contact details stay off the list until the agent opens them (client, 24 Nov 2026): one View
+ * Contact button, then phone and email together with call, message and copy. Privacy on screen, not access
+ * control: whoever can see the lead can open it.
  */
-export function LeadContact({ phone, email, name, tel }: { phone: string; email: string | null; name: string; tel: string }) {
-  const [shown, setShown] = useState(false);
-  const Icon = shown ? EyeOff : Eye;
+export function ViewContact({ phone, email, name, code, tel }: { phone: string; email: string | null; name: string; code: string; tel: string }) {
+  const [open, setOpen] = useState(false);
   const wa = whatsappHref(phone);
   return (
-    <div className="flex items-start gap-2 whitespace-nowrap">
+    <>
       <button
         type="button"
-        onClick={() => setShown((s) => !s)}
-        aria-pressed={shown}
-        aria-label={shown ? `Hide phone and email of ${name}` : `Show phone and email of ${name}`}
-        title={shown ? "Hide phone and email" : "Show phone and email"}
-        className={`${round} mt-0.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:outline-none`}
+        onClick={() => setOpen(true)}
+        aria-label={`View contact of ${name}`}
+        className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg border border-zinc-200/80 bg-white px-2.5 py-1 text-[11px] leading-4 font-bold text-zinc-700 hover:bg-zinc-50 focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:outline-none"
       >
-        <Icon aria-hidden="true" className="size-4" />
+        <Contact aria-hidden="true" className="size-3.5 text-zinc-400" />
+        View contact
       </button>
-      <div className="space-y-1">
-        <span className="flex items-center gap-2">
-          {/* Calls from the list without opening the lead: the phone dials through the tel: link. */}
-          <a href={tel} aria-label={`Call ${name}`} title={`Call ${name}`} className={`${round} bg-brand-50 text-brand ring-1 ring-brand/20 hover:bg-brand hover:text-white`}>
-            <Phone aria-hidden="true" className="size-3.5" />
-          </a>
-          <span className="tabular-nums">{shown ? phone : maskPhone(phone)}</span>
-          {wa ? (
-            <a href={wa} target="_blank" rel="noopener noreferrer" aria-label={`WhatsApp ${name}`} title={`WhatsApp ${name}`} className={`${round} bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200 hover:bg-emerald-600 hover:text-white`}>
-              <MessageCircle aria-hidden="true" className="size-3.5" />
-            </a>
-          ) : null}
-        </span>
-        {email ? (
-          <span className="flex items-center gap-2">
-            <GmailButton email={email} name={name} />
-            <span>{shown ? email : maskEmail(email)}</span>
-          </span>
-        ) : null}
-      </div>
-    </div>
+      {open ? (
+        <Modal open onClose={() => setOpen(false)} title="Contact details" description={`${name} · ${code}`}>
+          <div className="space-y-3">
+            <Detail label="Phone" value={phone}>
+              <a href={tel} aria-label={`Call ${name}`} className={action}>
+                <Phone aria-hidden="true" className="size-3.5" />
+                Call
+              </a>
+              {wa ? (
+                <a href={wa} target="_blank" rel="noopener noreferrer" aria-label={`WhatsApp ${name}`} className={action}>
+                  <MessageCircle aria-hidden="true" className="size-3.5" />
+                  WhatsApp
+                </a>
+              ) : null}
+              <CopyButton value={phone} label="phone number" />
+            </Detail>
+            {email ? (
+              <Detail label="Email" value={email}>
+                <a href={gmailComposeHref(email)} target="_blank" rel="noopener noreferrer" aria-label={`Email ${name} in Gmail`} className={action}>
+                  <Mail aria-hidden="true" className="size-3.5" />
+                  Email
+                </a>
+                <CopyButton value={email} label="email" />
+              </Detail>
+            ) : (
+              <p className="rounded-2xl border border-dashed border-zinc-200 px-4 py-3 text-xs text-zinc-500">No email saved for this lead.</p>
+            )}
+          </div>
+        </Modal>
+      ) : null}
+    </>
   );
 }
