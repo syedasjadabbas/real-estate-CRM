@@ -21,7 +21,7 @@ import {
   updateLeadAction,
 } from "../actions";
 import { ROLE_LABELS } from "@/server/auth/types";
-import { formatDateTime, since } from "../format";
+import { formatDateTime, noContactLabel, since } from "../format";
 import { ApprovalActions } from "./approval-actions";
 import { FollowUpForm, textareaClass } from "./follow-up-dialog";
 import { namePartsOf } from "@/lib/person-name";
@@ -500,7 +500,7 @@ export function EditDetailsForm({ detail, lookups }: { detail: LeadDetail; looku
             <ReadOnly label="Acquisition channel">{INBOUND_LABELS[lead.inboundChannel]}</ReadOnly>
             <ReadOnly label="Created">{formatDateTime(lead.createdAt)}</ReadOnly>
             <ReadOnly label="Time in stage">{since(lead.stageChangedAt, detail.generatedAt)}</ReadOnly>
-            <ReadOnly label="Last contact">{lead.lastContactAt ? formatDateTime(lead.lastContactAt) : "Not contacted yet"}</ReadOnly>
+            <ReadOnly label="Last contact">{lead.lastContactAt ? formatDateTime(lead.lastContactAt) : noContactLabel(lead.stage)}</ReadOnly>
             <ReadOnly label="First touch">{lead.firstTouchAt ? formatDateTime(lead.firstTouchAt) : "—"}</ReadOnly>
             <ReadOnly label="Repeat enquiry">{lead.regeneratedAt ? `Latest ${formatDateTime(lead.regeneratedAt)}` : "None"}</ReadOnly>
           </>

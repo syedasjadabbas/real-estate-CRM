@@ -20,6 +20,8 @@ import {
 import { VerificationBanner } from "@/features/leads/components/verification";
 import { CallUpdateCard } from "@/features/leads/components/call-update-card";
 import { withLeadsAccess } from "@/features/leads/components/list-view";
+import { EnquiryList, RecordEnquiryForm } from "@/features/leads/components/enquiry-history";
+import { ReopenLead } from "@/features/leads/components/reopen-lead";
 import { FavoriteButton } from "@/features/leads/components/row-actions";
 import { Timeline } from "@/features/leads/components/timeline";
 import { canDoBooking } from "@/modules/bookings/policy";
@@ -123,8 +125,11 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
               <StagePill stage={lead.stage} />
             </Fact>
           </div>
-          {lead.stage === "lost_lead" && lead.lostReason ? (
-            <p className="mt-4 rounded-xl bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">Lost reason: {lead.lostReason}</p>
+          {lead.stage === "lost_lead" ? (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-rose-50 px-3 py-2">
+              <p className="text-xs font-semibold text-rose-700">{lead.lostReason ? `Lost reason: ${lead.lostReason}` : "This lead is lost."}</p>
+              {detail.permissions.edit ? <ReopenLead leadId={lead.id} leadName={lead.name} lastStage={detail.stageBeforeLost} /> : null}
+            </div>
           ) : null}
           {lead.originalCode ? (
             <p className="mt-4 rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
@@ -149,7 +154,7 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
         </nav>
 
         {/* One save for a call and what it decided (owner, 14 Nov 2026). */}
-        {callCard ? <CallUpdateCard leadId={lead.id} currentStage={lead.stage} /> : null}
+        {callCard ? <CallUpdateCard leadId={lead.id} currentStage={lead.stage} pendingFollowUps={detail.followUps.filter((f) => f.status === "pending")} /> : null}
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
           <div className="min-w-0">
@@ -158,7 +163,7 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
           <div className="space-y-6">
             {clientStatus ? <LeadClientPanel leadId={lead.id} status={clientStatus} /> : null}
             {detail.permissions.assign ? <AssignPanel leadId={lead.id} ownerId={lead.ownerId} owners={owners} /> : null}
-            <StagePanel detail={detail} lostReasons={lookups.lostReasons} showStage={!callCard} />
+            <StagePanel detail={detail} lostReasons={lookups.lostReasons} showStage={!callCard && lead.stage !== "lost_lead"} />
             <DocumentsPanel leadId={lead.id} documents={documents} canUpload={detail.permissions.edit} />
           </div>
         </div>
@@ -170,6 +175,10 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
             <Timeline activities={detail.activities} people={detail.activityPeople} asOf={detail.asOf} />
           </div>
           <div className="space-y-6">
+            <PanelCard title={`Enquiry history · ${lead.enquiries.length}`}>
+              {detail.permissions.recordEnquiry ? <RecordEnquiryForm leadId={lead.id} sources={lookups.sources} /> : null}
+              <EnquiryList rows={lead.enquiries} />
+            </PanelCard>
             <FollowUpsPanel detail={detail} canSchedule={!callCard} />
             {canDoMeeting(actor, "view") ? (
               <PanelCard title="Meetings">

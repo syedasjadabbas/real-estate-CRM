@@ -135,16 +135,14 @@ describe.skipIf(!hasTestDb)("Leads module (PostgreSQL integration)", () => {
   });
 
   describe("duplicates and re-inquiries", () => {
-    it("warns, then records a duplicate or a regenerated lead on request", async () => {
+    it("warns, never saves a second lead for the project, and records a repeat enquiry on request", async () => {
       const input = leadInput(f);
       const first = await createLead(db, f.actors.agent1, input);
       expect(await errorCode(createLead(db, f.actors.agent1, input))).toBe("CONFLICT");
 
-      const dup = await createLead(db, f.actors.agent1, { ...input, onDuplicate: "duplicate" });
-      expect(dup.outcome).toBe("created");
-      const dupList = await listLeads(db, f.actors.agent1, f.projectId, { view: "duplicates" });
-      expect(dupList.total).toBe(1);
-      expect(dupList.rows[0].originalCode).toBe(first.code);
+      expect(await errorCode(createLead(db, f.actors.agent1, { ...input, onDuplicate: "duplicate" }))).toBe("VALIDATION_FAILED");
+      expect((await listLeads(db, f.actors.agent1, f.projectId, {})).total).toBe(1);
+      expect((await listLeads(db, f.actors.agent1, f.projectId, { view: "duplicates" })).total).toBe(0);
 
       const regen = await createLead(db, f.actors.agent1, { ...input, onDuplicate: "regenerate" });
       expect(regen).toMatchObject({ outcome: "regenerated", leadId: first.leadId });
@@ -274,6 +272,18 @@ describe.skipIf(!hasTestDb)("Leads module (PostgreSQL integration)", () => {
   });
 
   describe("lost flow", () => {
+    it("its agent reopens a lost lead at the stage it was in, and the lost reason goes (client, 24 Nov 2026)", async () => {
+      const r = await createLead(db, f.actors.agent1, leadInput(f));
+      if (r.outcome !== "created") throw new Error("setup");
+      await changeStage(db, f.actors.agent1, r.leadId, { stage: "qualified_lead" });
+      await markLost(db, f.actors.manager, r.leadId, { lostReasonId: f.lostReasonId });
+      expect((await getLeadDetail(db, f.actors.agent1, r.leadId)).stageBeforeLost).toBe("qualified_lead");
+      expect(await errorCode(changeStage(db, f.actors.agent2, r.leadId, { stage: "qualified_lead" }))).toBe("NOT_FOUND");
+      await changeStage(db, f.actors.agent1, r.leadId, { stage: "qualified_lead", remarks: "Enquired again" });
+      const [row] = await db.select().from(leads).where(eq(leads.id, r.leadId));
+      expect(row).toMatchObject({ stage: "qualified_lead", lostReasonId: null });
+    });
+
     it("agent request needs manager approval; manager can mark lost directly", async () => {
       const r = await createLead(db, f.actors.agent1, leadInput(f));
       if (r.outcome !== "created") throw new Error("setup");
@@ -442,8 +452,9 @@ describe.skipIf(!hasTestDb)("Leads module (PostgreSQL integration)", () => {
 
     it("an edit that keeps the number (any formatting) is unchanged behaviour, even for a flagged duplicate", async () => {
       const a = await make(f.actors.agent1, "03001234567");
-      const dup = await createLead(db, f.actors.agent1, leadInput(f, { phoneNumber: "0300-1234567", onDuplicate: "duplicate" }));
-      if (dup.outcome !== "created") throw new Error("setup");
+      // Duplicates saved before 24 Nov 2026 still exist; new ones can't be made.
+      const dup = await make(f.actors.agent1);
+      await db.update(leads).set({ phoneNumber: "3001234567", phoneE164: "+923001234567", duplicateOfId: a.leadId }).where(eq(leads.id, dup.leadId));
       // Same number written differently: nothing to check, nothing changes.
       expect(await updateLead(db, f.actors.agent1, a.leadId, { phoneNumber: "+92 300 1234567" })).toEqual({ changed: [] });
       // The flagged duplicate keeps sharing the number while other fields are edited.
@@ -534,12 +545,8 @@ describe.skipIf(!hasTestDb)("Leads module (PostgreSQL integration)", () => {
         const holders = await db.select({ id: leads.id }).from(leads).where(eq(leads.phoneE164, `+92346${String(1_000_000 + i)}`));
         expect(holders, `round ${i}`).toHaveLength(1);
       }
-      // Creation itself is unchanged: reject by default, or save as a linked duplicate when chosen.
-      const a = await make(f.actors.agent1, "03007778888");
+      await make(f.actors.agent1, "03007778888");
       expect(await errorCode(createLead(db, f.actors.agent1, leadInput(f, { phoneNumber: "0300 7778888" })))).toBe("CONFLICT");
-      const dup = await createLead(db, f.actors.agent1, leadInput(f, { phoneNumber: "+92 300 7778888", onDuplicate: "duplicate" }));
-      if (dup.outcome !== "created") throw new Error("expected a created duplicate");
-      expect((await row(dup.leadId)).duplicateOfId).toBe(a.leadId);
     });
   });
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { ChannelFields } from "./enquiry-history";
 import { AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -53,7 +54,9 @@ export function LeadCreateForm({
   const [conflict, setConflict] = useState<Conflict | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const submit = (onDuplicate: "reject" | "duplicate" | "regenerate" = "reject") =>
+  const [channel, setChannel] = useState({ channel: "", other: "" });
+
+  const submit = (onDuplicate: "reject" | "regenerate" = "reject") =>
     startTransition(async () => {
       setFormError(null);
       const early = phoneFormErrors(values.phoneNumber, values.phones);
@@ -62,7 +65,17 @@ export function LeadCreateForm({
         setFormError("Check the highlighted fields.");
         return;
       }
-      const result = await createLeadAction({ ...values, projectId, ownerId, note, onDuplicate });
+      const repeat =
+        onDuplicate === "regenerate"
+          ? channel.channel === "other"
+            ? { channelOther: channel.other }
+            : { sourceId: channel.channel }
+          : {};
+      if (onDuplicate === "regenerate" && channel.channel === "other" && !channel.other.trim()) {
+        setErrors({ channelOther: "Name the channel" });
+        return;
+      }
+      const result = await createLeadAction({ ...values, ...repeat, projectId, ownerId, note, onDuplicate });
       if (result.ok) {
         setConflict(null);
         if (result.data.outcome === "created" && !result.data.visible) {
@@ -72,11 +85,13 @@ export function LeadCreateForm({
         } else if (result.data.leadId) {
           router.push(`/dashboard/leads/${result.data.leadId}`);
         } else {
-          setNotice("Re-inquiry recorded on the existing lead. Its owner will see it in Regenerated.");
+          setNotice("Repeat enquiry recorded on the existing lead. Its agent has been told.");
         }
         return;
       }
       if (result.code === "CONFLICT") {
+        setErrors({});
+        setChannel({ channel: values.sourceId, other: "" });
         setConflict((result.details ?? {}) as Conflict);
         return;
       }
@@ -181,11 +196,8 @@ export function LeadCreateForm({
             <Button variant="secondary" size="lg" onClick={() => setConflict(null)} disabled={pending}>
               Cancel
             </Button>
-            <Button variant="secondary" size="lg" onClick={() => submit("duplicate")} disabled={pending}>
-              Save as duplicate
-            </Button>
-            <Button variant="primary" size="lg" onClick={() => submit("regenerate")} disabled={pending}>
-              Log re-inquiry on existing
+            <Button variant="primary" size="lg" onClick={() => submit("regenerate")} disabled={pending || !channel.channel}>
+              Record repeat enquiry
             </Button>
           </>
         }
@@ -201,16 +213,12 @@ export function LeadCreateForm({
           ) : (
             <p>The existing lead belongs to another owner, so its details are hidden.</p>
           )}
-          <ul className="list-disc space-y-1 pl-5 text-xs text-zinc-600">
-            <li>
-              <span className="font-bold text-zinc-800">Log re-inquiry</span> marks the existing lead as Regenerated and tells its agent (no new lead).
-            </li>
-            <li>
-              <span className="font-bold text-zinc-800">Save as duplicate</span> creates a new lead flagged as a duplicate of the original.{" "}
-              {/* A returning customer stays with their agent (commands.ts createLead), so the new lead goes there too (16 Nov 2026). */}
-              {conflict?.existingLeadId ? "It goes to the customer's existing agent while that agent is active." : "It goes to the agent who already has this customer, so you won't see it afterwards."}
-            </li>
-          </ul>
+          <p className="text-xs text-zinc-600">
+            This customer already has a lead in this project, so a second one isn&apos;t created. Their enquiry is added to the existing lead with today&apos;s date, and its agent is told.
+          </p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <ChannelFields sources={lookups.sources} channel={channel.channel} other={channel.other} errors={errors} disabled={pending} onChange={(p) => setChannel((c) => ({ ...c, ...p }))} />
+          </div>
         </div>
       </Modal>
     </form>

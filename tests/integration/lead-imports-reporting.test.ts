@@ -111,7 +111,7 @@ describe.skipIf(!hasTestDb)("Sprint P3: lead import batches, priority order, won
     it("approval creates the valid rows through normal assignment, and records who and when", async () => {
       const r = await submit(admin, ["A One,03001110031,,Facebook,,high,Hi", "B Two,03001110032,,Facebook,,,", "Bad,1,,Facebook,,,"]);
       const result = await decideImportBatch(db, f.actors.superAdmin, r.batchId, { approve: true });
-      expect(result).toEqual({ status: "approved", created: 2, skipped: 0 });
+      expect(result).toEqual({ status: "approved", created: 2, skipped: 0, repeats: 0 });
       const rows = await db.select().from(leadImportRows).where(eq(leadImportRows.batchId, r.batchId)).orderBy(leadImportRows.rowNo);
       expect(rows.map((x) => x.status)).toEqual(["created", "created", "invalid"]);
       const created = await db.select().from(leads).where(eq(leads.id, rows[0].leadId!));
@@ -123,10 +123,10 @@ describe.skipIf(!hasTestDb)("Sprint P3: lead import batches, priority order, won
       expect(audits.map((a) => a.action).sort()).toEqual(["lead_import.approve", "lead_import.created", "lead_import.submit"]);
     });
 
-    it("a row that became a duplicate while waiting is skipped, not doubled", async () => {
+    it("a row that became a duplicate while waiting is not doubled, nor counted again as a repeat the same day", async () => {
       const r = await submit(admin, ["Late Dup,03001110041,,Facebook,,,"]);
       await createLead(db, f.actors.agent2, leadInput(f, { phoneNumber: "03001110041" }));
-      expect(await decideImportBatch(db, f.actors.superAdmin, r.batchId, { approve: true })).toEqual({ status: "approved", created: 0, skipped: 1 });
+      expect(await decideImportBatch(db, f.actors.superAdmin, r.batchId, { approve: true })).toEqual({ status: "approved", created: 0, skipped: 1, repeats: 0 });
       expect(await db.select().from(leads).where(eq(leads.phoneE164, "+923001110041"))).toHaveLength(1);
     });
 

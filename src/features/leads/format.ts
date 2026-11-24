@@ -1,4 +1,4 @@
-import { BUSINESS_TIME_ZONE } from "@/modules/leads/constants";
+import { BUSINESS_TIME_ZONE, type LeadStage } from "@/modules/leads/constants";
 
 const dateTime = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -13,6 +13,12 @@ const dateTime = new Intl.DateTimeFormat("en-US", {
 export function formatDateTime(value: Date | string | null | undefined) {
   if (!value) return "—";
   return dateTime.format(new Date(value));
+}
+
+const dateOnly = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: BUSINESS_TIME_ZONE });
+/** "Oct 28, 2026" in business time. */
+export function formatDate(value: Date | string) {
+  return dateOnly.format(new Date(value));
 }
 
 /** Compact duration: "35m", "9h", "38d 18h". */
@@ -31,6 +37,12 @@ export function since(value: Date | string | null | undefined, now = Date.now())
   if (!value) return "—";
   return formatDuration(now - new Date(value).getTime());
 }
+
+/**
+ * Last contact when none is recorded (client, 24 Nov 2026). A lead that has already moved on was clearly
+ * reached, but nobody logged it.
+ */
+export const noContactLabel = (stage: LeadStage) => (stage === "new_lead" || stage === "contact_attempted" ? "Not contacted yet" : "No contact logged");
 
 export type FollowUpStatus = "Overdue" | "Due today" | "Upcoming";
 const businessDay = new Intl.DateTimeFormat("en-CA", { timeZone: BUSINESS_TIME_ZONE });

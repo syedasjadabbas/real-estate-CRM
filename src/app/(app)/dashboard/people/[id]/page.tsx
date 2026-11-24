@@ -38,7 +38,7 @@ const ACTIVITY_LABELS: Record<string, string> = {
   assignment: "Assignment",
   update: "Changed lead details",
   review: "Wrote a review",
-  regenerated: "Recorded a re-inquiry",
+  regenerated: "Recorded a repeat enquiry",
   lost_requested: "Asked to mark lost",
   lost_decided: "Decided a lost request",
   meeting: "Meeting",

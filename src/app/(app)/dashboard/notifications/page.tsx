@@ -18,7 +18,7 @@ export const metadata: Metadata = { title: "Notifications" };
 
 const TYPE_LABELS: Record<NotificationType, string> = {
   lead_assigned: "Assigned",
-  lead_regenerated: "Re-inquiry",
+  lead_regenerated: "Repeat enquiry",
   lead_reviewed: "Review",
   attendance_check_in: "Check-in",
   attendance_check_out: "Check-out",

@@ -1,4 +1,4 @@
-import { and, eq, lte } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import type { Database } from "@/server/db";
 import { followUps } from "@/server/db/schema";
@@ -20,6 +20,8 @@ const callUpdateSchema = z.object({
   note: z.string().trim().max(4000, "Use at most 4,000 characters").optional().default(""),
   stage: z.enum(LEAD_STAGES).optional().nullable(),
   meeting: z.object({ type: z.enum(MEETING_TYPES, "Choose the meeting type"), startsAt: when("Pick the meeting date and time") }).optional().nullable(),
+  /** The follow-ups the agent confirms this activity fulfils; never assumed, overdue or not (client, 24 Nov 2026). */
+  completeFollowUpIds: z.array(z.uuid()).max(50).optional().default([]),
   followUp: z.object({ dueAt: when("Pick the follow-up date and time"), note: z.string().trim().max(1000).optional().default("") }).optional().nullable(),
 });
 
@@ -31,7 +33,7 @@ function fieldsOf(error: z.ZodError) {
 
 /**
  * "Update after call" (owner, 14 Nov 2026): one save records the call on the timeline, moves the stage,
- * books a meeting, closes the follow-ups that were due and schedules the next one. Everything runs in
+ * books a meeting, completes the follow-ups the agent picked and schedules the next one. Everything runs in
  * one transaction through the usual commands (their checks and history included), so a refusal in any
  * part saves nothing.
  */
@@ -79,13 +81,19 @@ export async function logCallUpdate(db: Database, actor: Actor, leadId: string, 
       });
       done.push("meeting");
     }
-    if (data.followUp) {
-      // The follow-ups that were due by now are what this call answered.
-      const due = await tx
+    const picked = [...new Set(data.completeFollowUpIds)];
+    if (picked.length) {
+      const open = await tx
         .select({ id: followUps.id })
         .from(followUps)
-        .where(and(eq(followUps.leadId, leadId), eq(followUps.status, "pending"), lte(followUps.dueAt, now)));
-      for (const f of due) await completeFollowUp(inTx, actor, f.id);
+        .where(and(eq(followUps.leadId, leadId), eq(followUps.status, "pending"), inArray(followUps.id, picked)));
+      if (open.length !== picked.length) {
+        throw new AppError("CONFLICT", "A follow-up you picked is no longer pending on this lead. Reload and try again.");
+      }
+      for (const f of open) await completeFollowUp(inTx, actor, f.id);
+      done.push("followUpDone");
+    }
+    if (data.followUp) {
       await scheduleFollowUp(inTx, actor, leadId, { dueAt: data.followUp.dueAt.toISOString(), note: data.followUp.note || undefined }, now);
       done.push("followUp");
     }

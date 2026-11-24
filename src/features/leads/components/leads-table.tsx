@@ -6,7 +6,7 @@ import { cn } from "@/lib/cn";
 import { INBOUND_LABELS, PRIORITY_LABELS, type SortColumn } from "@/modules/leads/constants";
 import { telHref } from "@/modules/leads/phone";
 import type { LeadListRow } from "@/modules/leads/queries";
-import { followUpStatus, formatDateTime, since, type FollowUpStatus } from "../format";
+import { followUpStatus, formatDate, formatDateTime, noContactLabel, since, type FollowUpStatus } from "../format";
 import { withParams } from "../url";
 import { SourcePill, StagePill } from "./chips";
 import { ViewContact } from "./lead-contact";
@@ -161,7 +161,7 @@ export function LeadsTable({
                     ) : null}
                     <span className="block text-[11px] font-bold tracking-[0.05em] text-zinc-500">{r.code}</span>
                     <ViewContact phone={r.phone} email={r.email} name={r.name} code={r.code} tel={telHref(r.phoneCountryCode, r.phoneNumber)} />
-                    {r.isRegenerated ? <span className={cn(badge, "bg-sky-50 text-sky-700")}>Regenerated</span> : null}
+                    {r.isRegenerated ? <span className={cn(badge, "bg-sky-50 text-sky-700")}>Repeat enquiry{r.regeneratedAt ? ` · ${formatDate(r.regeneratedAt)}` : ""}</span> : null}
                     {r.duplicateOfId ? <span className={cn(badge, "bg-amber-50 text-amber-800")}>Duplicate</span> : null}
                   </td>
                 ),
@@ -190,7 +190,7 @@ export function LeadsTable({
                       <span className="block text-[11px] text-zinc-600">{formatDateTime(r.lastContactAt)}</span>
                     </>
                   ) : (
-                    <span className="font-semibold text-amber-700">Not contacted yet</span>
+                    <span className="font-semibold text-amber-700">{noContactLabel(r.stage)}</span>
                   ),
                 ),
                 next: text(
@@ -217,7 +217,7 @@ export function LeadsTable({
                       </Link>
                       {/* An agent works a lead only once it is verified (the server refuses it before), so no menu until then. */}
                       {canEdit && !closed && (showAgent || r.verification === "approved") ? (
-                        <LeadRowMenu leadId={r.id} leadName={r.name} stage={r.stage} hasPending={Boolean(r.nextFollowUpAt)} />
+                        <LeadRowMenu leadId={r.id} leadName={r.name} stage={r.stage} pendingFollowUps={r.pendingFollowUps} />
                       ) : null}
                     </div>
                   </td>

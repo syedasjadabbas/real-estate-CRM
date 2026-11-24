@@ -10,7 +10,7 @@ import { CALL_RESULTS, CALL_RESULT_LABELS, type CallResult } from "@/modules/lea
 import { LEAD_STAGES, STAGE_LABELS, type LeadStage } from "@/modules/leads/constants";
 import { MEETING_TYPES, MEETING_TYPE_LABELS, type MeetingType } from "@/modules/meetings/constants";
 import { logCallUpdateAction } from "../actions";
-import { fromLocalInputValue, toLocalInputValue } from "../format";
+import { followUpStatus, formatDateTime, fromLocalInputValue, toLocalInputValue } from "../format";
 import { FOLLOW_UP_SUGGESTIONS, textareaClass } from "./follow-up-dialog";
 import { selectClass } from "./lead-fields";
 
@@ -45,11 +45,13 @@ function suggestedFollowUp(result: CallResult, meetingAt: string | null): { due:
   return { due: at({ days: 1, hour: 10 }), note: "" };
 }
 
+export type PendingFollowUp = { id: string; dueAt: Date | string; note: string | null };
+
 /**
  * "Update after call" (owner, 14 Nov 2026): record a call and everything it decided in one save:
  * the call and what was said, the stage, a meeting and the next follow-up.
  */
-export function CallUpdateCard({ leadId, currentStage }: { leadId: string; currentStage: LeadStage }) {
+export function CallUpdateCard({ leadId, currentStage, pendingFollowUps }: { leadId: string; currentStage: LeadStage; pendingFollowUps: PendingFollowUp[] }) {
   const [result, setResult] = useState<CallResult>("talked");
   const [minutes, setMinutes] = useState("");
   const [note, setNote] = useState("");
@@ -60,6 +62,10 @@ export function CallUpdateCard({ leadId, currentStage }: { leadId: string; curre
   const [followOn, setFollowOn] = useState(true);
   const [followAt, setFollowAt] = useState(() => suggestedFollowUp("talked", null).due);
   const [followNote, setFollowNote] = useState("");
+  const [openedAt] = useState(() => Date.now());
+  // Always starts empty: only the agent can say which follow-up this activity fulfils (client, 24 Nov 2026).
+  const [ticked, setTicked] = useState<string[]>([]);
+  const completeFollowUpIds = pendingFollowUps.map((f) => f.id).filter((id) => ticked.includes(id));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [pending, startTransition] = useTransition();
@@ -80,16 +86,18 @@ export function CallUpdateCard({ leadId, currentStage }: { leadId: string; curre
         note,
         stage: stage === currentStage ? null : stage,
         meeting: meetingOn ? { type: meetingType, startsAt: meetingAt ? fromLocalInputValue(meetingAt) : "" } : null,
+        completeFollowUpIds,
         followUp: followOn ? { dueAt: followAt ? fromLocalInputValue(followAt) : "", note: followNote } : null,
       });
       if (r.ok) {
         const changedStage = stage !== currentStage ? `moved to ${STAGE_LABELS[stage]}` : null;
-        const parts = [result === "no_call" ? (note ? "note saved" : null) : "call saved", changedStage, meetingOn ? "meeting booked" : null, followOn ? "next follow-up set" : null].filter(Boolean).join(", ");
+        const parts = [result === "no_call" ? (note ? "note saved" : null) : "call saved", changedStage, meetingOn ? "meeting booked" : null, completeFollowUpIds.length ? (completeFollowUpIds.length > 1 ? `${completeFollowUpIds.length} follow-ups completed` : "follow-up completed") : null, followOn ? "next follow-up set" : null].filter(Boolean).join(", ");
         setMsg({ text: parts ? `Done: ${parts}.` : "Nothing changed.", ok: true });
         setErrors({});
         setNote("");
         setMinutes("");
         setMeetingOn(false);
+        setTicked([]);
       } else {
         setErrors(r.fields ?? {});
         setMsg({ text: r.message, ok: false });
@@ -112,7 +120,7 @@ export function CallUpdateCard({ leadId, currentStage }: { leadId: string; curre
         </span>
         <div>
           <h3 className="text-sm font-black">Update after call</h3>
-          <p className="text-[11px] text-zinc-500">Call, stage, notes, meeting and next follow-up in one save. Choose “No call” to update without a call.</p>
+          <p className="text-[11px] text-zinc-500">Call, stage, notes, meeting and follow-ups in one save. Choose “No call” to update without a call.</p>
         </div>
       </div>
 
@@ -207,11 +215,39 @@ export function CallUpdateCard({ leadId, currentStage }: { leadId: string; curre
         ) : null}
       </div>
 
+      {pendingFollowUps.length ? (
+        <fieldset className="space-y-2 rounded-xl border border-zinc-200/80 p-3">
+          <legend className="sr-only">Complete pending follow-ups</legend>
+          <p aria-hidden="true" className="text-sm font-bold">
+            Complete {pendingFollowUps.length > 1 ? "pending follow-ups" : "the pending follow-up"}
+            <span className="ml-2 text-[11px] font-medium text-zinc-500">Tick only what this fulfils</span>
+          </p>
+          <div className="max-h-48 space-y-2 overflow-y-auto">
+            {pendingFollowUps.map((f) => (
+              <label key={f.id} className="flex items-start gap-2 text-xs">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 size-4 shrink-0 accent-[#bb8c08]"
+                  checked={ticked.includes(f.id)}
+                  disabled={pending}
+                  onChange={(e) => setTicked((t) => (e.target.checked ? [...t, f.id] : t.filter((x) => x !== f.id)))}
+                />
+                <span className="min-w-0">
+                  <span className="font-bold">{f.note || "Follow-up"}</span>
+                  <span className="ml-2 text-zinc-500">
+                    {followUpStatus(f.dueAt, openedAt)} · {formatDateTime(f.dueAt)}
+                  </span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      ) : null}
+
       <div className="space-y-3 rounded-xl border border-zinc-200/80 p-3">
         <label className="flex items-center gap-2 text-sm font-bold">
           <input type="checkbox" className="size-4 accent-[#bb8c08]" checked={followOn} disabled={pending} onChange={(e) => setFollowOn(e.target.checked)} />
-          Next follow-up
-          <span className="text-[11px] font-medium text-zinc-500">(closes the follow-ups due now)</span>
+          Schedule the next follow-up
         </label>
         {followOn ? (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">

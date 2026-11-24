@@ -23,6 +23,7 @@ import {
 import type { Actor } from "@/server/auth/types";
 import { AppError, forbidden, notFound } from "@/server/errors";
 import { generateLeadCode } from "./code";
+import { OTHER_CHANNEL, recordFirstEnquiry, recordRepeat, resolveChannel } from "./enquiries";
 import { creationSummary, describeChanges, lostReasonName } from "./history";
 import { STAGE_LABELS } from "./constants";
 import { normalizePhone } from "./phone";
@@ -152,25 +153,8 @@ export async function createLead(db: Database, actor: Actor, input: unknown, { c
     if (existing && data.onDuplicate === "reject") throw duplicatePhoneError(existing, existingVisible);
 
     if (existing && data.onDuplicate === "regenerate") {
-      await tx
-        .update(leads)
-        .set({ isRegenerated: true, regeneratedAt: now, updatedAt: now })
-        .where(eq(leads.id, existing.id));
-      await logActivity(tx, {
-        leadId: existing.id,
-        actorId: actor.id,
-        type: "regenerated",
-        body: data.note ?? null,
-        data: { source: "manual", by: actor.name },
-      });
-      await audit(tx, actor, "lead.regenerated", existing.id, null, { regeneratedAt: now });
-      if (existing.ownerId) {
-        await notify(
-          tx,
-          [{ userId: existing.ownerId, type: "lead_regenerated", title: `Re-inquiry · ${existing.name}`, body: `Lead ${existing.code} enquired again.`, link: leadLink(existing.id), dedupeKey: `lead_regenerated:${existing.id}:${now.toISOString()}` }],
-          actor.id,
-        );
-      }
+      const channel = await resolveChannel(tx, data.channelOther ? OTHER_CHANNEL : data.sourceId, data.channelOther);
+      await recordRepeat(tx, actor, existing, channel, { at: now, note: data.note ?? null, now });
       return {
         outcome: "regenerated",
         leadId: existingVisible ? existing.id : null,
@@ -236,7 +220,6 @@ export async function createLead(db: Database, actor: Actor, input: unknown, { c
       budgetRangeId: data.budgetRangeId ?? null,
       desiredSize: data.desiredSize ?? null,
       priority: data.priority,
-      duplicateOfId: existing && data.onDuplicate === "duplicate" ? existing.id : null,
       clientId: joinClientId,
       latestComment: data.note ?? null,
       firstTouchAt: data.note ? now : null,
@@ -264,8 +247,9 @@ export async function createLead(db: Database, actor: Actor, input: unknown, { c
       actorId: actor.id,
       type: "created",
       // What the lead was on arrival, in words, so the history reads on its own years later.
-      data: { duplicateOf: values.duplicateOfId ? existing?.code ?? null : null, ...(await creationSummary(tx, data.projectId, values)) },
+      data: { ...(await creationSummary(tx, data.projectId, values)) },
     });
+    await recordFirstEnquiry(tx, actor, { id: created.id, sourceId: data.sourceId, ownerId, note: data.note ?? null, at: now });
     await replaceLeadPhones(tx, created.id, extraPhones);
     if (joinClientId) {
       // The customer's history shows each inquiry. A client whose agent has gone passes to this lead's owner.
@@ -427,7 +411,8 @@ export async function changeStage(db: Database, actor: Actor, leadId: string, in
     const now = new Date();
     await tx
       .update(leads)
-      .set({ stage, stageChangedAt: now, ...touchValues(lead, now) })
+      // A reopened lead has no lost reason; the timeline keeps it.
+      .set({ stage, stageChangedAt: now, ...(lead.stage === "lost_lead" ? { lostReasonId: null } : {}), ...touchValues(lead, now) })
       .where(eq(leads.id, leadId));
     await logActivity(tx, {
       leadId,

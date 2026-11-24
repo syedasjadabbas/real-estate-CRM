@@ -18,6 +18,7 @@ import {
 import { completeNextFollowUp } from "@/modules/leads/follow-ups";
 import { claimLead } from "@/modules/leads/claims";
 import { resubmitLead, verifyLead } from "@/modules/leads/verification";
+import { recordRepeatEnquiry } from "@/modules/leads/enquiries";
 import { logCallUpdate } from "@/modules/leads/call-update";
 import { requireActor } from "@/server/auth/current-user";
 import { getDb } from "@/server/db";
@@ -50,6 +51,11 @@ export async function verifyLeadAction(leadId: string, approve: boolean, note?: 
 /** The agent sends a corrected, rejected lead back for verification. */
 export async function resubmitLeadAction(leadId: string) {
   return run((db, actor) => resubmitLead(db, actor, leadId));
+}
+
+/** The customer asked about this lead's project again. */
+export async function recordRepeatEnquiryAction(leadId: string, input: Record<string, string>) {
+  return run((db, actor) => recordRepeatEnquiry(db, actor, leadId, input));
 }
 
 export async function updateLeadAction(leadId: string, input: Record<string, unknown>) {

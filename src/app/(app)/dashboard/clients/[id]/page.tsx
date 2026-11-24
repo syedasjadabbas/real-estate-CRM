@@ -1,4 +1,5 @@
 import { ArrowLeft } from "lucide-react";
+import { EnquiryList } from "@/features/leads/components/enquiry-history";
 import { InterestStatusTag } from "@/features/clients/components/interest-chip";
 import { cn } from "@/lib/cn";
 import type { Metadata } from "next";
@@ -148,6 +149,10 @@ export default async function ClientDetailPage({ params }: PageProps<"/dashboard
                 ))}
               </ul>
             )}
+          </PanelCard>
+
+          <PanelCard title={`Enquiry history · ${detail.enquiries.length}`}>
+            <EnquiryList rows={detail.enquiries} showLead />
           </PanelCard>
 
           <PanelCard title="Investments">

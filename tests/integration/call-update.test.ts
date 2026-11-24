@@ -35,10 +35,10 @@ describe.skipIf(!hasTestDb)("Update after call (PostgreSQL integration)", () => 
     return r.leadId;
   };
 
-  it("records the call, books the meeting, closes the due follow-up and sets the next one in one save", async () => {
+  it("records the call, books the meeting, completes the picked follow-up and sets the next one in one save", async () => {
     const leadId = await newLead();
     // A follow-up that was due by now: this call answers it.
-    await db.insert(followUps).values({ leadId, assigneeId: f.actors.agent1.id, dueAt: new Date(Date.now() - 3_600_000), createdById: f.actors.agent1.id });
+    const [due] = await db.insert(followUps).values({ leadId, assigneeId: f.actors.agent1.id, dueAt: new Date(Date.now() - 3_600_000), createdById: f.actors.agent1.id }).returning();
 
     const out = await logCallUpdate(db, f.actors.agent1, leadId, {
       result: "talked",
@@ -46,9 +46,10 @@ describe.skipIf(!hasTestDb)("Update after call (PostgreSQL integration)", () => 
       note: "Will visit next week with family",
       stage: "contacted",
       meeting: { type: "site_visit", startsAt: inDays(7, 6) },
+      completeFollowUpIds: [due.id],
       followUp: { dueAt: inDays(6), note: "Confirm the meeting" },
     });
-    expect(out.done).toEqual(["call", "stage", "meeting", "followUp"]);
+    expect(out.done).toEqual(["call", "stage", "meeting", "followUpDone", "followUp"]);
 
     const [lead] = await db.select().from(leads).where(eq(leads.id, leadId));
     expect(lead.stage).toBe("meeting_scheduled");
@@ -57,6 +58,36 @@ describe.skipIf(!hasTestDb)("Update after call (PostgreSQL integration)", () => 
     const ups = await db.select().from(followUps).where(eq(followUps.leadId, leadId));
     expect(ups.map((u) => u.status).sort()).toEqual(["done", "pending"]);
     expect(ups.find((u) => u.status === "pending")?.note).toBe("Confirm the meeting");
+  });
+
+  it("completes only the follow-ups the agent picked, overdue or not, with or without a next one", async () => {
+    const leadId = await newLead();
+    const add = async (lead: string, ms: number) =>
+      (await db.insert(followUps).values({ leadId: lead, assigneeId: f.actors.agent1.id, dueAt: new Date(Date.now() + ms), createdById: f.actors.agent1.id }).returning())[0];
+    const [older, overdue, tomorrow] = [await add(leadId, -2 * 3_600_000), await add(leadId, -3_600_000), await add(leadId, 86_400_000)];
+    const statuses = async () => (await db.select().from(followUps).where(eq(followUps.leadId, leadId)).orderBy(followUps.dueAt)).map((u) => u.status);
+    const log = (completeFollowUpIds?: string[], extra = {}) => logCallUpdate(db, f.actors.agent1, leadId, { result: "talked", completeFollowUpIds, ...extra });
+
+    // Nothing is assumed: overdue follow-ups stay pending, even with a next one scheduled.
+    await log();
+    await log([], { followUp: { dueAt: inDays(3) } });
+    expect(await statuses()).toEqual(["pending", "pending", "pending", "pending"]);
+    expect((await log([overdue.id])).done).toEqual(["call", "followUpDone"]);
+    expect(await statuses()).toEqual(["pending", "done", "pending", "pending"]);
+    await log([tomorrow.id, tomorrow.id]);
+    expect(await statuses()).toEqual(["pending", "done", "done", "pending"]);
+    const [lead] = await db.select().from(leads).where(eq(leads.id, leadId));
+    expect(lead.nextFollowUpAt).toEqual(older.dueAt);
+
+    // Already done, or another lead's: refused, and nothing of that save is kept.
+    const foreign = await add(await newLead(), -3_600_000);
+    for (const bad of [overdue.id, foreign.id]) {
+      const err = await log([older.id, bad], { note: "must not be saved" }).catch((e: unknown) => e);
+      expect((err as AppError).code).toBe("CONFLICT");
+    }
+    expect((await statuses())[0]).toBe("pending");
+    expect((await db.select().from(followUps).where(eq(followUps.id, foreign.id)))[0].status).toBe("pending");
+    expect(JSON.stringify(await db.select().from(leadActivities).where(eq(leadActivities.leadId, leadId)))).not.toContain("must not be saved");
   });
 
   it("a missed call only records the attempt and the retry", async () => {

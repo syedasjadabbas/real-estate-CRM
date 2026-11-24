@@ -87,7 +87,7 @@ export function ImportDecision({ batchId }: { batchId: string }) {
     startTransition(async () => {
       const r = await decideImportAction(batchId, approve, note);
       if (r.ok) {
-        setMsg({ text: r.data.status === "approved" ? `Approved: ${r.data.created} lead${r.data.created === 1 ? "" : "s"} created${r.data.skipped ? `, ${r.data.skipped} skipped` : ""}.` : "Rejected.", ok: true });
+        setMsg({ text: r.data.status === "approved" ? `Approved: ${r.data.created} lead${r.data.created === 1 ? "" : "s"} created${r.data.repeats ? `, ${r.data.repeats} repeat enquir${r.data.repeats === 1 ? "y" : "ies"} recorded` : ""}${r.data.skipped ? `, ${r.data.skipped} skipped` : ""}.` : "Rejected.", ok: true });
         router.refresh();
       } else setMsg({ text: r.fields?.note ?? r.message, ok: false });
     });

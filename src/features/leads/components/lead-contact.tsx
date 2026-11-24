@@ -14,7 +14,6 @@ function CopyButton({ value, label }: { value: string; label: string }) {
   return (
     <button
       type="button"
-      aria-label={`Copy ${label}`}
       className={action}
       onClick={async () => {
         try {
@@ -27,7 +26,7 @@ function CopyButton({ value, label }: { value: string; label: string }) {
       }}
     >
       {state === "copied" ? <Check aria-hidden="true" className="size-3.5 text-brand" /> : <Copy aria-hidden="true" className="size-3.5" />}
-      {state === "copied" ? "Copied" : state === "failed" ? "Can't copy" : "Copy"}
+      {state === "copied" ? "Copied" : state === "failed" ? "Can't copy" : `Copy ${label}`}
     </button>
   );
 }
@@ -75,7 +74,7 @@ export function ViewContact({ phone, email, name, code, tel }: { phone: string; 
                   WhatsApp
                 </a>
               ) : null}
-              <CopyButton value={phone} label="phone number" />
+              <CopyButton value={phone} label="Number" />
             </Detail>
             {email ? (
               <Detail label="Email" value={email}>
@@ -83,7 +82,7 @@ export function ViewContact({ phone, email, name, code, tel }: { phone: string; 
                   <Mail aria-hidden="true" className="size-3.5" />
                   Email
                 </a>
-                <CopyButton value={email} label="email" />
+                <CopyButton value={email} label="Email" />
               </Detail>
             ) : (
               <p className="rounded-2xl border border-dashed border-zinc-200 px-4 py-3 text-xs text-zinc-500">No email saved for this lead.</p>

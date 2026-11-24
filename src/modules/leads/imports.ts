@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { cityNameSchema } from "@/modules/cities/validation";
 import { leadsWithAnyNumber, normalizeExtraPhones } from "@/modules/contacts/phones";
 import { CsvFormatError, MAX_IMPORT_BYTES, MAX_IMPORT_ROWS, parseCsvRows } from "@/modules/inventory/import";
@@ -9,6 +9,7 @@ import { AppError, forbidden, notFound } from "@/server/errors";
 import { notify } from "@/modules/notifications/service";
 import { joinName } from "@/lib/person-name";
 import { createLead } from "./commands";
+import { recordImportedRepeat } from "./enquiries";
 import { PRIORITIES } from "./constants";
 import { normalizePhone } from "./phone";
 import { leadFieldsSchema } from "./validation";
@@ -236,7 +237,8 @@ export async function getImportBatch(db: Database, actor: Actor, batchId: string
  * Super Admin decision. A single conditional update moves the batch out of Pending, so a batch is
  * decided once even if two people press at the same moment. On approval each valid row becomes a
  * lead through the normal rules (duplicates checked again, returning customers to their original
- * agent, otherwise scored assignment); a row that has become a duplicate since is skipped.
+ * agent, otherwise scored assignment). A row whose customer already has a lead in the project, or got one
+ * while the batch waited, is recorded on that lead as a repeat enquiry.
  */
 export async function decideImportBatch(db: Database, actor: Actor, batchId: string, input: { approve?: unknown; note?: unknown }) {
   if (!canDecideImport(actor)) throw forbidden("Only a Super Admin can approve or reject an import batch.");
@@ -274,11 +276,23 @@ export async function decideImportBatch(db: Database, actor: Actor, batchId: str
     }
     return row;
   });
-  if (!approve) return { status: "rejected" as const, created: 0, skipped: 0 };
+  if (!approve) return { status: "rejected" as const, created: 0, skipped: 0, repeats: 0 };
 
   const valid = await db.select().from(leadImportRows).where(and(eq(leadImportRows.batchId, batchId), eq(leadImportRows.status, "valid"))).orderBy(leadImportRows.rowNo);
   let created = 0;
   let skipped = 0;
+  let repeats = 0;
+  const repeat = async (r: typeof leadImportRows.$inferSelect, leadId: string) => {
+    const data = r.data as { sourceId: string; note?: string };
+    const recorded = await recordImportedRepeat(db, actor, leadId, data.sourceId, data.note?.trim() || null);
+    if (recorded) repeats += 1;
+    return recorded ? "Recorded as a repeat enquiry on the existing lead" : "Already recorded as an enquiry today";
+  };
+  const known = await db.select().from(leadImportRows).where(and(eq(leadImportRows.batchId, batchId), eq(leadImportRows.status, "duplicate"), isNotNull(leadImportRows.matchLeadId))).orderBy(leadImportRows.rowNo);
+  for (const r of known) {
+    const result = await repeat(r, r.matchLeadId!);
+    await db.update(leadImportRows).set({ errors: [...((r.errors as string[] | null) ?? []), result] }).where(eq(leadImportRows.id, r.id));
+  }
   for (const r of valid) {
     try {
       const outcome = await createLead(db, actor, { ...(r.data as RowData), projectId: decided.projectId, onDuplicate: "reject" }, { channel: "import" });
@@ -286,15 +300,17 @@ export async function decideImportBatch(db: Database, actor: Actor, batchId: str
       await db.update(leadImportRows).set({ status: "created", leadId: outcome.leadId }).where(eq(leadImportRows.id, r.id));
       created += 1;
     } catch (e) {
-      const reason = e instanceof AppError ? (e.code === "CONFLICT" ? "Became a duplicate before approval" : e.message) : "Could not be created";
+      let reason = e instanceof AppError ? (e.code === "CONFLICT" ? "Became a duplicate before approval" : e.message) : "Could not be created";
+      const existingId = e instanceof AppError && e.code === "CONFLICT" ? (e.details as { existingLeadId?: string } | undefined)?.existingLeadId : undefined;
+      if (existingId) reason = `${reason}. ${await repeat(r, existingId)}`;
       if (!(e instanceof AppError)) console.error(e);
       await db.update(leadImportRows).set({ status: "skipped", errors: [reason] }).where(eq(leadImportRows.id, r.id));
       skipped += 1;
     }
   }
   await db.update(leadImportBatches).set({ createdLeads: created }).where(eq(leadImportBatches.id, batchId));
-  await db.insert(auditLogs).values({ actorId: actor.id, ip: actor.ip ?? null, action: "lead_import.created", entity: "lead_import_batch", entityId: batchId, after: { created, skipped } });
-  return { status: "approved" as const, created, skipped };
+  await db.insert(auditLogs).values({ actorId: actor.id, ip: actor.ip ?? null, action: "lead_import.created", entity: "lead_import_batch", entityId: batchId, after: { created, skipped, repeats } });
+  return { status: "approved" as const, created, skipped, repeats };
 }
 
 /** Pending batches waiting for a Super Admin, for a badge or queue. */

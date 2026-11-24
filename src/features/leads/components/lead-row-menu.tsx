@@ -6,7 +6,7 @@ import { createPortal } from "react-dom";
 import { Modal } from "@/components/ui/modal";
 import type { LeadStage } from "@/modules/leads/constants";
 import { completeNextFollowUpAction } from "../actions";
-import { CallUpdateCard } from "./call-update-card";
+import { CallUpdateCard, type PendingFollowUp } from "./call-update-card";
 import { FollowUpDialog } from "./follow-up-dialog";
 
 const WIDTH = 220;
@@ -17,7 +17,7 @@ const HEIGHT = 150;
  * "Mark follow-up done" is there only while a follow-up is pending. Drawn over the page so the table's
  * scroll area can't clip it.
  */
-export function LeadRowMenu({ leadId, leadName, stage, hasPending }: { leadId: string; leadName: string; stage: LeadStage; hasPending: boolean }) {
+export function LeadRowMenu({ leadId, leadName, stage, pendingFollowUps }: { leadId: string; leadName: string; stage: LeadStage; pendingFollowUps: PendingFollowUp[] }) {
   const [pos, setPos] = useState<{ left: number; top?: number; bottom?: number } | null>(null);
   const [dialog, setDialog] = useState<"log" | "followUp" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -75,7 +75,7 @@ export function LeadRowMenu({ leadId, leadName, stage, hasPending }: { leadId: s
   const items: { label: string; icon: LucideIcon; run: () => void }[] = [
     { label: "Log call", icon: PhoneCall, run: () => setDialog("log") },
     { label: "Schedule follow-up", icon: CalendarPlus, run: () => setDialog("followUp") },
-    ...(hasPending ? [{ label: "Mark follow-up done", icon: CircleCheck, run: done }] : []),
+    ...(pendingFollowUps.length ? [{ label: "Mark follow-up done", icon: CircleCheck, run: done }] : []),
   ];
 
   return (
@@ -123,7 +123,7 @@ export function LeadRowMenu({ leadId, leadName, stage, hasPending }: { leadId: s
         : null}
       {dialog === "log" ? (
         <Modal open onClose={() => setDialog(null)} title="Log call" description={leadName} className="max-w-2xl">
-          <CallUpdateCard leadId={leadId} currentStage={stage} />
+          <CallUpdateCard leadId={leadId} currentStage={stage} pendingFollowUps={pendingFollowUps} />
         </Modal>
       ) : null}
       <FollowUpDialog open={dialog === "followUp"} onClose={() => setDialog(null)} leadId={leadId} leadName={leadName} />

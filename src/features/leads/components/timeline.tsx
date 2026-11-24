@@ -79,7 +79,7 @@ function describeLead(a: TimelineActivity, { people }: Context): TimelineDescrip
     case "stage_change": {
       const details: TimelineDetail[] = [{ label: "Stage", value: `${d.from ? `${stage(d.from)} → ` : ""}${stage(d.to)}` }];
       if (str(d.reason)) details.push({ label: d.to === "lost_lead" ? "Lost reason" : "Reason", value: String(d.reason) });
-      return { title: `Moved to ${stage(d.to)}`, tag: "Stage", details };
+      return { title: d.from === "lost_lead" ? `Lead reopened at ${stage(d.to)}` : `Moved to ${stage(d.to)}`, tag: "Stage", details };
     }
     case "follow_up_scheduled":
       return { title: "Follow-up scheduled", tag: "Follow-up", details: [{ label: "Due", value: formatDateTime(String(d.dueAt)) }] };
@@ -118,7 +118,11 @@ function describeLead(a: TimelineActivity, { people }: Context): TimelineDescrip
       // Call reviews carry a 1–5 score (16 Nov 2026); a plain note or older review has none.
       return typeof d.rating === "number" ? { title: `Call review · ${d.rating}/5`, tag: "Call review" } : { title: "Note added", tag: "Note" };
     case "regenerated":
-      return { title: "Customer enquired again (re-inquiry)", tag: "Re-inquiry", details: str(d.by) ? [{ label: "Recorded by", value: String(d.by) }] : [] };
+      return {
+        title: "Customer enquired again",
+        tag: "Repeat enquiry",
+        details: [...(str(d.channel) ? [{ label: "Channel", value: String(d.channel) }] : []), ...(str(d.by) ? [{ label: "Recorded by", value: String(d.by) }] : [])],
+      };
     case "lost_requested":
       return { title: "Asked to mark the lead as lost", tag: "Lost request", details: str(d.reason) ? [{ label: "Lost reason", value: String(d.reason) }] : [] };
     case "lost_decided": {

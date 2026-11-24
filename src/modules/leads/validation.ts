@@ -55,7 +55,10 @@ export const createLeadSchema = leadFieldsSchema.extend({
   ownerId: optionalUuid,
   note: optionalText(4000),
   /** How to resolve a phone number that already exists in the project. */
-  onDuplicate: z.enum(["reject", "duplicate", "regenerate"]).default("reject"),
+  // The same project never gets a second lead for one customer: it is a repeat enquiry (client, 24 Nov 2026).
+  onDuplicate: z.enum(["reject", "regenerate"], "Record it as a repeat enquiry on the existing lead").default("reject"),
+  /** A repeat's channel when it isn't in the source list ("Other"); otherwise the source is the channel. */
+  channelOther: optionalText(80),
 });
 export type CreateLeadInput = z.input<typeof createLeadSchema>;
 

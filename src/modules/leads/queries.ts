@@ -24,7 +24,8 @@ import {
 } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
 import { forbidden } from "@/server/errors";
-import { BUSINESS_TIME_ZONE, LEAD_STAGES, PAGE_SIZE, STAGNATING_DAYS, UNATTENDED_HOURS, type LeadStage } from "./constants";
+import { BUSINESS_TIME_ZONE, LEAD_STAGES, OPEN_STAGES, PAGE_SIZE, STAGNATING_DAYS, UNATTENDED_HOURS, type LeadStage } from "./constants";
+import { enquiriesFor } from "./enquiries";
 import { formatPhone } from "./phone";
 import { leadPhonesOf } from "@/modules/contacts/phones";
 import { canAccessLead, canDo, canRateCalls, leadScope } from "./policy";
@@ -284,7 +285,8 @@ export async function listLeads(db: Database, actor: Actor, projectId: string | 
     .orderBy(...orderBy)
     .limit(PAGE_SIZE)
     .offset((page - 1) * PAGE_SIZE);
-  const others = await otherProjects(db, rows.map((r) => r.id));
+  const ids = rows.map((r) => r.id);
+  const [others, pending] = await Promise.all([otherProjects(db, ids), pendingFollowUps(db, ids)]);
 
   return {
     generatedAt: now.getTime(),
@@ -294,8 +296,21 @@ export async function listLeads(db: Database, actor: Actor, projectId: string | 
     page,
     pageCount,
     pageSize: PAGE_SIZE,
-    rows: rows.map((r) => ({ ...r, phone: formatPhone(r.phoneCountryCode, r.phoneNumber), otherProjects: others.get(r.id) ?? [] })),
+    rows: rows.map((r) => ({ ...r, phone: formatPhone(r.phoneCountryCode, r.phoneNumber), otherProjects: others.get(r.id) ?? [], pendingFollowUps: pending.get(r.id) ?? [] })),
   };
+}
+
+/** The follow-ups still open on these leads, soonest first. */
+export async function pendingFollowUps(db: Database, leadIds: string[]) {
+  const out = new Map<string, { id: string; dueAt: Date; note: string | null }[]>();
+  if (leadIds.length === 0) return out;
+  const rows = await db
+    .select({ id: followUps.id, leadId: followUps.leadId, dueAt: followUps.dueAt, note: followUps.note })
+    .from(followUps)
+    .where(and(inArray(followUps.leadId, leadIds), eq(followUps.status, "pending")))
+    .orderBy(asc(followUps.dueAt));
+  for (const { leadId, ...f } of rows) out.set(leadId, [...(out.get(leadId) ?? []), f]);
+  return out;
 }
 
 /** Kanban board: per-stage counts plus the newest cards in each stage. */
@@ -344,6 +359,15 @@ export async function pipelineBoard(db: Database, actor: Actor, projectId: strin
         .map((c) => ({ ...c, phone: formatPhone(c.phoneCountryCode, c.phoneNumber) })),
     })),
   };
+}
+
+/** The open stage the lead was in when it was last marked lost; New Lead when that isn't recorded. */
+function stageBeforeLost(activities: { type: string; data: unknown; createdAt: Date }[]): LeadStage {
+  const lost = activities
+    .filter((a) => a.type === "stage_change" && (a.data as { to?: string } | null)?.to === "lost_lead")
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+  const from = (lost?.data as { from?: string } | undefined)?.from;
+  return OPEN_STAGES.find((s) => s === from && s !== "booking_in_process") ?? "new_lead";
 }
 
 export async function getLeadDetail(db: Database, actor: Actor, leadId: string) {
@@ -430,6 +454,7 @@ export async function getLeadDetail(db: Database, actor: Actor, leadId: string) 
     lead: {
       ...row,
       otherProjects: (await otherProjects(db, [lead.id])).get(lead.id) ?? [],
+      enquiries: await enquiriesFor(db, [lead.id]),
       phone: formatPhone(row.phoneCountryCode, row.phoneNumber),
       phoneE164: lead.phoneE164,
       /** Numbers 2–5. */
@@ -444,6 +469,8 @@ export async function getLeadDetail(db: Database, actor: Actor, leadId: string) 
       lostReason: lostReason[0]?.name ?? null,
       timeToFirstTouchMs: lead.firstTouchAt ? lead.firstTouchAt.getTime() - lead.createdAt.getTime() : null,
     },
+    /** The stage a lost lead goes back to when it is reopened. */
+    stageBeforeLost: stageBeforeLost(activities),
     activities: await withCallLengths(db, activities),
     /** Names of the people that assignment entries point to (owner ids are stored, not names). */
     activityPeople: await activityPeople(db, activities),
@@ -474,6 +501,8 @@ export async function getLeadDetail(db: Database, actor: Actor, leadId: string) 
       /** Score a call 1–5 in a review (Admins, Super Admins, Managers; 16 Nov 2026). */
       rateCalls: canRateCalls(actor) && workable,
       scheduleFollowUp: canDo(actor, "edit") && !closed && workable,
+      /** A repeat enquiry can be recorded at any stage, booked and lost included. */
+      recordEnquiry: canDo(actor, "edit") && workable,
       verify: verifier && lead.verification === "pending",
       resubmit: lead.verification === "rejected" && (actor.role !== "agent" || lead.ownerId === actor.id),
     },

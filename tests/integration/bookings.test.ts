@@ -74,6 +74,8 @@ describe.skipIf(!hasTestDb)("Bookings module (PostgreSQL integration)", () => {
       const leadId = await leadOf(f.actors.agent1);
       const { bookingId } = await book(f.actors.agent1, leadId, unitId, { paymentInstructions: "Bank transfer to escrow" });
 
+      // A booking is not customer contact (client, 24 Nov 2026).
+      expect((await db.select({ at: leads.lastContactAt }).from(leads).where(eq(leads.id, leadId)))[0].at).toBeNull();
       const [b] = await db.select().from(bookings).where(eq(bookings.id, bookingId));
       expect(b).toMatchObject({ stage: "token_pending", areaSqft: 500, ratePerSqft: 25_000, totalSale: 12_500_000, tokenAmount: 500_000, agentId: f.actors.agent1.id });
       // The lead's client (every lead has one since 13 Nov 2026) holds the booking at once.

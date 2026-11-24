@@ -300,7 +300,7 @@ export const leads = pgTable(
     firstTouchAt: timestamp("first_touch_at", { withTimezone: true }),
     /** Any work on the lead (notes, stage moves, follow-ups…). Not a sign the customer was reached: see lastContactAt. */
     lastActivityAt: timestamp("last_activity_at", { withTimezone: true }).notNull().defaultNow(),
-    /** When the agent last actually reached the customer (markContact, client 23 Nov 2026); null = never. */
+    /** When the agent last actually reached the customer (markContact, client 23 Nov 2026); a booking is not contact (24 Nov 2026); null = never. */
     lastContactAt: timestamp("last_contact_at", { withTimezone: true }),
     isRegenerated: boolean("is_regenerated").notNull().default(false),
     verification: leadVerification("verification").notNull().default("approved"),
@@ -344,6 +344,35 @@ export const leadActivities = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("lead_activities_lead_created_idx").on(t.leadId, t.createdAt)],
+);
+
+/**
+ * Every enquiry on a lead (client, 24 Nov 2026): the first, and each time the customer asked about the same
+ * project again. Channel = a lead source, or a typed one ("Other"); both empty on repeats from before this.
+ */
+export const leadEnquiries = pgTable(
+  "lead_enquiries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    leadId: uuid("lead_id")
+      .notNull()
+      .references(() => leads.id, { onDelete: "cascade" }),
+    isRepeat: boolean("is_repeat").notNull(),
+    enquiredAt: timestamp("enquired_at", { withTimezone: true }).notNull(),
+    sourceId: uuid("source_id").references(() => leadSources.id, { onDelete: "restrict" }),
+    channelOther: text("channel_other"),
+    /** The agent responsible at that time. */
+    agentId: uuid("agent_id").references(() => users.id, { onDelete: "set null" }),
+    recordedById: uuid("recorded_by_id").references(() => users.id, { onDelete: "set null" }),
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("lead_enquiries_lead_idx").on(t.leadId, t.enquiredAt),
+    uniqueIndex("lead_enquiries_first_uq").on(t.leadId).where(sql`not ${t.isRepeat}`),
+    check("lead_enquiries_one_channel", sql`${t.sourceId} is null or ${t.channelOther} is null`),
+    check("lead_enquiries_channel_other", sql`${t.channelOther} is null or length(btrim(${t.channelOther})) between 1 and 80`),
+  ],
 );
 
 /**

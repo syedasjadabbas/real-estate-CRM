@@ -1,4 +1,5 @@
 import { clientPhonesOf } from "@/modules/contacts/phones";
+import { enquiriesFor } from "@/modules/leads/enquiries";
 import { clientInvestedIn, latestInvestments } from "@/modules/bookings/queries";
 import { canDoBooking } from "@/modules/bookings/policy";
 import { and, asc, count, desc, eq, ilike, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
@@ -306,6 +307,13 @@ export async function getClientDetail(db: Database, actor: Actor, clientId: stri
     hiddenLeadCount: linked.length - visibleLeads.length,
     /** Projects the client has enquired in, each with its leads (by link or phone). */
     interests: groupInterests(linked, canOpen),
+    /**
+     * Every enquiry across projects. On a lead the actor can't open, only the date, channel and project
+     * show (the interest is the client's); who handled it and the notes don't.
+     */
+    enquiries: (await enquiriesFor(db, linked.map((l) => l.id))).map((e) =>
+      visibleLeads.some((l) => l.id === e.leadId) ? e : { ...e, leadId: null, leadCode: null, agentName: null, recordedBy: null, note: null },
+    ),
     activities,
     followUps: followUpRows,
     permissions: { edit: canEdit, assign: canDoClient(actor, "assign"), scheduleFollowUp: canEdit, /** Agents never change phone numbers (14 Nov 2026). */ editPhones: actor.role !== "agent" },
