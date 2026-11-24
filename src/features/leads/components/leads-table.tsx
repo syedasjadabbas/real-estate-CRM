@@ -215,9 +215,9 @@ export function LeadsTable({
                       >
                         Open Lead
                       </Link>
-                      {/* An agent can't log on a lead until it is verified. */}
-                      {canEdit && !closed ? (
-                        <LeadRowMenu leadId={r.id} leadName={r.name} stage={r.stage} hasPending={Boolean(r.nextFollowUpAt)} canLog={showAgent || r.verification === "approved"} />
+                      {/* An agent works a lead only once it is verified (the server refuses it before), so no menu until then. */}
+                      {canEdit && !closed && (showAgent || r.verification === "approved") ? (
+                        <LeadRowMenu leadId={r.id} leadName={r.name} stage={r.stage} hasPending={Boolean(r.nextFollowUpAt)} />
                       ) : null}
                     </div>
                   </td>

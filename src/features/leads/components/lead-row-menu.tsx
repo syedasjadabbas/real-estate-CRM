@@ -17,7 +17,7 @@ const HEIGHT = 150;
  * "Mark follow-up done" is there only while a follow-up is pending. Drawn over the page so the table's
  * scroll area can't clip it.
  */
-export function LeadRowMenu({ leadId, leadName, stage, hasPending, canLog }: { leadId: string; leadName: string; stage: LeadStage; hasPending: boolean; canLog: boolean }) {
+export function LeadRowMenu({ leadId, leadName, stage, hasPending }: { leadId: string; leadName: string; stage: LeadStage; hasPending: boolean }) {
   const [pos, setPos] = useState<{ left: number; top?: number; bottom?: number } | null>(null);
   const [dialog, setDialog] = useState<"log" | "followUp" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -73,7 +73,7 @@ export function LeadRowMenu({ leadId, leadName, stage, hasPending, canLog }: { l
     });
 
   const items: { label: string; icon: LucideIcon; run: () => void }[] = [
-    ...(canLog ? [{ label: "Log call", icon: PhoneCall, run: () => setDialog("log") }] : []),
+    { label: "Log call", icon: PhoneCall, run: () => setDialog("log") },
     { label: "Schedule follow-up", icon: CalendarPlus, run: () => setDialog("followUp") },
     ...(hasPending ? [{ label: "Mark follow-up done", icon: CircleCheck, run: done }] : []),
   ];
