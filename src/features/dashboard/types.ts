@@ -20,6 +20,9 @@ export type ExecutiveKpis = {
   awaitingFirstTouch: number;
 };
 
+/** Leads per active project, all time. open + inProgress + won + lost = total. */
+export type ProjectLeads = { id: string; label: string; total: number; open: number; inProgress: number; won: number; lost: number };
+
 export type NamedCount = { id: string; label: string; count: number };
 
 export type TeamScoreSummary = { teams: number; avgScore: number | null; provisional: boolean };
@@ -74,10 +77,12 @@ export type DashboardData = {
   kpis: ExecutiveKpis | null;
   teams: { id: string; name: string }[];
   activeProjects: number | null;
-  topProjects: NamedCount[];
+  projectLeads: ProjectLeads[];
+  /** Pending follow-ups now (not tied to the date range), as on To-dos. */
+  followUps: { overdue: number; today: number } | null;
   insights: InsightTotals | null;
   insightsUpdatedAt: string | null;
-  teamScores: NamedCount[];
+  teamScores: (NamedCount & { provisional?: boolean })[];
   /** Teams tile: scored teams in view and their average score (null when none). */
   teamSummary: TeamScoreSummary | null;
   /** "own" for agents: the scores panel shows only the agent's own score. */
@@ -101,7 +106,8 @@ export const emptyDashboardData: DashboardData = {
   kpis: null,
   teams: [],
   activeProjects: null,
-  topProjects: [],
+  projectLeads: [],
+  followUps: null,
   insights: null,
   insightsUpdatedAt: null,
   teamScores: [],

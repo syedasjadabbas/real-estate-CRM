@@ -37,6 +37,8 @@ const sortColumns: Record<ClientSortColumn, SQL | AnyPgColumn> = {
 const listSelection = {
   id: clients.id,
   name: clients.name,
+  firstName: clients.firstName,
+  lastName: clients.lastName,
   phoneCountryCode: clients.phoneCountryCode,
   phoneNumber: clients.phoneNumber,
   email: clients.email,

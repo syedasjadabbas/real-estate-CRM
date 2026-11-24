@@ -11,7 +11,7 @@ test("HR adds an employee without a CRM login, finds them in the directory and e
   await page.getByRole("link", { name: "Add employee (no login)" }).click();
   await page.waitForURL("**/dashboard/hr/employees/new-record");
   const form = page.getByRole("form", { name: "HR profile" });
-  await form.getByLabel("Full name").fill(name);
+  await form.getByLabel("First name").fill(name);
   await form.getByLabel("Department").fill("Logistics");
   await form.getByRole("button", { name: "Add employee" }).click();
   await page.waitForURL(/\/dashboard\/hr\/employees\/[0-9a-f-]{36}$/);

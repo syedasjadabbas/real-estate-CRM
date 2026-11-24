@@ -61,7 +61,7 @@ export function ImportUploadForm({ projects, defaultProjectId }: { projects: { i
         </Field>
       </div>
       <p className="text-[11px] text-zinc-500">
-        Columns: <code>name, phone, source</code> (required), then any of <code>phone_country_code, phone2–phone5, email, city, budget, priority, size, gender, note</code>. Up to 2,000 rows.
+        Columns: <code>first_name, phone, source</code> (required), then any of <code>last_name, phone_country_code, phone2–phone5, email, city, budget, priority, size, gender, note</code>. Up to 2,000 rows.
       </p>
       <div className="flex flex-wrap items-center justify-end gap-3">
         {msg ? (

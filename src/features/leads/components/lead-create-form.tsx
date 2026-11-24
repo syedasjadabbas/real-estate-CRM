@@ -31,7 +31,8 @@ export function LeadCreateForm({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [values, setValues] = useState<LeadFormValues>({
-    name: "",
+    firstName: "",
+    lastName: "",
     phoneCountryCode: "+92",
     phoneNumber: "",
     email: "",

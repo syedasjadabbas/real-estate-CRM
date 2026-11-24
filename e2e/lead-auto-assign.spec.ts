@@ -15,7 +15,7 @@ test("a manager's Auto-assign gives the lead to their team, and the lead opens @
   await login(page, "manager");
   await page.goto("/dashboard/leads/new");
   await expect(page.getByText("assign automatically among your teams' available agents")).toBeVisible();
-  await page.getByLabel("Name").fill(name);
+  await page.getByLabel("First name").fill(name);
   await page.getByLabel("Mobile number").fill(uniquePhone());
   await page.getByLabel("Source").selectOption(s.sourceId);
   await expect(page.getByLabel("Owner")).toHaveValue(""); // Auto-assign

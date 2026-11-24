@@ -1,4 +1,5 @@
 import { and, eq, isNull, ne } from "drizzle-orm";
+import { nameFromParts } from "@/lib/person-name";
 import { assertPhoneEditable, notifyNameChange } from "@/modules/contacts/agent-edits";
 import type { Database } from "@/server/db";
 import { bookings, clientFollowUps, clients, leads, users } from "@/server/db/schema";
@@ -81,7 +82,8 @@ function duplicateError(existing: { client: { id: string; name: string }; visibl
  */
 export async function createClient(db: Database, actor: Actor, input: unknown) {
   assertCanClient(actor, "createManual");
-  const data = parse(createClientSchema, input);
+  const named = nameFromParts(input);
+  const data = parse(createClientSchema, named.input);
   const phone = phoneOrThrow(data.phoneCountryCode, data.phoneNumber);
   const extraPhones = normalizeExtraPhones(phone.e164, data.phones);
   const numbers = [phone.e164, ...extraPhones.map((p) => p.e164)];
@@ -96,6 +98,7 @@ export async function createClient(db: Database, actor: Actor, input: unknown) {
     const city = await resolveCity(tx, data);
     const values = {
       name: data.name,
+      ...named.parts,
       phoneCountryCode: phone.countryCode,
       phoneNumber: phone.national,
       phoneE164: phone.e164,
@@ -169,6 +172,8 @@ export async function convertLeadToClient(db: Database, actor: Actor, input: unk
 
     const values = {
       name: lead.name,
+      firstName: lead.firstName,
+      lastName: lead.lastName,
       phoneCountryCode: lead.phoneCountryCode,
       phoneNumber: lead.phoneNumber,
       phoneE164: lead.phoneE164,
@@ -202,7 +207,8 @@ export async function convertLeadToClient(db: Database, actor: Actor, input: unk
 
 export async function updateClient(db: Database, actor: Actor, clientId: string, input: unknown) {
   assertCanClient(actor, "edit");
-  const data = parse(updateClientSchema, input);
+  const named = nameFromParts(input);
+  const data = parse(updateClientSchema, named.input);
   return db.transaction(async (tx) => {
     const { client } = await loadAccessibleClient(tx, actor, clientId, true);
     // Agents never change a phone number (owner, 14 Nov 2026).
@@ -216,7 +222,7 @@ export async function updateClient(db: Database, actor: Actor, clientId: string,
       assertPhoneEditable(actor, primaryChanged || extraChanged);
     }
     const changes: Partial<typeof clients.$inferInsert> = {};
-    if (data.name !== undefined) changes.name = data.name;
+    if (data.name !== undefined) Object.assign(changes, { name: data.name }, named.parts);
     if (data.phoneNumber !== undefined || data.phoneCountryCode !== undefined) {
       const phone = phoneOrThrow(data.phoneCountryCode ?? client.phoneCountryCode, data.phoneNumber ?? client.phoneNumber);
       changes.phoneCountryCode = phone.countryCode;
@@ -245,7 +251,7 @@ export async function updateClient(db: Database, actor: Actor, clientId: string,
 
     const changed = Object.keys(changes).filter(
       (key) => String(changes[key as keyof typeof changes] ?? "") !== String(client[key as keyof typeof client] ?? ""),
-    );
+    ).filter((key, _, all) => !((key === "firstName" || key === "lastName") && all.includes("name"))); // told once, as the name
     if (phonesChanged) changed.push("phones");
     if (changed.length === 0) return { changed: [] as string[] };
 
@@ -353,7 +359,7 @@ export async function completeClientFollowUp(db: Database, actor: Actor, followU
   });
 }
 
-type BookedLead = { id: string; code: string; name: string; phoneCountryCode: string; phoneNumber: string; phoneE164: string; email: string | null; cityId: string | null; cityOther: string | null; ownerId: string | null; clientId: string | null };
+type BookedLead = { id: string; code: string; name: string; firstName: string | null; lastName: string | null; phoneCountryCode: string; phoneNumber: string; phoneE164: string; email: string | null; cityId: string | null; cityOther: string | null; ownerId: string | null; clientId: string | null };
 
 /**
  * The client this lead already belongs to, or null. Uses the lead's client, else the client with the
@@ -387,6 +393,8 @@ export async function ensureClientForLead(tx: Tx, actor: Actor, lead: BookedLead
   if (clientId) return { clientId, created: false };
   const values = {
     name: lead.name,
+    firstName: lead.firstName,
+    lastName: lead.lastName,
     phoneCountryCode: lead.phoneCountryCode,
     phoneNumber: lead.phoneNumber,
     phoneE164: lead.phoneE164,

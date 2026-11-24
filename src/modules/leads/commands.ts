@@ -1,4 +1,5 @@
 import { leadLink, notify, teamManagersOf } from "@/modules/notifications/service";
+import { nameFromParts } from "@/lib/person-name";
 import { assertPhoneEditable, notifyNameChange } from "@/modules/contacts/agent-edits";
 import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { auditClient, logClientActivity } from "@/modules/clients/support";
@@ -128,7 +129,8 @@ export type CreateLeadOutcome =
 
 export async function createLead(db: Database, actor: Actor, input: unknown): Promise<CreateLeadOutcome> {
   assertCan(actor, "create");
-  const data = parse(createLeadSchema, input);
+  const named = nameFromParts(input);
+  const data = parse(createLeadSchema, named.input);
   const phone = phoneOrThrow(data.phoneCountryCode, data.phoneNumber);
   const extraPhones = normalizeExtraPhones(phone.e164, data.phones);
   const numbers = [phone.e164, ...extraPhones.map((p) => p.e164)];
@@ -221,6 +223,7 @@ export async function createLead(db: Database, actor: Actor, input: unknown): Pr
       projectId: data.projectId,
       ownerId,
       name: data.name,
+      ...named.parts,
       phoneCountryCode: phone.countryCode,
       phoneNumber: phone.national,
       phoneE164: phone.e164,
@@ -277,6 +280,7 @@ export async function createLead(db: Database, actor: Actor, input: unknown): Pr
       // First inquiry from this person: their client profile starts now, held by the lead's owner.
       const clientValues = {
         name: data.name,
+        ...named.parts,
         phoneCountryCode: phone.countryCode,
         phoneNumber: phone.national,
         phoneE164: phone.e164,
@@ -318,7 +322,8 @@ export async function createLead(db: Database, actor: Actor, input: unknown): Pr
 
 export async function updateLead(db: Database, actor: Actor, leadId: string, input: unknown) {
   assertCan(actor, "edit");
-  const data = parse(updateLeadSchema, input);
+  const named = nameFromParts(input);
+  const data = parse(updateLeadSchema, named.input);
   const phoneOf = (lead: typeof leads.$inferSelect) => phoneOrThrow(data.phoneCountryCode ?? lead.phoneCountryCode, data.phoneNumber ?? lead.phoneNumber);
   const phoneEdited = data.phoneNumber !== undefined || data.phoneCountryCode !== undefined;
   const phonesEdited = data.phones !== undefined;
@@ -343,7 +348,7 @@ export async function updateLead(db: Database, actor: Actor, leadId: string, inp
     const { lead, members } = await loadAccessibleLead(tx, actor, leadId, true);
     assertWorkable(actor, lead, { allowRejectedEdit: true });
     const changes: Partial<typeof leads.$inferInsert> = {};
-    if (data.name !== undefined) changes.name = data.name;
+    if (data.name !== undefined) Object.assign(changes, { name: data.name }, named.parts);
     if (phoneEdited) {
       const phone = phoneOf(lead);
       if (phone.e164 !== lead.phoneE164) {
@@ -370,7 +375,7 @@ export async function updateLead(db: Database, actor: Actor, leadId: string, inp
 
     const changed = Object.keys(changes).filter(
       (key) => String(changes[key as keyof typeof changes] ?? "") !== String(lead[key as keyof typeof lead] ?? ""),
-    );
+    ).filter((key, _, all) => !((key === "firstName" || key === "lastName") && all.includes("name"))); // told once, as the name
     let phonesBefore: string[] = [];
     if (extraPhones) {
       phonesBefore = (await leadPhonesOf(tx, leadId)).map((p) => p.e164);

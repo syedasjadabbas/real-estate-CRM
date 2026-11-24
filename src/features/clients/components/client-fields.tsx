@@ -9,7 +9,8 @@ import type { ExtraPhoneInput } from "@/modules/contacts/constants";
 import { RELATIONSHIPS, RELATIONSHIP_LABELS } from "@/modules/clients/constants";
 
 export type ClientFormValues = {
-  name: string;
+  firstName: string;
+  lastName: string;
   phoneCountryCode: string;
   phoneNumber: string;
   email: string;
@@ -39,12 +40,12 @@ type Props = {
 /** Client fields shared by the create form and the detail page's edit form (Leads form sections). */
 export function ClientFields({ values, onChange, errors, cities, disabled, lockPhones = false, profileExtra, currentCity }: Props) {
   const text = (key: TextKey, label: string, opts: { required?: boolean; type?: string; placeholder?: string; lock?: boolean } = {}) => (
-    <Field label={label} required={opts.required} error={errors[key]}>
+    <Field label={label} required={opts.required} error={errors[key] ?? (key === "firstName" ? errors.name : undefined)}>
       {(id, describedBy) => (
         <Input
           id={id}
           aria-describedby={describedBy}
-          invalid={Boolean(errors[key])}
+          invalid={Boolean(errors[key] ?? (key === "firstName" ? errors.name : undefined))}
           type={opts.type ?? "text"}
           value={values[key]}
           placeholder={opts.placeholder}
@@ -86,7 +87,8 @@ export function ClientFields({ values, onChange, errors, cities, disabled, lockP
   return (
     <div className="space-y-4">
       <FormSection title="Contact">
-        {text("name", "Name", { required: true })}
+        {text("firstName", "First name", { required: true })}
+        {text("lastName", "Last name")}
         {text("email", "Email", { type: "email", placeholder: "Optional" })}
         {select("phoneCountryCode", "Country code", COUNTRY_CODES, { required: true, lock: lockPhones })}
         {text("phoneNumber", "Mobile number", { required: true, type: "tel", placeholder: "3001234567 or 0300 1234567", lock: lockPhones })}

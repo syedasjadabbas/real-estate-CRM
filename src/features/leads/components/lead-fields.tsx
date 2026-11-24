@@ -23,7 +23,8 @@ export const COUNTRY_CODES = [
 ];
 
 export type LeadFormValues = {
-  name: string;
+  firstName: string;
+  lastName: string;
   phoneCountryCode: string;
   phoneNumber: string;
   email: string;
@@ -90,12 +91,12 @@ export function LeadFields({ values, onChange, errors, lookups, disabled, lockPh
     .sort((a, b) => a - b)
     .map((a) => ({ value: sizeLabel(a), label: sizeLabel(a) }));
   const text = (key: TextKey, label: string, opts: { required?: boolean; type?: string; placeholder?: string; autoComplete?: string; lock?: boolean } = {}) => (
-    <Field label={label} required={opts.required} error={errors[key]}>
+    <Field label={label} required={opts.required} error={errors[key] ?? (key === "firstName" ? errors.name : undefined)}>
       {(id, describedBy) => (
         <Input
           id={id}
           aria-describedby={describedBy}
-          invalid={Boolean(errors[key])}
+          invalid={Boolean(errors[key] ?? (key === "firstName" ? errors.name : undefined))}
           type={opts.type ?? "text"}
           value={values[key]}
           placeholder={opts.placeholder}
@@ -132,7 +133,8 @@ export function LeadFields({ values, onChange, errors, lookups, disabled, lockPh
   return (
     <div className="space-y-4">
       <FormSection title="Contact">
-        {text("name", "Name", { required: true, autoComplete: "off" })}
+        {text("firstName", "First name", { required: true, autoComplete: "off" })}
+        {text("lastName", "Last name", { autoComplete: "off" })}
         {text("email", "Email", { type: "email", placeholder: "Optional" })}
         {select("phoneCountryCode", "Country code", COUNTRY_CODES, { required: true, lock: lockPhones })}
         {text("phoneNumber", "Mobile number", { required: true, type: "tel", placeholder: "3001234567 or 0300 1234567", lock: lockPhones })}

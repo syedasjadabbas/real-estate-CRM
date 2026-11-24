@@ -91,7 +91,7 @@ test("a lead takes a typed city under Other, refusing a phone number, and lists 
   const typed = cityName();
 
   await page.goto("/dashboard/leads/new");
-  await page.getByLabel("Name").fill(name);
+  await page.getByLabel("First name").fill(name);
   await page.getByLabel("Mobile number").fill(uniquePhone());
   await page.getByLabel("Source").selectOption(s.sourceId);
   await expect(typedCity(page)).toHaveCount(0);

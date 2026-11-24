@@ -18,6 +18,8 @@ type Context = { people: Record<string, string> };
 /** Stored column → what a person calls it (older entries kept only column names). */
 const FIELD_LABELS: Record<string, string> = {
   name: "Name",
+  firstName: "First name",
+  lastName: "Last name",
   phoneCountryCode: "Phone",
   phoneNumber: "Phone",
   phoneE164: "Phone",

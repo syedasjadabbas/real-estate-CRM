@@ -6,7 +6,7 @@ import { expect, login, selectTestProject, unique } from "./support/seed";
 
 const SORTS: [label: string, sort: string][] = [
   ["Code", "code"],
-  ["In stage", "inStage"],
+  ["Agent", "owner"],
   ["Modified", "modified"],
   ["First touch", "firstTouch"],
   ["Next follow-up", "next"],

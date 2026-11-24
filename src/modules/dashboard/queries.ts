@@ -2,12 +2,12 @@ import { and, asc, count, desc, eq, gte, inArray, isNull, lt, notInArray, sql, t
 import { currentTargets, TARGET_METRICS } from "@/modules/targets/service";
 import { z } from "zod";
 import type { Database } from "@/server/db";
-import { leadSources, leads, meetings, projects, teamMembers, teams, users } from "@/server/db/schema";
+import { followUps, leadSources, leads, meetings, projects, teamMembers, teams, users } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
 import { INBOUND_LABELS } from "@/modules/leads/constants";
 import { agentScores, teamScoreSummary, teamScores } from "@/modules/leads/assignment";
 import { leadScope } from "@/modules/leads/policy";
-import { scopeFilter, teamMemberIds } from "@/modules/leads/support";
+import { followUpLeadActive, scopeFilter, teamMemberIds } from "@/modules/leads/support";
 import { agingRows, meetingMixes, meetingTotals, teamOutput } from "./insights";
 import type { DashboardData, LostBreakdown, LostTeam, RangeKey } from "@/features/dashboard/types";
 
@@ -115,7 +115,8 @@ export async function dashboardData(db: Database, actor: Actor, projectId: strin
   const open = notInArray(leads.stage, ["booked", "lost_lead"]);
 
   const lostInRange = and(inRange, eq(leads.stage, "lost_lead"));
-  const [[k], sources, channels, top, [activeProjects], [health], [meetingsDone], lostTeamRows] = await Promise.all([
+  const todayStart = new Date(`${businessDay(now)}T00:00:00${OFFSET}`);
+  const [[k], sources, channels, projectLeads, [activeProjects], [health], [meetingsDone], lostTeamRows, [due]] = await Promise.all([
     db
       .select({
         total: count(),
@@ -135,13 +136,21 @@ export async function dashboardData(db: Database, actor: Actor, projectId: strin
       .orderBy(desc(count()), asc(leadSources.name)),
     db.select({ channel: leads.inboundChannel, count: count() }).from(leads).where(inRange).groupBy(leads.inboundChannel).orderBy(desc(count())),
     db
-      .select({ id: projects.id, label: projects.name, count: count() })
-      .from(leads)
-      .innerJoin(projects, eq(projects.id, leads.projectId))
-      .where(and(inScope, gte(leads.createdAt, start), lt(leads.createdAt, end)))
+      // Every active project, all time, including those with no leads yet (client, 23 Nov 2026).
+      .select({
+        id: projects.id,
+        label: projects.name,
+        total: count(leads.id),
+        open: sql<number>`count(*) filter (where ${leads.stage} in ('new_lead', 'contact_attempted', 'future_opportunity'))::int`,
+        inProgress: sql<number>`count(*) filter (where ${leads.stage} in ('contacted', 'qualified_lead', 'meeting_scheduled', 'meeting_done', 'booking_in_process'))::int`,
+        won: sql<number>`count(*) filter (where ${leads.stage} = 'booked')::int`,
+        lost: sql<number>`count(*) filter (where ${leads.stage} = 'lost_lead')::int`,
+      })
+      .from(projects)
+      .leftJoin(leads, and(eq(leads.projectId, projects.id), inScope))
+      .where(and(eq(projects.status, "active"), isNull(projects.archivedAt)))
       .groupBy(projects.id, projects.name)
-      .orderBy(desc(count()), asc(projects.name))
-      .limit(5),
+      .orderBy(desc(count(leads.id)), asc(projects.name)),
     db.select({ n: count() }).from(projects).where(and(eq(projects.status, "active"), isNull(projects.archivedAt))),
     db
       .select({
@@ -174,6 +183,15 @@ export async function dashboardData(db: Database, actor: Actor, projectId: strin
       .leftJoin(teams, and(eq(teams.id, teamMembers.teamId), eq(teams.isActive, true)))
       .where(lostInRange)
       .groupBy(teams.id, teams.name, users.id, users.name),
+    // Same rule as To-dos (which has no team filter), so the tile equals the list it opens.
+    db
+      .select({
+        overdue: sql<number>`count(*) filter (where ${followUps.dueAt} < ${now})::int`,
+        today: sql<number>`count(*) filter (where ${followUps.dueAt} >= ${todayStart} and ${followUps.dueAt} < ${new Date(todayStart.getTime() + DAY)})::int`,
+      })
+      .from(followUps)
+      .innerJoin(leads, eq(leads.id, followUps.leadId))
+      .where(and(scopeFilter(actor, members), isNull(leads.deletedAt), eq(leads.projectId, projectId), eq(followUps.status, "pending"), followUpLeadActive())),
   ]);
 
   const total = k.total;
@@ -224,7 +242,8 @@ export async function dashboardData(db: Database, actor: Actor, projectId: strin
     },
     teams: options,
     activeProjects: activeProjects.n,
-    topProjects: top,
+    projectLeads,
+    followUps: due,
     insights: panels
       ? { teams: summary?.teams ?? 0, avgScore: summary?.avgScore ?? 0, meetings30d: panels.totals.d30, meetings6m: panels.totals.m6, teamMeetings: panels.totals.team, bookings: panels.output.reduce((n, t) => n + t.bookings, 0) }
       : null,

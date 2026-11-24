@@ -126,7 +126,7 @@ export default async function EmployeePage({ params }: PageProps<"/dashboard/hr/
           </PanelCard>
           {manage && leadCounts ? (
             <PanelCard title="Manage account">
-              <AccountControls account={{ id: e.id, name: e.name, role: e.role!, status: e.status }} roles={grantableRoles(actor)} isSelf={actor.id === e.id} leads={leadCounts} receivers={receivers} />
+              <AccountControls account={{ id: e.id, name: e.name, firstName: e.firstName, lastName: e.lastName, role: e.role!, status: e.status }} roles={grantableRoles(actor)} isSelf={actor.id === e.id} leads={leadCounts} receivers={receivers} />
             </PanelCard>
           ) : null}
           {balance ? (
@@ -146,7 +146,7 @@ export default async function EmployeePage({ params }: PageProps<"/dashboard/hr/
             {canEdit ? (
               <EmployeeProfileForm
                 userId={e.id}
-                record={e.role === null ? { fullName: e.name, email: e.email, status: e.status } : undefined}
+                record={e.role === null ? { fullName: e.name, firstName: e.firstName, lastName: e.lastName, email: e.email, status: e.status } : undefined}
                 profile={{ designation: e.designation, department: e.department, phoneCountryCode: e.phoneCountryCode, phoneNumber: e.phoneNumber, joiningDate: e.joiningDate }}
                 departments={suggestions.departments}
                 designations={suggestions.designations}

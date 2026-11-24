@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
 import { selectClass } from "@/features/leads/components/lead-fields";
 import { cn } from "@/lib/cn";
+import { splitName } from "@/lib/person-name";
 import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from "@/modules/accounts/validation";
 import { ROLE_LABELS, type Role } from "@/server/auth/types";
 import { createAccountAction } from "../actions";
@@ -14,7 +15,7 @@ import { createAccountAction } from "../actions";
 export function AccountCreateForm({ roles, records = [], recordId = "" }: { roles: Role[]; records?: { id: string; name: string | null; email: string | null }[]; recordId?: string }) {
   const router = useRouter();
   const preset = records.find((r) => r.id === recordId);
-  const [values, setValues] = useState({ name: preset?.name ?? "", email: preset?.email ?? "", role: "agent" as Role, password: "", employeeRecordId: preset?.id ?? "" });
+  const [values, setValues] = useState({ ...splitName(preset?.name), email: preset?.email ?? "", role: "agent" as Role, password: "", employeeRecordId: preset?.id ?? "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -49,7 +50,7 @@ export function AccountCreateForm({ roles, records = [], recordId = "" }: { role
               disabled={pending}
               onChange={(e) => {
                 const r = records.find((x) => x.id === e.target.value);
-                setValues((v) => ({ ...v, employeeRecordId: e.target.value, name: r?.name ?? v.name, email: r?.email ?? v.email }));
+                setValues((v) => ({ ...v, employeeRecordId: e.target.value, ...(r?.name ? splitName(r.name) : {}), email: r?.email ?? v.email }));
               }}
             >
               <option value="">No existing HR record</option>
@@ -64,9 +65,12 @@ export function AccountCreateForm({ roles, records = [], recordId = "" }: { role
         </Field>
       ) : null}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Field label="Name" error={errors.name}>
-          {(id, d) => <Input id={id} aria-describedby={d} invalid={Boolean(errors.name)} maxLength={100} value={values.name} disabled={pending} onChange={set("name")} />}
-        </Field>
+        <Field label="First name" required error={errors.name}>
+            {(id, d) => <Input id={id} aria-describedby={d} invalid={Boolean(errors.name)} maxLength={60} value={values.firstName} disabled={pending} onChange={set("firstName")} />}
+          </Field>
+          <Field label="Last name">
+            {(id, d) => <Input id={id} aria-describedby={d} maxLength={60} value={values.lastName} disabled={pending} onChange={set("lastName")} />}
+          </Field>
         <Field label="Email" error={errors.email} hint="Used to sign in.">
           {(id, d) => <Input id={id} aria-describedby={d} type="email" autoComplete="off" invalid={Boolean(errors.email)} maxLength={254} value={values.email} disabled={pending} onChange={set("email")} />}
         </Field>

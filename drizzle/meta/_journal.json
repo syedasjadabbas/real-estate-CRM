@@ -414,6 +414,20 @@
       "when": 1795086471458,
       "tag": "0058_developer_transfer_receipts",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1795523896928,
+      "tag": "0059_person_names",
+      "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1795523984033,
+      "tag": "0060_person_name_triggers",
+      "breakpoints": true
     }
   ]
 }

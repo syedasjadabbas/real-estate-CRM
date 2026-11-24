@@ -6,8 +6,8 @@ import { forbidden } from "@/server/errors";
 
 /** Sample rows only: made-up names and numbers (the repository is public). */
 const EXAMPLES: Record<(typeof LEAD_IMPORT_COLUMNS)[number], string>[] = [
-  { name: "Sample Buyer", phone_country_code: "+92", phone: "3001234567", phone2: "", phone3: "", phone4: "", phone5: "", email: "buyer@example.com", source: "Facebook", city: "Islamabad", budget: "", priority: "high", size: "500 sq ft", gender: "male", note: "Wants a 1-bed apartment" },
-  { name: "Second Sample", phone_country_code: "+92", phone: "3217654321", phone2: "3331112222", phone3: "", phone4: "", phone5: "", email: "", source: "Walk in", city: "Lahore", budget: "", priority: "", size: "", gender: "female", note: "" },
+  { first_name: "Sample", last_name: "Buyer", phone_country_code: "+92", phone: "3001234567", phone2: "", phone3: "", phone4: "", phone5: "", email: "buyer@example.com", source: "Facebook", city: "Islamabad", budget: "", priority: "high", size: "500 sq ft", gender: "male", note: "Wants a 1-bed apartment" },
+  { first_name: "Second", last_name: "Sample", phone_country_code: "+92", phone: "3217654321", phone2: "3331112222", phone3: "", phone4: "", phone5: "", email: "", source: "Walk in", city: "Lahore", budget: "", priority: "", size: "", gender: "female", note: "" },
 ];
 
 /** GET: the lead import template, the exact columns the import expects plus two sample rows (Admin and Super Admin). */

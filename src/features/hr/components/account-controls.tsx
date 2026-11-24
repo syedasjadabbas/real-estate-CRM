@@ -7,11 +7,12 @@ import { Field, Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { selectClass } from "@/features/leads/components/lead-fields";
 import { cn } from "@/lib/cn";
+import { namePartsOf } from "@/lib/person-name";
 import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from "@/modules/accounts/validation";
 import { ROLE_LABELS, type Role } from "@/server/auth/types";
 import { reassignOwnedLeadsAction, resetAccountPasswordAction, setAccountStatusAction, updateAccountAction } from "../actions";
 
-type Account = { id: string; name: string; role: Role; status: "active" | "inactive" };
+type Account = { id: string; name: string; firstName?: string | null; lastName?: string | null; role: Role; status: "active" | "inactive" };
 type Msg = { text: string; ok: boolean } | null;
 
 function Status({ msg }: { msg: Msg }) {
@@ -45,7 +46,7 @@ export function AccountControls({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
-  const [details, setDetails] = useState({ name: account.name, role: account.role });
+  const [details, setDetails] = useState({ ...namePartsOf(account), role: account.role });
   const [detailsErr, setDetailsErr] = useState<Record<string, string>>({});
   const [detailsMsg, setDetailsMsg] = useState<Msg>(null);
 
@@ -85,8 +86,11 @@ export function AccountControls({
       >
         <p className={sectionTitle}>Name and role</p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="Name" error={detailsErr.name}>
-            {(id, d) => <Input id={id} aria-describedby={d} invalid={Boolean(detailsErr.name)} maxLength={100} value={details.name} disabled={pending} onChange={(e) => setDetails((v) => ({ ...v, name: e.target.value }))} />}
+          <Field label="First name" required error={detailsErr.name}>
+            {(id, d) => <Input id={id} aria-describedby={d} invalid={Boolean(detailsErr.name)} maxLength={60} value={details.firstName} disabled={pending} onChange={(e) => setDetails((v) => ({ ...v, firstName: e.target.value }))} />}
+          </Field>
+          <Field label="Last name">
+            {(id, d) => <Input id={id} aria-describedby={d} maxLength={60} value={details.lastName} disabled={pending} onChange={(e) => setDetails((v) => ({ ...v, lastName: e.target.value }))} />}
           </Field>
           <Field label="Role" error={detailsErr.role} hint={isSelf ? "You can't change your own role." : undefined}>
             {(id, d) => (

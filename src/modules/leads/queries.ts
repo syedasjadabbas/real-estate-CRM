@@ -155,7 +155,7 @@ const sortColumns = {
   // Longest in stage last when ascending, matching the duration shown.
   inStage: sql`now() - ${leads.stageChangedAt}`,
   modified: leads.updatedAt,
-  firstTouch: sql`${leads.firstTouchAt} - ${leads.createdAt}`,
+  firstTouch: sql`${leads.firstTouchAt}`,
   next: leads.nextFollowUpAt,
   inbound: sql`${leads.inboundChannel}::text`,
   // Size is free text ("1,200 sq ft"), so it sorts by its number; text with no number goes last.
@@ -181,6 +181,8 @@ const listSelection = {
   firstTouchAt: leads.firstTouchAt,
   nextFollowUpAt: leads.nextFollowUpAt,
   priority: leads.priority,
+  firstName: leads.firstName,
+  lastName: leads.lastName,
   desiredSize: leads.desiredSize,
   latestComment: leads.latestComment,
   inboundChannel: leads.inboundChannel,

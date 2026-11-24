@@ -7,10 +7,10 @@ import { api, expect, login, seed, selectTestProject, unique, uniquePhone } from
 async function fillLead(page: Page, name: string, phone: string) {
   await page.goto("/dashboard/leads/new");
   await expect(async () => {
-    await page.getByLabel("Name").fill(name);
+    await page.getByLabel("First name").fill(name);
     await page.getByLabel("Mobile number").fill(phone);
     await page.getByLabel("Source").selectOption(seed().sourceId);
-    await expect(page.getByLabel("Name")).toHaveValue(name, { timeout: 1_000 });
+    await expect(page.getByLabel("First name")).toHaveValue(name, { timeout: 1_000 });
   }).toPass();
 }
 

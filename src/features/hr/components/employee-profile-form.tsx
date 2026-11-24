@@ -1,5 +1,6 @@
 "use client";
 
+import { namePartsOf } from "@/lib/person-name";
 import { useId, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
@@ -11,7 +12,7 @@ import { createEmployeeRecordAction, saveEmployeeProfileAction, saveEmployeeReco
 
 type Profile = { designation: string | null; department: string | null; phoneCountryCode: string | null; phoneNumber: string | null; joiningDate: string | null };
 /** Name, email and employment status of staff without a CRM login (questionnaire Q1). */
-type RecordIdentity = { fullName: string; email: string | null; status: "active" | "inactive" };
+type RecordIdentity = { fullName: string; firstName?: string | null; lastName?: string | null; email: string | null; status: "active" | "inactive" };
 
 /**
  * FR-140 HR profile fields (super admin, admin, HR). Free text with suggestions from existing entries.
@@ -34,7 +35,7 @@ export function EmployeeProfileForm({
   const router = useRouter();
   const depList = useId();
   const desList = useId();
-  const [identity, setIdentity] = useState({ fullName: record?.fullName ?? "", email: record?.email ?? "", status: record?.status ?? "active" });
+  const [identity, setIdentity] = useState({ ...namePartsOf({ name: record?.fullName ?? "", firstName: record?.firstName, lastName: record?.lastName }), email: record?.email ?? "", status: record?.status ?? "active" });
   const [values, setValues] = useState({
     designation: profile.designation ?? "",
     department: profile.department ?? "",
@@ -76,8 +77,11 @@ export function EmployeeProfileForm({
     >
       {record ? (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="Full name" error={errors.fullName}>
-            {(id, d) => <Input id={id} aria-describedby={d} invalid={Boolean(errors.fullName)} maxLength={100} value={identity.fullName} disabled={pending} onChange={(e) => setIdentity((v) => ({ ...v, fullName: e.target.value }))} />}
+          <Field label="First name" required error={errors.fullName}>
+            {(id, d) => <Input id={id} aria-describedby={d} invalid={Boolean(errors.fullName)} maxLength={60} value={identity.firstName} disabled={pending} onChange={(e) => setIdentity((v) => ({ ...v, firstName: e.target.value }))} />}
+          </Field>
+          <Field label="Last name">
+            {(id, d) => <Input id={id} aria-describedby={d} maxLength={60} value={identity.lastName} disabled={pending} onChange={(e) => setIdentity((v) => ({ ...v, lastName: e.target.value }))} />}
           </Field>
           <Field label="Email" error={errors.email} hint="Optional. Not used to sign in.">
             {(id, d) => <Input id={id} type="email" aria-describedby={d} invalid={Boolean(errors.email)} maxLength={254} value={identity.email} disabled={pending} onChange={(e) => setIdentity((v) => ({ ...v, email: e.target.value }))} />}

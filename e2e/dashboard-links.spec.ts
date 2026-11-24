@@ -47,15 +47,16 @@ test("the team filter carries through to the list; Open pipeline now links", asy
   expect(list.data.teamName).toBe("Team 1");
 });
 
-test("the Won and Regenerated tiles keep the range; a manager can't widen a list with another team", async ({ page }) => {
+test("the Conversion tile keeps the range; a manager can't widen a list with another team", async ({ page }) => {
   await selectTestProject(page.context());
   await login(page, "manager");
   await page.goto("/dashboard?range=7d");
-  await page.locator('[data-kpi="Won / Lost"]').click();
+  await page.locator('[data-kpi="Conversion"]').click();
   await page.waitForURL(/\/dashboard\/leads\/won\?.*createdFrom=/);
+  // Regenerated left Executive Essentials (client, 24 Nov 2026); its list stays under Leads.
   await page.goto("/dashboard?range=7d");
-  await page.locator('[data-kpi="Regenerated"]').click();
-  await page.waitForURL(/\/dashboard\/leads\/regenerated\?.*createdFrom=/);
+  await expect(page.locator('[data-kpi="Conversion"]')).toBeVisible();
+  await expect(page.locator('[data-kpi="Regenerated"]')).toHaveCount(0);
 
   const other = "00000000-0000-4000-8000-000000000000";
   const plain = await api<{ total: number; teamName: string | null }>(page, "/api/v1/leads");

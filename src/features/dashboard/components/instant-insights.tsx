@@ -3,14 +3,14 @@
 import { MapPin, Video } from "lucide-react";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardHeader, Eyebrow, Panel } from "@/components/ui/card";
+import { Card, CardHeader, Panel } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ProgressBar } from "@/components/ui/progress";
 import { SegmentedControl } from "@/components/ui/segmented";
 import { MiniStat, SummaryTile } from "@/components/ui/stat";
 import { cn } from "@/lib/cn";
 import { formatDate, formatInt, formatTime, NO_VALUE, percentOf } from "@/lib/format";
-import type { DashboardData, MeetingFormat, RangeKey, TargetLine } from "../types";
+import type { DashboardData, MeetingFormat, RangeKey } from "../types";
 import { compactRangeOptions } from "./range-options";
 
 const formatColors: Record<MeetingFormat["color"], { stroke: string; bg: string; bar: string }> = {
@@ -56,49 +56,8 @@ function Donut({ formats, centerLabel }: { formats: MeetingFormat[]; centerLabel
   );
 }
 
-/** "10 Nov" for "2026-11-10". */
-function shortDate(iso: string) {
-  return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }).format(new Date(`${iso}T00:00:00Z`));
-}
-
-function TargetColumn({ title, lines }: { title: string; lines: TargetLine[] }) {
-  return (
-    <div className="rounded-2xl border border-zinc-200/80 bg-zinc-50/50 p-2.5">
-      <p className="px-1 pb-2 text-[9px] font-black tracking-[0.1em] text-zinc-500 uppercase">{title}</p>
-      <div className="space-y-2">
-        {lines.map((line) => (
-          <div key={line.label} className="rounded-xl border border-zinc-200/80 bg-white px-2.5 py-2 shadow-hairline">
-            <div className="flex items-center justify-between gap-2 text-[11px] leading-4">
-              <span className="flex items-center gap-1 font-bold">
-                {line.label}
-                {line.met ? (
-                  <span className="rounded-full bg-brand/10 px-1.5 text-[9px] font-black tracking-[0.05em] text-brand uppercase" title="Target met">
-                    ✓ Met
-                  </span>
-                ) : null}
-              </span>
-              <span className="font-black tabular-nums">
-                {formatInt(line.actual)}
-                <span className="font-semibold text-zinc-400">
-                  {line.target ? ` / ${formatInt(line.target)}` : " · no target"}
-                </span>
-              </span>
-            </div>
-            <ProgressBar
-              className="mt-1.5"
-              value={line.target ? line.actual : 1}
-              max={line.target ?? 1}
-              label={`${line.label} progress`}
-            />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/** `own`: an agent's dashboard, which shows only their own score and targets (no team or project-wide panels). */
-export function InstantInsights({ data, own = false }: { data: DashboardData; own?: boolean }) {
+/** Team and project-wide charts, for Admins (an agent's score and targets are on their own dashboard). */
+export function InstantInsights({ data }: { data: DashboardData }) {
   const [range, setRange] = useState<RangeKey>("mtd");
   const { insights } = data;
   const mixTotal = data.meetingMix.reduce((sum, f) => sum + f.count, 0);
@@ -116,14 +75,13 @@ export function InstantInsights({ data, own = false }: { data: DashboardData; ow
           <Badge>Live</Badge>
         </div>
         <p className="text-[11px] leading-[16.5px] text-zinc-600">
-          {own ? "Your score and targets" : "Charts · Sales Teams MTD"} ·{" "}
+          Charts · Sales Teams MTD ·{" "}
           {data.insightsUpdatedAt
             ? `${formatDate(data.insightsUpdatedAt)}, ${formatTime(data.insightsUpdatedAt)}`
             : "waiting for data"}
         </p>
       </Card>
 
-      {own ? null : (
       <div className="grid grid-cols-2 gap-3.5 md:grid-cols-4">
         <MiniStat
           label="Teams"
@@ -142,13 +100,12 @@ export function InstantInsights({ data, own = false }: { data: DashboardData; ow
         <MiniStat label="Team meetings" value={formatInt(insights?.teamMeetings)} caption="Completed in the selected range" />
         <MiniStat label="Bookings" value={formatInt(insights?.bookings)} caption="Across top teams" />
       </div>
-      )}
 
-      <div className={own ? "grid grid-cols-1 gap-3.5" : "grid grid-cols-1 gap-3.5 lg:grid-cols-3"}>
+      <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-3">
         <Panel
-          title={data.scoreScope === "own" ? "Your performance score" : "Team performance scores"}
+          title="Team performance scores"
           badge={<Badge>Score</Badge>}
-          description={data.scoreScope === "own" ? "Your own assignment score; provisional while your history is small" : "Composite score by sales team"}
+          description="Composite score by sales team"
         >
           {data.teamScores.length === 0 ? (
             <EmptyState>No team scores.</EmptyState>
@@ -166,8 +123,6 @@ export function InstantInsights({ data, own = false }: { data: DashboardData; ow
             </ul>
           )}
         </Panel>
-        {own ? null : (
-          <>
         <Panel title="Meetings vs bookings" badge={<Badge>Output</Badge>} description="Top teams throughput">
           {data.teamOutput.length === 0 ? (
             <EmptyState>No team output.</EmptyState>
@@ -220,41 +175,9 @@ export function InstantInsights({ data, own = false }: { data: DashboardData; ow
             </div>
           )}
         </Panel>
-          </>
-        )}
       </div>
 
       <div className="grid grid-cols-1 gap-5">
-        {/* Targets are personal goals: shown on an agent's own dashboard only (15 Nov 2026). Admins see
-            each agent's targets on Targets, Performance and the agent's work profile. */}
-        {own ? (
-        <Card className="self-start p-4">
-          <Eyebrow className="text-xs leading-4">My Targets</Eyebrow>
-          <p className="mt-0.5 text-[11px] text-zinc-600">Daily, weekly, monthly and campaign goals vs your activity.</p>
-          {data.targets ? (
-            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <TargetColumn title="Today" lines={data.targets.today} />
-              <TargetColumn title="This week" lines={data.targets.week} />
-              <TargetColumn title="This month" lines={data.targets.month} />
-            </div>
-          ) : null}
-          {data.targets?.custom?.length ? (
-            // Custom-period targets running today (15 Nov 2026).
-            <div className="mt-3 grid grid-cols-1 gap-3 border-t border-zinc-100 pt-3 sm:grid-cols-3">
-              {data.targets.custom.map((c) => (
-                <TargetColumn key={`${c.start}-${c.end}`} title={`${shortDate(c.start)} – ${shortDate(c.end)}`} lines={c.lines} />
-              ))}
-            </div>
-          ) : null}
-          {data.targets ? null : (
-            <EmptyState size="sm" className="mt-3">
-              No targets set for you yet.
-            </EmptyState>
-          )}
-        </Card>
-        ) : null}
-
-        {own ? null : (
         <Card className="overflow-hidden">
           <CardHeader
             title="Meetings Distribution"
@@ -307,7 +230,6 @@ export function InstantInsights({ data, own = false }: { data: DashboardData; ow
             </div>
           </div>
         </Card>
-        )}
       </div>
     </div>
   );

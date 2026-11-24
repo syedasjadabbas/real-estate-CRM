@@ -7,6 +7,7 @@ import { auditLogs, budgetRanges, cities, leadImportBatches, leadImportRows, lea
 import type { Actor } from "@/server/auth/types";
 import { AppError, forbidden, notFound } from "@/server/errors";
 import { notify } from "@/modules/notifications/service";
+import { joinName } from "@/lib/person-name";
 import { createLead } from "./commands";
 import { PRIORITIES } from "./constants";
 import { normalizePhone } from "./phone";
@@ -18,8 +19,9 @@ import { leadFieldsSchema } from "./validation";
  * the live leads or the assignment pool until a Super Admin approves the batch. Manual leads never
  * go through batches.
  */
-export const LEAD_IMPORT_COLUMNS = ["name", "phone_country_code", "phone", "phone2", "phone3", "phone4", "phone5", "email", "source", "city", "budget", "priority", "size", "gender", "note"] as const;
-const REQUIRED = ["name", "phone", "source"] as const;
+export const LEAD_IMPORT_COLUMNS = ["first_name", "last_name", "phone_country_code", "phone", "phone2", "phone3", "phone4", "phone5", "email", "source", "city", "budget", "priority", "size", "gender", "note"] as const;
+/** Files made before 23 Nov 2026 have one name column instead; they still import. */
+const REQUIRED = ["first_name", "phone", "source"] as const;
 
 /**
  * Bulk import is an Admin and Super Admin task (owner's decision, 13 Nov 2026); agents and managers
@@ -70,8 +72,10 @@ function validateRow(
   }
   const priority = get("priority").toLowerCase() || "none";
   if (!(PRIORITIES as readonly string[]).includes(priority)) errors.push(`Priority: use ${PRIORITIES.join(", ")}`);
+  const named = get("first_name") || get("last_name");
   const data: RowData = {
-    name: get("name"),
+    name: named ? (get("first_name") ? joinName(get("first_name"), get("last_name")) : "") : get("name"),
+    ...(get("first_name") ? { firstName: get("first_name"), lastName: get("last_name") } : {}),
     phoneCountryCode: countryCode,
     phoneNumber: get("phone"),
     phones: extras,
@@ -93,7 +97,11 @@ function validateRow(
       errors.push(`${field}: ${issue.message}`);
     }
   }
-  for (const k of REQUIRED) if (!get(k)) errors.push(`${k === "phone" ? "Phone" : k[0].toUpperCase() + k.slice(1)} is required`);
+  for (const k of REQUIRED) {
+    if (k === "first_name") {
+      if (!data.name) errors.push("First name is required");
+    } else if (!get(k)) errors.push(`${k === "phone" ? "Phone" : "Source"} is required`);
+  }
   return { data, numbers, errors: [...new Set(errors)] };
 }
 
@@ -115,7 +123,7 @@ export async function submitImport(db: Database, actor: Actor, input: { projectI
   const [header, ...body] = parsed;
   if (!header) throw fail("The file is empty");
   const columns = header.cells.map((c) => c.trim().toLowerCase());
-  const missing = REQUIRED.filter((c) => !columns.includes(c));
+  const missing = REQUIRED.filter((c) => !columns.includes(c) && !(c === "first_name" && columns.includes("name")));
   if (missing.length) throw fail(`Missing column${missing.length > 1 ? "s" : ""}: ${missing.join(", ")}. Expected: ${LEAD_IMPORT_COLUMNS.join(", ")}`);
   if (body.length === 0) throw fail("The file has no rows");
   if (body.length > MAX_IMPORT_ROWS) throw fail(`Use at most ${MAX_IMPORT_ROWS} rows per file`);

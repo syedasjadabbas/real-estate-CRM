@@ -6,7 +6,6 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { brand } from "@/config/brand";
 import { navigation, type NavGroup } from "@/config/navigation";
-import { Avatar } from "@/components/ui/avatar";
 import { Kbd } from "@/components/ui/input";
 import { cn } from "@/lib/cn";
 import type { SessionUser } from "@/lib/session";
@@ -195,12 +194,7 @@ export function Sidebar({
             <ActiveNavGroups groups={groups} onNavigate={onNavigate} collapsed />
           </Suspense>
         </nav>
-        <div className="flex shrink-0 flex-col items-center gap-3 border-t border-white/10 p-3">
-          {toggleButton}
-          <span title={user?.name ?? undefined}>
-            <Avatar name={user?.name} presence={Boolean(user)} />
-          </span>
-        </div>
+        {toggleButton ? <div className="shrink-0 border-t border-white/10 p-3">{toggleButton}</div> : null}
         {/* Keeps "/" working while collapsed: it expands the menu and focuses the search. */}
         <input ref={searchRef} type="search" value={query} onChange={(event) => setQuery(event.target.value)} aria-hidden="true" tabIndex={-1} className="sr-only" />
       </div>
@@ -250,27 +244,7 @@ export function Sidebar({
         ) : null}
       </nav>
 
-      {/* User card */}
-      <div className="shrink-0 space-y-2.5 border-t border-white/10 p-3.5">
-        {toggleButton}
-        <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-3">
-          <div className="flex items-center gap-3">
-            <Avatar name={user?.name} presence={Boolean(user)} />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm leading-[17.5px] font-bold text-zinc-100">
-                {user?.name ?? "Loading…"}
-              </p>
-              <p className="truncate text-xs leading-[15px] font-medium text-zinc-400">
-                {user?.email ?? " "}
-              </p>
-            </div>
-          </div>
-          <div className="mt-2.5 flex items-center justify-between border-t border-white/10 pt-2 text-xs leading-4 font-bold">
-            <span className="text-zinc-500">Workspace</span>
-            <span className="truncate text-[#f5d27a]">{brand.name}</span>
-          </div>
-        </div>
-      </div>
+      {toggleButton ? <div className="shrink-0 border-t border-white/10 p-3.5">{toggleButton}</div> : null}
     </div>
   );
 }

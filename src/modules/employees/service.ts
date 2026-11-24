@@ -1,4 +1,5 @@
 import { and, asc, count, desc, eq, ilike, isNotNull, or, sql } from "drizzle-orm";
+import { nameFromParts } from "@/lib/person-name";
 import { alias } from "drizzle-orm/pg-core";
 import type { Database } from "@/server/db";
 import { auditLogs, employeeProfiles, users } from "@/server/db/schema";
@@ -120,6 +121,8 @@ export async function getEmployee(db: Database, actor: Actor, id: string) {
   const [row] = await db
     .select({
       id: empId,
+      firstName: sql<string | null>`coalesce(${users.firstName}, ${employeeProfiles.firstName})`,
+      lastName: sql<string | null>`case when ${users.id} is not null then ${users.lastName} else ${employeeProfiles.lastName} end`,
       profileId: employeeProfiles.id,
       hasLogin: sql<boolean>`${users.id} is not null`,
       name: empName,
@@ -225,14 +228,15 @@ function applyRecordInput(base: RecordValues, data: ReturnType<typeof recordSche
 /** Adds an HR record for a staff member without a CRM login (Q1; super admin, admin, HR). */
 export async function createEmployeeRecord(db: Database, actor: Actor, input: unknown) {
   assertCanEditEmployeeProfiles(actor);
-  const data = parse(recordSchema, input);
+  const named = nameFromParts(input, "fullName");
+  const data = parse(recordSchema, named.input);
   if (!data.fullName) throw new AppError("VALIDATION_FAILED", "Check the highlighted fields.", { fields: { fullName: "Enter a name" } });
   const empty = Object.fromEntries(RECORD_FIELDS.map((k) => [k, null])) as RecordValues;
   const next = applyRecordInput({ ...empty, status: "active" }, data);
   return db.transaction(async (tx) => {
     const [row] = await tx
       .insert(employeeProfiles)
-      .values({ ...next, fullName: next.fullName!, status: next.status as "active" | "inactive", updatedById: actor.id })
+      .values({ ...next, ...named.parts, fullName: next.fullName!, status: next.status as "active" | "inactive", updatedById: actor.id })
       .returning({ id: employeeProfiles.id });
     await tx.insert(auditLogs).values({
       actorId: actor.id,
@@ -250,7 +254,8 @@ export async function createEmployeeRecord(db: Database, actor: Actor, input: un
 /** Edits an HR record without a CRM login: name, email, employment status and profile fields. */
 export async function saveEmployeeRecord(db: Database, actor: Actor, profileId: string, input: unknown) {
   assertCanEditEmployeeProfiles(actor);
-  const data = parse(recordSchema, input);
+  const named = nameFromParts(input, "fullName");
+  const data = parse(recordSchema, named.input);
   if (!/^[0-9a-f-]{36}$/i.test(profileId)) throw notFound("Employee");
   return db.transaction(async (tx) => {
     const [current] = await tx
@@ -262,11 +267,14 @@ export async function saveEmployeeRecord(db: Database, actor: Actor, profileId: 
     if (!current) throw notFound("Employee");
     const before = Object.fromEntries(RECORD_FIELDS.map((k) => [k, (current[k] as string | null) ?? null])) as RecordValues;
     const next = applyRecordInput(before, data);
-    const changed = RECORD_FIELDS.filter((k) => next[k] !== before[k]);
+    const changed: string[] = RECORD_FIELDS.filter((k) => next[k] !== before[k]);
+    const parts = named.parts;
+    const resplit = Boolean(parts && (parts.firstName !== current.firstName || parts.lastName !== (current.lastName || null)));
+    if (resplit && !changed.includes("fullName")) changed.push("firstName", "lastName");
     if (!changed.length) return { changed: [] as string[] };
     await tx
       .update(employeeProfiles)
-      .set({ ...next, fullName: next.fullName!, status: next.status as "active" | "inactive", updatedById: actor.id, updatedAt: new Date() })
+      .set({ ...next, ...parts, fullName: next.fullName!, status: next.status as "active" | "inactive", updatedById: actor.id, updatedAt: new Date() })
       .where(eq(employeeProfiles.id, profileId));
     await tx.insert(auditLogs).values({
       actorId: actor.id,
@@ -274,8 +282,8 @@ export async function saveEmployeeRecord(db: Database, actor: Actor, profileId: 
       action: "employee.record_update",
       entity: "employee_profile",
       entityId: profileId,
-      before: Object.fromEntries(changed.map((k) => [k, before[k]])),
-      after: Object.fromEntries(changed.map((k) => [k, next[k]])),
+      before: Object.fromEntries(changed.map((k) => [k, current[k as keyof typeof current]])),
+      after: Object.fromEntries(changed.map((k) => [k, ({ ...next, ...parts } as Record<string, unknown>)[k]])),
     });
     return { changed: changed as string[] };
   });

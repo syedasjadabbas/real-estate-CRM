@@ -72,33 +72,23 @@ export function Header({
   return (
     <header className="sticky top-0 z-30 border-b border-zinc-200/60 bg-white/95 backdrop-blur-sm">
       <div className="flex min-h-14 flex-wrap items-center gap-x-4 gap-y-2 px-3 py-3 sm:flex-nowrap sm:px-6 sm:py-0">
-        {/* Left: menu toggle + user chip */}
-        <div className="flex min-w-0 items-center gap-3">
-          <IconButton
-            label={sidebarOpen ? "Collapse menu" : "Expand menu"}
-            aria-expanded={sidebarOpen}
-            aria-controls="app-sidebar"
-            onClick={onToggleSidebar}
-          >
-            <Menu aria-hidden="true" className="size-5" />
-          </IconButton>
-          <div className="flex h-[39px] min-w-0 items-center gap-2.5 rounded-xl border border-zinc-200/80 bg-zinc-50/50 py-1 pr-1 pl-1.5 shadow-hairline sm:pr-3">
-            <Avatar name={user?.name} size="sm" presence={Boolean(user)} />
-            <div className="hidden min-w-0 sm:block">
-              <p className="truncate text-xs leading-[15px] font-bold">{user?.name ?? "Loading…"}</p>
-              <p className="hidden truncate text-[10px] leading-[13px] font-medium text-zinc-600 lg:block">
-                {user?.email ?? " "}
-              </p>
-            </div>
-          </div>
-        </div>
+        {/* Phones and tablets open the menu here; on desktop the sidebar has its own collapse button (23 Nov 2026). */}
+        <IconButton
+          label={sidebarOpen ? "Close menu" : "Open menu"}
+          className="lg:hidden"
+          aria-expanded={sidebarOpen}
+          aria-controls="app-sidebar"
+          onClick={onToggleSidebar}
+        >
+          <Menu aria-hidden="true" className="size-5" />
+        </IconButton>
 
         {/* Center: project scope (moves to its own row on phones) */}
         <div className="order-last flex w-full justify-center px-1 sm:order-none sm:w-auto sm:flex-1">
           <ProjectSelector projects={projects} activeProjectId={activeProjectId} loading={!user} />
         </div>
 
-        {/* Right: notifications + session action */}
+        {/* Right: notifications, the signed-in user and Log out */}
         <div className="ml-auto flex items-center gap-3 sm:ml-0">
           {user && (user.role === "super_admin" || user.role === "admin") ? (
             <Link
@@ -117,6 +107,13 @@ export function Header({
               <Bell aria-hidden="true" className="size-[18px]" />
             </IconButton>
           )}
+          <div title={user?.email} className="flex h-[39px] min-w-0 items-center gap-2.5 rounded-xl border border-zinc-200/80 bg-zinc-50/50 py-1 pr-1 pl-1.5 shadow-hairline xl:pr-3">
+            <Avatar name={user?.name} size="sm" presence={Boolean(user)} />
+            <div className="hidden min-w-0 xl:block">
+              <p className="max-w-40 truncate text-xs leading-[15px] font-bold">{user?.name ?? "Loading…"}</p>
+              <p className="max-w-40 truncate text-[10px] leading-[13px] font-medium text-zinc-600">{user?.email ?? " "}</p>
+            </div>
+          </div>
           {user ? (
             <form action={logoutAction}>
               <button

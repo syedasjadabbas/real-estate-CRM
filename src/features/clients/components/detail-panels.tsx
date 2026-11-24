@@ -20,6 +20,7 @@ import {
   scheduleClientFollowUpAction,
   updateClientAction,
 } from "../actions";
+import { namePartsOf } from "@/lib/person-name";
 import { ClientFields, type ClientFormValues } from "./client-fields";
 
 function Status({ message, ok }: { message: string | null; ok?: boolean }) {
@@ -34,7 +35,7 @@ function Status({ message, ok }: { message: string | null; ok?: boolean }) {
 export function EditClientForm({ detail, cities }: { detail: ClientDetail; cities: { id: string; name: string }[] }) {
   const { client } = detail;
   const initial: ClientFormValues = {
-    name: client.name,
+    ...namePartsOf(client),
     phoneCountryCode: client.phoneCountryCode,
     phoneNumber: client.phoneNumber,
     email: client.email ?? "",

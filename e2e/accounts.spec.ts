@@ -14,7 +14,7 @@ test("an admin creates a user who can sign in, then deactivates them and their s
   await admin.getByRole("link", { name: "New CRM user" }).click();
   await admin.waitForURL("**/dashboard/hr/employees/new");
   const form = admin.getByRole("form", { name: "New CRM user" });
-  await form.getByLabel("Name").fill("E2E Created Agent");
+  await form.getByLabel("First name").fill("E2E Created Agent");
   await form.getByLabel("Email").fill(email);
   await form.getByLabel("Role").selectOption("agent");
   await form.getByLabel("Initial password").fill(password);

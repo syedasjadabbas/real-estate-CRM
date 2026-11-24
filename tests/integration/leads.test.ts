@@ -95,7 +95,7 @@ describe.skipIf(!hasTestDb)("Leads module (PostgreSQL integration)", () => {
       const result = await createLead(db, f.actors.agent1, leadInput(f, { name: "Ali Raza", note: "Interested in 1 bed" }));
       expect(result.outcome).toBe("created");
       if (result.outcome !== "created") return;
-      expect(result.code).toMatch(/^[A-Z]{8}$/);
+      expect(result.code).toMatch(/^(?=.*[A-Z])(?=.*[0-9])[A-Z0-9]{8}$/);
 
       const detail = await getLeadDetail(db, f.actors.agent1, result.leadId);
       expect(detail.lead.name).toBe("Ali Raza");

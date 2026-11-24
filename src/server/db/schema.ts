@@ -135,6 +135,9 @@ export const users = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     name: text("name").notNull(),
+    /** Kept in step with name by a trigger (migration 0059). */
+    firstName: text("first_name"),
+    lastName: text("last_name"),
     email: text("email").notNull(),
     passwordHash: text("password_hash").notNull(),
     role: userRole("role").notNull(),
@@ -271,6 +274,9 @@ export const leads = pgTable(
       .references(() => projects.id, { onDelete: "restrict" }),
     ownerId: uuid("owner_id").references(() => users.id, { onDelete: "restrict" }),
     name: text("name").notNull(),
+    /** Kept in step with name by a trigger (migration 0059). */
+    firstName: text("first_name"),
+    lastName: text("last_name"),
     phoneCountryCode: text("phone_country_code").notNull(),
     phoneNumber: text("phone_number").notNull(),
     phoneE164: text("phone_e164").notNull(),
@@ -315,7 +321,7 @@ export const leads = pgTable(
     index("leads_project_phone_idx").on(t.projectId, t.phoneE164),
     index("leads_next_follow_up_idx").on(t.nextFollowUpAt),
     index("leads_client_idx").on(t.clientId),
-    check("leads_code_format", sql`${t.code} ~ '^[A-Z]{8}$'`),
+    check("leads_code_format", sql`${t.code} ~ '^[A-Z0-9]{8}$'`),
     check("leads_phone_e164_format", sql`${t.phoneE164} ~ '^\\+[1-9][0-9]{6,14}$'`),
     check("leads_not_self_duplicate", sql`${t.duplicateOfId} is null or ${t.duplicateOfId} <> ${t.id}`),
   ],
@@ -1179,6 +1185,9 @@ export const employeeProfiles = pgTable(
     userId: uuid("user_id").references(() => users.id, { onDelete: "restrict" }),
     /** Name, email and employment status of staff without a CRM login; accounts use `users`. */
     fullName: text("full_name"),
+    /** Kept in step with full_name by a trigger (migration 0059). */
+    firstName: text("first_name"),
+    lastName: text("last_name"),
     email: text("email"),
     status: userStatus("status").notNull().default("active"),
     designation: text("designation"),
@@ -1272,6 +1281,9 @@ export const clients = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     name: text("name").notNull(),
+    /** Kept in step with name by a trigger (migration 0059). */
+    firstName: text("first_name"),
+    lastName: text("last_name"),
     phoneCountryCode: text("phone_country_code").notNull(),
     phoneNumber: text("phone_number").notNull(),
     phoneE164: text("phone_e164").notNull(),

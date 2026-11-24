@@ -1,12 +1,8 @@
 "use client";
 
-import { ArrowRight, Inbox, RefreshCw, TrendingUp, Activity, CircleCheck } from "lucide-react";
-import Link from "next/link";
+import { AlarmClock, Building2, CircleCheck, Gauge, Inbox, TrendingUp } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { Badge } from "@/components/ui/badge";
-import { Card, Eyebrow } from "@/components/ui/card";
-import { EmptyState } from "@/components/ui/empty-state";
 import { ProgressBar, StackedBar } from "@/components/ui/progress";
 import { SegmentedControl } from "@/components/ui/segmented";
 import { KpiCard } from "@/components/ui/stat";
@@ -18,28 +14,21 @@ import { rangeOptions } from "./range-options";
 /** Stages the Open pipeline tile counts: everything but Booked and Lost. */
 const OPEN_STAGES = LEAD_STAGES.filter((s) => s !== "booked" && s !== "lost_lead").join(",");
 
-function SplitLegend({ open, won, lost }: { open: number | null; won: number | null; lost: number | null }) {
+/** Won, lost and open as numbers, so the conversion rate reads with what it is made of. */
+function OutcomeLegend({ open, won, lost }: { open: number; won: number; lost: number }) {
   const items = [
-    { label: "Open", value: open, className: "text-amber-600", align: "text-left" },
-    { label: "Won", value: won, className: "text-brand", align: "text-center" },
-    { label: "Lost", value: lost, className: "text-rose-600", align: "text-right" },
+    { label: "Won", value: won, className: "text-brand", bar: "bg-brand", align: "text-left" },
+    { label: "Lost", value: lost, className: "text-rose-600", bar: "bg-rose-500", align: "text-center" },
+    { label: "Open", value: open, className: "text-amber-600", bar: "bg-amber-400", align: "text-right" },
   ];
   return (
     <div>
-      <StackedBar
-        segments={[
-          { label: "Open", value: open ?? 0, className: "bg-amber-400" },
-          { label: "Won", value: won ?? 0, className: "bg-brand" },
-          { label: "Lost", value: lost ?? 0, className: "bg-rose-500" },
-        ]}
-      />
+      <StackedBar segments={items.map((i) => ({ label: i.label, value: i.value, className: i.bar }))} />
       <dl className="mt-1.5 grid grid-cols-3 text-[11px] leading-[13.75px] font-black tabular-nums">
         {items.map((item) => (
           <div key={item.label} className={item.align}>
-            <dd className={item.className}>{formatPct(item.value)}</dd>
-            <dt className="text-[9px] leading-[11.25px] font-bold tracking-[0.05em] text-zinc-400 uppercase">
-              {item.label}
-            </dt>
+            <dd className={item.className}>{formatInt(item.value)}</dd>
+            <dt className="text-[9px] leading-[11.25px] font-bold tracking-[0.05em] text-zinc-400 uppercase">{item.label}</dt>
           </div>
         ))}
       </dl>
@@ -75,7 +64,7 @@ export function ExecutiveEssentials({ data, filters = { range: "mtd" }, own = fa
     setCustomOpen(false);
     go({ range: value, team: filters.team });
   };
-  const maxProject = Math.max(1, ...data.topProjects.map((p) => p.count));
+  const ownScore = data.scoreScope === "own" ? data.teamScores[0] : undefined;
   // KPI tiles open the matching list: the same leads, window and team (MODULES_AND_FEATURES §1, FR-010).
   const listHref = (path: string, extra: Record<string, string> = {}) => {
     if (data.isSample) return undefined;
@@ -95,7 +84,7 @@ export function ExecutiveEssentials({ data, filters = { range: "mtd" }, own = fa
       </div>
 
       <div className="mt-4 space-y-4">
-        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-5 [&>*:last-child]:sm:col-span-2 [&>*:last-child]:xl:col-span-1">
           <KpiCard
             icon={Inbox}
             category="Pipeline"
@@ -103,17 +92,18 @@ export function ExecutiveEssentials({ data, filters = { range: "mtd" }, own = fa
             href={listHref("/dashboard/leads")}
             linkLabel="Open the leads list for these days"
             value={formatCompact(kpis?.totalLeads)}
-            caption="Active portfolio leads"
-            footer={
-              <SplitLegend open={kpis?.openPct ?? null} won={kpis?.wonPct ?? null} lost={kpis?.lostPct ?? null} />
-            }
+            caption={`${kpis ? formatInt(kpis.awaitingFirstTouch) : NO_VALUE} awaiting first touch`}
           />
+          {/* Conversion and Outcomes are one box, with the numbers behind the rate (client, 23 Nov 2026). */}
           <KpiCard
-            icon={Activity}
-            category="Performance"
-            label="Conversion rate"
+            icon={CircleCheck}
+            category="Outcomes"
+            label="Conversion"
+            href={listHref("/dashboard/leads/won")}
+            linkLabel="Open won leads for these days"
             value={<span className="text-brand">{formatPct(kpis?.conversionRate)}</span>}
-            caption={`Win on decided: ${formatPct(kpis?.winOnDecided)}`}
+            caption={kpis ? `${formatInt(kpis.won)} won of ${formatInt(kpis.totalLeads)} leads` : NO_VALUE}
+            footer={kpis ? <OutcomeLegend open={kpis.openPipeline} won={kpis.won} lost={kpis.lost} /> : undefined}
           />
           <KpiCard
             icon={TrendingUp}
@@ -123,34 +113,41 @@ export function ExecutiveEssentials({ data, filters = { range: "mtd" }, own = fa
             href={listHref("/dashboard/leads", { stage: OPEN_STAGES })}
             linkLabel="Open the leads still in progress for these days"
             value={<span className="text-amber-800">{formatCompact(kpis?.openPipeline)}</span>}
-            caption={`${formatPct(kpis?.openPipelinePct)} still active`}
+            caption="Leads not yet won or lost"
           />
           <KpiCard
-            icon={CircleCheck}
-            tone="neutral"
-            category="Outcomes"
-            label="Won / Lost"
-            href={listHref("/dashboard/leads/won")}
-            linkLabel="Open won leads for these days"
-            value={
-              <>
-                <span className="text-brand">{formatInt(kpis?.won)}</span>
-                <span className="mx-1 text-zinc-300">/</span>
-                <span className="text-rose-600">{formatInt(kpis?.lost)}</span>
-              </>
-            }
-            caption={`${formatPct(kpis?.attritionPct)} attrition rate`}
+            icon={AlarmClock}
+            tone="rose"
+            category="Action now"
+            label="Overdue follow-ups"
+            href={data.followUps && !data.isSample ? "/dashboard/leads/todos?bucket=overdue" : undefined}
+            linkLabel="Open overdue follow-ups"
+            value={<span className="text-rose-600">{formatInt(data.followUps?.overdue)}</span>}
+            caption={`${data.followUps ? formatInt(data.followUps.today) : NO_VALUE} due today`}
           />
-          <KpiCard
-            icon={RefreshCw}
-            tone="sky"
-            category="Re-inquiries"
-            label="Regenerated"
-            href={listHref("/dashboard/leads/regenerated")}
-            linkLabel="Open regenerated leads for these days"
-            value={<span className="text-sky-800">{formatInt(kpis?.regenerated)}</span>}
-            caption={`${kpis ? formatInt(kpis.awaitingFirstTouch) : NO_VALUE} awaiting first touch`}
-          />
+          {own ? (
+            <KpiCard
+              icon={Gauge}
+              category="Score"
+              label="Your performance score"
+              href={ownScore && !data.isSample ? "/dashboard/performance" : undefined}
+              linkLabel="Open my performance"
+              value={formatInt(ownScore?.count)}
+              caption={ownScore?.provisional ? "Out of 100 · provisional while your history is small" : "Out of 100"}
+              footer={ownScore ? <ProgressBar value={ownScore.count} max={100} label="Your score" /> : undefined}
+            />
+          ) : (
+            <KpiCard
+              icon={Building2}
+              tone="neutral"
+              category="Organization"
+              label="Active projects"
+              href="/dashboard/projects"
+              linkLabel="Open projects"
+              value={formatInt(data.activeProjects)}
+              caption="Projects open for leads"
+            />
+          )}
         </div>
 
         <div>
@@ -201,62 +198,6 @@ export function ExecutiveEssentials({ data, filters = { range: "mtd" }, own = fa
           ) : null}
           {data.teams.length === 0 && !own ? <p className="mt-3 text-sm text-zinc-600">No teams in your scope.</p> : null}
           {pending ? <p role="status" className="mt-2 text-xs font-semibold text-zinc-500">Updating…</p> : null}
-        </div>
-
-        <div className={own ? "grid grid-cols-1 gap-3.5" : "grid grid-cols-1 gap-3.5 lg:grid-cols-2"}>
-          {own ? null : (
-          <Card className="p-5">
-            <div className="flex items-center justify-between border-b border-zinc-100 pb-3">
-              <Eyebrow>Organization Health</Eyebrow>
-              <Badge tone="neutral" className="px-2.5">
-                Active
-              </Badge>
-            </div>
-            <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <Link
-                href="/dashboard/projects"
-                className="rounded-xl border border-zinc-200/80 bg-zinc-50/50 p-3 transition-colors hover:bg-zinc-50"
-              >
-                <p className="text-[10px] leading-[15px] font-black tracking-[0.05em] text-zinc-400 uppercase">
-                  Projects
-                </p>
-                <p className="text-2xl leading-8 font-black tabular-nums">{formatInt(data.activeProjects)}</p>
-              </Link>
-            </div>
-          </Card>
-          )}
-
-          <Card className="p-5">
-            <div className="flex items-center justify-between border-b border-zinc-100 pb-3">
-              <Eyebrow>{own ? "Your leads by project" : "Top Projects · Lead Volume"}</Eyebrow>
-              <Link
-                href="/dashboard/leads"
-                className="inline-flex items-center gap-1 text-[10px] font-black tracking-[0.1em] text-zinc-600 uppercase hover:text-brand"
-              >
-                All leads <ArrowRight aria-hidden="true" className="size-3" />
-              </Link>
-            </div>
-            <div className="mt-3 space-y-2">
-              {data.topProjects.length === 0 ? (
-                <EmptyState size="sm">No project lead volume yet.</EmptyState>
-              ) : (
-                data.topProjects.map((project, index) => (
-                  <div key={project.id} className="rounded-xl border border-zinc-200/80 px-2.5 py-2 shadow-hairline">
-                    <div className="flex items-center justify-between gap-2 text-xs leading-4">
-                      <span className="flex min-w-0 items-center gap-2">
-                        <span className="rounded-md bg-brand-50 px-1.5 py-0.5 text-[9px] font-black text-brand">
-                          {String(index + 1).padStart(2, "0")}
-                        </span>
-                        <span className="truncate font-bold">{project.label}</span>
-                      </span>
-                      <span className="shrink-0 font-black tabular-nums">{formatCompact(project.count)} leads</span>
-                    </div>
-                    <ProgressBar value={project.count} max={maxProject} className="mt-2" label={project.label} />
-                  </div>
-                ))
-              )}
-            </div>
-          </Card>
         </div>
       </div>
     </section>

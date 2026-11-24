@@ -47,7 +47,7 @@ describe("normalizePhone", () => {
 
 describe("generateLeadCode", () => {
   it("produces 8 uppercase letters", () => {
-    for (let i = 0; i < 50; i += 1) expect(generateLeadCode()).toMatch(/^[A-Z]{8}$/);
+    for (let i = 0; i < 50; i += 1) expect(generateLeadCode()).toMatch(/^(?=.*[A-Z])(?=.*[0-9])[A-Z0-9]{8}$/);
   });
 });
 

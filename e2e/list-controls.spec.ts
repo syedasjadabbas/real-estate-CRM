@@ -11,7 +11,7 @@ test("dashboard KPI tiles open the matching list for the same days", async ({ pa
   await page.locator('[data-kpi="Total leads"]').click();
   await page.waitForURL(`**/dashboard/leads?from=${today}&to=${today}`);
   await page.goto(`/dashboard?range=custom&from=${today}&to=${today}`);
-  await page.locator('[data-kpi="Won / Lost"]').click();
+  await page.locator('[data-kpi="Conversion"]').click();
   await page.waitForURL(`**/dashboard/leads/won?from=${today}&to=${today}`);
 });
 

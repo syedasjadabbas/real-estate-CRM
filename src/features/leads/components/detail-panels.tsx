@@ -24,6 +24,7 @@ import { ROLE_LABELS } from "@/server/auth/types";
 import { formatDateTime } from "../format";
 import { ApprovalActions } from "./approval-actions";
 import { FollowUpForm, textareaClass } from "./follow-up-dialog";
+import { namePartsOf } from "@/lib/person-name";
 import { LeadFields, selectClass, type LeadFormValues } from "./lead-fields";
 import { RatingStars } from "./rating-stars";
 
@@ -440,7 +441,7 @@ export function ReviewsPanel({ detail, recordings = [] }: { detail: LeadDetail; 
 export function EditDetailsForm({ detail, lookups }: { detail: LeadDetail; lookups: LeadLookups }) {
   const { lead } = detail;
   const initial: LeadFormValues = {
-    name: lead.name,
+    ...namePartsOf(lead),
     phoneCountryCode: lead.phoneCountryCode,
     phoneNumber: lead.phoneNumber,
     email: lead.email ?? "",

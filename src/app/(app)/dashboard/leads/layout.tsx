@@ -18,11 +18,31 @@ async function RoleTabs() {
   return <LeadsTabs showImports={canSubmitImport(actor)} showUnassigned={canListUnassigned(actor)} verifyCount={verifyCount} />;
 }
 
+/** The project these leads belong to (client, 23 Nov 2026); streams in, as it depends on the user. */
+async function ActiveProject() {
+  const { projects, activeProjectId } = await getProjectScope();
+  const name = projects.find((p) => p.id === activeProjectId)?.name;
+  return name ? (
+    <span title="Active project" className="rounded-full border border-brand/25 bg-brand-50 px-3 py-1 text-sm leading-5 font-black text-brand-700">
+      {name}
+    </span>
+  ) : null;
+}
+
 export default function LeadsLayout({ children }: LayoutProps<"/dashboard/leads">) {
   const item = findNavItem("/dashboard/leads")!;
   return (
     <PageStack>
-      <PageHeader title={item.label} description={item.description} icon={item.icon} />
+      <PageHeader
+        title={item.label}
+        description={item.description}
+        icon={item.icon}
+        actions={
+          <Suspense fallback={null}>
+            <ActiveProject />
+          </Suspense>
+        }
+      />
       {/* Same tabs every role starts with, until the user's own tabs arrive (instant navigation). */}
       <Suspense fallback={<LeadsTabs />}>
         <RoleTabs />

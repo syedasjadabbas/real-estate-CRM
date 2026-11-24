@@ -14,7 +14,7 @@ test("a manager creates a lead for an agent; the agent is notified and can mark 
   const manager = await managerCtx.newPage();
   await login(manager, "manager");
   await manager.goto("/dashboard/leads/new");
-  await manager.getByLabel("Name").fill(name);
+  await manager.getByLabel("First name").fill(name);
   await manager.getByLabel("Mobile number").fill(uniquePhone());
   await manager.getByLabel("Source").selectOption(s.sourceId);
   await manager.getByLabel("Owner").selectOption(s.users.agent1.id);

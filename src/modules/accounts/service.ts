@@ -6,6 +6,7 @@ import { hashPassword } from "@/server/auth/password";
 import { AppError, notFound } from "@/server/errors";
 import { assignLead } from "@/modules/leads/commands";
 import { isUniqueViolation } from "@/modules/leads/support";
+import { nameFromParts } from "@/lib/person-name";
 import { parseTask as parse } from "@/modules/tasks/support";
 import { assertCanManageAccount, assertCanManageAccounts, assertNotSelf } from "./policy";
 import { accountStatusSchema, createAccountSchema, reassignLeadsSchema, resetPasswordSchema, updateAccountSchema } from "./validation";
@@ -16,7 +17,7 @@ const fieldError = (field: string, message: string) => new AppError("VALIDATION_
 
 async function loadUser(db: Database | Tx, userId: string, lock = false) {
   if (!/^[0-9a-f-]{36}$/i.test(userId)) throw notFound("User");
-  const q = db.select({ id: users.id, name: users.name, email: users.email, role: users.role, status: users.status }).from(users).where(eq(users.id, userId)).limit(1);
+  const q = db.select({ id: users.id, name: users.name, firstName: users.firstName, lastName: users.lastName, email: users.email, role: users.role, status: users.status }).from(users).where(eq(users.id, userId)).limit(1);
   const [user] = lock ? await q.for("update") : await q;
   if (!user) throw notFound("User");
   return user;
@@ -53,14 +54,15 @@ async function assertRoleFitsTeams(tx: Tx, userId: string, nextRole: Role) {
 /** Creates a CRM account (Admin / Super Admin). The password is hashed and never returned or audited. */
 export async function createAccount(db: Database, actor: Actor, input: unknown) {
   assertCanManageAccounts(actor);
-  const data = parse(createAccountSchema, input);
+  const named = nameFromParts(input);
+  const data = parse(createAccountSchema, named.input);
   assertCanManageAccount(actor, data.role);
   const passwordHash = await hashPassword(data.password);
   try {
     return await db.transaction(async (tx) => {
       const [taken] = await tx.select({ id: users.id }).from(users).where(sql`lower(${users.email}) = ${data.email}`).limit(1);
       if (taken) throw fieldError("email", "An account with this email already exists");
-      const [user] = await tx.insert(users).values({ name: data.name, email: data.email, role: data.role, passwordHash }).returning({ id: users.id });
+      const [user] = await tx.insert(users).values({ name: data.name, ...named.parts, email: data.email, role: data.role, passwordHash }).returning({ id: users.id });
       await writeAudit(tx, actor, "user.create", user.id, null, { name: data.name, email: data.email, role: data.role, status: "active", employeeRecordId: data.employeeRecordId });
       if (data.employeeRecordId) {
         // The HR record (profile fields and history) now belongs to this account.
@@ -84,7 +86,8 @@ export async function createAccount(db: Database, actor: Actor, input: unknown) 
 /** Changes name and / or role. Role changes respect the Super Admin and team rules. */
 export async function updateAccount(db: Database, actor: Actor, userId: string, input: unknown) {
   assertCanManageAccounts(actor);
-  const data = parse(updateAccountSchema, input);
+  const named = nameFromParts(input);
+  const data = parse(updateAccountSchema, named.input);
   return db.transaction(async (tx) => {
     const user = await loadUser(tx, userId, true);
     const nextRole = data.role ?? user.role;
@@ -96,8 +99,16 @@ export async function updateAccount(db: Database, actor: Actor, userId: string, 
     }
     const next = { name: data.name ?? user.name, role: nextRole };
     const changed = (Object.keys(next) as (keyof typeof next)[]).filter((k) => next[k] !== user[k]);
+    // "Ali Raza | Khan" to "Ali | Raza Khan": the full name is the same, only the split moves.
+    const parts = named.parts;
+    const resplit = Boolean(parts && (parts.firstName !== user.firstName || parts.lastName !== (user.lastName || null)));
+    if (!changed.length && resplit) {
+      await tx.update(users).set(parts!).where(eq(users.id, userId));
+      await writeAudit(tx, actor, "user.update", userId, { firstName: user.firstName, lastName: user.lastName }, { ...parts });
+      return { changed: ["name"] };
+    }
     if (!changed.length) return { changed: [] as string[] };
-    await tx.update(users).set(next).where(eq(users.id, userId));
+    await tx.update(users).set({ ...next, ...parts }).where(eq(users.id, userId));
     // A new role changes what the person may see: end their sessions so it applies immediately.
     if (changed.includes("role")) await endSessions(tx, userId);
     await writeAudit(tx, actor, "user.update", userId, Object.fromEntries(changed.map((k) => [k, user[k]])), Object.fromEntries(changed.map((k) => [k, next[k]])));

@@ -81,7 +81,13 @@ describe.skipIf(!hasTestDb)("Dashboard analytics (PostgreSQL integration)", () =
     });
     expect(r.data!.leadSources).toEqual([expect.objectContaining({ label: "Facebook", count: 6 })]);
     expect(r.data!.inboundChannels).toEqual([{ id: "manual", label: "Manual", count: 6 }]);
-    expect(r.data!.topProjects.map((p) => [p.label, p.count])).toEqual([["Test Project", 6], ["Other Project", 1]]);
+    // All time, every stage in exactly one group: the 60-day-old lead counts here but not in the 30-day KPIs.
+    expect(r.data!.projectLeads.map((p) => [p.label, p.total, p.open, p.inProgress, p.won, p.lost])).toEqual([
+      ["Test Project", 7, 4, 0, 1, 2],
+      ["Other Project", 1, 1, 0, 0, 0],
+    ]);
+    const own = (await get(f.actors.agent2)).data!.projectLeads;
+    expect(own.map((p) => [p.label, p.total])).toEqual([["Test Project", 1], ["Other Project", 0]]);
     expect(r.data!.teams.map((t) => t.name)).toEqual(["Team 1", "Team 2"]);
   });
 
