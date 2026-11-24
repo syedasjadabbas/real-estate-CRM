@@ -236,6 +236,8 @@ export const projects = pgTable(
     city: text("city"),
     address: text("address"),
     description: text("description"),
+    /** Square feet in one marla here: 225, 250 or 272.25 depending on the society (client, 24 Nov 2026). */
+    marlaSqft: numeric("marla_sqft", { precision: 8, scale: 2, mode: "number" }).notNull().default(225),
     /** FR-061 per-project unit dimensions: allowed floors, blocks, categories, types, premiums. */
     dimensionConfig: jsonb("dimension_config").$type<ProjectDimensions>().notNull().default({}),
     /** The project's payment plan (owner, 14 Nov 2026), used by New booking and the booking form. Empty = the standard plan. */
@@ -297,7 +299,12 @@ export const leads = pgTable(
     /** The ad platform's lead id (MODULES 2.2). Blank until an integration or import supplies it. */
     externalId: text("external_id"),
     budgetRangeId: uuid("budget_range_id").references(() => budgetRanges.id, { onDelete: "restrict" }),
+    /** The size in the customer's words; sizeSqft is worked out from it (null = none, or unclear). */
     desiredSize: text("desired_size"),
+    sizeSqft: numeric("size_sqft", { precision: 12, scale: 2, mode: "number" }),
+    propertyType: text("property_type"),
+    /** The campaign the lead came from, as the import named it. */
+    campaign: text("campaign"),
     priority: leadPriority("priority").notNull().default("none"),
     nextFollowUpAt: timestamp("next_follow_up_at", { withTimezone: true }),
     firstTouchAt: timestamp("first_touch_at", { withTimezone: true }),

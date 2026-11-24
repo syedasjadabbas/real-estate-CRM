@@ -7,6 +7,8 @@ import type { ExtraPhoneInput } from "@/modules/contacts/constants";
 import { Field, Input } from "@/components/ui/input";
 import { PRIORITIES, PRIORITY_LABELS } from "@/modules/leads/constants";
 import type { LeadLookups } from "@/modules/leads/queries";
+import { DEFAULT_MARLA_SQFT, PROPERTY_TYPE_LABELS, PROPERTY_TYPES } from "@/modules/leads/size";
+import { SizeField } from "./size-field";
 
 export const COUNTRY_CODES = [
   { value: "+92", label: "+92 Pakistan" },
@@ -30,6 +32,8 @@ export type LeadFormValues = {
   email: string;
   gender: string;
   desiredSize: string;
+  propertyType: string;
+  campaign: string;
   sourceId: string;
   budgetRangeId: string;
   priority: string;
@@ -91,7 +95,7 @@ function withCurrent(options: { value: string; label: string }[], current: strin
 export function LeadFields({ values, onChange, errors, lookups, disabled, lockPhones = false, requirementsExtra, interestExtra, currentCity, projectId }: Props) {
   const sizeOptions = [...new Set(lookups.unitSizes.filter((u) => !projectId || u.projectId === projectId).map((u) => Number(u.areaSqft)))]
     .sort((a, b) => a - b)
-    .map((a) => ({ value: sizeLabel(a), label: sizeLabel(a) }));
+    .map((a) => sizeLabel(a));
   const text = (key: TextKey, label: string, opts: { required?: boolean; type?: string; placeholder?: string; autoComplete?: string; lock?: boolean } = {}) => (
     <Field label={label} required={opts.required} error={errors[key] ?? (key === "firstName" ? errors.name : undefined)}>
       {(id, describedBy) => (
@@ -148,11 +152,13 @@ export function LeadFields({ values, onChange, errors, lookups, disabled, lockPh
       {lockPhones ? <p className="-mt-2 text-[11px] text-zinc-500">Phone numbers can only be changed by an Admin.</p> : null}
       <FormSection title="Property requirements" id="requirements">
         {select("budgetRangeId", "Budget", lookups.budgets.map((b) => ({ value: b.id, label: b.name })), { empty: "Not specified" })}
-        {select("desiredSize", "Size", withCurrent(sizeOptions, values.desiredSize), { empty: sizeOptions.length ? "Not specified" : "No unit sizes in inventory yet" })}
+        {select("propertyType", "Property type", PROPERTY_TYPES.map((t) => ({ value: t, label: PROPERTY_TYPE_LABELS[t] })), { empty: "Not specified" })}
+        <SizeField value={values.desiredSize} onChange={(desiredSize) => onChange({ desiredSize })} unitSizes={sizeOptions} marlaSqft={(projectId && lookups.marlaSqft[projectId]) || DEFAULT_MARLA_SQFT} error={errors.desiredSize} disabled={disabled} />
         {requirementsExtra}
       </FormSection>
       <FormSection title="Lead information" id="lead-information">
         {select("sourceId", "Source", lookups.sources.map((s) => ({ value: s.id, label: s.name })), { required: true, empty: "Select…" })}
+        {text("campaign", "Campaign", { placeholder: "Optional", autoComplete: "off" })}
         {select("priority", "Priority", PRIORITIES.map((p) => ({ value: p, label: PRIORITY_LABELS[p] })))}
         {interestExtra}
       </FormSection>

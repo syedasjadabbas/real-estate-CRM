@@ -33,6 +33,8 @@ const FIELD_LABELS: Record<string, string> = {
   sourceId: "Source",
   budgetRangeId: "Budget",
   desiredSize: "Desired size",
+  propertyType: "Property type",
+  campaign: "Campaign",
   priority: "Priority",
 };
 

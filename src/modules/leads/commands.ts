@@ -25,6 +25,7 @@ import { AppError, forbidden, notFound } from "@/server/errors";
 import { generateLeadCode } from "./code";
 import { OTHER_CHANNEL, recordFirstEnquiry, recordRepeat, resolveChannel } from "./enquiries";
 import { recordMissed } from "./missed-follow-ups";
+import { sizeFields } from "./size";
 import { creationSummary, describeChanges, lostReasonName } from "./history";
 import { STAGE_LABELS } from "./constants";
 import { normalizePhone } from "./phone";
@@ -222,6 +223,8 @@ export async function createLead(db: Database, actor: Actor, input: unknown, { c
       inboundChannel: channel,
       budgetRangeId: data.budgetRangeId ?? null,
       desiredSize: data.desiredSize ?? null,
+      ...sizeFields(data.desiredSize, data.propertyType, project.marlaSqft),
+      campaign: data.campaign ?? null,
       priority: data.priority,
       clientId: joinClientId,
       latestComment: data.note ?? null,
@@ -359,12 +362,21 @@ export async function updateLead(db: Database, actor: Actor, leadId: string, inp
       if (data.budgetRangeId) await assertListValue(tx, budgetRanges, data.budgetRangeId, "budgetRangeId");
       changes.budgetRangeId = data.budgetRangeId ?? null;
     }
-    if ("desiredSize" in data) changes.desiredSize = data.desiredSize ?? null;
+    if ("campaign" in data) changes.campaign = data.campaign ?? null;
+    if ("propertyType" in data) changes.propertyType = data.propertyType ?? null;
+    if ("desiredSize" in data) {
+      const [project] = await tx.select({ marlaSqft: projects.marlaSqft }).from(projects).where(eq(projects.id, lead.projectId));
+      const size = sizeFields(data.desiredSize, "propertyType" in data ? data.propertyType : lead.propertyType, project.marlaSqft);
+      changes.desiredSize = data.desiredSize ?? null;
+      changes.sizeSqft = size.sizeSqft;
+      // Words that name a type fill an empty one; a size edit never clears it.
+      if (size.propertyType && !changes.propertyType) changes.propertyType = size.propertyType;
+    }
     if (data.priority !== undefined) changes.priority = data.priority;
 
     const changed = Object.keys(changes).filter(
       (key) => String(changes[key as keyof typeof changes] ?? "") !== String(lead[key as keyof typeof lead] ?? ""),
-    ).filter((key, _, all) => !((key === "firstName" || key === "lastName") && all.includes("name"))); // told once, as the name
+    ).filter((key) => key !== "sizeSqft" || !("desiredSize" in changes)).filter((key, _, all) => !((key === "firstName" || key === "lastName") && all.includes("name"))); // told once, as the name
     let phonesBefore: string[] = [];
     if (extraPhones) {
       phonesBefore = (await leadPhonesOf(tx, leadId)).map((p) => p.e164);

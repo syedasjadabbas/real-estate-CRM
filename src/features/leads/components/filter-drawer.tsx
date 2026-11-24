@@ -15,6 +15,7 @@ import {
   STAGE_LABELS,
 } from "@/modules/leads/constants";
 import type { LeadLookups } from "@/modules/leads/queries";
+import { PROPERTY_TYPE_LABELS, PROPERTY_TYPES } from "@/modules/leads/size";
 import { FILTER_KEYS } from "../url";
 
 type Option = { value: string; label: string };
@@ -158,6 +159,49 @@ export function LeadFilterDrawer({
           selected={split(params.city)}
           onChange={(v) => set("city", v)}
         />
+        {lookups.campaigns.length ? (
+          <Field label="Campaign">
+            {(id) => (
+              <div id={id} className="rounded-xl border border-zinc-200/80 bg-zinc-50/70 px-1.5 shadow-hairline">
+                <Select
+                  label="Campaign"
+                  options={[{ value: "", label: "All campaigns" }, ...lookups.campaigns.map((c) => ({ value: c, label: c }))]}
+                  value={params.campaign ?? ""}
+                  onChange={(v) => set("campaign", v || null)}
+                  buttonClassName="h-9"
+                />
+              </div>
+            )}
+          </Field>
+        ) : null}
+        <ChipGroup
+          label="Property type"
+          options={PROPERTY_TYPES.map((t) => ({ value: t, label: PROPERTY_TYPE_LABELS[t] }))}
+          selected={split(params.propertyType)}
+          onChange={(v) => set("propertyType", v)}
+        />
+        <div className="grid grid-cols-2 gap-3">
+          {(["sizeMin", "sizeMax"] as const).map((key) => (
+            <Field key={key} label={key === "sizeMin" ? "Size from (sq ft)" : "Size to (sq ft)"}>
+              {(id) => (
+                <input
+                  id={id}
+                  inputMode="numeric"
+                  defaultValue={params[key] ?? ""}
+                  onBlur={(event) => {
+                    const v = event.target.value.replace(/[^\d.]/g, "");
+                    if (v !== (params[key] ?? "")) set(key, v || null);
+                  }}
+                  className="h-[38px] w-full rounded-xl border border-zinc-200/80 bg-zinc-50/70 px-2.5 text-sm font-medium shadow-hairline focus:border-brand/50 focus:outline-none"
+                />
+              )}
+            </Field>
+          ))}
+        </div>
+        <label className="flex items-center gap-2 text-xs font-bold text-zinc-700">
+          <input type="checkbox" className="size-4 accent-[#bb8c08]" checked={params.sizeUnclear === "1"} onChange={(e) => set("sizeUnclear", e.target.checked ? "1" : null)} />
+          Only leads whose size is unclear
+        </label>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Field label="Date field">
             {(id) => (

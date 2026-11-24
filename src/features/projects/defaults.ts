@@ -10,4 +10,5 @@ export const EMPTY_PROJECT = {
   city: "",
   address: "",
   description: "",
+  marlaSqft: "225",
 };

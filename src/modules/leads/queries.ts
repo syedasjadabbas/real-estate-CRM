@@ -75,6 +75,11 @@ function filterConditions(query: LeadListQuery, now: Date): SQL[] {
   if (query.lostReason.length) out.push(inArray(leads.lostReasonId, query.lostReason));
   if (query.priority.length) out.push(inArray(leads.priority, query.priority));
   if (query.owner) out.push(eq(leads.ownerId, query.owner));
+  if (query.propertyType.length) out.push(inArray(leads.propertyType, query.propertyType));
+  if (query.campaign) out.push(eq(leads.campaign, query.campaign));
+  if (query.sizeMin) out.push(gte(leads.sizeSqft, query.sizeMin));
+  if (query.sizeMax) out.push(lte(leads.sizeSqft, query.sizeMax));
+  if (query.sizeUnclear) out.push(isNotNull(leads.desiredSize), isNull(leads.sizeSqft));
   if (query.followUp) {
     // The follow-up window describes pending work, so Lost leads are not in it (F-2).
     out.push(followUpLeadActive());
@@ -176,7 +181,7 @@ const sortColumns = {
   next: leads.nextFollowUpAt,
   inbound: sql`${leads.inboundChannel}::text`,
   // Size is free text ("1,200 sq ft"), so it sorts by its number; text with no number goes last.
-  size: sql`substring(replace(${leads.desiredSize}, ',', '') from '[0-9]+(?:\.[0-9]+)?')::numeric`,
+  size: leads.sizeSqft,
   gender: sql`lower(${leads.gender})`,
   comment: sql`lower(${leads.latestComment})`,
   lostReason: lostReasons.name,
@@ -202,6 +207,9 @@ const listSelection = {
   firstName: leads.firstName,
   lastName: leads.lastName,
   desiredSize: leads.desiredSize,
+  sizeSqft: leads.sizeSqft,
+  propertyType: leads.propertyType,
+  campaign: leads.campaign,
   latestComment: leads.latestComment,
   inboundChannel: leads.inboundChannel,
   gender: leads.gender,
@@ -797,7 +805,7 @@ export async function lostReasonMix(db: Database, actor: Actor, projectId: strin
 
 export async function leadLookups(db: Database) {
   const pick = { id: leadSources.id, name: leadSources.name };
-  const [sources, allCities, budgets, reasons, sizes] = await Promise.all([
+  const [sources, allCities, budgets, reasons, sizes, marlas, campaigns] = await Promise.all([
     db.select(pick).from(leadSources).where(eq(leadSources.isActive, true)).orderBy(asc(leadSources.sortOrder)),
     db.select({ id: cities.id, name: cities.name, isActive: cities.isActive }).from(cities).orderBy(asc(cities.sortOrder), asc(cities.name)),
     db
@@ -812,6 +820,8 @@ export async function leadLookups(db: Database) {
       .orderBy(asc(lostReasons.sortOrder)),
     // The Size dropdown offers each project's unit sizes from inventory.
     db.selectDistinct({ projectId: units.projectId, areaSqft: units.areaSqft }).from(units).where(isNull(units.archivedAt)).orderBy(asc(units.projectId), asc(units.areaSqft)),
+    db.select({ id: projects.id, marlaSqft: projects.marlaSqft }).from(projects),
+    db.selectDistinct({ name: leads.campaign }).from(leads).where(isNotNull(leads.campaign)).orderBy(asc(leads.campaign)).limit(500),
   ]);
   const active = allCities.filter((c) => c.isActive).map(({ id, name }) => ({ id, name }));
   return {
@@ -826,6 +836,9 @@ export async function leadLookups(db: Database) {
     budgets,
     lostReasons: reasons,
     unitSizes: sizes,
+    /** Square feet in a marla, by project. */
+    marlaSqft: Object.fromEntries(marlas.map((m) => [m.id, m.marlaSqft])) as Record<string, number>,
+    campaigns: campaigns.map((c) => c.name!),
   };
 }
 export type LeadLookups = Awaited<ReturnType<typeof leadLookups>>;

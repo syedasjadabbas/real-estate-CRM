@@ -29,6 +29,9 @@ import { bookingsFor } from "@/modules/bookings/queries";
 import { LeadMeetingsList } from "@/features/meetings/components/lead-meetings";
 import { canDoMeeting } from "@/modules/meetings/policy";
 import { canViewAuditLog } from "@/modules/audit/service";
+import { EmptyState } from "@/components/ui/empty-state";
+import { matchingUnits } from "@/modules/leads/matching-units";
+import { formatSqft } from "@/modules/leads/size";
 import { openMeetings } from "@/modules/meetings/open";
 import { meetingsForLead } from "@/modules/meetings/queries";
 import { clientStatusForLead } from "@/modules/clients/queries";
@@ -78,7 +81,7 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
     const { lead } = detail;
     // "Log activity" replaces the separate stage, note and schedule-follow-up forms (14 Nov 2026).
     const callCard = detail.permissions.edit && detail.permissions.scheduleFollowUp;
-    const [lookups, owners, clientStatus, leadBookings, leadMeetings, recordings, documents, whatsapp, scheduled] = await Promise.all([
+    const [lookups, owners, clientStatus, leadBookings, leadMeetings, recordings, documents, whatsapp, scheduled, matches] = await Promise.all([
       leadLookups(db),
       assignableUsers(db, actor),
       clientStatusForLead(db, actor, lead),
@@ -88,6 +91,7 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
       listDocuments(db, actor, lead.id),
       listWhatsapp(db, actor, lead.id),
       openMeetings(db, actor, [lead.id]),
+      matchingUnits(db, actor, lead),
     ]);
 
     return (
@@ -164,6 +168,32 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
             <EditDetailsForm detail={detail} lookups={lookups} />
           </div>
           <div className="space-y-6">
+            {lead.sizeSqft ? (
+              <PanelCard title={`Matching units · ${matches.total}`}>
+                <p className="mb-2 text-[11px] text-zinc-500">
+                  Available in {lead.projectName}, within 10% of {formatSqft(lead.sizeSqft)}.
+                </p>
+                {matches.rows.length === 0 ? (
+                  <EmptyState size="sm">No available unit is this size.</EmptyState>
+                ) : (
+                  <ul className="space-y-1.5">
+                    {matches.rows.map((u) => (
+                      <li key={u.id} className="flex items-center justify-between gap-2 rounded-xl border border-zinc-200/80 px-3 py-2 text-xs shadow-hairline">
+                        <Link href={`/dashboard/inventory/${u.id}`} className="min-w-0 font-bold text-brand hover:underline">
+                          {u.unitNo}
+                          <span className="block font-medium text-zinc-500">{[u.nature, u.floor].filter(Boolean).join(" · ")}</span>
+                        </Link>
+                        <span className="shrink-0 text-right font-semibold">{formatSqft(u.areaSqft)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </PanelCard>
+            ) : lead.desiredSize ? (
+              <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-900">
+                Size “{lead.desiredSize}” is unclear. Ask the customer and choose a size under Property requirements.
+              </p>
+            ) : null}
             {clientStatus ? <LeadClientPanel leadId={lead.id} status={clientStatus} /> : null}
             {detail.permissions.assign ? <AssignPanel leadId={lead.id} ownerId={lead.ownerId} owners={owners} /> : null}
             <StagePanel detail={detail} lostReasons={lookups.lostReasons} showStage={!callCard && lead.stage !== "lost_lead"} />

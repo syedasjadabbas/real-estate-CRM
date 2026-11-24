@@ -232,7 +232,7 @@ describe.skipIf(!hasTestDb)("Leads module (PostgreSQL integration)", () => {
 
       // A partial edit leaves omitted fields alone (priority used to fall back to "none").
       await updateLead(db, f.actors.agent1, r.leadId, { desiredSize: "5 marla" });
-      expect((await getLeadDetail(db, f.actors.agent1, r.leadId)).lead).toMatchObject({ priority: "high", desiredSize: "5 marla" });
+      expect((await getLeadDetail(db, f.actors.agent1, r.leadId)).lead).toMatchObject({ priority: "high", desiredSize: "5 marla", sizeSqft: 1125 });
       const stageChange = detail.activities.find((a) => a.type === "stage_change");
       expect(stageChange?.data).toMatchObject({ from: "new_lead", to: "qualified_lead" });
       expect(detail.lead.firstTouchAt).not.toBeNull();

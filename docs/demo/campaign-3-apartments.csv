@@ -1,0 +1,46 @@
+first_name,last_name,phone_country_code,phone,email,source,campaign,city,budget,property_type,size,priority,note
+Hina,Hashmi,+92,3000003005,hina.hashmi5@example.com,Walk in,Property Expo,Rawalpindi,Under PKR 10 million,Apartment,900 sq ft,high,Wants easy instalments
+Jawad,Janjua,+92,3000003006,jawad.janjua6@example.com,Walk in,Property Expo,Lahore,PKR 10–20 million,Apartment,640 sq ft,medium,Call after 6 PM
+Komal,Khan,+92,3000003007,komal.khan7@example.com,Walk in,Property Expo,Peshawar,PKR 20–30 million,Apartment,2 bed,low,
+Moiz,Awan,+92,3000003008,moiz.awan8@example.com,Walk in,Property Expo,Islamabad,PKR 30–50 million,Apartment,"1,150 sq ft",high,"Overseas, replies on WhatsApp"
+Nida,Bhatti,+92,3000003009,nida.bhatti9@example.com,Walk in,Property Expo,Rawalpindi,Under PKR 10 million,Apartment,900 sq ft,medium,
+Omer,Cheema,+92,3000003010,omer.cheema10@example.com,Walk in,Property Expo,Lahore,PKR 10–20 million,Apartment,640 sq ft,low,Wants easy instalments
+Rida,Dar,+92,3000003011,rida.dar11@example.com,Walk in,Property Expo,Peshawar,PKR 20–30 million,Apartment,2 bed,high,Call after 6 PM
+Saad,Gillani,+92,3000003012,saad.gillani12@example.com,Walk in,Property Expo,Islamabad,PKR 30–50 million,Apartment,"1,150 sq ft",medium,
+Tania,Hashmi,+92,3000003013,tania.hashmi13@example.com,Walk in,Property Expo,Rawalpindi,Under PKR 10 million,Apartment,900 sq ft,low,"Overseas, replies on WhatsApp"
+Umer,Janjua,+92,3000003014,umer.janjua14@example.com,Walk in,Property Expo,Lahore,PKR 10–20 million,Apartment,640 sq ft,high,
+Zoya,Dar,+92,3000003095,zoya.dar95@example.com,Walk in,Property Expo,Peshawar,PKR 20–30 million,Apartment,2 bed,medium,Wants easy instalments
+Adnan,Gillani,+92,3000003096,adnan.gillani96@example.com,Walk in,Property Expo,Islamabad,PKR 30–50 million,Apartment,"1,150 sq ft",low,Call after 6 PM
+Beenish,Hashmi,+92,3000003097,beenish.hashmi97@example.com,Walk in,Property Expo,Rawalpindi,Under PKR 10 million,Apartment,900 sq ft,high,
+Danial,Janjua,+92,3000003098,danial.janjua98@example.com,Walk in,Property Expo,Lahore,PKR 10–20 million,Apartment,640 sq ft,medium,"Overseas, replies on WhatsApp"
+Erum,Khan,+92,3000003099,erum.khan99@example.com,Walk in,Property Expo,Peshawar,PKR 20–30 million,Apartment,2 bed,low,
+Ahmed,Bhatti,+92,3000003100,ahmed.bhatti100@example.com,Walk in,Property Expo,Islamabad,PKR 30–50 million,Apartment,"1,150 sq ft",high,Wants easy instalments
+Ayesha,Cheema,+92,3000003101,ayesha.cheema101@example.com,Walk in,Property Expo,Rawalpindi,Under PKR 10 million,Apartment,900 sq ft,medium,Call after 6 PM
+Bilal,Dar,+92,3000003102,bilal.dar102@example.com,Walk in,Property Expo,Lahore,PKR 10–20 million,Apartment,640 sq ft,low,
+Farah,Gillani,+92,3000003103,farah.gillani103@example.com,Walk in,Property Expo,Peshawar,PKR 20–30 million,Apartment,2 bed,high,"Overseas, replies on WhatsApp"
+Haris,Hashmi,+92,3000003104,haris.hashmi104@example.com,Walk in,Property Expo,Islamabad,PKR 30–50 million,Apartment,"1,150 sq ft",medium,
+Hina,Janjua,+92,3000003105,hina.janjua105@example.com,Walk in,Property Expo,Rawalpindi,Under PKR 10 million,Apartment,900 sq ft,low,Wants easy instalments
+Jawad,Khan,+92,3000003106,jawad.khan106@example.com,Walk in,Property Expo,Lahore,PKR 10–20 million,Apartment,640 sq ft,high,Call after 6 PM
+Komal,Awan,+92,3000003107,komal.awan107@example.com,Walk in,Property Expo,Peshawar,PKR 20–30 million,Apartment,2 bed,medium,
+Moiz,Bhatti,+92,3000003108,moiz.bhatti108@example.com,Walk in,Property Expo,Islamabad,PKR 30–50 million,Apartment,"1,150 sq ft",low,"Overseas, replies on WhatsApp"
+Nida,Cheema,+92,3000003109,nida.cheema109@example.com,Walk in,Property Expo,Rawalpindi,Under PKR 10 million,Apartment,900 sq ft,high,
+Omer,Dar,+92,3000003110,omer.dar110@example.com,Walk in,Property Expo,Lahore,PKR 10–20 million,Apartment,640 sq ft,medium,Wants easy instalments
+Rida,Gillani,+92,3000003111,rida.gillani111@example.com,Walk in,Property Expo,Peshawar,PKR 20–30 million,Apartment,2 bed,low,Call after 6 PM
+Saad,Hashmi,+92,3000003112,saad.hashmi112@example.com,Walk in,Property Expo,Islamabad,PKR 30–50 million,Apartment,"1,150 sq ft",high,
+Tania,Janjua,+92,3000003113,tania.janjua113@example.com,Walk in,Property Expo,Rawalpindi,Under PKR 10 million,Apartment,900 sq ft,medium,"Overseas, replies on WhatsApp"
+Umer,Khan,+92,3000003114,umer.khan114@example.com,Walk in,Property Expo,Lahore,PKR 10–20 million,Apartment,640 sq ft,low,
+Zoya,Awan,+92,3000003115,zoya.awan115@example.com,Walk in,Property Expo,Peshawar,PKR 20–30 million,Apartment,2 bed,high,Wants easy instalments
+Adnan,Bhatti,+92,3000003116,adnan.bhatti116@example.com,Walk in,Property Expo,Islamabad,PKR 30–50 million,Apartment,"1,150 sq ft",medium,Call after 6 PM
+Beenish,Cheema,+92,3000003117,beenish.cheema117@example.com,Walk in,Property Expo,Rawalpindi,Under PKR 10 million,Apartment,900 sq ft,low,
+Danial,Dar,+92,3000003118,danial.dar118@example.com,Walk in,Property Expo,Lahore,PKR 10–20 million,Apartment,640 sq ft,high,"Overseas, replies on WhatsApp"
+Erum,Gillani,+92,3000003119,erum.gillani119@example.com,Walk in,Property Expo,Peshawar,PKR 20–30 million,Apartment,2 bed,medium,
+Ahmed,Janjua,+92,3000003120,ahmed.janjua120@example.com,Walk in,Property Expo,Islamabad,PKR 30–50 million,Apartment,"1,150 sq ft",low,Wants easy instalments
+Ayesha,Khan,+92,3000003121,ayesha.khan121@example.com,Walk in,Property Expo,Rawalpindi,Under PKR 10 million,Apartment,900 sq ft,high,Call after 6 PM
+Bilal,Awan,+92,3000003122,bilal.awan122@example.com,Walk in,Property Expo,Lahore,PKR 10–20 million,Apartment,640 sq ft,medium,
+Farah,Bhatti,+92,3000003123,farah.bhatti123@example.com,Walk in,Property Expo,Peshawar,PKR 20–30 million,Apartment,2 bed,low,"Overseas, replies on WhatsApp"
+Haris,Cheema,+92,3000003124,haris.cheema124@example.com,Walk in,Property Expo,Islamabad,PKR 30–50 million,Apartment,"1,150 sq ft",high,
+Hina,Dar,+92,3000003125,hina.dar125@example.com,Walk in,Property Expo,Rawalpindi,Under PKR 10 million,Apartment,900 sq ft,medium,Wants easy instalments
+Jawad,Gillani,+92,3000003126,jawad.gillani126@example.com,Walk in,Property Expo,Lahore,PKR 10–20 million,Apartment,640 sq ft,low,Call after 6 PM
+Komal,Hashmi,+92,3000003127,komal.hashmi127@example.com,Walk in,Property Expo,Peshawar,PKR 20–30 million,Apartment,2 bed,high,
+Moiz,Janjua,+92,3000003128,moiz.janjua128@example.com,Walk in,Property Expo,Islamabad,PKR 30–50 million,Apartment,"1,150 sq ft",medium,"Overseas, replies on WhatsApp"
+Nida,Khan,+92,3000003129,nida.khan129@example.com,Walk in,Property Expo,Rawalpindi,Under PKR 10 million,Apartment,900 sq ft,low,

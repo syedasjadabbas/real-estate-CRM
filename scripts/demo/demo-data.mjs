@@ -4,7 +4,8 @@
 // Run it again on the day of the demo: nobody is added twice, the "today" and "tomorrow" dates move to today.
 // Numbers are +92 300 0002xxx and emails example.com, so nobody real is contacted.
 import { createRequire, registerHooks } from "node:module";
-import { existsSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
@@ -32,7 +33,10 @@ const { logCallUpdate } = await imp("modules/leads/call-update.ts");
 const { recordRepeatEnquiry } = await imp("modules/leads/enquiries.ts");
 const { verifyLead } = await imp("modules/leads/verification.ts");
 const { createMeeting, completeMeeting, cancelMeeting } = await imp("modules/meetings/commands.ts");
-const { createProject } = await imp("modules/projects/commands.ts");
+const { createProject, updateProject } = await imp("modules/projects/commands.ts");
+const { createAccount } = await imp("modules/accounts/service.ts");
+const { setTeamMembers } = await imp("modules/teams/commands.ts");
+const { submitImport, decideImportBatch } = await imp("modules/leads/imports.ts");
 const { createUnit } = await imp("modules/inventory/commands.ts");
 const { createBooking, advanceBooking } = await imp("modules/bookings/commands.ts");
 const { recordPayment } = await imp("modules/finance/commands.ts");
@@ -95,9 +99,22 @@ async function ago(hours, step) {
   return out;
 }
 
-async function project(name, type, city, prefix) {
+/** `was`: the name an earlier run gave it. */
+async function project(name, type, city, prefix, { was, marlaSqft = 225, marlas = [], nature = "House" } = {}) {
   let p = await one("select id from projects where name=$1", [name]);
-  if (!p) p = { id: (await createProject(db, admin, { name, type, city, developer: "Demo Developer", description: "Made-up project for demonstration" })).projectId };
+  const old = was ? await one("select id from projects where name=$1", [was]) : null;
+  if (!p && old) {
+    await updateProject(db, admin, old.id, { name });
+    p = old;
+  }
+  if (!p) p = { id: (await createProject(db, admin, { name, type, city, marlaSqft, developer: "Demo Developer", description: "Made-up project for demonstration" })).projectId };
+  for (const [i, m] of marlas.entries()) {
+    const unitNo = `${prefix}-${201 + i}`;
+    if (await one("select 1 from units where project_id=$1 and unit_no=$2", [p.id, unitNo])) continue;
+    const area = m * marlaSqft;
+    await createUnit(db, admin, { projectId: p.id, unitNo, block: "ABC"[i % 3], areaSqft: String(area), basePrice: String(area * 14_000), nature });
+  }
+  if (marlas.length) return p.id;
   for (let i = 1; i <= 6; i += 1) {
     const unitNo = `${prefix}-${100 + i}`;
     if (await one("select 1 from units where project_id=$1 and unit_no=$2", [p.id, unitNo])) continue;
@@ -106,9 +123,10 @@ async function project(name, type, city, prefix) {
   }
   return p.id;
 }
-const cedar = await project("Cedar Court Residences", "building", "Islamabad", "CC");
-const palm = await project("Palm Court Villas", "society", "Rawalpindi", "PC");
-const garden = await project("Garden Court Farmhouses", "farmhouse", "Islamabad", "GC");
+const cedar = await project("Demo Project 1", "building", "Islamabad", "CC", { was: "Cedar Court Residences" });
+const palm = await project("Demo Project 2", "society", "Rawalpindi", "PC", { was: "Palm Court Villas", marlas: [5, 5, 5, 5, 7, 7, 10, 10, 10, 20, 20, 20] });
+const garden = await project("Demo Project 3", "farmhouse", "Islamabad", "GC", { was: "Garden Court Farmhouses", marlas: [20, 20, 40, 40, 80], nature: "Farmhouse" });
+const plots = await project("Demo Project 4", "society", "Lahore", "PL", { marlaSqft: 250, marlas: [3, 3, 5, 5, 5, 7, 7, 10, 10, 20, 20, 20], nature: "Plot" });
 
 const phoneOf = (n) => `0300 0002${String(n).padStart(3, "0")}`.replace(" ", "");
 /** Adds the lead (by an Admin, for the agent) unless that number already has one in the project. */
@@ -166,14 +184,14 @@ async function book(hours, id, projectId, unitNo, by = agent) {
   return { bookingId, price: Number(unit.base_price) };
 }
 /** Token → Partial → Complete down payment → Closed Won, with sample proofs and the money posted in Finance. */
-async function closeWon(hours, bookingId, price) {
+async function closeWon(hours, bookingId, price, by = agent) {
   const cash = (await listPaymentMethods(db, { activeOnly: true })).find((m) => m.name === "Cash");
   const proof = await screenshot("Sample payment proof", ["> Sample document"]);
   await ago(hours, async () => {
-    await advanceBooking(db, agent, bookingId, { toStage: "down_payment", proofFileId: (await uploadBookingProof(db, agent, bookingId, { bytes: proof, name: "sample-receipt.png" })).id, amount: String(Math.round(price * 0.1)) });
-    await uploadSignedBookingForm(db, agent, bookingId, { bytes: proof, name: "sample-signed-form.png" });
-    await advanceBooking(db, agent, bookingId, { toStage: "agreement_pending", proofFileId: (await uploadBookingProof(db, agent, bookingId, { bytes: proof, name: "sample-receipt.png" })).id, amount: String(Math.round(price * 0.3)) });
-    await uploadSignedBookingForm(db, agent, bookingId, { bytes: proof, name: "sample-signed-form.png" });
+    await advanceBooking(db, by, bookingId, { toStage: "down_payment", proofFileId: (await uploadBookingProof(db, by, bookingId, { bytes: proof, name: "sample-receipt.png" })).id, amount: String(Math.round(price * 0.1)) });
+    await uploadSignedBookingForm(db, by, bookingId, { bytes: proof, name: "sample-signed-form.png" });
+    await advanceBooking(db, by, bookingId, { toStage: "agreement_pending", proofFileId: (await uploadBookingProof(db, by, bookingId, { bytes: proof, name: "sample-receipt.png" })).id, amount: String(Math.round(price * 0.3)) });
+    await uploadSignedBookingForm(db, by, bookingId, { bytes: proof, name: "sample-signed-form.png" });
     await recordPayment(db, admin, { bookingId, type: "down_payment", amount: String(Math.round(price * 0.5)), receivedOn: businessToday(), methodId: cash.id });
     await advanceBooking(db, admin, bookingId, { toStage: "confirmed" });
   });
@@ -296,6 +314,100 @@ for (let i = 0; i < 30; i += 1) {
     if (i % 2 === 0) await followUp(lead, pkt(1 + (i % 5), 10 + (i % 7)), "Call back");
   }
 }
+
+// ---- Five agents in the team. New logins' passwords go only into .dev-credentials (git-ignored), never to the screen. ----
+const extraAgents = [["Demo Agent Three", "agent3@mz.local"], ["Demo Agent Four", "agent4@mz.local"], ["Demo Agent Five", "agent5@mz.local"]];
+for (const [name, email] of extraAgents) {
+  if (await one("select 1 from users where email=$1", [email])) continue;
+  const password = randomBytes(12).toString("base64url");
+  await createAccount(db, admin, { name, email, role: "agent", password });
+  appendFileSync(".dev-credentials", `\nagent        ${email}        ${password}   # demo data\n`);
+}
+const team = await one("select id from teams where name='Demo Sales Team'");
+if (team) {
+  const now = (await q("select user_id from team_members where team_id=$1", [team.id])).map((x) => x.user_id);
+  const five = (await q("select id from users where email = any($1)", [["agent1@mz.local", "agent2@mz.local", ...extraAgents.map((x) => x[1])]])).map((x) => x.id);
+  await setTeamMembers(db, admin, team.id, { userIds: [...new Set([...now, ...five])] });
+}
+
+// ---- Campaigns: the sheets a campaign form would give, through the real import and approval ----
+const C_FIRST = ["Ahmed", "Ayesha", "Bilal", "Farah", "Haris", "Hina", "Jawad", "Komal", "Moiz", "Nida", "Omer", "Rida", "Saad", "Tania", "Umer", "Zoya", "Adnan", "Beenish", "Danial", "Erum"];
+const C_LAST = ["Awan", "Bhatti", "Cheema", "Dar", "Gillani", "Hashmi", "Janjua", "Khan"];
+const customer = (n) => ({ first: C_FIRST[n % 20], last: C_LAST[(Math.floor(n / 20) + n) % 8], phone: `3000003${String(n).padStart(3, "0")}` });
+const HEAD = ["first_name", "last_name", "phone_country_code", "phone", "email", "source", "campaign", "city", "budget", "property_type", "size", "priority", "note"];
+const csvOf = (rows) => [HEAD, ...rows].map((x) => x.map((v) => (/[",]/.test(v) ? `"${v.replaceAll('"', '""')}"` : v)).join(",")).join("\r\n") + "\r\n";
+const campaignRow = (n, campaign, source, [type, size], i) => {
+  const c = customer(n);
+  return [c.first, c.last, "+92", c.phone, `${c.first}.${c.last}${n}@example.com`.toLowerCase(), source, campaign, CITIES[n % 4], [...BUDGETS, "PKR 30–50 million"][i % 4], type, size, ["high", "medium", "low"][i % 3], ["Wants easy instalments", "Call after 6 PM", "", "Overseas, replies on WhatsApp", ""][i % 5]];
+};
+const HOUSES = [["House", "5 marla"], ["House", "10 marla"], ["House", "1 kanal"], ["House", "20 marla"], ["House", "7 marla"], ["House", "Other / not sure"]];
+const PLOTS = [["Plot", "5 marla"], ["Plot", "1 kanal"], ["Plot", "10 marla"], ["Plot", "5,000 sq ft"], ["Plot", "3 marla"]];
+const FLATS = [["Apartment", "900 sq ft"], ["Apartment", "640 sq ft"], ["Apartment", "2 bed"], ["Apartment", "1,150 sq ft"]];
+const range = (a, b) => Array.from({ length: b - a }, (_, i) => a + i);
+const campaigns = [
+  // The second and third reach some of the first's customers again: one client, several leads.
+  { file: "campaign-1-houses.csv", name: "Nov Houses Launch", source: "Facebook", projectId: palm, kinds: HOUSES, who: range(0, 55), hours: 9 * 24 },
+  { file: "campaign-2-plots.csv", name: "1 Kanal Plots", source: "Google", projectId: plots, kinds: PLOTS, who: [...range(0, 15), ...range(55, 95)], hours: 6 * 24 },
+  { file: "campaign-3-apartments.csv", name: "Property Expo", source: "Walk in", projectId: cedar, kinds: FLATS, who: [...range(5, 15), ...range(95, 130)], hours: 3 * 24 },
+];
+mkdirSync("docs/demo", { recursive: true });
+const worked = new Map();
+const ownerActor = async (id) => worked.get(id) ?? (worked.set(id, await loadActor(db, await one("select id,name,email,role from users where id=$1", [id]))), worked.get(id));
+for (const c of campaigns) {
+  const csv = csvOf(c.who.map((n, i) => campaignRow(n, c.name, c.source, c.kinds[i % c.kinds.length], i)));
+  writeFileSync("docs/demo/" + c.file, csv);
+  if (await one("select 1 from leads where campaign=$1 and project_id=$2", [c.name, c.projectId])) continue;
+  await ago(c.hours, async () => {
+    const b = await submitImport(db, admin, { projectId: c.projectId, fileName: c.file, csv });
+    const d = await decideImportBatch(db, admin, b.batchId, { approve: true });
+    console.log(c.file, { rows: b.totalRows, created: d.created, skipped: d.skipped, repeats: d.repeats });
+    made += d.created;
+  });
+  const list = await q("select id, owner_id, name from leads where campaign=$1 and project_id=$2 order by phone_e164", [c.name, c.projectId]);
+  for (const [i, l] of list.entries()) {
+    if (!l.owner_id) continue;
+    const by = await ownerActor(l.owner_id);
+    const h = c.hours - 3 - (i % 10);
+    const k = i % 10;
+    if (k < 2) continue;
+    if (k < 4) await call(h, l.id, ["no_answer", "busy"][k - 2], "", { stage: "contact_attempted" }, by);
+    else if (k < 7) {
+      await call(h, l.id, "talked", ["Asked for the payment plan", "Comparing with another project", "Will decide with family"][k - 4], { stage: k === 6 ? "qualified_lead" : "contacted", minutes: 2 + k }, by);
+      await followUp(l.id, pkt(1 + (i % 4), 10 + k), "Call back", by);
+    } else if (k === 7) {
+      await call(h, l.id, "talked", "Wants to see it", { stage: "qualified_lead", minutes: 8 }, by);
+      await meeting(l.id, `Site visit with ${l.name}`, pkt(1 + (i % 3), 15), { hours: h - 1, by });
+    } else if (k === 8) {
+      await call(h, l.id, "talked", "Interested, visited the site", { stage: "contacted", minutes: 6 }, by);
+      await meeting(l.id, `Site visit with ${l.name}`, pkt(-1, 15), { hours: h - 1, by, done: "Liked it, discussing price" });
+      await followUp(l.id, pkt(1, 17), "Ask for their decision", by);
+    } else {
+      await call(h, l.id, "talked", "Not buying now", { stage: "contacted", minutes: 2 }, by);
+      await lose(h - 2, l.id, ["Budget mismatch", "Bought elsewhere", "Not interested"][Math.floor(i / 10) % 3], "");
+    }
+  }
+}
+// One campaign customer from the sheet to Closed Won: imported, assigned, called, met, booked a 1 kanal house, paid.
+const done = await one("select id, owner_id from leads where campaign=$1 and project_id=$2 and size_sqft=4500 and stage='meeting_done' and not exists (select 1 from bookings b where b.lead_id=leads.id) order by phone_e164 limit 1", [campaigns[0].name, palm]);
+if (done && !(await one("select 1 from bookings b join leads l on l.id=b.lead_id where l.campaign=$1", [campaigns[0].name]))) {
+  const by = await ownerActor(done.owner_id);
+  const b = await book(20, done.id, palm, "PC-210", by);
+  await closeWon(4, b.bookingId, b.price, by);
+}
+// For the live import: new customers, a known one, a repeated number, an unclear size and a wrong number.
+writeFileSync("docs/demo/campaign-4-live.csv", csvOf([
+  ...range(200, 212).map((n, i) => campaignRow(n, "Farmhouse Weekend", "TikTok", [["Farmhouse", "1 kanal"], ["Farmhouse", "2 kanal"], ["Farmhouse", "4 kanal"]][i % 3], i)),
+  campaignRow(0, "Farmhouse Weekend", "TikTok", ["Farmhouse", "1 kanal farmhouse"], 0),
+  campaignRow(212, "Farmhouse Weekend", "TikTok", ["", "1 kanal house"], 1),
+  campaignRow(213, "Farmhouse Weekend", "TikTok", ["Farmhouse", "big one"], 2),
+  campaignRow(200, "Farmhouse Weekend", "TikTok", ["Farmhouse", "2 kanal"], 3),
+  campaignRow(214, "Farmhouse Weekend", "TikTok", ["Farmhouse", "1 kanal"], 4).map((v, i) => (i === 3 ? "12" : v)),
+]));
+
+// Sizes the earlier demo customers gave as bedrooms, put as real sizes.
+const { updateLead } = await imp("modules/leads/commands.ts");
+for (const [was, size] of [["1 bed", "520 sq ft"], ["2 bed", "780 sq ft"], ["3 bed", "1,150 sq ft"]])
+  for (const l of await q("select id from leads where desired_size=$1 and stage not in ('booked') and phone_e164 like '+923000002%' and phone_e164 <> '+923000002008'", [was])) await updateLead(db, admin, l.id, { desiredSize: size, propertyType: "apartment" });
 
 // Only the repeat enquiries and decisions stay unread: 50 assignments would bury them.
 await q("update notifications set read_at=now() where type='lead_assigned' and read_at is null and link in (select '/dashboard/leads/'||id from leads where phone_e164 like '+923000002%')");

@@ -20,6 +20,7 @@ export type ProjectFormValues = {
   city: string;
   address: string;
   description: string;
+  marlaSqft: string;
 };
 
 /**
@@ -106,6 +107,7 @@ export function ProjectForm({ projectId, initial, disabled = false }: { projectI
         {text("name", "Name", { required: true })}
         {text("developer", "Developer / company", { placeholder: "Optional" })}
         {select("type", "Type", PROJECT_TYPES.map((t) => ({ value: t, label: PROJECT_TYPE_LABELS[t] })))}
+        {text("marlaSqft", "Square feet in a marla", { required: true, placeholder: "225, 250 or 272.25" })}
         {select("status", "Status", PROJECT_STATUSES.map((s) => ({ value: s, label: PROJECT_STATUS_LABELS[s] })))}
       </FormSection>
       <FormSection title="Location">

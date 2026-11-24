@@ -426,6 +426,8 @@ export function EditDetailsForm({ detail, lookups }: { detail: LeadDetail; looku
     email: lead.email ?? "",
     gender: lead.gender ?? "",
     desiredSize: lead.desiredSize ?? "",
+    propertyType: lead.propertyType ?? "",
+    campaign: lead.campaign ?? "",
     sourceId: lead.sourceId,
     budgetRangeId: lead.budgetRangeId ?? "",
     priority: lead.priority,

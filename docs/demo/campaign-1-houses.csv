@@ -1,0 +1,56 @@
+first_name,last_name,phone_country_code,phone,email,source,campaign,city,budget,property_type,size,priority,note
+Ahmed,Awan,+92,3000003000,ahmed.awan0@example.com,Facebook,Nov Houses Launch,Islamabad,Under PKR 10 million,House,5 marla,high,Wants easy instalments
+Ayesha,Bhatti,+92,3000003001,ayesha.bhatti1@example.com,Facebook,Nov Houses Launch,Rawalpindi,PKR 10–20 million,House,10 marla,medium,Call after 6 PM
+Bilal,Cheema,+92,3000003002,bilal.cheema2@example.com,Facebook,Nov Houses Launch,Lahore,PKR 20–30 million,House,1 kanal,low,
+Farah,Dar,+92,3000003003,farah.dar3@example.com,Facebook,Nov Houses Launch,Peshawar,PKR 30–50 million,House,20 marla,high,"Overseas, replies on WhatsApp"
+Haris,Gillani,+92,3000003004,haris.gillani4@example.com,Facebook,Nov Houses Launch,Islamabad,Under PKR 10 million,House,7 marla,medium,
+Hina,Hashmi,+92,3000003005,hina.hashmi5@example.com,Facebook,Nov Houses Launch,Rawalpindi,PKR 10–20 million,House,Other / not sure,low,Wants easy instalments
+Jawad,Janjua,+92,3000003006,jawad.janjua6@example.com,Facebook,Nov Houses Launch,Lahore,PKR 20–30 million,House,5 marla,high,Call after 6 PM
+Komal,Khan,+92,3000003007,komal.khan7@example.com,Facebook,Nov Houses Launch,Peshawar,PKR 30–50 million,House,10 marla,medium,
+Moiz,Awan,+92,3000003008,moiz.awan8@example.com,Facebook,Nov Houses Launch,Islamabad,Under PKR 10 million,House,1 kanal,low,"Overseas, replies on WhatsApp"
+Nida,Bhatti,+92,3000003009,nida.bhatti9@example.com,Facebook,Nov Houses Launch,Rawalpindi,PKR 10–20 million,House,20 marla,high,
+Omer,Cheema,+92,3000003010,omer.cheema10@example.com,Facebook,Nov Houses Launch,Lahore,PKR 20–30 million,House,7 marla,medium,Wants easy instalments
+Rida,Dar,+92,3000003011,rida.dar11@example.com,Facebook,Nov Houses Launch,Peshawar,PKR 30–50 million,House,Other / not sure,low,Call after 6 PM
+Saad,Gillani,+92,3000003012,saad.gillani12@example.com,Facebook,Nov Houses Launch,Islamabad,Under PKR 10 million,House,5 marla,high,
+Tania,Hashmi,+92,3000003013,tania.hashmi13@example.com,Facebook,Nov Houses Launch,Rawalpindi,PKR 10–20 million,House,10 marla,medium,"Overseas, replies on WhatsApp"
+Umer,Janjua,+92,3000003014,umer.janjua14@example.com,Facebook,Nov Houses Launch,Lahore,PKR 20–30 million,House,1 kanal,low,
+Zoya,Khan,+92,3000003015,zoya.khan15@example.com,Facebook,Nov Houses Launch,Peshawar,PKR 30–50 million,House,20 marla,high,Wants easy instalments
+Adnan,Awan,+92,3000003016,adnan.awan16@example.com,Facebook,Nov Houses Launch,Islamabad,Under PKR 10 million,House,7 marla,medium,Call after 6 PM
+Beenish,Bhatti,+92,3000003017,beenish.bhatti17@example.com,Facebook,Nov Houses Launch,Rawalpindi,PKR 10–20 million,House,Other / not sure,low,
+Danial,Cheema,+92,3000003018,danial.cheema18@example.com,Facebook,Nov Houses Launch,Lahore,PKR 20–30 million,House,5 marla,high,"Overseas, replies on WhatsApp"
+Erum,Dar,+92,3000003019,erum.dar19@example.com,Facebook,Nov Houses Launch,Peshawar,PKR 30–50 million,House,10 marla,medium,
+Ahmed,Hashmi,+92,3000003020,ahmed.hashmi20@example.com,Facebook,Nov Houses Launch,Islamabad,Under PKR 10 million,House,1 kanal,low,Wants easy instalments
+Ayesha,Janjua,+92,3000003021,ayesha.janjua21@example.com,Facebook,Nov Houses Launch,Rawalpindi,PKR 10–20 million,House,20 marla,high,Call after 6 PM
+Bilal,Khan,+92,3000003022,bilal.khan22@example.com,Facebook,Nov Houses Launch,Lahore,PKR 20–30 million,House,7 marla,medium,
+Farah,Awan,+92,3000003023,farah.awan23@example.com,Facebook,Nov Houses Launch,Peshawar,PKR 30–50 million,House,Other / not sure,low,"Overseas, replies on WhatsApp"
+Haris,Bhatti,+92,3000003024,haris.bhatti24@example.com,Facebook,Nov Houses Launch,Islamabad,Under PKR 10 million,House,5 marla,high,
+Hina,Cheema,+92,3000003025,hina.cheema25@example.com,Facebook,Nov Houses Launch,Rawalpindi,PKR 10–20 million,House,10 marla,medium,Wants easy instalments
+Jawad,Dar,+92,3000003026,jawad.dar26@example.com,Facebook,Nov Houses Launch,Lahore,PKR 20–30 million,House,1 kanal,low,Call after 6 PM
+Komal,Gillani,+92,3000003027,komal.gillani27@example.com,Facebook,Nov Houses Launch,Peshawar,PKR 30–50 million,House,20 marla,high,
+Moiz,Hashmi,+92,3000003028,moiz.hashmi28@example.com,Facebook,Nov Houses Launch,Islamabad,Under PKR 10 million,House,7 marla,medium,"Overseas, replies on WhatsApp"
+Nida,Janjua,+92,3000003029,nida.janjua29@example.com,Facebook,Nov Houses Launch,Rawalpindi,PKR 10–20 million,House,Other / not sure,low,
+Omer,Khan,+92,3000003030,omer.khan30@example.com,Facebook,Nov Houses Launch,Lahore,PKR 20–30 million,House,5 marla,high,Wants easy instalments
+Rida,Awan,+92,3000003031,rida.awan31@example.com,Facebook,Nov Houses Launch,Peshawar,PKR 30–50 million,House,10 marla,medium,Call after 6 PM
+Saad,Bhatti,+92,3000003032,saad.bhatti32@example.com,Facebook,Nov Houses Launch,Islamabad,Under PKR 10 million,House,1 kanal,low,
+Tania,Cheema,+92,3000003033,tania.cheema33@example.com,Facebook,Nov Houses Launch,Rawalpindi,PKR 10–20 million,House,20 marla,high,"Overseas, replies on WhatsApp"
+Umer,Dar,+92,3000003034,umer.dar34@example.com,Facebook,Nov Houses Launch,Lahore,PKR 20–30 million,House,7 marla,medium,
+Zoya,Gillani,+92,3000003035,zoya.gillani35@example.com,Facebook,Nov Houses Launch,Peshawar,PKR 30–50 million,House,Other / not sure,low,Wants easy instalments
+Adnan,Hashmi,+92,3000003036,adnan.hashmi36@example.com,Facebook,Nov Houses Launch,Islamabad,Under PKR 10 million,House,5 marla,high,Call after 6 PM
+Beenish,Janjua,+92,3000003037,beenish.janjua37@example.com,Facebook,Nov Houses Launch,Rawalpindi,PKR 10–20 million,House,10 marla,medium,
+Danial,Khan,+92,3000003038,danial.khan38@example.com,Facebook,Nov Houses Launch,Lahore,PKR 20–30 million,House,1 kanal,low,"Overseas, replies on WhatsApp"
+Erum,Awan,+92,3000003039,erum.awan39@example.com,Facebook,Nov Houses Launch,Peshawar,PKR 30–50 million,House,20 marla,high,
+Ahmed,Cheema,+92,3000003040,ahmed.cheema40@example.com,Facebook,Nov Houses Launch,Islamabad,Under PKR 10 million,House,7 marla,medium,Wants easy instalments
+Ayesha,Dar,+92,3000003041,ayesha.dar41@example.com,Facebook,Nov Houses Launch,Rawalpindi,PKR 10–20 million,House,Other / not sure,low,Call after 6 PM
+Bilal,Gillani,+92,3000003042,bilal.gillani42@example.com,Facebook,Nov Houses Launch,Lahore,PKR 20–30 million,House,5 marla,high,
+Farah,Hashmi,+92,3000003043,farah.hashmi43@example.com,Facebook,Nov Houses Launch,Peshawar,PKR 30–50 million,House,10 marla,medium,"Overseas, replies on WhatsApp"
+Haris,Janjua,+92,3000003044,haris.janjua44@example.com,Facebook,Nov Houses Launch,Islamabad,Under PKR 10 million,House,1 kanal,low,
+Hina,Khan,+92,3000003045,hina.khan45@example.com,Facebook,Nov Houses Launch,Rawalpindi,PKR 10–20 million,House,20 marla,high,Wants easy instalments
+Jawad,Awan,+92,3000003046,jawad.awan46@example.com,Facebook,Nov Houses Launch,Lahore,PKR 20–30 million,House,7 marla,medium,Call after 6 PM
+Komal,Bhatti,+92,3000003047,komal.bhatti47@example.com,Facebook,Nov Houses Launch,Peshawar,PKR 30–50 million,House,Other / not sure,low,
+Moiz,Cheema,+92,3000003048,moiz.cheema48@example.com,Facebook,Nov Houses Launch,Islamabad,Under PKR 10 million,House,5 marla,high,"Overseas, replies on WhatsApp"
+Nida,Dar,+92,3000003049,nida.dar49@example.com,Facebook,Nov Houses Launch,Rawalpindi,PKR 10–20 million,House,10 marla,medium,
+Omer,Gillani,+92,3000003050,omer.gillani50@example.com,Facebook,Nov Houses Launch,Lahore,PKR 20–30 million,House,1 kanal,low,Wants easy instalments
+Rida,Hashmi,+92,3000003051,rida.hashmi51@example.com,Facebook,Nov Houses Launch,Peshawar,PKR 30–50 million,House,20 marla,high,Call after 6 PM
+Saad,Janjua,+92,3000003052,saad.janjua52@example.com,Facebook,Nov Houses Launch,Islamabad,Under PKR 10 million,House,7 marla,medium,
+Tania,Khan,+92,3000003053,tania.khan53@example.com,Facebook,Nov Houses Launch,Rawalpindi,PKR 10–20 million,House,Other / not sure,low,"Overseas, replies on WhatsApp"
+Umer,Awan,+92,3000003054,umer.awan54@example.com,Facebook,Nov Houses Launch,Lahore,PKR 20–30 million,House,5 marla,high,

@@ -1,0 +1,56 @@
+first_name,last_name,phone_country_code,phone,email,source,campaign,city,budget,property_type,size,priority,note
+Ahmed,Awan,+92,3000003000,ahmed.awan0@example.com,Google,1 Kanal Plots,Islamabad,Under PKR 10 million,Plot,5 marla,high,Wants easy instalments
+Ayesha,Bhatti,+92,3000003001,ayesha.bhatti1@example.com,Google,1 Kanal Plots,Rawalpindi,PKR 10–20 million,Plot,1 kanal,medium,Call after 6 PM
+Bilal,Cheema,+92,3000003002,bilal.cheema2@example.com,Google,1 Kanal Plots,Lahore,PKR 20–30 million,Plot,10 marla,low,
+Farah,Dar,+92,3000003003,farah.dar3@example.com,Google,1 Kanal Plots,Peshawar,PKR 30–50 million,Plot,"5,000 sq ft",high,"Overseas, replies on WhatsApp"
+Haris,Gillani,+92,3000003004,haris.gillani4@example.com,Google,1 Kanal Plots,Islamabad,Under PKR 10 million,Plot,3 marla,medium,
+Hina,Hashmi,+92,3000003005,hina.hashmi5@example.com,Google,1 Kanal Plots,Rawalpindi,PKR 10–20 million,Plot,5 marla,low,Wants easy instalments
+Jawad,Janjua,+92,3000003006,jawad.janjua6@example.com,Google,1 Kanal Plots,Lahore,PKR 20–30 million,Plot,1 kanal,high,Call after 6 PM
+Komal,Khan,+92,3000003007,komal.khan7@example.com,Google,1 Kanal Plots,Peshawar,PKR 30–50 million,Plot,10 marla,medium,
+Moiz,Awan,+92,3000003008,moiz.awan8@example.com,Google,1 Kanal Plots,Islamabad,Under PKR 10 million,Plot,"5,000 sq ft",low,"Overseas, replies on WhatsApp"
+Nida,Bhatti,+92,3000003009,nida.bhatti9@example.com,Google,1 Kanal Plots,Rawalpindi,PKR 10–20 million,Plot,3 marla,high,
+Omer,Cheema,+92,3000003010,omer.cheema10@example.com,Google,1 Kanal Plots,Lahore,PKR 20–30 million,Plot,5 marla,medium,Wants easy instalments
+Rida,Dar,+92,3000003011,rida.dar11@example.com,Google,1 Kanal Plots,Peshawar,PKR 30–50 million,Plot,1 kanal,low,Call after 6 PM
+Saad,Gillani,+92,3000003012,saad.gillani12@example.com,Google,1 Kanal Plots,Islamabad,Under PKR 10 million,Plot,10 marla,high,
+Tania,Hashmi,+92,3000003013,tania.hashmi13@example.com,Google,1 Kanal Plots,Rawalpindi,PKR 10–20 million,Plot,"5,000 sq ft",medium,"Overseas, replies on WhatsApp"
+Umer,Janjua,+92,3000003014,umer.janjua14@example.com,Google,1 Kanal Plots,Lahore,PKR 20–30 million,Plot,3 marla,low,
+Zoya,Bhatti,+92,3000003055,zoya.bhatti55@example.com,Google,1 Kanal Plots,Peshawar,PKR 30–50 million,Plot,5 marla,high,Wants easy instalments
+Adnan,Cheema,+92,3000003056,adnan.cheema56@example.com,Google,1 Kanal Plots,Islamabad,Under PKR 10 million,Plot,1 kanal,medium,Call after 6 PM
+Beenish,Dar,+92,3000003057,beenish.dar57@example.com,Google,1 Kanal Plots,Rawalpindi,PKR 10–20 million,Plot,10 marla,low,
+Danial,Gillani,+92,3000003058,danial.gillani58@example.com,Google,1 Kanal Plots,Lahore,PKR 20–30 million,Plot,"5,000 sq ft",high,"Overseas, replies on WhatsApp"
+Erum,Hashmi,+92,3000003059,erum.hashmi59@example.com,Google,1 Kanal Plots,Peshawar,PKR 30–50 million,Plot,3 marla,medium,
+Ahmed,Khan,+92,3000003060,ahmed.khan60@example.com,Google,1 Kanal Plots,Islamabad,Under PKR 10 million,Plot,5 marla,low,Wants easy instalments
+Ayesha,Awan,+92,3000003061,ayesha.awan61@example.com,Google,1 Kanal Plots,Rawalpindi,PKR 10–20 million,Plot,1 kanal,high,Call after 6 PM
+Bilal,Bhatti,+92,3000003062,bilal.bhatti62@example.com,Google,1 Kanal Plots,Lahore,PKR 20–30 million,Plot,10 marla,medium,
+Farah,Cheema,+92,3000003063,farah.cheema63@example.com,Google,1 Kanal Plots,Peshawar,PKR 30–50 million,Plot,"5,000 sq ft",low,"Overseas, replies on WhatsApp"
+Haris,Dar,+92,3000003064,haris.dar64@example.com,Google,1 Kanal Plots,Islamabad,Under PKR 10 million,Plot,3 marla,high,
+Hina,Gillani,+92,3000003065,hina.gillani65@example.com,Google,1 Kanal Plots,Rawalpindi,PKR 10–20 million,Plot,5 marla,medium,Wants easy instalments
+Jawad,Hashmi,+92,3000003066,jawad.hashmi66@example.com,Google,1 Kanal Plots,Lahore,PKR 20–30 million,Plot,1 kanal,low,Call after 6 PM
+Komal,Janjua,+92,3000003067,komal.janjua67@example.com,Google,1 Kanal Plots,Peshawar,PKR 30–50 million,Plot,10 marla,high,
+Moiz,Khan,+92,3000003068,moiz.khan68@example.com,Google,1 Kanal Plots,Islamabad,Under PKR 10 million,Plot,"5,000 sq ft",medium,"Overseas, replies on WhatsApp"
+Nida,Awan,+92,3000003069,nida.awan69@example.com,Google,1 Kanal Plots,Rawalpindi,PKR 10–20 million,Plot,3 marla,low,
+Omer,Bhatti,+92,3000003070,omer.bhatti70@example.com,Google,1 Kanal Plots,Lahore,PKR 20–30 million,Plot,5 marla,high,Wants easy instalments
+Rida,Cheema,+92,3000003071,rida.cheema71@example.com,Google,1 Kanal Plots,Peshawar,PKR 30–50 million,Plot,1 kanal,medium,Call after 6 PM
+Saad,Dar,+92,3000003072,saad.dar72@example.com,Google,1 Kanal Plots,Islamabad,Under PKR 10 million,Plot,10 marla,low,
+Tania,Gillani,+92,3000003073,tania.gillani73@example.com,Google,1 Kanal Plots,Rawalpindi,PKR 10–20 million,Plot,"5,000 sq ft",high,"Overseas, replies on WhatsApp"
+Umer,Hashmi,+92,3000003074,umer.hashmi74@example.com,Google,1 Kanal Plots,Lahore,PKR 20–30 million,Plot,3 marla,medium,
+Zoya,Janjua,+92,3000003075,zoya.janjua75@example.com,Google,1 Kanal Plots,Peshawar,PKR 30–50 million,Plot,5 marla,low,Wants easy instalments
+Adnan,Khan,+92,3000003076,adnan.khan76@example.com,Google,1 Kanal Plots,Islamabad,Under PKR 10 million,Plot,1 kanal,high,Call after 6 PM
+Beenish,Awan,+92,3000003077,beenish.awan77@example.com,Google,1 Kanal Plots,Rawalpindi,PKR 10–20 million,Plot,10 marla,medium,
+Danial,Bhatti,+92,3000003078,danial.bhatti78@example.com,Google,1 Kanal Plots,Lahore,PKR 20–30 million,Plot,"5,000 sq ft",low,"Overseas, replies on WhatsApp"
+Erum,Cheema,+92,3000003079,erum.cheema79@example.com,Google,1 Kanal Plots,Peshawar,PKR 30–50 million,Plot,3 marla,high,
+Ahmed,Gillani,+92,3000003080,ahmed.gillani80@example.com,Google,1 Kanal Plots,Islamabad,Under PKR 10 million,Plot,5 marla,medium,Wants easy instalments
+Ayesha,Hashmi,+92,3000003081,ayesha.hashmi81@example.com,Google,1 Kanal Plots,Rawalpindi,PKR 10–20 million,Plot,1 kanal,low,Call after 6 PM
+Bilal,Janjua,+92,3000003082,bilal.janjua82@example.com,Google,1 Kanal Plots,Lahore,PKR 20–30 million,Plot,10 marla,high,
+Farah,Khan,+92,3000003083,farah.khan83@example.com,Google,1 Kanal Plots,Peshawar,PKR 30–50 million,Plot,"5,000 sq ft",medium,"Overseas, replies on WhatsApp"
+Haris,Awan,+92,3000003084,haris.awan84@example.com,Google,1 Kanal Plots,Islamabad,Under PKR 10 million,Plot,3 marla,low,
+Hina,Bhatti,+92,3000003085,hina.bhatti85@example.com,Google,1 Kanal Plots,Rawalpindi,PKR 10–20 million,Plot,5 marla,high,Wants easy instalments
+Jawad,Cheema,+92,3000003086,jawad.cheema86@example.com,Google,1 Kanal Plots,Lahore,PKR 20–30 million,Plot,1 kanal,medium,Call after 6 PM
+Komal,Dar,+92,3000003087,komal.dar87@example.com,Google,1 Kanal Plots,Peshawar,PKR 30–50 million,Plot,10 marla,low,
+Moiz,Gillani,+92,3000003088,moiz.gillani88@example.com,Google,1 Kanal Plots,Islamabad,Under PKR 10 million,Plot,"5,000 sq ft",high,"Overseas, replies on WhatsApp"
+Nida,Hashmi,+92,3000003089,nida.hashmi89@example.com,Google,1 Kanal Plots,Rawalpindi,PKR 10–20 million,Plot,3 marla,medium,
+Omer,Janjua,+92,3000003090,omer.janjua90@example.com,Google,1 Kanal Plots,Lahore,PKR 20–30 million,Plot,5 marla,low,Wants easy instalments
+Rida,Khan,+92,3000003091,rida.khan91@example.com,Google,1 Kanal Plots,Peshawar,PKR 30–50 million,Plot,1 kanal,high,Call after 6 PM
+Saad,Awan,+92,3000003092,saad.awan92@example.com,Google,1 Kanal Plots,Islamabad,Under PKR 10 million,Plot,10 marla,medium,
+Tania,Bhatti,+92,3000003093,tania.bhatti93@example.com,Google,1 Kanal Plots,Rawalpindi,PKR 10–20 million,Plot,"5,000 sq ft",low,"Overseas, replies on WhatsApp"
+Umer,Cheema,+92,3000003094,umer.cheema94@example.com,Google,1 Kanal Plots,Lahore,PKR 20–30 million,Plot,3 marla,high,

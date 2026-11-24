@@ -6,6 +6,7 @@ import { cn } from "@/lib/cn";
 import { INBOUND_LABELS, PRIORITY_LABELS, type SortColumn } from "@/modules/leads/constants";
 import { telHref } from "@/modules/leads/phone";
 import type { LeadListRow } from "@/modules/leads/queries";
+import { formatSqft, PROPERTY_TYPE_LABELS, type PropertyType } from "@/modules/leads/size";
 import { followUpStatus, formatDate, formatDateTime, noContactLabel, since, type FollowUpStatus } from "../format";
 import { withParams } from "../url";
 import { SourcePill, StagePill } from "./chips";
@@ -223,10 +224,25 @@ export function LeadsTable({
                   </td>
                 ),
                 city: text("city", r.cityName),
-                source: text("source", <SourcePill>{r.sourceName ?? INBOUND_LABELS[r.inboundChannel]}</SourcePill>),
+                source: text(
+                  "source",
+                  <>
+                    <SourcePill>{r.sourceName ?? INBOUND_LABELS[r.inboundChannel]}</SourcePill>
+                    {r.campaign ? <span className="mt-1 block text-[11px] text-zinc-500">{r.campaign}</span> : null}
+                  </>,
+                ),
                 inbound: text("inbound", INBOUND_LABELS[r.inboundChannel]),
                 budget: text("budget", r.budgetName, "whitespace-nowrap text-zinc-800 uppercase"),
-                size: text("size", r.desiredSize),
+                size: text(
+                  "size",
+                  r.desiredSize || r.propertyType ? (
+                    <>
+                      <span className="block">{[r.desiredSize, r.propertyType ? PROPERTY_TYPE_LABELS[r.propertyType as PropertyType] : null].filter(Boolean).join(" · ")}</span>
+                      {r.sizeSqft ? <span className="block text-[11px] text-zinc-500">{formatSqft(r.sizeSqft)}</span> : r.desiredSize ? <span className="block text-[11px] font-semibold text-amber-700">Unclear size</span> : null}
+                    </>
+                  ) : null,
+                  "whitespace-nowrap",
+                ),
                 firstTouch: text("firstTouch", r.firstTouchAt ? formatDateTime(r.firstTouchAt) : null),
                 comment: text("comment", r.latestComment ? <span className="line-clamp-2">{r.latestComment}</span> : null, "max-w-[208px] text-zinc-700"),
                 lostReason: text("lostReason", r.lostReasonName),

@@ -1,11 +1,12 @@
 import { and, eq, ne, sql } from "drizzle-orm";
 import type { Database } from "@/server/db";
-import { auditLogs, projects } from "@/server/db/schema";
+import { auditLogs, leads, projects } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
 import { AppError, notFound } from "@/server/errors";
 import { parse } from "@/modules/clients/support";
 import { isUniqueViolation, type DbOrTx } from "@/modules/leads/support";
 import { assertCanProject } from "./policy";
+import { sizeFields } from "@/modules/leads/size";
 import { createProjectSchema, dimensionsSchema, paymentPlanSchema, updateProjectSchema } from "./validation";
 
 const NAME_TAKEN = "A project with this name already exists.";
@@ -43,6 +44,7 @@ export async function createProject(db: Database, actor: Actor, input: unknown) 
       city: data.city ?? null,
       address: data.address ?? null,
       description: data.description ?? null,
+      marlaSqft: data.marlaSqft,
       status: data.status,
     };
     let created: { id: string };
@@ -70,6 +72,7 @@ export async function updateProject(db: Database, actor: Actor, projectId: strin
     if (data.name !== undefined) changes.name = data.name;
     if (data.type !== undefined) changes.type = data.type;
     if (data.status !== undefined) changes.status = data.status;
+    if (data.marlaSqft !== undefined) changes.marlaSqft = data.marlaSqft;
     for (const key of ["developer", "city", "address", "description"] as const) {
       if (key in data) changes[key] = data[key] ?? null;
     }
@@ -85,6 +88,11 @@ export async function updateProject(db: Database, actor: Actor, projectId: strin
     } catch (error) {
       if (isNameViolation(error)) throw nameTaken();
       throw error;
+    }
+    if (changes.marlaSqft !== undefined && changed.includes("marlaSqft")) {
+      // Sizes given in marla or kanal are worked out again with the new figure.
+      const sized = await tx.select({ id: leads.id, words: leads.desiredSize }).from(leads).where(and(eq(leads.projectId, projectId), sql`${leads.desiredSize} ~* 'marla|kanal'`));
+      for (const l of sized) await tx.update(leads).set({ sizeSqft: sizeFields(l.words, null, changes.marlaSqft).sizeSqft }).where(eq(leads.id, l.id));
     }
     await auditProject(
       tx,

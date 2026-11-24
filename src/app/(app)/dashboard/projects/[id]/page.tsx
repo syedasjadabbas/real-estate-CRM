@@ -95,6 +95,7 @@ export default async function ProjectDetailPage({ params }: PageProps<"/dashboar
               city: project.city ?? "",
               address: project.address ?? "",
               description: project.description ?? "",
+              marlaSqft: String(project.marlaSqft),
             }}
           />
           ) : (

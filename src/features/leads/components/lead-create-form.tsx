@@ -39,6 +39,8 @@ export function LeadCreateForm({
     email: "",
     gender: "",
     desiredSize: "",
+    propertyType: "",
+    campaign: "",
     sourceId: "",
     budgetRangeId: "",
     priority: "none",

@@ -12,6 +12,7 @@ import { createLead } from "./commands";
 import { recordImportedRepeat } from "./enquiries";
 import { PRIORITIES } from "./constants";
 import { normalizePhone } from "./phone";
+import { parsePropertyType, parseSize } from "./size";
 import { leadFieldsSchema } from "./validation";
 
 /**
@@ -20,7 +21,9 @@ import { leadFieldsSchema } from "./validation";
  * the live leads or the assignment pool until a Super Admin approves the batch. Manual leads never
  * go through batches.
  */
-export const LEAD_IMPORT_COLUMNS = ["first_name", "last_name", "phone_country_code", "phone", "phone2", "phone3", "phone4", "phone5", "email", "source", "city", "budget", "priority", "size", "gender", "note"] as const;
+export const LEAD_IMPORT_COLUMNS = ["first_name", "last_name", "phone_country_code", "phone", "phone2", "phone3", "phone4", "phone5", "email", "source", "city", "budget", "priority", "property_type", "size", "campaign", "gender", "note"] as const;
+/** Headings Facebook's lead form export uses. */
+const ALIASES: Record<string, string> = { full_name: "name", phone_number: "phone", campaign_name: "campaign" };
 /** Files made before 23 Nov 2026 have one name column instead; they still import. */
 const REQUIRED = ["first_name", "phone", "source"] as const;
 
@@ -40,9 +43,11 @@ type RowData = Record<string, unknown>;
 function validateRow(
   cells: Record<string, string>,
   lookup: { sources: Map<string, string>; cities: Map<string, string>; budgets: Map<string, string> },
-): { data: RowData; numbers: string[]; errors: string[] } {
+): { data: RowData; numbers: string[]; errors: string[]; warnings: string[] } {
   const errors: string[] = [];
-  const get = (k: string) => (cells[k] ?? "").trim();
+  const warnings: string[] = [];
+  // Facebook writes numbers as "p:+92300…".
+  const get = (k: string) => (cells[k] ?? "").trim().replace(/^p:(?=\+?\d)/, "");
   const countryCode = get("phone_country_code") || "+92";
   const primary = normalizePhone(countryCode, get("phone"));
   if (!primary) errors.push("Phone: enter a valid number");
@@ -71,6 +76,10 @@ function validateRow(
       else errors.push(`City: ${typed.error.issues[0].message.toLowerCase()}`);
     }
   }
+  const type = get("property_type") ? parsePropertyType(get("property_type")) : null;
+  if (get("property_type") && !type && !/^(other|not sure|other ?\/ ?not sure)$/i.test(get("property_type"))) warnings.push(`Property type "${get("property_type")}" isn't on the list: left empty`);
+  const size = /^(other|not sure|other ?\/ ?not sure)$/i.test(get("size")) ? "" : get("size");
+  if (size && !parseSize(size)) warnings.push(`Size "${size}" is unclear: kept for the agent to confirm`);
   const priority = get("priority").toLowerCase() || "none";
   if (!(PRIORITIES as readonly string[]).includes(priority)) errors.push(`Priority: use ${PRIORITIES.join(", ")}`);
   const named = get("first_name") || get("last_name");
@@ -84,7 +93,9 @@ function validateRow(
     sourceId: sourceId ?? "",
     budgetRangeId: budgetId ?? "",
     priority,
-    desiredSize: get("size"),
+    desiredSize: size,
+    propertyType: type ?? "",
+    campaign: get("campaign"),
     gender: get("gender"),
     note: get("note"),
     ...city,
@@ -103,7 +114,7 @@ function validateRow(
       if (!data.name) errors.push("First name is required");
     } else if (!get(k)) errors.push(`${k === "phone" ? "Phone" : "Source"} is required`);
   }
-  return { data, numbers, errors: [...new Set(errors)] };
+  return { data, numbers, errors: [...new Set(errors)], warnings };
 }
 
 /** Validates a file and stores it as a pending batch. Nothing is created yet. */
@@ -123,7 +134,7 @@ export async function submitImport(db: Database, actor: Actor, input: { projectI
   }
   const [header, ...body] = parsed;
   if (!header) throw fail("The file is empty");
-  const columns = header.cells.map((c) => c.trim().toLowerCase());
+  const columns = header.cells.map((c) => c.trim().toLowerCase()).map((c) => ALIASES[c] ?? c);
   const missing = REQUIRED.filter((c) => !columns.includes(c) && !(c === "first_name" && columns.includes("name")));
   if (missing.length) throw fail(`Missing column${missing.length > 1 ? "s" : ""}: ${missing.join(", ")}. Expected: ${LEAD_IMPORT_COLUMNS.join(", ")}`);
   if (body.length === 0) throw fail("The file has no rows");
@@ -145,7 +156,7 @@ export async function submitImport(db: Database, actor: Actor, input: { projectI
     const counts = { valid: 0, duplicate: 0, invalid: 0 };
     for (const [i, r] of body.entries()) {
       const cells = Object.fromEntries(columns.map((c, j) => [c, r.cells[j] ?? ""]));
-      const { data, numbers, errors } = validateRow(cells, lookup);
+      const { data, numbers, errors, warnings } = validateRow(cells, lookup);
       let status: "valid" | "duplicate" | "invalid" = errors.length ? "invalid" : "valid";
       let matchLeadId: string | null = null;
       const duplicateReasons: string[] = [];
@@ -163,7 +174,7 @@ export async function submitImport(db: Database, actor: Actor, input: { projectI
       }
       for (const n of numbers) if (!seen.has(n)) seen.set(n, i + 1);
       counts[status] += 1;
-      rows.push({ rowNo: i + 1, data, phoneE164: numbers[0] ?? null, status, errors: errors.length ? errors : duplicateReasons.length ? duplicateReasons : null, matchLeadId });
+      rows.push({ rowNo: i + 1, data, phoneE164: numbers[0] ?? null, status, errors: errors.length ? errors : duplicateReasons.length ? duplicateReasons : warnings.length ? warnings : null, matchLeadId });
     }
     const fileName = typeof input.fileName === "string" ? input.fileName.slice(0, 200) : null;
     const [batch] = await tx
@@ -283,8 +294,9 @@ export async function decideImportBatch(db: Database, actor: Actor, batchId: str
   let skipped = 0;
   let repeats = 0;
   const repeat = async (r: typeof leadImportRows.$inferSelect, leadId: string) => {
-    const data = r.data as { sourceId: string; note?: string };
-    const recorded = await recordImportedRepeat(db, actor, leadId, data.sourceId, data.note?.trim() || null);
+    const data = r.data as { sourceId: string; note?: string; campaign?: string };
+    const note = [data.campaign ? `Campaign: ${data.campaign}` : null, data.note?.trim() || null].filter(Boolean).join(". ");
+    const recorded = await recordImportedRepeat(db, actor, leadId, data.sourceId, note || null);
     if (recorded) repeats += 1;
     return recorded ? "Recorded as a repeat enquiry on the existing lead" : "Already recorded as an enquiry today";
   };

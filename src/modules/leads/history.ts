@@ -2,6 +2,7 @@ import { eq, inArray } from "drizzle-orm";
 import { budgetRanges, cities, leadSources, lostReasons, projects } from "@/server/db/schema";
 import { PRIORITY_LABELS, type LeadPriority } from "./constants";
 import { formatPhone } from "./phone";
+import { PROPERTY_TYPE_LABELS, type PropertyType } from "./size";
 import type { Tx } from "./support";
 
 /**
@@ -21,6 +22,8 @@ type LeadFields = {
   sourceId: string;
   budgetRangeId: string | null;
   desiredSize: string | null;
+  propertyType?: string | null;
+  campaign?: string | null;
   priority: string;
 };
 
@@ -48,6 +51,8 @@ async function readable(tx: Tx, rows: LeadFields[]) {
       Source: sources.get(r.sourceId) ?? "",
       Budget: r.budgetRangeId ? (budgets.get(r.budgetRangeId) ?? "") : "",
       "Desired size": r.desiredSize ?? "",
+      "Property type": PROPERTY_TYPE_LABELS[r.propertyType as PropertyType] ?? r.propertyType ?? "",
+      Campaign: r.campaign ?? "",
       Priority: PRIORITY_LABELS[r.priority as LeadPriority] ?? r.priority,
     }),
   );

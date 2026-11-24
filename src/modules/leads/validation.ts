@@ -2,6 +2,7 @@ import { OTHER_CITY } from "@/modules/cities/constants";
 import { cityChoiceSchema, cityOtherSchema } from "@/modules/cities/validation";
 import { extraPhonesSchema } from "@/modules/contacts/validation";
 import { z } from "zod";
+import { PROPERTY_TYPES } from "./size";
 import {
   FOLLOW_UP_WINDOWS,
   LEAD_STAGES,
@@ -46,7 +47,12 @@ export const leadFieldsSchema = z.object({
   gender: optionalText(30),
   sourceId: z.uuid("Source is required"),
   budgetRangeId: optionalUuid,
-  desiredSize: optionalText(40),
+  desiredSize: optionalText(60),
+  propertyType: z
+    .union([z.enum(PROPERTY_TYPES, "Choose a property type"), z.literal("")])
+    .optional()
+    .transform((v) => v || undefined),
+  campaign: optionalText(120),
   priority: z.enum(PRIORITIES).default("none"),
 });
 
@@ -143,6 +149,13 @@ export const leadListQuerySchema = z.object({
   /** Lost reason ids (dashboard "Lost leads by reason" click-through). */
   lostReason: csvIds.catch([]),
   priority: csv(PRIORITIES).catch([]),
+  propertyType: csv(PROPERTY_TYPES).catch([]),
+  campaign: z.string().trim().max(120).optional().catch(undefined),
+  /** Square feet. */
+  sizeMin: z.coerce.number().positive().max(10_000_000).optional().catch(undefined),
+  sizeMax: z.coerce.number().positive().max(10_000_000).optional().catch(undefined),
+  /** A size was given but it isn't clear. */
+  sizeUnclear: z.literal("1").optional().catch(undefined),
   followUp: z.enum(FOLLOW_UP_WINDOWS).optional().catch(undefined),
   /** "decided" = when the lead was won or lost (its last stage change). */
   dateField: z.enum(["created", "updated", "decided"]).catch("created"),

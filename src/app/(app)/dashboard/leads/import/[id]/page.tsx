@@ -72,9 +72,9 @@ export default async function ImportBatchPage({ params }: PageProps<"/dashboard/
                         <Link href={`/dashboard/leads/${r.leadId}`} className="font-bold text-brand hover:underline">
                           Open lead
                         </Link>
-                      ) : (
-                        ((r.errors as string[] | null) ?? []).join("; ") || "—"
-                      )}
+                      ) : null}
+                      {r.leadId && r.errors ? " · " : null}
+                      {((r.errors as string[] | null) ?? []).join("; ") || (r.leadId ? null : "—")}
                     </td>
                   </tr>
                 ))}

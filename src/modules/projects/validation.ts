@@ -17,11 +17,14 @@ export const projectFieldsSchema = z.object({
   city: optionalText(80),
   address: optionalText(240),
   description: optionalText(2000),
+  /** Square feet in a marla; sizes given in marla and kanal are worked out with it. */
+  marlaSqft: z.coerce.number("Enter the square feet in a marla").min(200, "Use 200 to 300").max(300, "Use 200 to 300"),
   status: z.enum(PROJECT_STATUSES, "Choose a status"),
 });
 
 export const createProjectSchema = projectFieldsSchema.extend({
   type: z.enum(PROJECT_TYPES, "Choose a project type").default("building"),
+  marlaSqft: projectFieldsSchema.shape.marlaSqft.default(225),
   status: z.enum(PROJECT_STATUSES, "Choose a status").default("active"),
 });
 export type CreateProjectInput = z.input<typeof createProjectSchema>;
