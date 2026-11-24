@@ -7,7 +7,7 @@ import { buttonClasses } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { BookingsMiniList } from "@/features/bookings/components/bookings-table";
 import { LeadClientPanel } from "@/features/clients/components/lead-client-panel";
-import { SourcePill, StagePill } from "@/features/leads/components/chips";
+import { StagePill } from "@/features/leads/components/chips";
 import {
   AssignPanel,
   EditDetailsForm,
@@ -22,7 +22,6 @@ import { CallUpdateCard } from "@/features/leads/components/call-update-card";
 import { withLeadsAccess } from "@/features/leads/components/list-view";
 import { FavoriteButton } from "@/features/leads/components/row-actions";
 import { Timeline } from "@/features/leads/components/timeline";
-import { formatDateTime, formatDuration } from "@/features/leads/format";
 import { canDoBooking } from "@/modules/bookings/policy";
 import { bookingsFor } from "@/modules/bookings/queries";
 import { LeadMeetingsList } from "@/features/meetings/components/lead-meetings";
@@ -32,7 +31,6 @@ import { clientStatusForLead } from "@/modules/clients/queries";
 import { DocumentsPanel } from "@/features/documents/components/documents-panel";
 import { RecordingsPanel } from "@/features/recordings/components/recordings-panel";
 import { listDocuments } from "@/modules/documents/service";
-import { INBOUND_LABELS } from "@/modules/leads/constants";
 import { telHref } from "@/modules/leads/phone";
 import { canPlayRecordings, listRecordings } from "@/modules/recordings/service";
 import { Dialer } from "@/features/voip/components/dialer";
@@ -52,6 +50,14 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
       <p className="text-[10px] font-black tracking-[0.1em] text-zinc-400 uppercase">{label}</p>
       <div className="mt-0.5 truncate text-sm font-bold">{children}</div>
     </div>
+  );
+}
+
+function SectionTitle({ id, children }: { id: string; children: React.ReactNode }) {
+  return (
+    <h3 id={id} className="scroll-mt-24 border-b border-zinc-200 pb-2 text-base font-black tracking-[-0.01em]">
+      {children}
+    </h3>
   );
 }
 
@@ -103,7 +109,7 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
         <VerificationBanner leadId={lead.id} verification={detail.verification} canVerify={detail.permissions.verify} canResubmit={detail.permissions.resubmit} />
 
         <Card className="p-5">
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-7">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <Fact label="Code">
               <span className="tracking-[0.05em]">{lead.code}</span>
             </Fact>
@@ -113,14 +119,9 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
             <Fact label="Email">
               <EmailWithGmail email={lead.email} name={lead.name} />
             </Fact>
-            <Fact label="Lead">
+            <Fact label="Stage">
               <StagePill stage={lead.stage} />
             </Fact>
-            <Fact label="Inbound">
-              <SourcePill>{INBOUND_LABELS[lead.inboundChannel]}</SourcePill>
-            </Fact>
-            <Fact label="First added">{formatDateTime(lead.createdAt)}</Fact>
-            <Fact label="Time to first touch">{formatDuration(lead.timeToFirstTouchMs)}</Fact>
           </div>
           {lead.stage === "lost_lead" && lead.lostReason ? (
             <p className="mt-4 rounded-xl bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">Lost reason: {lead.lostReason}</p>
@@ -132,20 +133,55 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
           ) : null}
         </Card>
 
+        {/* The client's five sections (23 Nov 2026): the form holds the first three. */}
+        <nav aria-label="Lead sections" className="flex gap-1.5 overflow-x-auto rounded-2xl border border-zinc-200/80 bg-white p-1.5 shadow-hairline">
+          {[
+            ["customer", "Customer information"],
+            ["requirements", "Property requirements"],
+            ["lead-information", "Lead information"],
+            ["sales-activity", "Sales activity"],
+            ["booking-information", "Booking information"],
+          ].map(([anchor, label]) => (
+            <a key={anchor} href={`#${anchor}`} className="shrink-0 rounded-xl px-3.5 py-2 text-xs leading-4 font-bold whitespace-nowrap text-zinc-700 hover:bg-zinc-100">
+              {label}
+            </a>
+          ))}
+        </nav>
+
         {/* One save for a call and what it decided (owner, 14 Nov 2026). */}
         {callCard ? <CallUpdateCard leadId={lead.id} currentStage={lead.stage} /> : null}
 
-        <Dialer status={getVoipStatus(actor)} telHref={telHref(lead.phoneCountryCode, lead.phoneNumber)} leadName={lead.name} phone={lead.phone} />
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
+          <div className="min-w-0">
+            <EditDetailsForm detail={detail} lookups={lookups} />
+          </div>
+          <div className="space-y-6">
+            {clientStatus ? <LeadClientPanel leadId={lead.id} status={clientStatus} /> : null}
+            {detail.permissions.assign ? <AssignPanel leadId={lead.id} ownerId={lead.ownerId} owners={owners} /> : null}
+            <StagePanel detail={detail} lostReasons={lookups.lostReasons} showStage={!callCard} />
+            <DocumentsPanel leadId={lead.id} documents={documents} canUpload={detail.permissions.edit} />
+          </div>
+        </div>
 
+        <SectionTitle id="sales-activity">Sales activity</SectionTitle>
+        <Dialer status={getVoipStatus(actor)} telHref={telHref(lead.phoneCountryCode, lead.phoneNumber)} leadName={lead.name} phone={lead.phone} />
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
           <div className="min-w-0 space-y-6">
-            <EditDetailsForm detail={detail} lookups={lookups} />
             <Timeline activities={detail.activities} people={detail.activityPeople} asOf={detail.asOf} />
           </div>
           <div className="space-y-6">
-            <StagePanel detail={detail} lostReasons={lookups.lostReasons} showStage={!callCard} />
-            {detail.permissions.assign ? <AssignPanel leadId={lead.id} ownerId={lead.ownerId} owners={owners} /> : null}
             <FollowUpsPanel detail={detail} canSchedule={!callCard} />
+            {canDoMeeting(actor, "view") ? (
+              <PanelCard title="Meetings">
+                <LeadMeetingsList rows={leadMeetings} />
+                {canDoMeeting(actor, "create") && detail.permissions.edit ? (
+                  <Link href={`/dashboard/meetings/new?lead=${lead.id}`} className={buttonClasses({ variant: "secondary", size: "lg", className: "mt-3" })}>
+                    <CalendarPlus aria-hidden="true" className="size-4" />
+                    Schedule meeting →
+                  </Link>
+                ) : null}
+              </PanelCard>
+            ) : null}
             {callCard ? null : <NotePanel leadId={lead.id} canEdit={detail.permissions.edit} />}
             <RecordingsPanel leadId={lead.id} recordings={recordings} canUpload={detail.permissions.edit} canDelete={actor.role === "super_admin"} canPlay={canPlayRecordings(actor)} />
             <WhatsappPanel
@@ -153,9 +189,11 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
               rows={whatsapp.map((w) => ({ id: w.id, kind: w.kind, name: w.name, durationSec: w.durationSec, createdAt: w.createdAt.toISOString(), uploadedBy: w.uploadedBy }))}
               canUpload={detail.permissions.edit}
             />
-            <DocumentsPanel leadId={lead.id} documents={documents} canUpload={detail.permissions.edit} />
             <ReviewsPanel detail={detail} recordings={recordings} />
-            {clientStatus ? <LeadClientPanel leadId={lead.id} status={clientStatus} /> : null}
+          </div>
+        </div>
+
+        {canDoBooking(actor, "view") ? <SectionTitle id="booking-information">Booking information</SectionTitle> : null}
             {canDoBooking(actor, "view") ? (
               <PanelCard title="Bookings">
                 <BookingsMiniList rows={leadBookings} empty="No bookings for this lead yet." />
@@ -170,19 +208,6 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
                 ) : null}
               </PanelCard>
             ) : null}
-            {canDoMeeting(actor, "view") ? (
-              <PanelCard title="Meetings">
-                <LeadMeetingsList rows={leadMeetings} />
-                {canDoMeeting(actor, "create") && detail.permissions.edit ? (
-                  <Link href={`/dashboard/meetings/new?lead=${lead.id}`} className={buttonClasses({ variant: "secondary", size: "lg", className: "mt-3" })}>
-                    <CalendarPlus aria-hidden="true" className="size-4" />
-                    Schedule meeting →
-                  </Link>
-                ) : null}
-              </PanelCard>
-            ) : null}
-          </div>
-        </div>
       </section>
     );
   });

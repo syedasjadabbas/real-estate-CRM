@@ -127,7 +127,8 @@ export type CreateLeadOutcome =
   | { outcome: "created"; leadId: string; code: string; visible: boolean; ownerName: string | null; verification: "pending" | "approved" | "rejected" }
   | { outcome: "regenerated"; leadId: string | null; code: string | null };
 
-export async function createLead(db: Database, actor: Actor, input: unknown): Promise<CreateLeadOutcome> {
+/** `channel`: how the lead came in; set by the code that brings it in, never by the form. */
+export async function createLead(db: Database, actor: Actor, input: unknown, { channel = "manual" }: { channel?: "manual" | "import" } = {}): Promise<CreateLeadOutcome> {
   assertCan(actor, "create");
   const named = nameFromParts(input);
   const data = parse(createLeadSchema, named.input);
@@ -231,6 +232,7 @@ export async function createLead(db: Database, actor: Actor, input: unknown): Pr
       ...city,
       gender: data.gender ?? null,
       sourceId: data.sourceId,
+      inboundChannel: channel,
       budgetRangeId: data.budgetRangeId ?? null,
       desiredSize: data.desiredSize ?? null,
       priority: data.priority,

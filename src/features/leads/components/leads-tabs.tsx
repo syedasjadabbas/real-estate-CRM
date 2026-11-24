@@ -6,10 +6,12 @@ import { cn } from "@/lib/cn";
 
 const TABS = [
   { label: "All", href: "/dashboard/leads" },
-  // The leads list filtered to the New Lead stage; the tab bar follows the path only, so "All" stays selected there.
+  // Leads awaiting a first conversation; the tab bar follows the path only, so "All" stays selected there.
   { label: "New leads", href: "/dashboard/leads?view=new" },
   // Order by daily priority: today's work, then queues to clear, then outcomes, then data checks.
   { label: "To-dos", href: "/dashboard/leads/todos" },
+  { label: "Meetings scheduled", href: "/dashboard/leads/meetings" },
+  { label: "Booking in process", href: "/dashboard/leads/booking" },
   { label: "Pipeline", href: "/dashboard/leads/pipeline" },
   { label: "Favorites", href: "/dashboard/leads/favorites" },
   { label: "Verify", href: "/dashboard/leads/verify" },

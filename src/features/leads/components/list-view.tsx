@@ -43,9 +43,9 @@ export async function withLeadsAccess(render: (ctx: Awaited<ReturnType<typeof le
 }
 
 export async function LeadsListView({
-  view,
-  title,
-  description,
+  view: pageView,
+  title: pageTitle,
+  description: pageDescription,
   pathname,
   searchParams,
   emptyMessage,
@@ -63,6 +63,11 @@ export async function LeadsListView({
   return withLeadsAccess(async ({ actor, db, projectId }) => {
     const params = flattenParams(await searchParams);
     // "All projects" (owner, 16 Nov 2026): a work profile counts every project, so its links open this.
+    // /dashboard/leads?view=new: the New leads menu item and tab.
+    const isNew = pageView === "all" && params.view === "new";
+    const view: LeadView = isNew ? "new" : pageView;
+    const title = isNew ? "New leads" : pageTitle;
+    const description = isNew ? "Leads still waiting for a first conversation, newest first." : pageDescription;
     const allProjects = params.project === "all";
     const [result, lookups, agents] = await Promise.all([
       listLeads(db, actor, allProjects ? null : projectId, { ...params, view }),
@@ -77,7 +82,7 @@ export async function LeadsListView({
           title={title}
           description={description}
           actions={
-            view === "all" && canDo(actor, "create") ? (
+            pageView === "all" && canDo(actor, "create") ? (
               <Link href="/dashboard/leads/new" className={buttonClasses({ variant: "primary", size: "lg", className: "px-5" })}>
                 <Plus aria-hidden="true" className="size-4" />
                 Add lead

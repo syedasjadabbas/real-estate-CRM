@@ -80,7 +80,7 @@ test("a lost lead is counted by team and listed in the Lost list; the reason and
   await expect(page.getByRole("link", { name, exact: true }).first()).toBeVisible();
 });
 
-test("the menu's New leads link opens the leads added in the last 24 hours", async ({ page }) => {
+test("the menu's New leads link opens the leads waiting for contact", async ({ page }) => {
   const name = unique("E2E New Lead Menu");
   await createLeadFor("agent1", name);
   await selectTestProject(page.context());

@@ -44,10 +44,10 @@ type TextKey = Exclude<keyof LeadFormValues, "phones">;
 export const selectClass =
   "h-10 w-full rounded-xl border border-zinc-200/80 bg-zinc-50/70 px-3 text-sm font-medium text-zinc-900 shadow-hairline focus:border-brand/50 focus:bg-white focus:ring-2 focus:ring-brand/15 focus:outline-none disabled:opacity-60";
 
-/** Form section card ("Contact", "Profile", "Interest & pipeline", "Location"). */
-export function FormSection({ title, children }: { title: string; children: ReactNode }) {
+/** Form section card ("Customer information", "Property requirements", "Lead information"). */
+export function FormSection({ title, children, id }: { title: string; children: ReactNode; id?: string }) {
   return (
-    <fieldset className="rounded-2xl border border-zinc-200/80 bg-white p-5 shadow-hairline">
+    <fieldset id={id} className="scroll-mt-24 rounded-2xl border border-zinc-200/80 bg-white p-5 shadow-hairline">
       <legend className="sr-only">{title}</legend>
       <p aria-hidden="true" className="mb-3 text-[10px] font-black tracking-[0.2em] text-brand uppercase">
         {title}
@@ -65,7 +65,9 @@ type Props = {
   disabled?: boolean;
   /** Phone numbers read-only (agents editing a lead, 14 Nov 2026). */
   lockPhones?: boolean;
-  /** Extra controls appended to the Interest section (project, owner). */
+  /** Extra content in Property requirements (project interests). */
+  requirementsExtra?: ReactNode;
+  /** Extra content in Lead information (project and owner, or the lead's dates). */
   interestExtra?: ReactNode;
   /** The record's saved list city, kept as an option if it has since been deactivated. */
   currentCity?: { id: string; name: string | null } | null;
@@ -86,7 +88,7 @@ function withCurrent(options: { value: string; label: string }[], current: strin
 }
 
 /** Lead fields shared by the create form and the detail page's edit form. */
-export function LeadFields({ values, onChange, errors, lookups, disabled, lockPhones = false, interestExtra, currentCity, projectId }: Props) {
+export function LeadFields({ values, onChange, errors, lookups, disabled, lockPhones = false, requirementsExtra, interestExtra, currentCity, projectId }: Props) {
   const sizeOptions = [...new Set(lookups.unitSizes.filter((u) => !projectId || u.projectId === projectId).map((u) => Number(u.areaSqft)))]
     .sort((a, b) => a - b)
     .map((a) => ({ value: sizeLabel(a), label: sizeLabel(a) }));
@@ -132,28 +134,27 @@ export function LeadFields({ values, onChange, errors, lookups, disabled, lockPh
 
   return (
     <div className="space-y-4">
-      <FormSection title="Contact">
+      <FormSection title="Customer information" id="customer">
         {text("firstName", "First name", { required: true, autoComplete: "off" })}
         {text("lastName", "Last name", { autoComplete: "off" })}
-        {text("email", "Email", { type: "email", placeholder: "Optional" })}
         {select("phoneCountryCode", "Country code", COUNTRY_CODES, { required: true, lock: lockPhones })}
         {text("phoneNumber", "Mobile number", { required: true, type: "tel", placeholder: "3001234567 or 0300 1234567", lock: lockPhones })}
+        {text("email", "Email", { type: "email", placeholder: "Optional" })}
+        {select("gender", "Gender", withCurrent(GENDERS, values.gender), { empty: "Not specified" })}
+        {select("cityId", "City", cityOptions(lookups.cities, currentCity), { empty: "Not specified" })}
+        {values.cityId === OTHER_CITY ? text("cityOther", "City name", { required: true, placeholder: "e.g. Murree", autoComplete: "off" }) : null}
       </FormSection>
       <ExtraPhonesFields phones={values.phones} onChange={(phones) => onChange({ phones })} errors={errors} disabled={disabled || lockPhones} />
       {lockPhones ? <p className="-mt-2 text-[11px] text-zinc-500">Phone numbers can only be changed by an Admin.</p> : null}
-      <FormSection title="Profile">
-        {select("gender", "Gender", withCurrent(GENDERS, values.gender), { empty: "Not specified" })}
-        {select("desiredSize", "Size", withCurrent(sizeOptions, values.desiredSize), { empty: sizeOptions.length ? "Not specified" : "No unit sizes in inventory yet" })}
-      </FormSection>
-      <FormSection title="Interest & pipeline">
-        {select("sourceId", "Source", lookups.sources.map((s) => ({ value: s.id, label: s.name })), { required: true, empty: "Select…" })}
+      <FormSection title="Property requirements" id="requirements">
         {select("budgetRangeId", "Budget", lookups.budgets.map((b) => ({ value: b.id, label: b.name })), { empty: "Not specified" })}
+        {select("desiredSize", "Size", withCurrent(sizeOptions, values.desiredSize), { empty: sizeOptions.length ? "Not specified" : "No unit sizes in inventory yet" })}
+        {requirementsExtra}
+      </FormSection>
+      <FormSection title="Lead information" id="lead-information">
+        {select("sourceId", "Source", lookups.sources.map((s) => ({ value: s.id, label: s.name })), { required: true, empty: "Select…" })}
         {select("priority", "Priority", PRIORITIES.map((p) => ({ value: p, label: PRIORITY_LABELS[p] })))}
         {interestExtra}
-      </FormSection>
-      <FormSection title="Location">
-        {select("cityId", "City", cityOptions(lookups.cities, currentCity), { empty: "Not specified" })}
-        {values.cityId === OTHER_CITY ? text("cityOther", "City name", { required: true, placeholder: "e.g. Murree", autoComplete: "off" }) : null}
       </FormSection>
     </div>
   );

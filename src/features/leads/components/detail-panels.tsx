@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Field } from "@/components/ui/input";
 import { cn } from "@/lib/cn";
-import { LEAD_STAGES, STAGE_LABELS, type LeadStage } from "@/modules/leads/constants";
+import { INBOUND_LABELS, LEAD_STAGES, STAGE_LABELS, type LeadStage } from "@/modules/leads/constants";
 import type { LeadDetail, LeadLookups } from "@/modules/leads/queries";
 import {
   addNoteAction,
@@ -21,7 +21,7 @@ import {
   updateLeadAction,
 } from "../actions";
 import { ROLE_LABELS } from "@/server/auth/types";
-import { formatDateTime } from "../format";
+import { formatDateTime, since } from "../format";
 import { ApprovalActions } from "./approval-actions";
 import { FollowUpForm, textareaClass } from "./follow-up-dialog";
 import { namePartsOf } from "@/lib/person-name";
@@ -438,6 +438,15 @@ export function ReviewsPanel({ detail, recordings = [] }: { detail: LeadDetail; 
   );
 }
 
+function ReadOnly({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[10px] font-black tracking-[0.1em] text-zinc-400 uppercase">{label}</p>
+      <div className="mt-1 text-sm font-semibold text-zinc-800">{children}</div>
+    </div>
+  );
+}
+
 export function EditDetailsForm({ detail, lookups }: { detail: LeadDetail; lookups: LeadLookups }) {
   const { lead } = detail;
   const initial: LeadFormValues = {
@@ -479,7 +488,24 @@ export function EditDetailsForm({ detail, lookups }: { detail: LeadDetail; looku
       }}
       className="space-y-4"
     >
-      <LeadFields values={values} onChange={(p) => setValues((v) => ({ ...v, ...p }))} errors={errors} lookups={lookups} lockPhones={!detail.permissions.editPhones} projectId={lead.projectId} currentCity={lead.cityId ? { id: lead.cityId, name: lead.cityName } : null} disabled={pending || !detail.permissions.editDetails} />
+      <LeadFields values={values} onChange={(p) => setValues((v) => ({ ...v, ...p }))} errors={errors} lookups={lookups} lockPhones={!detail.permissions.editPhones} projectId={lead.projectId}
+        requirementsExtra={
+          <ReadOnly label="Project interests">
+            {lead.projectName}
+            {lead.otherProjects.length ? <span className="block text-xs font-medium text-zinc-500">Also interested in {lead.otherProjects.join(", ")}</span> : null}
+          </ReadOnly>
+        }
+        interestExtra={
+          <>
+            <ReadOnly label="Acquisition channel">{INBOUND_LABELS[lead.inboundChannel]}</ReadOnly>
+            <ReadOnly label="Created">{formatDateTime(lead.createdAt)}</ReadOnly>
+            <ReadOnly label="Time in stage">{since(lead.stageChangedAt, detail.generatedAt)}</ReadOnly>
+            <ReadOnly label="Last contact">{lead.lastContactAt ? formatDateTime(lead.lastContactAt) : "Not contacted yet"}</ReadOnly>
+            <ReadOnly label="First touch">{lead.firstTouchAt ? formatDateTime(lead.firstTouchAt) : "—"}</ReadOnly>
+            <ReadOnly label="Repeat enquiry">{lead.regeneratedAt ? `Latest ${formatDateTime(lead.regeneratedAt)}` : "None"}</ReadOnly>
+          </>
+        }
+        currentCity={lead.cityId ? { id: lead.cityId, name: lead.cityName } : null} disabled={pending || !detail.permissions.editDetails} />
       {detail.permissions.editDetails ? (
         <div className="flex flex-wrap items-center justify-end gap-2">
           <Status message={msg?.text ?? null} ok={msg?.ok} />

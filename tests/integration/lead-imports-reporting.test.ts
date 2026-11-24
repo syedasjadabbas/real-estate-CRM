@@ -115,7 +115,7 @@ describe.skipIf(!hasTestDb)("Sprint P3: lead import batches, priority order, won
       const rows = await db.select().from(leadImportRows).where(eq(leadImportRows.batchId, r.batchId)).orderBy(leadImportRows.rowNo);
       expect(rows.map((x) => x.status)).toEqual(["created", "created", "invalid"]);
       const created = await db.select().from(leads).where(eq(leads.id, rows[0].leadId!));
-      expect(created[0]).toMatchObject({ name: "A One", priority: "high" });
+      expect(created[0]).toMatchObject({ name: "A One", priority: "high", inboundChannel: "import" });
       const [batch] = await db.select().from(leadImportBatches).where(eq(leadImportBatches.id, r.batchId));
       expect(batch).toMatchObject({ status: "approved", decidedById: f.actors.superAdmin.id, createdLeads: 2 });
       expect(batch.decidedAt).toBeInstanceOf(Date);

@@ -1,6 +1,6 @@
 import { OTHER_CITY } from "@/modules/cities/constants";
 import { canVerifyLeads } from "./verification";
-import { and, asc, count, desc, eq, gt, gte, ilike, inArray, isNotNull, isNull, lt, lte, ne, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, gte, ilike, inArray, isNotNull, isNull, lt, lte, ne, notInArray, or, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { Database } from "@/server/db";
 import {
@@ -24,7 +24,7 @@ import {
 } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
 import { forbidden } from "@/server/errors";
-import { BUSINESS_TIME_ZONE, LEAD_STAGES, PAGE_SIZE, UNATTENDED_HOURS, type LeadStage, NEW_LEAD_HOURS } from "./constants";
+import { BUSINESS_TIME_ZONE, LEAD_STAGES, PAGE_SIZE, UNATTENDED_HOURS, type LeadStage } from "./constants";
 import { formatPhone } from "./phone";
 import { leadPhonesOf } from "@/modules/contacts/phones";
 import { canAccessLead, canDo, canRateCalls, leadScope } from "./policy";
@@ -125,7 +125,17 @@ function viewConditions(query: LeadListQuery): SQL[] {
     case "favorites":
       return [isNotNull(leadFavorites.leadId)];
     case "new":
-      return [sql`${leads.createdAt} >= now() - make_interval(hours => ${NEW_LEAD_HOURS})`];
+      // Awaiting contact (client, 23 Nov 2026): still at the start, and the customer hasn't been reached yet.
+      return [isNull(leads.lastContactAt), inArray(leads.stage, ["new_lead", "contact_attempted"])];
+    case "meetings":
+      return [
+        or(
+          and(eq(leads.stage, "meeting_scheduled")),
+          and(notInArray(leads.stage, ["booked", "lost_lead"]), sql`exists (select 1 from meetings m where m.lead_id = "leads"."id" and m.status = 'scheduled' and m.starts_at >= now())`),
+        )!,
+      ];
+    case "booking":
+      return [eq(leads.stage, "booking_in_process")];
     default:
       return [];
   }
@@ -209,7 +219,7 @@ const listSelection = {
  * The other projects each listed lead's customer is interested in: their other enquiries that aren't
  * lost, in any project (client, 24 Nov 2026). Project names only, so it doesn't open another agent's lead.
  */
-async function otherProjects(db: Database, leadIds: string[]) {
+export async function otherProjects(db: Database, leadIds: string[]) {
   const out = new Map<string, string[]>();
   if (leadIds.length === 0) return out;
   const other = alias(leads, "customer_other_lead");
@@ -414,6 +424,7 @@ export async function getLeadDetail(db: Database, actor: Actor, leadId: string) 
     generatedAt: Date.now(),
     lead: {
       ...row,
+      otherProjects: (await otherProjects(db, [lead.id])).get(lead.id) ?? [],
       phone: formatPhone(row.phoneCountryCode, row.phoneNumber),
       phoneE164: lead.phoneE164,
       /** Numbers 2–5. */

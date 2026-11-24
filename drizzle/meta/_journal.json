@@ -435,6 +435,13 @@
       "when": 1795526163806,
       "tag": "0061_last_contact",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1795527104094,
+      "tag": "0062_import_channel",
+      "breakpoints": true
     }
   ]
 }

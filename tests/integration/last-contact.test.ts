@@ -60,6 +60,19 @@ describe.skipIf(!hasTestDb)("Last contact is a real customer interaction (client
     expect(await contact(id)).toEqual(held);
   });
 
+  it("New leads, Meetings scheduled and Booking in process list the right leads", async () => {
+    const [fresh, talked, planned, held, booking] = [await lead(), await lead(), await lead(), await lead(), await lead()];
+    const agent = f.actors.agent1;
+    await logCallUpdate(db, agent, talked, { result: "talked" });
+    await createMeeting(db, agent, { title: "Visit", type: "site_visit", startsAt: new Date(Date.now() + 3_600_000).toISOString(), leadId: planned, moveLead: false });
+    await db.update(leads).set({ stage: "meeting_done", lastContactAt: new Date() }).where(eq(leads.id, held));
+    await db.update(leads).set({ stage: "booking_in_process" }).where(eq(leads.id, booking));
+    const ids = async (view: string) => (await listLeads(db, agent, f.projectId, { view })).rows.map((r) => r.id).sort();
+    expect(await ids("new")).toEqual([fresh, planned].sort());
+    expect(await ids("meetings")).toEqual([planned]);
+    expect(await ids("booking")).toEqual([booking]);
+  });
+
   it("the list shows and sorts by it, with leads never contacted last", async () => {
     const [a, b, c] = [await lead(), await lead(), await lead()];
     await logCallUpdate(db, f.actors.agent1, a, { result: "talked" }, new Date(Date.now() - 60_000));

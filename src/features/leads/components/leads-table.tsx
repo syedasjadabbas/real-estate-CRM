@@ -10,6 +10,8 @@ import { formatDateTime, since } from "../format";
 import { withParams } from "../url";
 import { SourcePill, StagePill } from "./chips";
 import { LeadContact } from "./lead-contact";
+import { LogButton } from "./log-button";
+import { OtherProjects } from "./other-projects";
 import { VerificationBadge } from "./verification";
 import { CopyCodeButton, FavoriteButton, FollowUpButtons } from "./row-actions";
 
@@ -40,6 +42,9 @@ const MORE: Column[] = [
   { key: "firstTouch", label: "First touch", sort: "firstTouch" },
   { key: "comment", label: "Comment", sort: "comment" },
   { key: "lostReason", label: "Lost reason", sort: "lostReason" },
+];
+/** Technical and audit details: Admins only (client, 23 Nov 2026). */
+const ADMIN_MORE: Column[] = [
   { key: "externalId", label: "External ID", sort: "externalId" },
   { key: "created", label: "Created", sort: "createdAt" },
   { key: "modified", label: "Modified", sort: "modified" },
@@ -96,9 +101,10 @@ export function LeadsTable({
     ...MAIN.slice(0, 2),
     ...(showOriginal ? [{ key: "original", label: "Original" }] : []),
     ...MAIN.slice(2),
-    ...(showAgent || all ? [AGENT] : []),
+    ...(showAgent ? [AGENT] : []),
     ACTIONS,
     ...(all ? MORE : []),
+    ...(all && showAgent ? ADMIN_MORE : []),
   ];
 
   return (
@@ -162,15 +168,7 @@ export function LeadsTable({
                   "project",
                   <>
                     <span className="block">{r.projectName}</span>
-                    {r.otherProjects.length ? (
-                      // The customer's other enquiries (client, 24 Nov 2026): names only, greyed out.
-                      <span className="mt-1 block max-w-[150px] text-[11px] leading-4 whitespace-normal text-zinc-400">
-                        <span className="block font-bold">
-                          Interested in +{r.otherProjects.length} {r.otherProjects.length === 1 ? "project" : "projects"}
-                        </span>
-                        {r.otherProjects.join(", ")}
-                      </span>
-                    ) : null}
+                    {r.otherProjects.length ? <OtherProjects names={r.otherProjects} customer={r.name} /> : null}
                   </>,
                 ),
                 stage: text(
@@ -198,13 +196,17 @@ export function LeadsTable({
                 actions: (
                   <td key="actions" className="px-3 py-2.5">
                     <div className="flex items-start gap-2">
-                      <Link
-                        href={`/dashboard/leads/${r.id}`}
-                        aria-label={`Open ${r.name}`}
-                        className="mt-0.5 rounded-lg border border-zinc-200/80 bg-white px-2.5 py-1 text-[10px] leading-[13px] font-black tracking-[0.025em] text-zinc-700 uppercase hover:bg-zinc-50"
-                      >
-                        Open
-                      </Link>
+                      <div className="flex flex-col gap-1.5 py-0.5">
+                        <Link
+                          href={`/dashboard/leads/${r.id}`}
+                          aria-label={`Open ${r.name}`}
+                          className="rounded-lg border border-zinc-200/80 bg-white px-2.5 py-1 text-center text-[10px] leading-[13px] font-black tracking-[0.025em] text-zinc-700 uppercase hover:bg-zinc-50"
+                        >
+                          Open
+                        </Link>
+                        {/* An agent can't work a lead until it is verified. */}
+                        <LogButton leadId={r.id} leadName={r.name} stage={r.stage} disabled={!canEdit || closed || (!showAgent && r.verification !== "approved")} />
+                      </div>
                       <FollowUpButtons leadId={r.id} leadName={r.name} hasPending={Boolean(r.nextFollowUpAt)} disabled={!canEdit || closed} />
                     </div>
                   </td>

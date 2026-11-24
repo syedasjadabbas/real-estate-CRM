@@ -281,7 +281,7 @@ export async function decideImportBatch(db: Database, actor: Actor, batchId: str
   let skipped = 0;
   for (const r of valid) {
     try {
-      const outcome = await createLead(db, actor, { ...(r.data as RowData), projectId: decided.projectId, onDuplicate: "reject" });
+      const outcome = await createLead(db, actor, { ...(r.data as RowData), projectId: decided.projectId, onDuplicate: "reject" }, { channel: "import" });
       if (outcome.outcome !== "created") throw new Error("unexpected");
       await db.update(leadImportRows).set({ status: "created", leadId: outcome.leadId }).where(eq(leadImportRows.id, r.id));
       created += 1;
