@@ -54,7 +54,7 @@ export const ACTION_LABELS: Record<string, string> = {
   "lead.lost_request": "Asked to mark a lead lost",
   "lead.lost_approved": "Approved a lost lead",
   "lead.verify_approve": "Approved a lead's verification",
-  "lead.regenerated": "Regenerated a lead",
+  "lead.regenerated": "Recorded a repeat enquiry",
   "lead_import.created": "Started a lead import",
   "lead_import.submit": "Submitted a lead import",
   "lead_import.approve": "Approved a lead import",
