@@ -14,7 +14,8 @@
     "db:migrate": "node scripts/db-migrate.mjs",
     "db:seed": "node scripts/db-seed.mjs",
     "job:prune-signin-logs": "node scripts/jobs/prune-signin-logs.mjs",
-    "job:release-holds": "node scripts/jobs/release-holds.mjs"
+    "job:release-holds": "node scripts/jobs/release-holds.mjs",
+    "job:mark-missed-follow-ups": "node scripts/jobs/mark-missed-follow-ups.mjs"
   },
   "dependencies": {
     "@node-rs/argon2": "^2.2.2",

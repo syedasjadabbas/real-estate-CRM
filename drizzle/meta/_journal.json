@@ -463,6 +463,20 @@
       "when": 1795530478602,
       "tag": "0065_booking_not_contact",
       "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1795532965412,
+      "tag": "0066_follow_up_history",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1795532967139,
+      "tag": "0067_audit_append_only",
+      "breakpoints": true
     }
   ]
 }

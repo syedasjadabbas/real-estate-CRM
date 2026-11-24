@@ -1,0 +1,10 @@
+# Runs mz-crm-missed-follow-ups.service at 00:10 Pakistan time. Persistent=true catches up after downtime.
+[Unit]
+Description=Daily MZ CRM missed follow-ups
+
+[Timer]
+OnCalendar=*-*-* 00:10:00 Asia/Karachi
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -65,18 +65,33 @@ const need = (map, name) => map.get(name) ?? (() => { throw new Error("Missing "
 
 /** Runs a step as if it happened `hours` ago: what it wrote is moved back, in the same order. */
 const STAMPS = {
+  audit_logs: ["created_at"],
   leads: ["created_at", "stage_changed_at", "first_touch_at", "last_activity_at", "last_contact_at", "regenerated_at", "updated_at"],
   lead_activities: ["created_at"], lead_enquiries: ["created_at", "enquired_at"], lead_assignments: ["created_at"], follow_ups: ["created_at", "done_at"],
   meetings: ["created_at", "completed_at"], files: ["created_at"], clients: ["created_at", "last_activity_at"], client_activities: ["created_at"],
   bookings: ["created_at", "stage_changed_at", "confirmed_at"], booking_stage_history: ["created_at"], approvals: ["created_at"], notifications: ["created_at"],
 };
+/** Append-only tables (migration 0067). Made-up history on a local database only: the checks above refuse any other. */
+const LOCKED = ["audit_logs", "lead_activities", "client_activities", "booking_stage_history"];
 const columns = new Set((await q("select table_name||'.'||column_name c from information_schema.columns where table_schema='public'")).map((r) => r.c));
 async function ago(hours, step) {
   const t0 = new Date(Date.now() - 20);
   const out = await step();
   const back = `${Math.round(hours * 3600)} seconds`;
-  for (const [table, cols] of Object.entries(STAMPS))
-    for (const c of cols) if (columns.has(`${table}.${c}`)) await q(`update ${table} set ${c}=${c}-$2::interval where ${c}>=$1 and ${c}<=now()`, [t0, back]);
+  const c1 = await pool.connect();
+  try {
+    await c1.query("begin");
+    for (const t of LOCKED) await c1.query(`alter table ${t} disable trigger ${t}_append_only`);
+    for (const [table, cols] of Object.entries(STAMPS))
+      for (const c of cols) if (columns.has(`${table}.${c}`)) await c1.query(`update ${table} set ${c}=${c}-$2::interval where ${c}>=$1 and ${c}<=now()`, [t0, back]);
+    for (const t of LOCKED) await c1.query(`alter table ${t} enable trigger ${t}_append_only`);
+    await c1.query("commit");
+  } catch (error) {
+    await c1.query("rollback");
+    throw error;
+  } finally {
+    c1.release();
+  }
   return out;
 }
 

@@ -1,4 +1,6 @@
 import { EmptyState } from "@/components/ui/empty-state";
+import { BOOKING_STAGE_LABELS, type BookingStage } from "@/modules/bookings/constants";
+import { MEETING_TYPE_LABELS, type MeetingType } from "@/modules/meetings/constants";
 import { BUSINESS_TIME_ZONE, PRIORITY_LABELS, STAGE_LABELS, type LeadPriority, type LeadStage } from "@/modules/leads/constants";
 import type { LeadDetail } from "@/modules/leads/queries";
 import { formatClock } from "@/modules/recordings/validation";
@@ -60,6 +62,74 @@ function ago(at: Date | string, asOf: Date | string) {
 
 const monthKey = (at: Date | string) => new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: BUSINESS_TIME_ZONE }).format(new Date(at));
 
+const RECORD_FIELDS: Record<string, string> = {
+  reservedUntil: "Hold until",
+  paymentInstructions: "Payment instructions",
+  agreementSentOn: "Agreement sent on",
+  paymentDocsStatus: "Payment documents",
+  title: "Title",
+  startsAt: "Starts",
+  endsAt: "Ends",
+  type: "Type",
+  location: "Location",
+  organizerId: "Organizer",
+  notes: "Notes",
+};
+const BOOKING_TITLES: Record<string, string> = {
+  "booking.create": "Booking created",
+  "booking.stage": "Booking moved",
+  "booking.confirm": "Booking confirmed (Closed Won)",
+  "booking.cancel": "Booking cancelled",
+  "booking.update": "Booking details changed",
+  "booking.discount_approve": "Booking discount approved",
+  "booking.discount_reject": "Booking discount rejected",
+  "booking.payment_reject": "Booking rejected: payment not verified",
+  "booking.proof_upload": "Payment proof uploaded",
+  "booking.signed_form_upload": "Signed booking form uploaded",
+};
+
+/** A booking or meeting change read from the audit log (client, 24 Nov 2026). */
+function describeRecord(d: Record<string, unknown>, person: (id: unknown) => string | null): TimelineDescription {
+  const action = String(d.action);
+  const before = (d.before ?? {}) as Record<string, unknown>;
+  const after = (d.after ?? {}) as Record<string, unknown>;
+  const details: TimelineDetail[] = [];
+  const add = (label: string, value: unknown) => str(value) && details.push({ label, value: String(value) });
+  const pkr = (v: unknown) => (typeof v === "number" ? `PKR ${new Intl.NumberFormat("en-US").format(Math.round(v))}` : null);
+  if (action === "booking.update" || action === "meeting.update") {
+    const show = (k: string, v: unknown) => {
+      if (str(v) === null) return "—";
+      if (k === "startsAt" || k === "endsAt") return formatDateTime(String(v));
+      if (k === "organizerId") return person(v) ?? "—";
+      if (k === "type") return MEETING_TYPE_LABELS[v as MeetingType] ?? String(v);
+      return String(v).replace(/_/g, " ");
+    };
+    for (const k of Object.keys(after)) if (RECORD_FIELDS[k]) add(RECORD_FIELDS[k], `${show(k, before[k])} → ${show(k, after[k])}`);
+    return action === "meeting.update" ? { title: "Meeting changed", tag: "Meeting", details } : { title: BOOKING_TITLES[action], tag: "Booking", details };
+  }
+  if (action === "booking.create") {
+    add("Unit", after.unitNo);
+    add("Price", pkr(after.totalSale));
+    add("Token", pkr(after.tokenAmount));
+    if (Number(after.discountPct) > 0) add("Discount", `${after.discountPct}%`);
+    if (after.discountRequestedPct) add("Discount asked", `${after.discountRequestedPct}%, waiting for approval`);
+  } else if (action.startsWith("booking.discount_")) {
+    if (after.discountPct !== undefined) add("Discount", `${before.discountPct}% → ${after.discountPct}%`);
+    if (after.totalSale !== undefined) add("Price", `${pkr(before.totalSale)} → ${pkr(after.totalSale)}`);
+    add("Note", after.note);
+  } else {
+    const label = (s: unknown) => BOOKING_STAGE_LABELS[s as BookingStage] ?? str(s);
+    if (before.stage && after.stage) add("Booking stage", `${label(before.stage)} → ${label(after.stage)}`);
+    add("Amount reported", pkr(after.amount));
+    add("Reason", after.reason);
+    add("Deduction", pkr(after.refundDeduction));
+    add("Refund due", pkr(after.refundDue));
+    add("Note", after.note);
+    add("File", after.name);
+  }
+  return { title: BOOKING_TITLES[action] ?? "Booking changed", tag: "Booking", details };
+}
+
 function describeLead(a: TimelineActivity, { people }: Context): TimelineDescription {
   const d = (a.data ?? {}) as Record<string, unknown>;
   const person = (id: unknown) => (typeof id === "string" ? (people[id] ?? "a former user") : null);
@@ -87,6 +157,14 @@ function describeLead(a: TimelineActivity, { people }: Context): TimelineDescrip
       const late = lateness(d.dueAt, a.createdAt);
       return { title: "Follow-up completed", tag: "Follow-up", details: [{ label: "Was due", value: `${formatDateTime(String(d.dueAt))}${late ? ` · done ${late}` : ""}` }] };
     }
+    case "follow_up_rescheduled":
+      return { title: "Follow-up rescheduled", tag: "Follow-up", details: [{ label: "Due", value: `${formatDateTime(String(d.from))} → ${formatDateTime(String(d.dueAt))}` }, ...(str(d.note) ? [{ label: "For", value: String(d.note) }] : [])] };
+    case "follow_up_cancelled":
+      return { title: "Follow-up cancelled", tag: "Follow-up", details: [{ label: "Was due", value: formatDateTime(String(d.dueAt)) }, ...(str(d.note) ? [{ label: "For", value: String(d.note) }] : [])] };
+    case "follow_up_missed":
+      return { title: "Follow-up missed", tag: "Missed", details: [{ label: "Was due", value: formatDateTime(String(d.dueAt)) }] };
+    case "record_change":
+      return describeRecord(d, person);
     case "assignment": {
       const to = person(d.ownerId ?? d.to);
       const from = person(d.from);

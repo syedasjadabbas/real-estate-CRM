@@ -94,6 +94,11 @@ export const followUpSchema = z.object({
   dueAt: z.coerce.date({ error: "Pick a date and time" }),
   note: optionalText(1000),
 });
+export const followUpRescheduleSchema = z.object({
+  dueAt: z.coerce.date({ error: "Pick a date and time" }),
+  reason: optionalText(500),
+});
+export const followUpCancelSchema = z.object({ reason: z.string().trim().min(3, "Give a reason (at least 3 characters)").max(500, "Use at most 500 characters") });
 export const lostSchema = z.object({
   lostReasonId: z.uuid("Choose a lost reason"),
   note: optionalText(1000),

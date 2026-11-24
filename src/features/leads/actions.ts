@@ -6,7 +6,9 @@ import {
   addReview,
   assignLead,
   changeStage,
+  cancelFollowUp,
   completeFollowUp,
+  rescheduleFollowUp,
   createLead,
   decideLostRequest,
   markLost,
@@ -75,6 +77,14 @@ export async function addNoteAction(leadId: string, body: string) {
 
 export async function scheduleFollowUpAction(leadId: string, input: { dueAt: string; note?: string }) {
   return run((db, actor) => scheduleFollowUp(db, actor, leadId, input));
+}
+
+export async function rescheduleFollowUpAction(followUpId: string, input: { dueAt: string; reason: string }) {
+  return run((db, actor) => rescheduleFollowUp(db, actor, followUpId, input));
+}
+
+export async function cancelFollowUpAction(followUpId: string, reason: string) {
+  return run((db, actor) => cancelFollowUp(db, actor, followUpId, { reason }));
 }
 
 export async function completeFollowUpAction(followUpId: string) {

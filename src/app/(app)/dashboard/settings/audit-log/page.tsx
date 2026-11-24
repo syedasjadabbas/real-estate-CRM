@@ -66,7 +66,7 @@ export default async function AuditLogPage({ searchParams }: PageProps<"/dashboa
       <AuditSortHeader path={PATH} params={params} column={column} label={label} sort={data.query.sort} dir={data.query.dir} />
     </th>
   );
-  const filtered = Boolean(params.q || params.actor || params.entity || params.action || params.from || params.to);
+  const filtered = Boolean(params.q || params.lead || params.actor || params.entity || params.action || params.from || params.to);
 
   return (
     <PageStack>
@@ -79,7 +79,7 @@ export default async function AuditLogPage({ searchParams }: PageProps<"/dashboa
       <PanelCard title={`Entries · ${data.total}`}>
         <div className="mb-3 flex justify-end">
           <a
-            href={`/api/v1/audit/export?${new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([k, v]) => v && ["q", "actor", "entity", "action", "from", "to"].includes(k))))}`}
+            href={`/api/v1/audit/export?${new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([k, v]) => v && ["q", "lead", "actor", "entity", "action", "from", "to"].includes(k))))}`}
             className={buttonClasses({ variant: "secondary", className: "h-[33px] px-3 text-xs" })}
             download
             title="Every entry matching the filters below, newest first (up to 20,000)"
@@ -91,6 +91,26 @@ export default async function AuditLogPage({ searchParams }: PageProps<"/dashboa
         <div className="mb-3">
           <AuditFilters path={PATH} params={params} options={data.options} />
         </div>
+        {data.leadMatches ? (
+          <p role="status" className="mb-3 rounded-xl bg-zinc-50 px-3 py-2 text-xs text-zinc-700">
+            {data.leadMatches.length === 0 ? (
+              "No lead matches that code, name or phone."
+            ) : (
+              <>
+                {data.leadMatches.length === 1 ? "Everything about " : `Everything about ${data.leadMatches.length === data.leadMatchLimit ? "the first " : ""}${data.leadMatches.length} matching leads: `}
+                {data.leadMatches.slice(0, 8).map((l, i) => (
+                  <span key={l.id}>
+                    {i ? ", " : ""}
+                    <Link href={`/dashboard/leads/${l.id}`} className="font-bold text-brand hover:underline">
+                      {l.name} ({l.code})
+                    </Link>
+                  </span>
+                ))}
+                {data.leadMatches.length > 8 ? ` and ${data.leadMatches.length - 8} more` : ""}. Includes bookings, payments, meetings and tasks.
+              </>
+            )}
+          </p>
+        ) : null}
         {data.rows.length === 0 ? (
           <EmptyState size="sm">{filtered ? "No audit entries match these filters." : "No audit entries yet."}</EmptyState>
         ) : (

@@ -1,0 +1,21 @@
+# Daily record of missed follow-ups, just after midnight in Pakistan.
+# Installed with the other timers by scripts/ops/install-timers.sh (or copy to /etc/systemd/system/).
+# Adjust User, Group, WorkingDirectory and EnvironmentFile if the app lives elsewhere.
+[Unit]
+Description=MZ CRM: record missed follow-ups
+Wants=network-online.target
+After=network-online.target postgresql.service
+
+[Service]
+Type=oneshot
+User=mzcrm
+Group=mzcrm
+WorkingDirectory=/srv/mz-crm
+# Supplies DATABASE_URL (plain KEY=value lines, mode 600, owned by the app user).
+EnvironmentFile=/srv/mz-crm/.env
+ExecStart=/usr/bin/node scripts/jobs/mark-missed-follow-ups.mjs
+TimeoutStartSec=15min
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true

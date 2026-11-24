@@ -97,9 +97,9 @@ describe.skipIf(!hasTestDb)("Call recordings (PostgreSQL integration)", () => {
       // The call length is kept on the timeline entry (15 Nov 2026).
       expect(activity).toMatchObject({ leadId, actorId: f.actors.agent1.id, body: "Call 0300.mp3", data: { kind: "call_recording", durationSec: 95 } });
       // An entry from before that change gets the length from the recording when the lead is read.
-      await db.update(leadActivities).set({ data: { fileId: r.id, kind: "call_recording" } }).where(eq(leadActivities.id, activity.id));
+      const [old] = await db.insert(leadActivities).values({ leadId, actorId: f.actors.agent1.id, type: "file_uploaded", data: { fileId: r.id, kind: "call_recording" } }).returning();
       const detail = await getLeadDetail(db, f.actors.agent1, leadId);
-      expect(detail.activities.find((x) => x.id === activity.id)?.data).toMatchObject({ durationSec: 95 });
+      expect(detail.activities.find((x) => x.id === old.id)?.data).toMatchObject({ durationSec: 95 });
       const [log] = await db.select().from(auditLogs).where(eq(auditLogs.action, "lead.recording_upload"));
       expect(log).toMatchObject({ actorId: f.actors.agent1.id, entity: "lead", entityId: leadId });
       const [lead] = await db.select().from(leads).where(eq(leads.id, leadId));

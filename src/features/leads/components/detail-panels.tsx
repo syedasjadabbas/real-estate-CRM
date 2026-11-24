@@ -2,7 +2,7 @@
 
 import { extraPhoneSlots } from "@/modules/contacts/constants";
 import { OTHER_CITY } from "@/modules/cities/constants";
-import { Check, Star } from "lucide-react";
+import { Star } from "lucide-react";
 import { useState, useTransition, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -16,13 +16,13 @@ import {
   addReviewAction,
   assignLeadAction,
   changeStageAction,
-  completeFollowUpAction,
   markLostAction,
   updateLeadAction,
 } from "../actions";
 import { ROLE_LABELS } from "@/server/auth/types";
 import { formatDateTime, noContactLabel, since } from "../format";
 import { ApprovalActions } from "./approval-actions";
+import { FollowUpItem } from "./follow-up-item";
 import { FollowUpForm, textareaClass } from "./follow-up-dialog";
 import { namePartsOf } from "@/lib/person-name";
 import { LeadFields, selectClass, type LeadFormValues } from "./lead-fields";
@@ -236,8 +236,6 @@ export function AssignPanel({ leadId, ownerId, owners }: { leadId: string; owner
 
 /** `canSchedule` false when the "Update after call" card schedules the next follow-up (14 Nov 2026). */
 export function FollowUpsPanel({ detail, canSchedule = true }: { detail: LeadDetail; canSchedule?: boolean }) {
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
   const now = detail.generatedAt;
   return (
     <PanelCard title="Follow-ups">
@@ -246,39 +244,11 @@ export function FollowUpsPanel({ detail, canSchedule = true }: { detail: LeadDet
           <EmptyState size="sm">No follow-ups yet.</EmptyState>
         ) : (
           <ul className="space-y-1.5">
-            {detail.followUps.map((f) => {
-              const overdue = f.status === "pending" && new Date(f.dueAt).getTime() < now;
-              return (
-                <li key={f.id} className="flex items-start justify-between gap-2 rounded-xl border border-zinc-200/80 px-3 py-2 text-xs shadow-hairline">
-                  <div className="min-w-0">
-                    <p className={cn("font-bold", overdue ? "text-rose-600" : f.status === "pending" ? "text-zinc-900" : "text-zinc-400 line-through")}>
-                      {formatDateTime(f.dueAt)}
-                      {overdue ? " · overdue" : ""}
-                    </p>
-                    {f.note ? <p className="text-zinc-600">{f.note}</p> : null}
-                    {f.status === "done" ? <p className="text-[11px] text-zinc-500">Done {formatDateTime(f.doneAt)}</p> : null}
-                  </div>
-                  {f.status === "pending" && detail.permissions.edit ? (
-                    <button
-                      type="button"
-                      disabled={pending}
-                      onClick={() =>
-                        startTransition(async () => {
-                          const result = await completeFollowUpAction(f.id);
-                          setError(result.ok ? null : result.message);
-                        })
-                      }
-                      className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-zinc-200/80 bg-white px-2 py-1 text-[10px] font-black text-zinc-700 uppercase hover:bg-zinc-50 disabled:opacity-50"
-                    >
-                      <Check aria-hidden="true" className="size-3" /> Done
-                    </button>
-                  ) : null}
-                </li>
-              );
-            })}
+            {detail.followUps.map((f) => (
+              <FollowUpItem key={f.id} item={f} now={now} canEdit={detail.permissions.edit} />
+            ))}
           </ul>
         )}
-        <Status message={error} />
         {canSchedule && detail.permissions.scheduleFollowUp ? (
           <div className="border-t border-zinc-100 pt-4">
             <FollowUpForm leadId={detail.lead.id} />

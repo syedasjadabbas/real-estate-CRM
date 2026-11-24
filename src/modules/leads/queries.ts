@@ -1,4 +1,5 @@
 import { openMeetings } from "@/modules/meetings/open";
+import { recordHistory } from "./record-history";
 import { OTHER_CITY } from "@/modules/cities/constants";
 import { canVerifyLeads } from "./verification";
 import { and, asc, count, desc, eq, gt, gte, ilike, inArray, isNotNull, isNull, lt, lte, ne, notInArray, or, sql, type SQL } from "drizzle-orm";
@@ -410,6 +411,7 @@ export async function getLeadDetail(db: Database, actor: Actor, leadId: string) 
         note: followUps.note,
         status: followUps.status,
         doneAt: followUps.doneAt,
+        missedAt: followUps.missedAt,
       })
       .from(followUps)
       .where(eq(followUps.leadId, leadId))
@@ -443,6 +445,11 @@ export async function getLeadDetail(db: Database, actor: Actor, leadId: string) 
   ]);
 
   const closed = lead.stage === "lost_lead" || lead.stage === "booked";
+  // Booking and meeting changes come from the audit log. A meeting moved through Log activity already has its
+  // own entry, written in the same transaction (so at the same instant).
+  const logged = new Set(activities.filter((a) => a.type === "meeting").map((a) => `${(a.data as { meetingId?: string } | null)?.meetingId}:${a.createdAt.getTime()}`));
+  const changes = (await recordHistory(db, actor, lead.id)).filter((c) => !logged.has(`${c.data.recordId}:${c.createdAt.getTime()}`));
+  const timeline = [...(await withCallLengths(db, activities)), ...changes].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   // An open booking must be cancelled before the lead can be lost (the server refuses it otherwise).
   const openBooking = !closed && (await hasOpenBooking(db, lead.id));
   // Lead verification: until an Admin or Super Admin approves an agent's lead, only they work on it;
@@ -472,9 +479,9 @@ export async function getLeadDetail(db: Database, actor: Actor, leadId: string) 
     },
     /** The stage a lost lead goes back to when it is reopened. */
     stageBeforeLost: stageBeforeLost(activities),
-    activities: await withCallLengths(db, activities),
-    /** Names of the people that assignment entries point to (owner ids are stored, not names). */
-    activityPeople: await activityPeople(db, activities),
+    activities: timeline,
+    /** Names of the people that entries point to (owner and organizer ids are stored, not names). */
+    activityPeople: await activityPeople(db, timeline),
     /** When this was read, for "2 years ago" in the timeline. */
     asOf: new Date(),
     followUps: followUpRows,
@@ -860,8 +867,14 @@ export async function isLeadVisible(db: Database, actor: Actor, leadId: string) 
 async function activityPeople(db: Database, activities: { type: string; data: unknown }[]) {
   const ids = new Set<string>();
   for (const a of activities) {
-    if (a.type !== "assignment") continue;
     const d = (a.data ?? {}) as Record<string, unknown>;
+    if (a.type === "record_change") {
+      for (const side of [d.before, d.after]) {
+        const id = (side as { organizerId?: unknown } | null)?.organizerId;
+        if (typeof id === "string") ids.add(id);
+      }
+    }
+    if (a.type !== "assignment") continue;
     for (const k of ["ownerId", "from", "to"]) if (typeof d[k] === "string") ids.add(d[k] as string);
   }
   if (!ids.size) return {} as Record<string, string>;

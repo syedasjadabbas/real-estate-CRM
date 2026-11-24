@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, gte, ilike, isNotNull, lt, or, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import type { Database } from "@/server/db";
-import { auditLogs, users } from "@/server/db/schema";
+import { auditLogs, leads, users } from "@/server/db/schema";
 import { ROLE_LABELS, type Actor, type Role } from "@/server/auth/types";
 import { forbidden } from "@/server/errors";
 import { toCsv } from "@/server/csv";
@@ -25,6 +25,8 @@ const isoDate = z.iso.date().optional().catch(undefined);
 
 const auditQuery = z.object({
   q: z.string().trim().max(100).optional().catch(undefined),
+  /** A lead's code, name or phone: that lead, its bookings, payments, meetings and tasks. */
+  lead: z.string().trim().max(100).optional().catch(undefined),
   actor: z.uuid().optional().catch(undefined),
   entity: z.string().trim().regex(/^[a-z_]{1,40}$/).optional().catch(undefined),
   action: z.string().trim().regex(/^[a-z_.]{1,80}$/).optional().catch(undefined),
@@ -73,13 +75,46 @@ const SORTS: Record<AuditSortColumn, SQL> = {
   entity: sql`${auditLogs.entity}`,
 };
 
+const LEAD_MATCH_LIMIT = 50;
+export type AuditLeadMatch = { id: string; name: string; code: string };
+
+/** The leads the Lead filter means: an exact code wins; otherwise names and numbers containing the text. */
+async function matchLeads(db: Database, text: string | undefined): Promise<AuditLeadMatch[] | null> {
+  if (!text) return null;
+  const columns = { id: leads.id, name: leads.name, code: leads.code };
+  const exact = await db.select(columns).from(leads).where(sql`upper(${leads.code}) = ${text.toUpperCase()}`).limit(1);
+  if (exact.length) return exact;
+  const like = `%${text.replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
+  const digits = text.replace(/\D/g, "").replace(/^0+/, "");
+  return db
+    .select(columns)
+    .from(leads)
+    .where(or(ilike(leads.name, like), ilike(leads.code, like), digits.length >= 4 && /^[\d\s+()-]+$/.test(text) ? ilike(leads.phoneE164, `%${digits}%`) : undefined))
+    .orderBy(asc(leads.name), asc(leads.code))
+    .limit(LEAD_MATCH_LIMIT);
+}
+
+/** Entries about these leads and the records that belong to them. */
+function aboutLeads(ids: string[]): SQL {
+  if (ids.length === 0) return sql`false`;
+  const list = sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `);
+  return sql`(
+    (${auditLogs.entity} = 'lead' and ${auditLogs.entityId} in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)}))
+    or (${auditLogs.entity} = 'booking' and ${auditLogs.entityId} in (select id::text from bookings where lead_id in (${list})))
+    or (${auditLogs.entity} = 'payment' and ${auditLogs.entityId} in (select p.id::text from booking_payments p join bookings b on b.id = p.booking_id where b.lead_id in (${list})))
+    or (${auditLogs.entity} = 'meeting' and ${auditLogs.entityId} in (select id::text from meetings where lead_id in (${list})))
+    or (${auditLogs.entity} = 'task' and ${auditLogs.entityId} in (select id::text from tasks where lead_id in (${list})))
+  )`;
+}
+
 /** The WHERE clause for the filters; shared by the page and the CSV download. */
-function auditWhere(query: AuditQuery) {
+function auditWhere(query: AuditQuery, matched: AuditLeadMatch[] | null) {
   const term = query.q ? `%${query.q.replace(/[%_\\]/g, (c) => `\\${c}`)}%` : null;
   const needle = query.q?.toLowerCase() ?? "";
   const labelActions = needle ? Object.entries(ACTION_LABELS).filter(([, l]) => l.toLowerCase().includes(needle)).map(([code]) => code) : [];
   const labelEntities = needle ? Object.entries(ENTITY_LABELS).filter(([, l]) => l.toLowerCase().includes(needle)).map(([code]) => code) : [];
   return and(
+    matched ? aboutLeads(matched.map((l) => l.id)) : undefined,
     query.actor ? eq(auditLogs.actorId, query.actor) : undefined,
     query.entity ? eq(auditLogs.entity, query.entity) : undefined,
     query.action ? eq(auditLogs.action, query.action) : undefined,
@@ -105,7 +140,8 @@ function auditWhere(query: AuditQuery) {
 export async function listAuditLogs(db: Database, actor: Actor, rawQuery: unknown = {}) {
   if (!canViewAuditLog(actor)) throw forbidden();
   const query = auditQuery.parse(rawQuery ?? {});
-  const where = auditWhere(query);
+  const matched = await matchLeads(db, query.lead);
+  const where = auditWhere(query, matched);
   // Sequential on purpose: small queries, and one connection is enough.
   const [{ total }] = await db.select({ total: sql<number>`count(*)::int` }).from(auditLogs).leftJoin(users, eq(users.id, auditLogs.actorId)).where(where);
   const pageCount = Math.max(1, Math.ceil(total / AUDIT_PAGE_SIZE));
@@ -153,6 +189,9 @@ export async function listAuditLogs(db: Database, actor: Actor, rawQuery: unknow
     page,
     pageCount,
     rows: await withRecords(db, rows),
+    /** Null without the Lead filter. */
+    leadMatches: matched,
+    leadMatchLimit: LEAD_MATCH_LIMIT,
     options: { entities, actions, actors },
   };
 }
@@ -193,7 +232,7 @@ export async function auditLogCsv(db: Database, actor: Actor & { ip?: string | n
     })
     .from(auditLogs)
     .leftJoin(users, eq(users.id, auditLogs.actorId))
-    .where(auditWhere(query))
+    .where(auditWhere(query, await matchLeads(db, query.lead)))
     .orderBy(desc(auditLogs.createdAt), desc(auditLogs.id))
     .limit(AUDIT_EXPORT_LIMIT);
   const rows = await withRecords(db, raw);
@@ -221,7 +260,7 @@ export async function auditLogCsv(db: Database, actor: Actor & { ip?: string | n
     entity: "audit_log",
     entityId: null,
     before: null,
-    after: { file: filename, rows: rows.length, filters: Object.fromEntries(Object.entries({ q: query.q, actor: query.actor, entity: query.entity, action: query.action, from: query.from, to: query.to }).filter(([, v]) => v)) },
+    after: { file: filename, rows: rows.length, filters: Object.fromEntries(Object.entries({ q: query.q, lead: query.lead, actor: query.actor, entity: query.entity, action: query.action, from: query.from, to: query.to }).filter(([, v]) => v)) },
   });
   return { filename, body, rows: rows.length };
 }

@@ -58,6 +58,9 @@ export const leadActivityType = pgEnum("lead_activity_type", [
   "stage_change",
   "follow_up_scheduled",
   "follow_up_done",
+  "follow_up_rescheduled",
+  "follow_up_cancelled",
+  "follow_up_missed",
   "assignment",
   "update",
   "review",
@@ -437,6 +440,8 @@ export const followUps = pgTable(
     status: followUpStatus("status").notNull().default("pending"),
     doneAt: timestamp("done_at", { withTimezone: true }),
     doneById: uuid("done_by_id").references(() => users.id, { onDelete: "set null" }),
+    /** Recorded as missed (still pending at the end of its due day); cleared when rescheduled. */
+    missedAt: timestamp("missed_at", { withTimezone: true }),
     createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

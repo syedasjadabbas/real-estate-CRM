@@ -6,7 +6,7 @@ import type { AuditSortColumn } from "@/modules/audit/service";
 
 const field = "mt-1 block h-9 rounded-xl border border-zinc-200/80 bg-white px-2 text-xs font-semibold";
 const labelClass = "text-[10px] font-black tracking-[0.05em] text-zinc-500 uppercase";
-const FILTERS = ["q", "actor", "entity", "action", "from", "to"] as const;
+const FILTERS = ["q", "lead", "actor", "entity", "action", "from", "to"] as const;
 
 /**
  * Settings section tabs for Super Admins and Admins: Security settings, Cities and the Audit log.
@@ -64,6 +64,10 @@ export function AuditFilters({
         <input type="search" name="q" aria-label="Search" defaultValue={params.q ?? ""} placeholder="e.g. booking, Ahmed, stage, or an IP" maxLength={100} className={cn(field, "w-60 max-w-full")} />
       </label>
       <label className={labelClass}>
+        Lead
+        <input type="search" name="lead" aria-label="Lead" defaultValue={params.lead ?? ""} placeholder="Code, name or phone" maxLength={100} className={cn(field, "w-44 max-w-full")} />
+      </label>
+      <label className={labelClass}>
         User
         <select name="actor" aria-label="User" defaultValue={params.actor ?? ""} className={cn(field, "max-w-48")}>
           <option value="">All users</option>
@@ -117,7 +121,7 @@ export function AuditFilters({
       </button>
       {active ? (
         <Link
-          href={withParams(path, params, { q: null, actor: null, entity: null, action: null, from: null, to: null, page: null })}
+          href={withParams(path, params, { q: null, lead: null, actor: null, entity: null, action: null, from: null, to: null, page: null })}
           className="h-9 rounded-xl border border-zinc-200/80 px-3.5 text-xs leading-9 font-bold text-zinc-700 hover:bg-zinc-50"
         >
           Clear all

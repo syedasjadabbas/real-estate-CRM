@@ -1,4 +1,4 @@
-import { ArrowLeft, BookText, CalendarPlus, Phone } from "lucide-react";
+import { ArrowLeft, BookText, CalendarPlus, Phone, ScrollText } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -28,6 +28,7 @@ import { canDoBooking } from "@/modules/bookings/policy";
 import { bookingsFor } from "@/modules/bookings/queries";
 import { LeadMeetingsList } from "@/features/meetings/components/lead-meetings";
 import { canDoMeeting } from "@/modules/meetings/policy";
+import { canViewAuditLog } from "@/modules/audit/service";
 import { openMeetings } from "@/modules/meetings/open";
 import { meetingsForLead } from "@/modules/meetings/queries";
 import { clientStatusForLead } from "@/modules/clients/queries";
@@ -174,6 +175,14 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
         <Dialer status={getVoipStatus(actor)} telHref={telHref(lead.phoneCountryCode, lead.phoneNumber)} leadName={lead.name} phone={lead.phone} />
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
           <div className="min-w-0 space-y-6">
+            {canViewAuditLog(actor) ? (
+              <div className="flex justify-end">
+                <Link href={`/dashboard/settings/audit-log?lead=${encodeURIComponent(lead.code)}`} className={buttonClasses({ variant: "secondary", size: "lg" })}>
+                  <ScrollText aria-hidden="true" className="size-4" />
+                  Open full audit
+                </Link>
+              </div>
+            ) : null}
             <Timeline activities={detail.activities} people={detail.activityPeople} asOf={detail.asOf} />
           </div>
           <div className="space-y-6">

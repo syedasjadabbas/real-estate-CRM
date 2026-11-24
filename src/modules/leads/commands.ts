@@ -24,6 +24,7 @@ import type { Actor } from "@/server/auth/types";
 import { AppError, forbidden, notFound } from "@/server/errors";
 import { generateLeadCode } from "./code";
 import { OTHER_CHANNEL, recordFirstEnquiry, recordRepeat, resolveChannel } from "./enquiries";
+import { recordMissed } from "./missed-follow-ups";
 import { creationSummary, describeChanges, lostReasonName } from "./history";
 import { STAGE_LABELS } from "./constants";
 import { normalizePhone } from "./phone";
@@ -37,6 +38,8 @@ import {
   createLeadSchema,
   decisionSchema,
   fieldErrors,
+  followUpCancelSchema,
+  followUpRescheduleSchema,
   followUpSchema,
   lostSchema,
   noteSchema,
@@ -512,6 +515,7 @@ export async function completeFollowUp(db: Database, actor: Actor, followUpId: s
     assertWorkable(actor, lead);
     if (followUp.status !== "pending") throw new AppError("BUSINESS_RULE", "This follow-up is already closed.");
     const now = new Date();
+    await recordMissed(tx, followUpId, now);
     await tx
       .update(followUps)
       .set({ status: "done", doneAt: now, doneById: actor.id })
@@ -529,6 +533,54 @@ export async function completeFollowUp(db: Database, actor: Actor, followUpId: s
 }
 
 /** A person's own favourite flag. Audited only when it actually changes (a repeat is a no-op). */
+/** The pending follow-up behind a change, with its lead locked and checked. */
+async function pendingFollowUp(tx: Tx, actor: Actor, followUpId: string) {
+  if (!/^[0-9a-f-]{36}$/i.test(followUpId)) throw notFound("Follow-up");
+  const [followUp] = await tx.select().from(followUps).where(eq(followUps.id, followUpId)).limit(1).for("update");
+  if (!followUp) throw notFound("Follow-up");
+  const { lead } = await loadAccessibleLead(tx, actor, followUp.leadId, true);
+  assertWorkable(actor, lead);
+  if (followUp.status !== "pending") throw new AppError("BUSINESS_RULE", "This follow-up is already closed.");
+  return { followUp, lead };
+}
+
+/** Moves a pending follow-up to a new time; the old one stays in the history (client, 24 Nov 2026). */
+export async function rescheduleFollowUp(db: Database, actor: Actor, followUpId: string, input: unknown, now = new Date()) {
+  assertCan(actor, "edit");
+  const { dueAt, reason } = parse(followUpRescheduleSchema, input);
+  if (dueAt.getTime() < now.getTime() - 60_000) {
+    throw new AppError("VALIDATION_FAILED", "Check the highlighted fields.", { fields: { dueAt: "Pick a time in the future" } });
+  }
+  return db.transaction(async (tx) => {
+    const { followUp, lead } = await pendingFollowUp(tx, actor, followUpId);
+    if (lead.stage === "lost_lead" || lead.stage === "booked") throw new AppError("BUSINESS_RULE", "Follow-ups cannot be scheduled on closed leads.");
+    if (followUp.dueAt.getTime() === dueAt.getTime()) throw new AppError("VALIDATION_FAILED", "Check the highlighted fields.", { fields: { dueAt: "It is already due then" } });
+    await recordMissed(tx, followUpId, now);
+    await tx.update(followUps).set({ dueAt, missedAt: null }).where(eq(followUps.id, followUpId));
+    await tx.update(leads).set(touchValues(lead, now)).where(eq(leads.id, lead.id));
+    await refreshNextFollowUp(tx, lead.id);
+    const [from, to] = [followUp.dueAt.toISOString(), dueAt.toISOString()];
+    await logActivity(tx, { leadId: lead.id, actorId: actor.id, type: "follow_up_rescheduled", body: reason ?? null, data: { followUpId, from, dueAt: to, note: followUp.note } });
+    await audit(tx, actor, "lead.follow_up_reschedule", lead.id, { followUpId, dueAt: from }, { followUpId, dueAt: to, reason: reason ?? null });
+  });
+}
+
+/** Closes a pending follow-up that is no longer needed, with the reason. */
+export async function cancelFollowUp(db: Database, actor: Actor, followUpId: string, input: unknown, now = new Date()) {
+  assertCan(actor, "edit");
+  const { reason } = parse(followUpCancelSchema, input);
+  return db.transaction(async (tx) => {
+    const { followUp, lead } = await pendingFollowUp(tx, actor, followUpId);
+    await recordMissed(tx, followUpId, now);
+    await tx.update(followUps).set({ status: "cancelled" }).where(eq(followUps.id, followUpId));
+    await tx.update(leads).set(touchValues(lead, now)).where(eq(leads.id, lead.id));
+    await refreshNextFollowUp(tx, lead.id);
+    const dueAt = followUp.dueAt.toISOString();
+    await logActivity(tx, { leadId: lead.id, actorId: actor.id, type: "follow_up_cancelled", body: reason, data: { followUpId, dueAt, note: followUp.note } });
+    await audit(tx, actor, "lead.follow_up_cancel", lead.id, { followUpId, status: "pending", dueAt }, { followUpId, status: "cancelled", reason });
+  });
+}
+
 export async function setFavorite(db: Database, actor: Actor, leadId: string, favorite: boolean) {
   assertCan(actor, "view");
   return db.transaction(async (tx) => {
