@@ -24,7 +24,7 @@ import {
 } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
 import { forbidden } from "@/server/errors";
-import { BUSINESS_TIME_ZONE, LEAD_STAGES, PAGE_SIZE, UNATTENDED_HOURS, type LeadStage } from "./constants";
+import { BUSINESS_TIME_ZONE, LEAD_STAGES, PAGE_SIZE, STAGNATING_DAYS, UNATTENDED_HOURS, type LeadStage } from "./constants";
 import { formatPhone } from "./phone";
 import { leadPhonesOf } from "@/modules/contacts/phones";
 import { canAccessLead, canDo, canRateCalls, leadScope } from "./policy";
@@ -136,6 +136,9 @@ function viewConditions(query: LeadListQuery): SQL[] {
       ];
     case "booking":
       return [eq(leads.stage, "booking_in_process")];
+    case "stagnating":
+      // Finished leads can't stagnate, and Future Opportunity is parked on purpose.
+      return [notInArray(leads.stage, ["booked", "lost_lead", "future_opportunity"]), sql`${leads.stageChangedAt} <= now() - make_interval(days => ${STAGNATING_DAYS})`];
     default:
       return [];
   }
@@ -247,6 +250,8 @@ export async function listLeads(db: Database, actor: Actor, projectId: string | 
   const orderBy =
     query.view === "new" && !query.sort
       ? [desc(leads.createdAt)]
+      : query.view === "stagnating" && !query.sort
+      ? [asc(leads.stageChangedAt)]
       : query.view === "regenerated" && !query.sort
       ? [desc(sql`${leads.lastActivityAt} < ${leads.regeneratedAt}`), desc(leads.regeneratedAt)]
       : query.sort

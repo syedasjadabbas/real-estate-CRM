@@ -50,7 +50,9 @@ export const FOLLOW_UP_WINDOW_LABELS: Record<FollowUpWindow, string> = {
   upcoming: "Any future date",
 };
 
-export const LEAD_VIEWS = ["all", "won", "lost", "regenerated", "favorites", "duplicates", "new", "meetings", "booking"] as const;
+export const LEAD_VIEWS = ["all", "won", "lost", "regenerated", "favorites", "duplicates", "new", "meetings", "booking", "stagnating"] as const;
+/** Days in the same stage before a lead counts as stagnating (owner, 24 Nov 2026). */
+export const STAGNATING_DAYS = 7;
 /** "New leads" = added in the last 24 hours, newest first, marked 🔥 in lists (owner, 14 Nov 2026). */
 export const NEW_LEAD_HOURS = 24;
 export type LeadView = (typeof LEAD_VIEWS)[number];

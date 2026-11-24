@@ -10,6 +10,7 @@ const TABS = [
   { label: "New leads", href: "/dashboard/leads?view=new" },
   // Order by daily priority: today's work, then queues to clear, then outcomes, then data checks.
   { label: "To-dos", href: "/dashboard/leads/todos" },
+  { label: "Stagnating", href: "/dashboard/leads/stagnating" },
   { label: "Meetings scheduled", href: "/dashboard/leads/meetings" },
   { label: "Booking in process", href: "/dashboard/leads/booking" },
   { label: "Pipeline", href: "/dashboard/leads/pipeline" },

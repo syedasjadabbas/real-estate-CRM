@@ -73,6 +73,22 @@ describe.skipIf(!hasTestDb)("Last contact is a real customer interaction (client
     expect(await ids("booking")).toEqual([booking]);
   });
 
+  it("Stagnating lists leads 7 days or more in one stage, longest first; a stage move takes them out", async () => {
+    const [fresh, week, month, won, parked] = [await lead(), await lead(), await lead(), await lead(), await lead()];
+    const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000);
+    await db.update(leads).set({ stageChangedAt: daysAgo(6.9) }).where(eq(leads.id, fresh));
+    await db.update(leads).set({ stageChangedAt: daysAgo(7.1) }).where(eq(leads.id, week));
+    await db.update(leads).set({ stageChangedAt: daysAgo(30) }).where(eq(leads.id, month));
+    await db.update(leads).set({ stage: "booked", stageChangedAt: daysAgo(30) }).where(eq(leads.id, won));
+    await db.update(leads).set({ stage: "future_opportunity", stageChangedAt: daysAgo(30) }).where(eq(leads.id, parked));
+    const ids = async () => (await listLeads(db, f.actors.agent1, f.projectId, { view: "stagnating" })).rows.map((r) => r.id);
+    expect(await ids()).toEqual([month, week]);
+    await addNote(db, f.actors.agent1, month, { body: "Not a stage move" });
+    expect(await ids()).toEqual([month, week]);
+    await changeStage(db, f.actors.agent1, month, { stage: "contacted" });
+    expect(await ids()).toEqual([week]);
+  });
+
   it("the list shows and sorts by it, with leads never contacted last", async () => {
     const [a, b, c] = [await lead(), await lead(), await lead()];
     await logCallUpdate(db, f.actors.agent1, a, { result: "talked" }, new Date(Date.now() - 60_000));
