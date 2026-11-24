@@ -35,10 +35,14 @@ const { verifyLead } = await imp("modules/leads/verification.ts");
 const { createMeeting, completeMeeting, cancelMeeting } = await imp("modules/meetings/commands.ts");
 const { createProject, updateProject } = await imp("modules/projects/commands.ts");
 const { createAccount } = await imp("modules/accounts/service.ts");
+const { checkIn, checkOut, getAttendanceSettings } = await imp("modules/attendance/service.ts");
+const { recordLeave, decideLeave } = await imp("modules/leave/service.ts");
+const { setTarget } = await imp("modules/targets/service.ts");
+const { createTask } = await imp("modules/tasks/commands.ts");
 const { setTeamMembers } = await imp("modules/teams/commands.ts");
 const { submitImport, decideImportBatch } = await imp("modules/leads/imports.ts");
 const { createUnit } = await imp("modules/inventory/commands.ts");
-const { createBooking, advanceBooking } = await imp("modules/bookings/commands.ts");
+const { createBooking, advanceBooking, cancelBooking } = await imp("modules/bookings/commands.ts");
 const { recordPayment } = await imp("modules/finance/commands.ts");
 const { listPaymentMethods } = await imp("modules/finance/queries.ts");
 const { businessToday } = await imp("modules/bookings/today.ts");
@@ -408,6 +412,131 @@ writeFileSync("docs/demo/campaign-4-live.csv", csvOf([
 const { updateLead } = await imp("modules/leads/commands.ts");
 for (const [was, size] of [["1 bed", "520 sq ft"], ["2 bed", "780 sq ft"], ["3 bed", "1,150 sq ft"]])
   for (const l of await q("select id from leads where desired_size=$1 and stage not in ('booked') and phone_e164 like '+923000002%' and phone_e164 <> '+923000002008'", [was])) await updateLead(db, admin, l.id, { desiredSize: size, propertyType: "apartment" });
+
+// ---- More inventory: blocks and floors ----
+const moreUnits = async (projectId, prefix, list, rate, nature, where) => {
+  for (const [i, area] of list.entries()) {
+    const unitNo = `${prefix}-${301 + i}`;
+    if (await one("select 1 from units where project_id=$1 and unit_no=$2", [projectId, unitNo])) continue;
+    await createUnit(db, admin, { projectId, unitNo, areaSqft: String(area), basePrice: String(Math.round(area * rate)), nature, ...where(i) });
+  }
+};
+const times = (n, list) => Array.from({ length: n }, (_, i) => list[i % list.length]);
+await moreUnits(cedar, "CC", times(20, [520, 640, 780, 900, 1150]), 18_000, "Apartment", (i) => ({ floor: ["3rd Floor", "4th Floor", "5th Floor", "6th Floor"][Math.floor(i / 5)], block: i % 2 ? "B" : "A", bedrooms: String(1 + (i % 5 > 1 ? 1 : 0) + (i % 5 > 3 ? 1 : 0)) }));
+await moreUnits(palm, "PC", times(16, [1125, 1575, 2250, 4500]), 14_500, "House", (i) => ({ block: "ABCD"[Math.floor(i / 4)] }));
+await moreUnits(garden, "GC", times(10, [4500, 9000, 9000, 18000]), 6_000, "Farmhouse", (i) => ({ block: i % 2 ? "East" : "West" }));
+await moreUnits(plots, "PL", times(16, [750, 1250, 1750, 2500, 5000]), 9_000, "Plot", (i) => ({ block: "EFGH"[Math.floor(i / 4)] }));
+
+// ---- Bookings at every stage, with money in Finance ----
+const demoBookings = Number((await one("select count(*) n from bookings where project_id = any($1)", [[palm, plots, garden]])).n);
+if (demoBookings < 5) {
+  const sample = await screenshot("Sample payment proof", ["> Sample document"]);
+  const cash = (await listPaymentMethods(db, { activeOnly: true })).find((m) => m.name === "Cash");
+  const bank = (await listPaymentMethods(db, { activeOnly: true })).find((m) => m.name === "Bank Transfer") ?? cash;
+  const pay = (bookingId, type, amount, method = bank) => recordPayment(db, admin, { bookingId, type, amount: String(amount), receivedOn: businessToday(), methodId: method.id });
+  const proofOf = async (by, id) => (await uploadBookingProof(db, by, id, { bytes: sample, name: "sample-receipt.png" })).id;
+  const partial = async (by, id, price) => advanceBooking(db, by, id, { toStage: "down_payment", proofFileId: await proofOf(by, id), amount: String(Math.round(price * 0.1)) });
+  const complete = async (by, id, price) => {
+    await uploadSignedBookingForm(db, by, id, { bytes: sample, name: "sample-signed-form.png" });
+    await advanceBooking(db, by, id, { toStage: "agreement_pending", proofFileId: await proofOf(by, id), amount: String(Math.round(price * 0.15)) });
+  };
+  // project, size wanted, how far it goes
+  const plan = [
+    [palm, 1125, "token"], [plots, 1250, "token"], [cedar, 640, "tokenPaid"], [plots, 2500, "tokenPaid"], [palm, 2250, "discount"],
+    [palm, 1575, "partial"], [plots, 750, "partial"], [cedar, 900, "partial"],
+    [palm, 1125, "complete"], [plots, 5000, "complete"],
+    [palm, 2250, "won"], [plots, 1250, "won"], [cedar, 1150, "won"],
+    [palm, 4500, "refundDue"], [plots, 1750, "cancelled"],
+  ];
+  const summary = {};
+  for (const [i, [projectId, area, step]] of plan.entries()) {
+    const l = await one(
+      "select l.id, l.owner_id from leads l join users u on u.id=l.owner_id where l.project_id=$1 and l.phone_e164 like '+923000003%' and l.phone_e164 < '+923000003900' and l.stage in ('qualified_lead','contacted','meeting_done') and u.role='agent' and not exists (select 1 from bookings b where b.lead_id=l.id) order by l.stage desc, l.phone_e164 limit 1",
+      [projectId],
+    );
+    const u = await one("select id, base_price from units where project_id=$1 and status='available' and archived_at is null and area_sqft=$2 order by unit_no limit 1", [projectId, area]);
+    if (!l || !u) {
+      console.log("skipped booking", step, Boolean(l), Boolean(u));
+      continue;
+    }
+    const by = await ownerActor(l.owner_id);
+    const price = Number(u.base_price);
+    const hours = 2 + i * 3;
+    const { bookingId } = await ago(hours + 6, async () => {
+      const b = await createBooking(db, by, { projectId, leadId: l.id, unitId: u.id, tokenAmount: "300000", ...(step === "discount" ? { discountPct: "8" } : {}) });
+      await proofOf(by, b.bookingId);
+      return b;
+    });
+    await ago(hours, async () => {
+      if (["tokenPaid", "partial", "complete", "won", "refundDue"].includes(step)) await pay(bookingId, "token", 300000, i % 2 ? cash : bank);
+      if (["partial", "complete", "won"].includes(step)) {
+        await partial(by, bookingId, price);
+        await pay(bookingId, "down_payment", Math.round(price * 0.1));
+      }
+      if (["complete", "won"].includes(step)) await complete(by, bookingId, price);
+      if (step === "won") {
+        await uploadSignedBookingForm(db, by, bookingId, { bytes: sample, name: "sample-signed-form-2.png" });
+        await pay(bookingId, "down_payment", Math.round(price * 0.25));
+        await advanceBooking(db, admin, bookingId, { toStage: "confirmed" });
+        await pay(bookingId, "installment", Math.round(price * 0.02));
+      }
+      if (step === "refundDue") await cancelBooking(db, admin, bookingId, { reason: "Buyer's loan was refused", deduction: "50000" });
+      if (step === "cancelled") await cancelBooking(db, admin, bookingId, { reason: "Buyer chose another project" });
+    });
+    summary[step] = (summary[step] ?? 0) + 1;
+  }
+  console.log("bookings", summary);
+}
+
+// ---- A month of attendance, leave and targets for the five agents ----
+const fiveAgents = await q("select id,name,email,role from users where email = any($1) order by email", [["agent1@mz.local", "agent2@mz.local", ...extraAgents.map((x) => x[1])]]);
+const dayOf = (n) => new Date(Date.now() + 5 * HOUR + n * DAY).toISOString().slice(0, 10);
+const hrPerson = await actorOf("hr@mz.local");
+const leave = async (agentNo, from, to, type, reason, decide) => {
+  const a = fiveAgents[agentNo];
+  if (!a || dayOf(from).slice(0, 4) !== dayOf(to).slice(0, 4)) return;
+  if (await one("select 1 from leave_requests where user_id=$1 and reason=$2", [a.id, reason])) return;
+  const rec = await recordLeave(db, decide === "approved" ? admin : hrPerson, { person: `user:${a.id}`, type, startDate: dayOf(from), endDate: dayOf(to), reason });
+  if (decide === "rejected") await decideLeave(db, admin, rec.id, { approve: false, comment: "Too many people off that week" });
+};
+await leave(1, -13, -12, "annual", "Family wedding", "approved");
+await leave(2, -6, -6, "medical", "Fever", "approved");
+await leave(3, 9, 11, "annual", "Travelling home", "pending");
+await leave(4, 4, 5, "annual", "Personal work", "rejected");
+const offDays = (await getAttendanceSettings(db)).weekendDays;
+for (const [n, a] of fiveAgents.entries()) {
+  const actor = await loadActor(db, a);
+  for (let d = -30; d < 0; d += 1) {
+    const day = dayOf(d);
+    const weekday = new Date(day + "T00:00:00Z").getUTCDay();
+    if ((offDays.length ? offDays : [0]).includes(weekday)) continue;
+    if (await one("select 1 from leave_requests where user_id=$1 and status='approved' and $2::date between start_date and end_date", [a.id, day])) continue;
+    if ((n * 7 - d) % 17 === 0) continue; // an absence now and then
+    if (await one("select 1 from attendance_records where user_id=$1 and date=$2", [a.id, day])) continue;
+    const late = (n * 5 - d) % 9 === 0;
+    const at = (h, m) => new Date(`${day}T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00+05:00`);
+    await checkIn(db, actor, at(late ? 9 : 8, late ? 25 + n : 45 + ((n * 3 - d) % 14)));
+    await checkOut(db, actor, at(18, (n * 11 - d) % 40));
+  }
+}
+for (const [n, a] of fiveAgents.entries())
+  for (const [period, calls, meetings, soldSqft] of [["weekly", 40, 5, 1000], ["monthly", 160, 15 + n, 4000 + n * 500]]) await setTarget(db, admin, { userId: a.id, period, anchor: businessToday(), calls, meetings, soldSqft });
+
+// ---- WhatsApp screenshots and proposals ----
+const talkers = await q("select l.id, l.name, l.owner_id from leads l join users u on u.id=l.owner_id where l.phone_e164 like '+923000003%' and l.phone_e164 < '+923000003900' and l.stage in ('contacted','qualified_lead','meeting_scheduled') and u.role='agent' and not exists (select 1 from files f where f.lead_id=l.id) order by l.phone_e164 limit 12");
+if (Number((await one("select count(*) n from files where kind::text='whatsapp_chat'")).n) < 10)
+  for (const [i, l] of talkers.entries()) {
+    const words = [["< Please share the location", "> Sent, it is near the main road"], ["< What is the monthly instalment?", "> Sharing the plan now", "< Thanks"], ["< Can I visit on Sunday?", "> Yes, 4 PM works"]][i % 3];
+    await chat(3 + i * 4, l.id, l.name, words, await ownerActor(l.owner_id));
+  }
+if (Number((await one("select count(*) n from tasks where title like 'Proposal for %'")).n) < 5) {
+  const month = dayOf(35).slice(0, 7);
+  for (const [i, l] of talkers.slice(0, 8).entries()) {
+    const lead = await one("select project_id, name from leads where id=$1", [l.id]);
+    const u = await one("select id from units where project_id=$1 and status='available' and archived_at is null order by unit_no offset $2 limit 1", [lead.project_id, i]);
+    if (u) await createTask(db, await ownerActor(l.owner_id), { title: `Proposal for ${lead.name}`, type: "proposal", proposal: { customerName: lead.name, projectId: lead.project_id, unitId: u.id, firstInstallmentMonth: month } });
+  }
+}
 
 // Only the repeat enquiries and decisions stay unread: 50 assignments would bury them.
 await q("update notifications set read_at=now() where type='lead_assigned' and read_at is null and link in (select '/dashboard/leads/'||id from leads where phone_e164 like '+923000002%')");
