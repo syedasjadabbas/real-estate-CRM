@@ -7,8 +7,11 @@ import { Card, Eyebrow } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { StackedBar } from "@/components/ui/progress";
-import { formatInt } from "@/lib/format";
+import { formatInt, formatPct } from "@/lib/format";
 import type { ProjectLeads } from "../types";
+
+/** Won out of all leads, the same rule as the Conversion box; a project with no leads has no rate. */
+const conversion = (won: number, total: number) => (total ? formatPct(Math.round((won / total) * 1000) / 10) : "—");
 
 const num = "px-2 py-2 text-right font-bold tabular-nums";
 
@@ -26,7 +29,7 @@ export function LeadsByProject({ rows, own }: { rows: ProjectLeads[]; own: boole
           All leads <ArrowRight aria-hidden="true" className="size-3" />
         </Link>
       </div>
-      <p className="mt-2 text-[11px] text-zinc-600">All time. Open: new, contact attempted or future opportunity. In progress: contacted up to booking in process.</p>
+      <p className="mt-2 text-[11px] text-zinc-600">All time. Open: new, contact attempted or future opportunity. In progress: contacted up to booking in process. Conversion: won out of total leads.</p>
       {rows.length > 5 ? (
         <div className="relative mt-3">
           <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 z-10 size-3.5 -translate-y-1/2 text-zinc-400" />
@@ -39,11 +42,11 @@ export function LeadsByProject({ rows, own }: { rows: ProjectLeads[]; own: boole
         </EmptyState>
       ) : (
         <div className="mt-3 max-h-96 overflow-auto">
-          <table className="w-full min-w-[460px] border-collapse text-left text-xs">
+          <table className="w-full min-w-[540px] border-collapse text-left text-xs">
             <thead className="sticky top-0 z-10 bg-white">
               <tr className="border-b border-zinc-200 text-[10px] font-black tracking-[0.05em] text-zinc-500 uppercase">
                 <th scope="col" className="py-2 pr-2">Project</th>
-                {["Total", "Open", "In progress", "Won", "Lost"].map((h) => (
+                {["Total", "Open", "In progress", "Won", "Lost", "Conversion"].map((h) => (
                   <th key={h} scope="col" className="px-2 py-2 text-right whitespace-nowrap">
                     {h}
                   </th>
@@ -70,6 +73,7 @@ export function LeadsByProject({ rows, own }: { rows: ProjectLeads[]; own: boole
                   <td className={`${num} text-amber-700`}>{formatInt(p.inProgress)}</td>
                   <td className={`${num} text-brand`}>{formatInt(p.won)}</td>
                   <td className={`${num} text-rose-600`}>{formatInt(p.lost)}</td>
+                  <td className={`${num} font-black text-brand`}>{conversion(p.won, p.total)}</td>
                 </tr>
               ))}
             </tbody>
@@ -82,6 +86,7 @@ export function LeadsByProject({ rows, own }: { rows: ProjectLeads[]; own: boole
                       {formatInt(sum(k))}
                     </td>
                   ))}
+                  <td className={num}>{conversion(sum("won"), sum("total"))}</td>
                 </tr>
               </tfoot>
             )}
