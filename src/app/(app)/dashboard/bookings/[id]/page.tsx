@@ -220,7 +220,7 @@ export default async function BookingDetailPage({ params, searchParams }: PagePr
                     <li key={h.id} className="rounded-xl border border-zinc-200/80 px-3 py-2.5 shadow-hairline">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <p className="text-xs font-bold">
-                          {h.fromStage ? `${BOOKING_STAGE_LABELS[h.fromStage as BookingStage]} → ` : ""}
+                          {h.fromStage && h.fromStage !== h.toStage ? `${BOOKING_STAGE_LABELS[h.fromStage as BookingStage]} → ` : ""}
                           {BOOKING_STAGE_LABELS[h.toStage as BookingStage]}
                         </p>
                         <BookingStagePill stage={h.toStage as BookingStage} />

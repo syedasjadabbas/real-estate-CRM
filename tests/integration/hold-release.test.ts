@@ -81,7 +81,7 @@ describe.skipIf(!hasTestDb)("FR-081 unit-hold expiry and release (PostgreSQL int
     expect(b).toMatchObject({ stage: "cancelled", cancelledReason: HOLD_EXPIRED_REASON });
     expect(b.cancelledAt).not.toBeNull();
     expect(await unitStatus(unitId)).toBe("available");
-    expect((await db.select().from(leads).where(eq(leads.id, leadId)))[0].stage).toBe("booking_in_process");
+    expect((await db.select().from(leads).where(eq(leads.id, leadId)))[0].stage).toBe("new_lead");
 
     const history = await db.select().from(bookingStageHistory).where(eq(bookingStageHistory.bookingId, bookingId));
     expect(history.find((h) => h.toStage === "cancelled")).toMatchObject({ fromStage: "token_pending", actorId: null, note: HOLD_EXPIRED_REASON });

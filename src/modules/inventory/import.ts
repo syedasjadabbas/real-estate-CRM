@@ -88,6 +88,9 @@ export function parseCsvRows(text: string): { line: number; cells: string[] }[] 
 
 export const parseCsv = (text: string) => parseCsvRows(text).map((r) => r.cells);
 
+/** How a person reads each field in a row's error. */
+const FIELD_LABELS: Record<string, string> = { unitNo: "Unit number", areaSqft: "Area", basePrice: "Base price", saleModel: "Sale model", listedOn: "Listed on", floor: "Floor", block: "Block", nature: "Nature", category: "Category", type: "Type", bedrooms: "Bedrooms", premium: "Premium", comment: "Comment", projectId: "Project" };
+
 export type ImportRowResult = { line: number; unitNo: string; ok: boolean; message?: string };
 
 class Rollback extends Error {}
@@ -134,7 +137,7 @@ export async function importUnits(db: Database, actor: Actor, input: { projectId
           results.push({ line, unitNo, ok: true });
         } catch (error) {
           if (!(error instanceof AppError)) throw error;
-          const detail = error.fields ? Object.entries(error.fields).map(([k, m]) => `${k}: ${m}`).join("; ") : error.message;
+          const detail = error.fields ? Object.entries(error.fields).map(([k, m]) => `${FIELD_LABELS[k] ? `${FIELD_LABELS[k]}: ` : ""}${m}`).join("; ") : error.message;
           results.push({ line, unitNo, ok: false, message: detail });
         }
       }

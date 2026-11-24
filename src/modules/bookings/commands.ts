@@ -7,18 +7,20 @@ import { unitPricePerSqft } from "@/modules/tasks/plan";
 import { discountCap } from "@/modules/tasks/policy";
 import { assertWorkable } from "@/modules/leads/verification";
 import type { Database } from "@/server/db";
-import { auditLogs, bookingStageHistory, bookings, files, leads, projects, units, users } from "@/server/db/schema";
+import { auditLogs, bookingStageHistory, bookings, files, followUps, leads, projects, units, users } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
 import { AppError, forbidden, notFound } from "@/server/errors";
 import { ensureClientForLead, linkExistingClient } from "@/modules/clients/commands";
 import { parse } from "@/modules/clients/support";
 import { transitionUnitStatus, reserveAvailableUnit } from "@/modules/inventory/status";
+import { recordMissed } from "@/modules/leads/missed-follow-ups";
 import { STAGE_LABELS } from "@/modules/leads/constants";
-import { isUniqueViolation, loadAccessibleLead, logActivity, teamMemberIds, type DbOrTx, type Tx } from "@/modules/leads/support";
+import { isUniqueViolation, loadAccessibleLead, logActivity, refreshNextFollowUp, teamMemberIds, type DbOrTx, type Tx } from "@/modules/leads/support";
 import { BOOKING_STAGE_LABELS, CLOSED_STAGES, nextStage, type BookingStage, FIRST_STAGE } from "./constants";
 import { assertCanBooking, canAccessBooking, canMoveTo } from "./policy";
 import { netPaid } from "@/modules/finance/ledger";
 import { businessToday, defaultHoldUntil } from "./today";
+import { returnLead } from "./return-lead";
 import { advanceSchema, cancelSchema, createBookingSchema, updateBookingSchema } from "./validation";
 
 const fieldError = (field: string, message: string) => new AppError("VALIDATION_FAILED", "Check the highlighted fields.", { fields: { [field]: message } });
@@ -49,6 +51,19 @@ async function setLeadStage(tx: Tx, actor: Actor, leadId: string, to: "booking_i
   });
   await tx.insert(auditLogs).values({ actorId: actor.id, ip: actor.ip ?? null, action: "lead.stage", entity: "lead", entityId: leadId, before: { stage: lead.stage }, after: { stage: to, reason } });
   return lead;
+}
+
+/** The sale is won: what was still to be followed up on the lead is closed, as a booked lead can't be worked (24 Nov 2026). */
+async function closeFollowUps(tx: Tx, actor: Actor, leadId: string) {
+  const open = await tx.select({ id: followUps.id, dueAt: followUps.dueAt, note: followUps.note }).from(followUps).where(and(eq(followUps.leadId, leadId), eq(followUps.status, "pending")));
+  for (const f of open) {
+    await recordMissed(tx, f.id);
+    await tx.update(followUps).set({ status: "cancelled" }).where(eq(followUps.id, f.id));
+    const data = { followUpId: f.id, dueAt: f.dueAt.toISOString() };
+    await logActivity(tx, { leadId, actorId: actor.id, type: "follow_up_cancelled", body: "Sale won", data: { ...data, note: f.note } });
+    await tx.insert(auditLogs).values({ actorId: actor.id, ip: actor.ip ?? null, action: "lead.follow_up_cancel", entity: "lead", entityId: leadId, before: { ...data, status: "pending" }, after: { ...data, status: "cancelled", reason: "Sale won" } });
+  }
+  if (open.length) await refreshNextFollowUp(tx, leadId);
 }
 
 async function loadAccessibleBooking(tx: DbOrTx, actor: Actor, bookingId: string, forUpdate = false) {
@@ -313,6 +328,7 @@ export async function advanceBooking(db: Database, actor: Actor, bookingId: stri
       }
       await transitionUnitStatus(tx, { unitId: booking.unitId, from: ["reserved"], to: "booked", actorId: actor.id, ip: actor.ip ?? null, source: "booking", reason: "Booking confirmed" });
       const lead = await setLeadStage(tx, actor, booking.leadId, "booked", "Booking confirmed");
+      await closeFollowUps(tx, actor, booking.leadId);
       clientId = (await ensureClientForLead(tx, actor, lead, booking.id)).clientId;
       await writeStage(tx, booking.id, booking.stage, toStage, { confirmedAt: new Date(), clientId });
     } else {
@@ -325,7 +341,7 @@ export async function advanceBooking(db: Database, actor: Actor, bookingId: stri
   });
 }
 
-/** Cancel from any open stage (managers for their team, admins): releases the unit; the lead is left as is (decision 29 Oct 2026). */
+/** Cancel from any open stage (managers for their team, admins): releases the unit; the lead goes back to the stage it was booked from (24 Nov 2026). */
 /** Smallest token a booking may be made with (owner, 14 Nov 2026). */
 export const MIN_TOKEN_PKR = 20_000;
 
@@ -348,6 +364,7 @@ export async function rejectBookingPayment(db: Database, actor: Actor, bookingId
     const note = `Payment rejected by Accounts: ${reason}`;
     await writeStage(tx, booking.id, booking.stage, "cancelled", { cancelledAt: new Date(), cancelledReason: note });
     await transitionUnitStatus(tx, { unitId: booking.unitId, from: ["reserved"], to: "available", actorId: actor.id, ip: actor.ip ?? null, source: "booking", reason: note });
+    await returnLead(tx, booking.leadId, actor, note);
     await tx.insert(bookingStageHistory).values({ bookingId: booking.id, fromStage: booking.stage, toStage: "cancelled", actorId: actor.id, note });
     await auditBooking(tx, actor, "booking.payment_reject", booking.id, { stage: booking.stage }, { stage: "cancelled", reason });
     if (booking.agentId) {
@@ -385,6 +402,7 @@ export async function cancelBooking(db: Database, actor: Actor, bookingId: strin
     }
     await writeStage(tx, booking.id, booking.stage, "cancelled", { cancelledAt: new Date(), cancelledReason: reason, ...(refund ?? {}) });
     await transitionUnitStatus(tx, { unitId: booking.unitId, from: ["reserved"], to: "available", actorId: actor.id, ip: actor.ip ?? null, source: "booking", reason: `Booking cancelled: ${reason}` });
+    await returnLead(tx, booking.leadId, actor, `Booking cancelled: ${reason}`);
     await tx.insert(bookingStageHistory).values({ bookingId: booking.id, fromStage: booking.stage, toStage: "cancelled", actorId: actor.id, note: reason });
     await auditBooking(tx, actor, "booking.cancel", booking.id, { stage: booking.stage }, { stage: "cancelled", reason, ...(refund ? { paid, ...refund } : {}) });
     return { from: booking.stage, refundDue: refund?.refundDue ?? null };

@@ -206,7 +206,7 @@ export function BookingForm({ projectId, defaultLeadId, options }: { projectId: 
             />
           )}
         </Field>
-        {text("tokenAmount", "Token amount (PKR)", { required: true, placeholder: "e.g. 500,000", hint: "At least PKR 20,000. Accounts verify it before the booking goes ahead." })}
+        {text("tokenAmount", "Token amount (PKR)", { required: true, placeholder: "e.g. 500,000", hint: "At least PKR 20,000. Accounts check the proof and post it; Closed Won needs the posted money." })}
         <Field label="Token payment proof" required error={proofError ?? undefined} hint="Transfer screenshot, cheque or cash photo (JPG, PNG or PDF, up to 10 MB).">
           {(id, describedBy) => (
             <input

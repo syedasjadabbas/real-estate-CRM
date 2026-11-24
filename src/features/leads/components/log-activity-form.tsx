@@ -105,7 +105,8 @@ export function LogActivityForm({
   const [meetingOn, setMeetingOn] = useState(false);
   const [meetingType, setMeetingType] = useState<MeetingType>("site_visit");
   const [meetingAt, setMeetingAt] = useState(() => at({ days: 7, hour: 11 }));
-  const [followOn, setFollowOn] = useState(true);
+  // Off when one is already pending, so logging several things doesn't pile up the same follow-up.
+  const [followOn, setFollowOn] = useState(pendingFollowUps.length === 0);
   const [followAt, setFollowAt] = useState(() => suggestedFollowUp("talked", null).due);
   const [followNote, setFollowNote] = useState("");
   const [openedAt] = useState(() => Date.now());
@@ -231,6 +232,8 @@ export function LogActivityForm({
         setMinutes("");
         setMeetingOn(false);
         setTicked([]);
+        // One is pending now, or the agent chose none: either way the next save starts without one.
+        setFollowOn(false);
       } else {
         setErrors(r.fields ?? {});
         setMsg({ text: r.message, ok: false });

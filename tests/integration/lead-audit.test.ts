@@ -79,6 +79,7 @@ describe.skipIf(!hasTestDb)("Lead audit trail (client, 24 Nov 2026; PostgreSQL)"
     const { unitId } = await createUnit(db, f.actors.superAdmin, { projectId: f.projectId, unitNo: "A-1", areaSqft: "500", basePrice: "10000000" });
     const { bookingId } = await createBooking(db, a, { projectId: f.projectId, leadId: id, unitId, tokenAmount: "500000" });
     await cancelBooking(db, f.actors.superAdmin, bookingId, { reason: "Changed their mind" });
+    expect((await db.select().from(leads).where(eq(leads.id, id)))[0].stage).toBe("new_lead");
     const { meetingId } = await createMeeting(db, a, { title: "Visit", type: "site_visit", startsAt: inDays(1), leadId: id });
     await updateMeeting(db, a, meetingId, { location: "Head office" });
     await logCallUpdate(db, a, id, { result: "no_call", meetingResult: { meetingId, outcome: "rescheduled", startsAt: inDays(2) } });

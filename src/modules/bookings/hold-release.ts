@@ -3,6 +3,7 @@ import type { Database } from "@/server/db";
 import { auditLogs, bookingPayments, bookingStageHistory, bookings, units } from "@/server/db/schema";
 import { transitionUnitStatus } from "@/modules/inventory/status";
 import { HOLD_EXPIRED_REASON, HOLD_STAGES, type BookingStage } from "./constants";
+import { returnLead } from "./return-lead";
 import { businessToday } from "./today";
 
 // Kept free of the wider app graph (sessions, clients, leads commands) so the scheduled job
@@ -61,7 +62,7 @@ export async function findExpiredHolds(db: Database, today: string) {
  * Releases one expired hold in its own transaction. The booking row is locked first (the same
  * lock recordPayment takes), then the rule is re-checked under the lock: a payment, stage move or
  * new date that committed first wins and the booking is skipped. Lock order booking → unit, as in
- * cancelBooking. The lead is left where it is, as cancelBooking does (decision 29 Oct 2026).
+ * cancelBooking. The lead goes back to the stage it was booked from, as cancelBooking does.
  * There is no user actor: audit and history rows carry actor null and ip null (as the backup and
  * sign-in cleanup jobs record theirs).
  */
@@ -93,6 +94,7 @@ async function releaseOne(db: Database, bookingId: string, today: string): Promi
       source: "booking",
       reason: `Booking cancelled: ${HOLD_EXPIRED_REASON}`,
     });
+    await returnLead(tx, booking.leadId, { id: null }, `Booking cancelled: ${HOLD_EXPIRED_REASON}`);
     await tx.insert(bookingStageHistory).values({ bookingId, fromStage: booking.stage, toStage: "cancelled", actorId: null, note: HOLD_EXPIRED_REASON });
     await tx.insert(auditLogs).values({
       actorId: null,

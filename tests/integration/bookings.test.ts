@@ -4,12 +4,12 @@ import { advanceBooking, cancelBooking, createBooking, updateBookingDetails } fr
 import { bookingFormOptions, getBookingDetail, listBookings } from "@/modules/bookings/queries";
 import { convertLeadToClient, createClient } from "@/modules/clients/commands";
 import { createUnit, setUnitStatus } from "@/modules/inventory/commands";
-import { changeStage, createLead, decideLostRequest, markLost } from "@/modules/leads/commands";
+import { changeStage, createLead, decideLostRequest, markLost, scheduleFollowUp } from "@/modules/leads/commands";
 import { pendingLostRequests } from "@/modules/leads/queries";
 import { completeMeeting, createMeeting } from "@/modules/meetings/commands";
 import { hashPassword } from "@/server/auth/password";
 import { loadActor } from "@/server/auth/session-store";
-import { auditLogs, bookingStageHistory, bookings, clients, leadActivities, leads, units, users } from "@/server/db/schema";
+import { auditLogs, bookingStageHistory, bookings, clients, files, followUps, leadActivities, leads, units, users } from "@/server/db/schema";
 import type { Database } from "@/server/db";
 import type { Actor } from "@/server/auth/types";
 import { AppError } from "@/server/errors";
@@ -237,7 +237,7 @@ describe.skipIf(!hasTestDb)("Bookings module (PostgreSQL integration)", () => {
       const [b] = await db.select().from(bookings).where(eq(bookings.id, bookingId));
       expect(b).toMatchObject({ stage: "cancelled", cancelledReason: "Token not paid" });
       expect(await statusOf(unitId)).toBe("available");
-      expect(await leadStage(leadId)).toBe("booking_in_process");
+      expect(await leadStage(leadId)).toBe("new_lead"); // back to where it was booked from
       expect(await errorCode(cancelBooking(db, f.actors.manager, bookingId, { reason: "again" }))).toBe("BUSINESS_RULE");
       expect(await errorCode(updateBookingDetails(db, f.actors.manager, bookingId, { paymentInstructions: "x" }))).toBe("BUSINESS_RULE");
 
@@ -292,6 +292,28 @@ describe.skipIf(!hasTestDb)("Bookings module (PostgreSQL integration)", () => {
       expect((await db.select().from(bookings).where(eq(bookings.id, bookingId)))[0].stage).toBe("token_pending");
     });
 
+    it("winning the sale closes the lead's pending follow-ups; a cancelled booking returns a lead to the stage it was booked from", async () => {
+      const won = await leadOf(f.actors.agent1);
+      await scheduleFollowUp(db, f.actors.agent1, won, { dueAt: new Date(Date.now() + 86_400_000).toISOString() });
+      const { bookingId } = await book(f.actors.agent1, won, await unit());
+      await db.update(bookings).set({ stage: "agreement_pending", stageChangedAt: new Date(Date.now() - 60_000) }).where(eq(bookings.id, bookingId));
+      await db.insert(files).values({ leadId: won, bookingId, kind: "document", storageKey: "t/x.png", originalName: "x.png", mime: "image/png", sizeBytes: 1, sha256: "0".repeat(64) });
+      await postDownPayment(db, f.actors.superAdmin, bookingId);
+      await advanceBooking(db, f.actors.superAdmin, bookingId, { toStage: "confirmed" });
+      const [lead] = await db.select().from(leads).where(eq(leads.id, won));
+      expect(lead).toMatchObject({ stage: "booked", nextFollowUpAt: null });
+      expect((await db.select().from(followUps).where(eq(followUps.leadId, won))).map((x) => x.status)).toEqual(["cancelled"]);
+
+      const back = await leadOf(f.actors.agent1);
+      await changeStage(db, f.actors.agent1, back, { stage: "qualified_lead" });
+      const second = await book(f.actors.agent1, back, await unit());
+      const third = await book(f.actors.agent1, back, await unit());
+      await cancelBooking(db, f.actors.manager, second.bookingId, { reason: "One of two" });
+      expect(await leadStage(back)).toBe("booking_in_process"); // another booking is open
+      await cancelBooking(db, f.actors.manager, third.bookingId, { reason: "Both gone" });
+      expect(await leadStage(back)).toBe("qualified_lead");
+    });
+
     it("refuses every other stage while the booking is open (pipeline drag / stage menu)", async () => {
       const leadId = await leadOf(f.actors.agent1);
       await book(f.actors.agent1, leadId, await unit());
@@ -334,7 +356,7 @@ describe.skipIf(!hasTestDb)("Bookings module (PostgreSQL integration)", () => {
       const { bookingId } = await book(f.actors.agent1, leadId, unitId);
       await cancelBooking(db, f.actors.manager, bookingId, { reason: "Buyer withdrew before the token" });
       expect(await statusOf(unitId)).toBe("available");
-      expect(await leadStage(leadId)).toBe("booking_in_process"); // left as is (29 Oct decision)
+      expect(await leadStage(leadId)).toBe("new_lead"); // back to where it was booked from (24 Nov 2026)
       await changeStage(db, f.actors.agent1, leadId, { stage: "future_opportunity" });
       expect(await markLost(db, f.actors.manager, leadId, { lostReasonId: f.lostReasonId })).toEqual({ status: "lost" });
       expect(await leadStage(leadId)).toBe("lost_lead");

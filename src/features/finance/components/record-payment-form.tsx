@@ -30,6 +30,7 @@ export function RecordPaymentForm({
   today: string;
 }) {
   const router = useRouter();
+  const [search, setSearch] = useState("");
   const [pending, startTransition] = useTransition();
   const [key] = useState(() => `form-${crypto.randomUUID()}`);
   const [values, setValues] = useState({
@@ -69,6 +70,9 @@ export function RecordPaymentForm({
       )}
     </Field>
   );
+  const words = search.toLowerCase().split(/\s+/).filter(Boolean);
+  // The chosen booking stays in the list whatever is searched.
+  const found = bookings.filter((b) => b.id === values.bookingId || words.every((x) => `${b.leadName} ${b.leadCode} ${b.unitNo} ${b.projectName}`.toLowerCase().includes(x)));
   const text = (key: "amount" | "receivedOn" | "reference", label: string, opts: { required?: boolean; type?: string; placeholder?: string }) => (
     <Field label={label} required={opts.required} error={errors[key]}>
       {(id, describedBy) => (
@@ -106,11 +110,14 @@ export function RecordPaymentForm({
         </p>
       ) : null}
       <FormSection title="Booking">
+        <Field label="Search bookings" className="sm:col-span-2">
+          {(id) => <Input id={id} type="search" value={search} placeholder="Name, lead code, unit or project" autoComplete="off" disabled={pending} onChange={(e) => setSearch(e.target.value)} />}
+        </Field>
         {select(
           "bookingId",
           "Booking",
-          bookings.map((b) => ({ value: b.id, label: `${b.leadName} (${b.leadCode}) · Unit ${b.unitNo} · ${b.projectName}` })),
-          bookings.length ? "Select a booking…" : "No bookings can take a payment",
+          found.map((b) => ({ value: b.id, label: `${b.leadName} (${b.leadCode}) · Unit ${b.unitNo} · ${b.projectName}` })),
+          bookings.length === 0 ? "No bookings can take a payment" : found.length ? `Select a booking… (${found.length})` : "No booking matches",
         )}
         {/* One column on phones so amounts are never cut off. */}
         <div className="grid grid-cols-1 gap-2 sm:col-span-2 sm:grid-cols-3" aria-live="polite">
@@ -139,7 +146,7 @@ export function RecordPaymentForm({
           )}
         </Field>
       </FormSection>
-      <p className="text-[11px] text-zinc-500">Posted payments can&apos;t be edited or deleted. Mistakes are corrected with a reversal, which needs a manager or admin to approve.</p>
+      <p className="text-[11px] text-zinc-500">Posted payments can&apos;t be edited or deleted. Mistakes are corrected with a reversal, which an Admin approves.</p>
       <div className="flex flex-wrap justify-end gap-2">
         <Link href="/dashboard/finance" className={buttonClasses({ variant: "secondary", size: "lg" })}>
           Cancel

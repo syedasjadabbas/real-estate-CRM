@@ -35,7 +35,7 @@ export default async function ReversalApprovalsPage() {
         description={
           actor.role === "manager"
             ? "Reversals requested on your teams' bookings. The requester can't approve their own request."
-            : "Reversals requested by Finance. A manager (own team) or an admin approves; the requester can't approve their own request."
+            : "Reversals requested by Finance. An Admin approves; the requester can't approve their own request."
         }
       />
       <PanelCard title={`Waiting for a decision · ${pending.length}`}>
@@ -60,7 +60,7 @@ export default async function ReversalApprovalsPage() {
                 {canDecide && (r.requestedById !== actor.id || actor.role === "super_admin") ? (
                   <DecideReversalForm requestId={r.id} compact />
                 ) : (
-                  <p className="text-[11px] text-zinc-500">{r.requestedById === actor.id ? "You requested this; someone else must decide." : "Waiting for a manager or admin."}</p>
+                  <p className="text-[11px] text-zinc-500">{r.requestedById === actor.id ? "You requested this; someone else must decide." : "Waiting for an Admin."}</p>
                 )}
               </li>
             ))}

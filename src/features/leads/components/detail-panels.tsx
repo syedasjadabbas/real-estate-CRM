@@ -85,7 +85,7 @@ export function StagePanel({
     startTransition(async () => {
       const result = await markLostAction(lead.id, { lostReasonId: reasonId, note: lostNote });
       if (result.ok) {
-        setLostMsg({ text: result.data.status === "lost" ? "Lead marked lost." : "Lost request sent for manager approval.", ok: true });
+        setLostMsg({ text: result.data.status === "lost" ? "Lead marked lost." : "Lost request sent. An Admin decides it.", ok: true });
         setReasonId("");
         setLostNote("");
       } else setLostMsg({ text: result.fields?.lostReasonId ?? result.message, ok: false });
@@ -149,7 +149,7 @@ export function StagePanel({
               {formatDateTime(pendingLostRequest.createdAt)}
               {pendingLostRequest.note ? <span className="block">“{pendingLostRequest.note}”</span> : null}
             </p>
-            {permissions.decideLost ? <ApprovalActions approvalId={pendingLostRequest.id} /> : <p>Waiting for a manager decision.</p>}
+            {permissions.decideLost ? <ApprovalActions approvalId={pendingLostRequest.id} /> : <p>Waiting for an Admin to decide.</p>}
           </div>
         ) : null}
 
@@ -162,7 +162,7 @@ export function StagePanel({
         {permissions.markLostDirect || permissions.requestLost ? (
           <div className="space-y-2">
             <p className="text-[10px] font-black tracking-[0.1em] text-zinc-500 uppercase">
-              {permissions.markLostDirect ? "Mark lost" : "Request lost (needs manager approval)"}
+              {permissions.markLostDirect ? "Mark lost" : "Request lost (an Admin decides)"}
             </p>
             <select aria-label="Lost reason" value={reasonId} onChange={(e) => setReasonId(e.target.value)} className={selectClass} disabled={pending}>
               <option value="">Choose a lost reason…</option>
