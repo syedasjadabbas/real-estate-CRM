@@ -183,13 +183,14 @@ export async function completeMeeting(db: Database, actor: Actor, meetingId: str
 
 export async function cancelMeeting(db: Database, actor: Actor, meetingId: string, input: unknown) {
   assertCanMeeting(actor, "edit");
-  const { note } = parse(cancelSchema, input);
+  const { note, noShow } = parse(cancelSchema, input);
+  const missed = noShow ? { noShow } : {};
   return db.transaction(async (tx) => {
     const { meeting } = await loadAccessibleMeeting(tx, actor, meetingId, true);
     if (meeting.status !== "scheduled") throw new AppError("BUSINESS_RULE", `This meeting is already ${MEETING_STATUS_LABELS[meeting.status].toLowerCase()}.`);
     await close(tx, meeting.id, "cancelled");
-    await logActivity(tx, { leadId: meeting.leadId, actorId: actor.id, type: "meeting", data: { action: "cancelled", meetingId: meeting.id, title: meeting.title, startsAt: meeting.startsAt, note } });
-    await record(tx, actor, meeting.id, "cancel", { note }, { status: "scheduled" });
+    await logActivity(tx, { leadId: meeting.leadId, actorId: actor.id, type: "meeting", data: { action: "cancelled", meetingId: meeting.id, title: meeting.title, startsAt: meeting.startsAt, note, ...missed } });
+    await record(tx, actor, meeting.id, "cancel", { note, ...missed }, { status: "scheduled" });
     return { cancelled: true };
   });
 }

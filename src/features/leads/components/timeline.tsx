@@ -132,10 +132,12 @@ function describeLead(a: TimelineActivity, { people }: Context): TimelineDescrip
       return { title: d.approved ? "Lost request approved: lead closed as lost" : "Lost request rejected: lead stays open", tag: "Decision", details };
     }
     case "meeting": {
-      const verb = d.action === "completed" ? "Meeting held" : d.action === "cancelled" ? "Meeting cancelled" : "Meeting scheduled";
+      const verb = d.action === "completed" ? "Meeting held" : d.action === "cancelled" ? (d.noShow ? "Customer didn't come to the meeting" : "Meeting cancelled") : d.action === "rescheduled" ? "Meeting rescheduled" : "Meeting scheduled";
       const details: TimelineDetail[] = [];
       if (str(d.title)) details.push({ label: "Meeting", value: String(d.title) });
+      if (d.action === "rescheduled" && d.from) details.push({ label: "Was", value: formatDateTime(String(d.from)) });
       if (d.startsAt) details.push({ label: "When", value: formatDateTime(String(d.startsAt)) });
+      if (str(d.note)) details.push({ label: "Note", value: String(d.note) });
       return { title: verb, tag: "Meeting", details };
     }
     case "file_uploaded": {

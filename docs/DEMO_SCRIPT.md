@@ -16,10 +16,10 @@ About 30 minutes. All customers are made up. Their numbers may not be real, so *
 | 1 | Leads table | Open Leads | Project on every lead, time in stage, Last Contact, and Overdue / Due today / Upcoming follow-ups |
 | 2 | Views | Open New, Meetings, Booking, Stagnating, Repeat enquiries | **Waqas Ahmed** is first in Stagnating |
 | 3 | Contact details | View contact on **Sana Malik** | Call, WhatsApp, Copy Number, Copy Email |
-| 4 | Log Call | ⋯ → Log call on **Fahad Sheikh**: Talked, add a note, tick the pending follow-up it fulfils, schedule the next one, save | Nothing is ticked beforehand, even overdue. The ticked follow-up is completed, new one scheduled, stage and Last Contact updated in one save |
-| 5 | Complete only | Log call on **Imran Baig**: tick the follow-up, untick Schedule, save | Follow-up completed, nothing new scheduled |
+| 4 | Log Activity: call | Log Activity on **Fahad Sheikh**: Call, Talked, add a note, tick the pending follow-up it fulfils, schedule the next one, save | Nothing is ticked beforehand, even overdue. The ticked follow-up is completed, new one scheduled, stage and Last Contact updated in one save |
+| 5 | Complete only | Log Activity → Note on **Imran Baig**: tick the follow-up, untick Schedule, save | Follow-up completed, nothing new scheduled |
 | 6 | No contact logged | Find **Ghazala Parveen** (Booking in Process) and **Omar Farooq** | Ghazala went straight to a booking: "No contact logged", as a booking isn't contact. Omar has a contact date from a real meeting |
-| 7 | Meeting | Open **Tariq Mehmood** (planned) and **Saima Javed** (done) | The completed meeting moved the stage and set Last Contact |
+| 7 | Log Activity: meeting | On **Hira Nawaz**, log a meeting that wasn't scheduled; on **Tariq Mehmood**, choose Rescheduled. Show **Saima Javed** (done) | Held: meeting record, Meeting Done and Last Contact, all in one save. Rescheduled: the meeting moves. A no-show isn't contact |
 | 8 | Booking | Open **Omar Farooq**, then **Kiran Shah** | One booking in process; one Closed Won with proofs and payment |
 
 ## Repeat enquiries
@@ -40,7 +40,7 @@ About 30 minutes. All customers are made up. Their numbers may not be real, so *
 1. Super Admin: Add lead with **your second number**, owner Dev Agent One.
 2. Agent: View contact → WhatsApp. Show which account opens. Send a message and reply from the other phone.
 3. Back in the CRM, Last Contact is still empty: **the click isn't contact**.
-4. Take a screenshot and upload it in the lead's WhatsApp section.
+4. Take a screenshot. Log Activity → WhatsApp, add it and save.
 5. Last Contact is now set and the upload is on the timeline. **Imran Baig** has a finished example.
 
 Say plainly: it is click-to-chat, not an integration. The CRM doesn't read the conversation. Delete the lead's real number from anything you share afterwards.
@@ -60,4 +60,4 @@ Say plainly: it is click-to-chat, not an integration. The CRM doesn't read the c
 - **Desired size:** one text field today. The structure follows once MZ Marketing shows how they collect it.
 - **Names like "Dev Agent One":** test accounts.
 
-Steps 4, 5, 10, 14, 17, 18 and 20 change the data. Running the script again only refreshes dates; it does not undo them. Rehearse with other leads.
+Steps 4, 5, 7, 10, 14, 17, 18 and 20 change the data. Running the script again only refreshes dates; it does not undo them. Rehearse with other leads.

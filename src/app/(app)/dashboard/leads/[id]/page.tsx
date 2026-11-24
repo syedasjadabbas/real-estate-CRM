@@ -18,7 +18,7 @@ import {
   StagePanel,
 } from "@/features/leads/components/detail-panels";
 import { VerificationBanner } from "@/features/leads/components/verification";
-import { CallUpdateCard } from "@/features/leads/components/call-update-card";
+import { LogActivityForm } from "@/features/leads/components/log-activity-form";
 import { withLeadsAccess } from "@/features/leads/components/list-view";
 import { EnquiryList, RecordEnquiryForm } from "@/features/leads/components/enquiry-history";
 import { ReopenLead } from "@/features/leads/components/reopen-lead";
@@ -28,6 +28,7 @@ import { canDoBooking } from "@/modules/bookings/policy";
 import { bookingsFor } from "@/modules/bookings/queries";
 import { LeadMeetingsList } from "@/features/meetings/components/lead-meetings";
 import { canDoMeeting } from "@/modules/meetings/policy";
+import { openMeetings } from "@/modules/meetings/open";
 import { meetingsForLead } from "@/modules/meetings/queries";
 import { clientStatusForLead } from "@/modules/clients/queries";
 import { DocumentsPanel } from "@/features/documents/components/documents-panel";
@@ -74,9 +75,9 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
       throw error;
     }
     const { lead } = detail;
-    // "Update after call" replaces the separate stage, note and schedule-follow-up forms (14 Nov 2026).
+    // "Log activity" replaces the separate stage, note and schedule-follow-up forms (14 Nov 2026).
     const callCard = detail.permissions.edit && detail.permissions.scheduleFollowUp;
-    const [lookups, owners, clientStatus, leadBookings, leadMeetings, recordings, documents, whatsapp] = await Promise.all([
+    const [lookups, owners, clientStatus, leadBookings, leadMeetings, recordings, documents, whatsapp, scheduled] = await Promise.all([
       leadLookups(db),
       assignableUsers(db, actor),
       clientStatusForLead(db, actor, lead),
@@ -85,6 +86,7 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
       listRecordings(db, actor, lead.id),
       listDocuments(db, actor, lead.id),
       listWhatsapp(db, actor, lead.id),
+      openMeetings(db, actor, [lead.id]),
     ]);
 
     return (
@@ -153,8 +155,8 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
           ))}
         </nav>
 
-        {/* One save for a call and what it decided (owner, 14 Nov 2026). */}
-        {callCard ? <CallUpdateCard leadId={lead.id} currentStage={lead.stage} pendingFollowUps={detail.followUps.filter((f) => f.status === "pending")} /> : null}
+        {/* One save for what happened and what it decided (owner, 14 Nov 2026; client, 24 Nov 2026). */}
+        {callCard ? <LogActivityForm leadId={lead.id} meetings={scheduled.get(lead.id) ?? []} currentStage={lead.stage} pendingFollowUps={detail.followUps.filter((f) => f.status === "pending")} /> : null}
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
           <div className="min-w-0">

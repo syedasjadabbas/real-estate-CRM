@@ -4,7 +4,6 @@ import { useState, useTransition } from "react";
 import { DateTimeInput } from "@/components/ui/date-time-input";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/input";
-import { Modal } from "@/components/ui/modal";
 import type { ActionResult } from "@/server/errors";
 import { scheduleFollowUpAction } from "../actions";
 import { fromLocalInputValue, toLocalInputValue } from "../format";
@@ -145,13 +144,5 @@ export function FollowUpForm({
         {pending ? "Scheduling…" : "Schedule follow-up"}
       </Button>
     </div>
-  );
-}
-
-export function FollowUpDialog({ open, onClose, leadId, leadName }: { open: boolean; onClose: () => void; leadId: string; leadName: string }) {
-  return (
-    <Modal open={open} onClose={onClose} title="Schedule follow-up" description={leadName}>
-      <FollowUpForm leadId={leadId} onDone={onClose} />
-    </Modal>
   );
 }

@@ -60,7 +60,8 @@ export const updateMeetingSchema = z.object(fields).partial().superRefine(endAft
 
 /** D1 checkbox on completion ("Also move lead to Meeting Done") and an optional outcome note (M-A6). */
 export const completeSchema = z.object({ note: optionalText(1000), moveLead: z.boolean().optional().default(true) });
-export const cancelSchema = z.object({ note: optionalText(1000) });
+/** `noShow`: the customer didn't come. */
+export const cancelSchema = z.object({ note: optionalText(1000), noShow: z.boolean().optional().default(false) });
 
 export const meetingListQuerySchema = z.object({
   q: z.string().trim().max(100).optional().catch(undefined),

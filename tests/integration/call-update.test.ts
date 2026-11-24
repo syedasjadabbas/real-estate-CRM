@@ -2,6 +2,8 @@ import { and, eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createLead } from "@/modules/leads/commands";
 import { logCallUpdate } from "@/modules/leads/call-update";
+import { listLeads } from "@/modules/leads/queries";
+import { createMeeting } from "@/modules/meetings/commands";
 import { followUps, leadActivities, leads, meetings } from "@/server/db/schema";
 import type { Database } from "@/server/db";
 import { AppError } from "@/server/errors";
@@ -117,5 +119,83 @@ describe.skipIf(!hasTestDb)("Update after call (PostgreSQL integration)", () => 
     expect((theirs as AppError).code).toBe("NOT_FOUND");
     expect(await db.select().from(leadActivities).where(eq(leadActivities.leadId, leadId))).toHaveLength(before.length);
     expect(await db.select().from(followUps).where(and(eq(followUps.leadId, leadId), eq(followUps.status, "pending")))).toHaveLength(0);
+  });
+
+  describe("how a meeting went (client, 24 Nov 2026)", () => {
+    const schedule = async (leadId: string, startsAt: string, actor = f.actors.agent1) =>
+      (await createMeeting(db, actor, { title: "Visit", type: "site_visit", startsAt, leadId })).meetingId;
+    const heldAt = new Date(Date.now() - 2 * 3_600_000);
+    const past = async (leadId: string) => {
+      const id = await schedule(leadId, inDays(1));
+      await db.update(meetings).set({ startsAt: heldAt }).where(eq(meetings.id, id));
+      return id;
+    };
+    const meetingOf = async (id: string) => (await db.select().from(meetings).where(eq(meetings.id, id)))[0];
+    const leadOf = async (id: string) => (await db.select().from(leads).where(eq(leads.id, id)))[0];
+    const log = (leadId: string, meetingResult: Record<string, unknown>, extra = {}) => logCallUpdate(db, f.actors.agent1, leadId, { result: "no_call", meetingResult, ...extra });
+
+    it("completed: meeting, stage, Last Contact, the picked follow-up and the next one in one save", async () => {
+      const leadId = await newLead();
+      const id = await past(leadId);
+      const [due] = await db.insert(followUps).values({ leadId, assigneeId: f.actors.agent1.id, dueAt: heldAt, createdById: f.actors.agent1.id }).returning();
+      const out = await log(leadId, { meetingId: id, outcome: "completed" }, { note: "Liked the corner unit", stage: "meeting_done", completeFollowUpIds: [due.id], followUp: { dueAt: inDays(2) } });
+      expect(out.done).toEqual(["meeting_completed", "followUpDone", "followUp"]);
+      expect((await meetingOf(id)).status).toBe("completed");
+      expect(await leadOf(leadId)).toMatchObject({ stage: "meeting_done", lastContactAt: heldAt, latestComment: "Liked the corner unit" });
+      const said = (await db.select().from(leadActivities).where(eq(leadActivities.leadId, leadId))).filter((a) => JSON.stringify(a).includes("Liked the corner unit"));
+      expect(said).toHaveLength(1);
+      // Already closed: refused.
+      const err = await log(leadId, { meetingId: id, outcome: "completed" }).catch((e: unknown) => e);
+      expect((err as AppError).code).toBe("CONFLICT");
+    });
+
+    it("a no-show closes the meeting without counting as contact, and only once its time has come", async () => {
+      const leadId = await newLead();
+      const early = await schedule(leadId, inDays(1));
+      const err = await log(leadId, { meetingId: early, outcome: "no_show" }).catch((e: unknown) => e);
+      expect((err as AppError).fields?.["meetingResult.outcome"]).toBeTruthy();
+      const id = await past(leadId);
+      await log(leadId, { meetingId: id, outcome: "no_show" });
+      expect((await meetingOf(id)).status).toBe("cancelled");
+      expect(await leadOf(leadId)).toMatchObject({ stage: "meeting_scheduled", lastContactAt: null });
+      const acts = await db.select().from(leadActivities).where(and(eq(leadActivities.leadId, leadId), eq(leadActivities.type, "meeting")));
+      expect(acts.some((a) => (a.data as { noShow?: boolean }).noShow)).toBe(true);
+    });
+
+    it("rescheduled moves it, keeping its length; cancelled closes it", async () => {
+      const leadId = await newLead();
+      const id = await schedule(leadId, inDays(1));
+      const before = await meetingOf(id);
+      await db.update(meetings).set({ endsAt: new Date(before.startsAt.getTime() + 3_600_000) }).where(eq(meetings.id, id));
+      const to = inDays(3);
+      await log(leadId, { meetingId: id, outcome: "rescheduled", startsAt: to });
+      const moved = await meetingOf(id);
+      expect([moved.status, moved.startsAt.toISOString(), moved.endsAt!.getTime() - moved.startsAt.getTime()]).toEqual(["scheduled", to, 3_600_000]);
+      const err = await log(leadId, { meetingId: id, outcome: "rescheduled", startsAt: inDays(-1) }).catch((e: unknown) => e);
+      expect((err as AppError).fields?.["meetingResult.startsAt"]).toBeTruthy();
+      await log(leadId, { meetingId: id, outcome: "cancelled" });
+      expect((await meetingOf(id)).status).toBe("cancelled");
+      expect((await leadOf(leadId)).lastContactAt).toBeNull();
+    });
+
+    it("a meeting that wasn't scheduled is added as held; one on another lead or not the agent's is refused", async () => {
+      const leadId = await newLead();
+      await log(leadId, { meetingId: null, outcome: "completed", type: "company_office", startsAt: heldAt.toISOString() });
+      expect(await db.select().from(meetings).where(eq(meetings.leadId, leadId))).toMatchObject([{ status: "completed", type: "company_office" }]);
+      expect(await leadOf(leadId)).toMatchObject({ stage: "meeting_done", lastContactAt: heldAt });
+
+      const other = await newLead();
+      const foreign = await schedule(other, inDays(1));
+      const wrongLead = await log(leadId, { meetingId: foreign, outcome: "cancelled" }).catch((e: unknown) => e);
+      expect((wrongLead as AppError).code).toBe("CONFLICT");
+      const admins = await schedule(leadId, inDays(1), f.actors.superAdmin);
+      const refused = await log(leadId, { meetingId: admins, outcome: "cancelled" }, { note: "kept out" }).catch((e: unknown) => e);
+      expect((refused as AppError).code).toBe("NOT_FOUND");
+      expect((await leadOf(leadId)).latestComment).not.toBe("kept out");
+      // The list offers only meetings the agent may record.
+      const rows = (await listLeads(db, f.actors.agent1, f.projectId, {})).rows;
+      expect(rows.find((r) => r.id === leadId)?.openMeetings).toEqual([]);
+      expect(rows.find((r) => r.id === other)?.openMeetings.map((m) => m.id)).toEqual([foreign]);
+    });
   });
 });

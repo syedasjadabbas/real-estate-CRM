@@ -1,3 +1,4 @@
+import { openMeetings } from "@/modules/meetings/open";
 import { OTHER_CITY } from "@/modules/cities/constants";
 import { canVerifyLeads } from "./verification";
 import { and, asc, count, desc, eq, gt, gte, ilike, inArray, isNotNull, isNull, lt, lte, ne, notInArray, or, sql, type SQL } from "drizzle-orm";
@@ -286,7 +287,7 @@ export async function listLeads(db: Database, actor: Actor, projectId: string | 
     .limit(PAGE_SIZE)
     .offset((page - 1) * PAGE_SIZE);
   const ids = rows.map((r) => r.id);
-  const [others, pending] = await Promise.all([otherProjects(db, ids), pendingFollowUps(db, ids)]);
+  const [others, pending, open] = await Promise.all([otherProjects(db, ids), pendingFollowUps(db, ids), openMeetings(db, actor, ids)]);
 
   return {
     generatedAt: now.getTime(),
@@ -296,7 +297,7 @@ export async function listLeads(db: Database, actor: Actor, projectId: string | 
     page,
     pageCount,
     pageSize: PAGE_SIZE,
-    rows: rows.map((r) => ({ ...r, phone: formatPhone(r.phoneCountryCode, r.phoneNumber), otherProjects: others.get(r.id) ?? [], pendingFollowUps: pending.get(r.id) ?? [] })),
+    rows: rows.map((r) => ({ ...r, phone: formatPhone(r.phoneCountryCode, r.phoneNumber), otherProjects: others.get(r.id) ?? [], pendingFollowUps: pending.get(r.id) ?? [], openMeetings: open.get(r.id) ?? [] })),
   };
 }
 

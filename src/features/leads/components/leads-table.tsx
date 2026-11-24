@@ -10,7 +10,7 @@ import { followUpStatus, formatDate, formatDateTime, noContactLabel, since, type
 import { withParams } from "../url";
 import { SourcePill, StagePill } from "./chips";
 import { ViewContact } from "./lead-contact";
-import { LeadRowMenu } from "./lead-row-menu";
+import { LogActivityButton } from "./log-activity-button";
 import { OtherProjects } from "./other-projects";
 import { VerificationBadge } from "./verification";
 import { FavoriteButton } from "./row-actions";
@@ -207,17 +207,17 @@ export function LeadsTable({
                 agent: text("agent", r.ownerName ?? "Unassigned", "whitespace-nowrap text-zinc-800"),
                 actions: (
                   <td key="actions" className="px-3 py-2.5">
-                    <div className="flex items-center gap-2">
+                    <div className="flex w-fit flex-col gap-1.5">
                       <Link
                         href={`/dashboard/leads/${r.id}`}
                         aria-label={`Open lead ${r.name}`}
-                        className="inline-flex h-8 items-center rounded-lg bg-brand px-3 text-[11px] font-black whitespace-nowrap text-white shadow-hairline hover:bg-brand-700"
+                        className="inline-flex h-8 items-center justify-center rounded-lg bg-brand px-3 text-[11px] font-black whitespace-nowrap text-white shadow-hairline hover:bg-brand-700"
                       >
-                        Open Lead
+                        Open
                       </Link>
-                      {/* An agent works a lead only once it is verified (the server refuses it before), so no menu until then. */}
+                      {/* An agent works a lead only once it is verified (the server refuses it before), so no logging until then. */}
                       {canEdit && !closed && (showAgent || r.verification === "approved") ? (
-                        <LeadRowMenu leadId={r.id} leadName={r.name} stage={r.stage} pendingFollowUps={r.pendingFollowUps} />
+                        <LogActivityButton leadId={r.id} leadName={r.name} stage={r.stage} pendingFollowUps={r.pendingFollowUps} meetings={r.openMeetings} />
                       ) : null}
                     </div>
                   </td>

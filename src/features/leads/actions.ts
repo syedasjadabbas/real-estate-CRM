@@ -15,7 +15,6 @@ import {
   updateLead,
   type CreateLeadOutcome,
 } from "@/modules/leads/commands";
-import { completeNextFollowUp } from "@/modules/leads/follow-ups";
 import { claimLead } from "@/modules/leads/claims";
 import { resubmitLead, verifyLead } from "@/modules/leads/verification";
 import { recordRepeatEnquiry } from "@/modules/leads/enquiries";
@@ -82,10 +81,6 @@ export async function completeFollowUpAction(followUpId: string) {
   return run((db, actor) => completeFollowUp(db, actor, followUpId));
 }
 
-export async function completeNextFollowUpAction(leadId: string) {
-  return run((db, actor) => completeNextFollowUp(db, actor, leadId));
-}
-
 export async function setFavoriteAction(leadId: string, favorite: boolean) {
   return run((db, actor) => setFavorite(db, actor, leadId, favorite));
 }
@@ -107,7 +102,7 @@ export async function claimLeadAction(leadId: string) {
   return run((db, actor) => claimLead(db, actor, leadId));
 }
 
-/** "Update after call": note, stage, meeting and next follow-up in one save. */
+/** "Log activity": call or meeting outcome, note, stage, meeting and next follow-up in one save. */
 export async function logCallUpdateAction(leadId: string, input: Record<string, unknown>) {
   return run((db, actor) => logCallUpdate(db, actor, leadId, input));
 }
