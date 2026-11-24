@@ -38,6 +38,15 @@ const KEYS: Record<keyof AssignmentSettings, string> = {
   weightPerformance: "assignment.weight_performance",
   weightConversion: "assignment.weight_conversion",
   weightAvailability: "assignment.weight_availability",
+  weightCalls: "assignment.weight_calls",
+  weightMeetings: "assignment.weight_meetings",
+  weightSqft: "assignment.weight_sqft",
+  goalCalls: "assignment.goal_calls",
+  goalMeetings: "assignment.goal_meetings",
+  goalSqft: "assignment.goal_sqft",
+  followUpShare: "assignment.follow_up_share",
+  firstTouchHours: "assignment.first_touch_hours",
+  neutralScore: "assignment.neutral_score",
   maxLoad: "assignment.max_load",
   minDecidedLeads: "assignment.min_decided_leads",
   minPerformanceSample: "assignment.min_performance_sample",
@@ -50,12 +59,22 @@ const KEYS: Record<keyof AssignmentSettings, string> = {
 
 const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use HH:MM, 24-hour");
 const weight = z.coerce.number().int("Use a whole number").min(0).max(100);
+const goal = z.coerce.number().int("Use a whole number").min(1, "Use at least 1").max(10_000_000);
 export const assignmentSettingsSchema = z
   .object({
     weightWorkload: weight,
     weightPerformance: weight,
     weightConversion: weight,
     weightAvailability: weight,
+    weightCalls: weight,
+    weightMeetings: weight,
+    weightSqft: weight,
+    goalCalls: goal,
+    goalMeetings: goal,
+    goalSqft: goal,
+    followUpShare: weight,
+    firstTouchHours: z.coerce.number().int("Use a whole number").min(1).max(720),
+    neutralScore: weight,
     maxLoad: z.coerce.number().int().min(1).max(10_000),
     minDecidedLeads: z.coerce.number().int().min(1).max(1_000),
     minPerformanceSample: z.coerce.number().int().min(1).max(1_000),
@@ -65,9 +84,9 @@ export const assignmentSettingsSchema = z
     workStart: hhmm,
     workEnd: hhmm,
   })
-  .refine((s) => s.weightWorkload + s.weightPerformance + s.weightConversion + s.weightAvailability === 100, {
-    message: "The four weights must add up to 100",
-    path: ["weightWorkload"],
+  .refine((s) => s.weightPerformance + s.weightConversion + s.weightCalls + s.weightMeetings + s.weightSqft > 0, {
+    message: "Give at least one part a weight above 0",
+    path: ["weightPerformance"],
   });
 
 export async function readAssignmentSettings(db: Db): Promise<AssignmentSettings> {
@@ -81,10 +100,12 @@ export async function readAssignmentSettings(db: Db): Promise<AssignmentSettings
   return parsed.success ? parsed.data : DEFAULT_ASSIGNMENT_SETTINGS;
 }
 
+/** Only the Super Admin changes the score formula (owner, 24 Nov 2026); Admins see it. */
+export const canChangeScores = (actor: Pick<Actor, "role">) => actor.role === "super_admin";
 export const canManageAssignment = (actor: Pick<Actor, "role">) => actor.role === "super_admin" || actor.role === "admin";
 
 export async function updateAssignmentSettings(db: Database, actor: Actor, input: unknown) {
-  if (!canManageAssignment(actor)) throw forbidden();
+  if (!canChangeScores(actor)) throw forbidden();
   const parsed = assignmentSettingsSchema.safeParse(input);
   if (!parsed.success) {
     const fields = Object.fromEntries(parsed.error.issues.map((i) => [String(i.path[0] ?? "form"), i.message]));
@@ -110,7 +131,8 @@ export async function agentStats(db: Db, userIds: string[], s: AssignmentSetting
   const stats = new Map(userIds.map((id) => [id, zero()]));
   if (userIds.length === 0) return stats;
   const since = new Date(now.getTime() - s.lookbackDays * 86_400_000);
-  const dayAgo = new Date(now.getTime() - 86_400_000);
+  // A lead younger than the contact limit can't be late yet, so it isn't judged.
+  const touchCutoff = new Date(now.getTime() - s.firstTouchHours * 3_600_000);
   const soon = new Date(now.getTime() + 7 * 86_400_000);
   const [open, pending, fu, touch, outcome, online] = await inOrder([
     db
@@ -136,10 +158,10 @@ export async function agentStats(db: Db, userIds: string[], s: AssignmentSetting
       .select({
         id: leads.ownerId,
         n: sql<number>`count(*)::int`,
-        fast: sql<number>`count(*) filter (where ${leads.firstTouchAt} is not null and ${leads.firstTouchAt} - ${leads.createdAt} <= interval '1 day')::int`,
+        fast: sql<number>`count(*) filter (where ${leads.firstTouchAt} is not null and ${leads.firstTouchAt} - ${leads.createdAt} <= make_interval(hours => ${s.firstTouchHours}::int))::int`,
       })
       .from(leads)
-      .where(and(inArray(leads.ownerId, userIds), isNull(leads.deletedAt), gte(leads.createdAt, since), lt(leads.createdAt, dayAgo)))
+      .where(and(inArray(leads.ownerId, userIds), isNull(leads.deletedAt), gte(leads.createdAt, since), lt(leads.createdAt, touchCutoff)))
       .groupBy(leads.ownerId),
     db
       .select({
@@ -162,6 +184,11 @@ export async function agentStats(db: Db, userIds: string[], s: AssignmentSetting
   for (const r of touch) if (at(r.id)) Object.assign(at(r.id)!, { leadsToTouch: r.n, touchedWithinDay: r.fast });
   for (const r of outcome) if (at(r.id)) Object.assign(at(r.id)!, { booked: r.booked, lost: r.lost });
   for (const r of online) if (at(r.id)) at(r.id)!.online = true;
+  if (s.weightCalls + s.weightMeetings + s.weightSqft > 0) {
+    // Loaded here: Targets reads lead data, so a top-level import would be circular.
+    const { achievementsFor } = await import("@/modules/targets/service");
+    for (const [id, got] of await achievementsFor(db as Database, userIds, { from: since, to: now })) Object.assign(at(id)!, got);
+  }
   return stats;
 }
 

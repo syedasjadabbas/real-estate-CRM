@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createClient } from "@/modules/clients/commands";
-import { readAssignmentSettings, updateAssignmentSettings } from "@/modules/leads/assignment";
+import { agentScores, readAssignmentSettings, updateAssignmentSettings } from "@/modules/leads/assignment";
 import { canListUnassigned, claimLead, listUnassigned } from "@/modules/leads/claims";
 import { assignLead, createLead, updateLead } from "@/modules/leads/commands";
 import { getLeadDetail } from "@/modules/leads/queries";
@@ -229,13 +229,25 @@ describe.skipIf(!hasTestDb)("Sprint P1–P2: phones, customers, ownership, claim
       expect((await history(none.leadId))[0].reason).toMatch(/No available agent/);
     });
 
-    it("settings must add up to 100 and only admins can change them", async () => {
+    it("score settings need one weighted part and only the Super Admin can change them", async () => {
       const s = await readAssignmentSettings(db);
       expect([s.weightWorkload, s.weightPerformance, s.weightConversion, s.weightAvailability]).toEqual([40, 30, 20, 10]);
-      expect((await failure(updateAssignmentSettings(db, admin, { ...s, weightWorkload: 50 }))).fields?.weightWorkload).toMatch(/100/);
-      expect((await failure(updateAssignmentSettings(db, f.actors.manager, s))).code).toBe("FORBIDDEN");
-      await updateAssignmentSettings(db, admin, { ...s, weightWorkload: 30, weightPerformance: 40 });
+      expect((await failure(updateAssignmentSettings(db, f.actors.superAdmin, { ...s, weightPerformance: 0, weightConversion: 0 }))).fields?.weightPerformance).toMatch(/above 0/);
+      for (const other of [admin, f.actors.manager]) expect((await failure(updateAssignmentSettings(db, other, s))).code).toBe("FORBIDDEN");
+      await updateAssignmentSettings(db, f.actors.superAdmin, { ...s, weightWorkload: 30, weightPerformance: 40 });
       expect((await readAssignmentSettings(db)).weightPerformance).toBe(40);
+      // Every input is a setting: the contact limit and the optional parts change the live score.
+      const own = (await lead(f.actors.agent1)).leadId;
+      await db.update(leads).set({ createdAt: new Date(Date.now() - 40 * 3_600_000), firstTouchAt: new Date(Date.now() - 10 * 3_600_000) }).where(eq(leads.id, own));
+      const scoreNow = async () => (await agentScores(db, [f.actors.agent1.id])).get(f.actors.agent1.id)!;
+      const only = { ...s, weightPerformance: 100, weightConversion: 0, minPerformanceSample: 1 };
+      await updateAssignmentSettings(db, f.actors.superAdmin, { ...only, firstTouchHours: 24 });
+      expect((await scoreNow()).score).toBe(25);
+      await updateAssignmentSettings(db, f.actors.superAdmin, { ...only, firstTouchHours: 36 });
+      expect((await scoreNow()).score).toBe(75);
+      await updateAssignmentSettings(db, f.actors.superAdmin, { ...only, weightPerformance: 0, weightMeetings: 100 });
+      expect((await scoreNow()).score).toBe(0);
+
       await db.update(appSettings).set({ value: "nonsense" }).where(eq(appSettings.key, "assignment.weight_workload"));
       expect((await readAssignmentSettings(db)).weightWorkload).toBe(40);
     });

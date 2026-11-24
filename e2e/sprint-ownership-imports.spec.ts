@@ -106,21 +106,20 @@ test("an Admin submits a batch, it stays pending, and only the Super Admin appro
   await ctx.close();
 });
 
-test("admins tune assignment; My Teams shows each agent's score; won and lost have date ranges", async ({ page, context }) => {
+test("the Super Admin tunes agent scores; My Teams shows each agent's score; won and lost have date ranges", async ({ page, context }) => {
   await selectTestProject(context);
-  await login(page, "admin");
+  await login(page, "superAdmin");
   await page.goto("/dashboard/settings/assignment");
   // 13 Nov 2026: new leads go round in equal turns with no weights; the weights now only shape the agent score.
   await expect(page.getByText("next agent in turn", { exact: false })).toBeVisible();
   await expect(page.getByLabel("Workload and capacity %")).toHaveCount(0);
   const form = page.getByRole("form", { name: "Agent score settings" });
-  const performance = form.getByLabel("Performance %", { exact: true });
+  const performance = form.getByLabel("Performance weight", { exact: true });
   const current = await performance.inputValue();
-  const bumped = String(Number(current) >= 90 ? Number(current) - 10 : Number(current) + 10);
   await expect(async () => {
-    await performance.fill(bumped);
+    await performance.fill("101");
     await form.getByRole("button", { name: "Save settings" }).click();
-    await expect(page.getByText("The four weights must add up to 100").first()).toBeVisible({ timeout: 2_000 });
+    await expect(form.getByRole("status")).toHaveText("Check the highlighted fields.", { timeout: 2_000 });
   }).toPass();
   await performance.fill(current);
   await form.getByRole("button", { name: "Save settings" }).click();

@@ -6,7 +6,7 @@ import { SettingsTabs } from "@/features/audit/components/audit-controls";
 import { PanelCard } from "@/features/leads/components/detail-panels";
 import { AssignmentSettingsForm } from "@/features/leads/components/assignment-settings-form";
 import { canViewBackups } from "@/modules/backups/policy";
-import { canManageAssignment, readAssignmentSettings } from "@/modules/leads/assignment";
+import { canChangeScores, canManageAssignment, readAssignmentSettings } from "@/modules/leads/assignment";
 import { requirePageUser } from "@/server/auth/current-user";
 import { getDb } from "@/server/db";
 
@@ -46,10 +46,10 @@ export default async function AssignmentSettingsPage() {
       <PanelCard title="2 · Agent scores">
         <p className="mb-4 text-xs text-zinc-600">
           Every agent gets a score from 0 to 100, shown on My Teams, the dashboard, Performance and their work profile. It&apos;s a quick health check and{" "}
-          <strong>does not decide who gets leads</strong>. It is made of two parts: follow-up performance and conversion. Example: performance 70 and
+          <strong>does not decide who gets leads</strong>. You choose what it is made of and how much each part counts. Example: performance 70 and
           conversion 50, with weights 30 and 20, give (70×30 + 50×20) ÷ 50 = <strong>62</strong>.
         </p>
-        <AssignmentSettingsForm settings={settings} />
+        <AssignmentSettingsForm settings={settings} canEdit={canChangeScores(actor)} />
       </PanelCard>
     </PageStack>
   );

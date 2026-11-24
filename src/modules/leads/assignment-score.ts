@@ -8,6 +8,19 @@ export type AssignmentSettings = {
   weightPerformance: number;
   weightConversion: number;
   weightAvailability: number;
+  /** Optional score parts (24 Nov 2026), off at 0. Each is measured against its goal over the history window. */
+  weightCalls: number;
+  weightMeetings: number;
+  weightSqft: number;
+  goalCalls: number;
+  goalMeetings: number;
+  goalSqft: number;
+  /** Follow-ups' share of the performance part, 0-100; first contact is the rest. */
+  followUpShare: number;
+  /** A new lead contacted within this many hours counts as fast. */
+  firstTouchHours: number;
+  /** Score an agent with no history starts from, 0-100. */
+  neutralScore: number;
   /** Open leads plus pending follow-ups at which an agent is full and gets no more leads. */
   maxLoad: number;
   /** Decided leads (booked + lost) before an agent's own conversion rate counts in full. */
@@ -30,6 +43,15 @@ export const DEFAULT_ASSIGNMENT_SETTINGS: AssignmentSettings = {
   weightPerformance: 30,
   weightConversion: 20,
   weightAvailability: 10,
+  weightCalls: 0,
+  weightMeetings: 0,
+  weightSqft: 0,
+  goalCalls: 300,
+  goalMeetings: 30,
+  goalSqft: 5000,
+  followUpShare: 50,
+  firstTouchHours: 24,
+  neutralScore: 50,
   maxLoad: 80,
   minDecidedLeads: 10,
   minPerformanceSample: 10,
@@ -51,6 +73,9 @@ export type AgentStats = {
   booked: number;
   lost: number;
   online: boolean;
+  calls?: number;
+  meetings?: number;
+  soldSqft?: number;
 };
 
 export const NEUTRAL = 0.5;
@@ -61,25 +86,25 @@ const round = (n: number) => Math.round(n * 1000) / 1000;
  * Conversion quality, 0–1. Shrunk towards neutral until the agent has `minDecided` decided leads,
  * so one lucky booking can't make a new agent look perfect, and one loss can't sink them.
  */
-export function conversionScore(booked: number, lost: number, minDecided: number) {
+export function conversionScore(booked: number, lost: number, minDecided: number, neutral = NEUTRAL) {
   const decided = booked + lost;
   const k = Math.max(1, minDecided);
-  return round((booked + NEUTRAL * k) / (decided + k));
+  return round((booked + neutral * k) / (decided + k));
 }
 
 /**
  * Performance, 0–1: follow-up completion and first touch within a day, averaged. Shrunk towards
  * neutral in the same way until there is enough activity to judge.
  */
-export function performanceScore(s: Pick<AgentStats, "followUpsDue" | "followUpsDone" | "leadsToTouch" | "touchedWithinDay">, minSample: number) {
-  const parts: number[] = [];
-  if (s.followUpsDue > 0) parts.push(s.followUpsDone / s.followUpsDue);
-  if (s.leadsToTouch > 0) parts.push(s.touchedWithinDay / s.leadsToTouch);
-  const sample = s.followUpsDue + s.leadsToTouch;
-  if (parts.length === 0) return NEUTRAL;
-  const raw = parts.reduce((a, b) => a + b, 0) / parts.length;
+export function performanceScore(s: Pick<AgentStats, "followUpsDue" | "followUpsDone" | "leadsToTouch" | "touchedWithinDay">, minSample: number, neutral = NEUTRAL, followUpShare = 50) {
+  const parts: { value: number; weight: number }[] = [];
+  if (s.followUpsDue > 0 && followUpShare > 0) parts.push({ value: s.followUpsDone / s.followUpsDue, weight: followUpShare });
+  if (s.leadsToTouch > 0 && followUpShare < 100) parts.push({ value: s.touchedWithinDay / s.leadsToTouch, weight: 100 - followUpShare });
+  const sample = (followUpShare > 0 ? s.followUpsDue : 0) + (followUpShare < 100 ? s.leadsToTouch : 0);
+  if (parts.length === 0) return neutral;
+  const raw = parts.reduce((a, p) => a + p.value * p.weight, 0) / parts.reduce((a, p) => a + p.weight, 0);
   const k = Math.max(1, minSample);
-  return round((raw * sample + NEUTRAL * k) / (sample + k));
+  return round((raw * sample + neutral * k) / (sample + k));
 }
 
 /** 1 when empty, 0 when full. */
@@ -138,19 +163,27 @@ export function pickCandidate(candidates: Candidate[]) {
   );
 }
 
-/** Agent score for My Teams and the dashboard, 0–100: performance and conversion only. */
+/** Agent score for My Teams and the dashboard, 0–100: the parts with a weight, measured against each other. */
 export function agentScore(stats: AgentStats, s: AssignmentSettings) {
-  const performance = performanceScore(stats, s.minPerformanceSample);
-  const conversion = conversionScore(stats.booked, stats.lost, s.minDecidedLeads);
-  const weights = s.weightPerformance + s.weightConversion || 1;
-  const value = (performance * s.weightPerformance + conversion * s.weightConversion) / weights;
+  const neutral = s.neutralScore / 100;
+  const performance = performanceScore(stats, s.minPerformanceSample, neutral, s.followUpShare);
+  const conversion = conversionScore(stats.booked, stats.lost, s.minDecidedLeads, neutral);
+  const reached = (done: number | undefined, goal: number) => clamp((done ?? 0) / goal);
+  const parts = [
+    [performance, s.weightPerformance],
+    [conversion, s.weightConversion],
+    [reached(stats.calls, s.goalCalls), s.weightCalls],
+    [reached(stats.meetings, s.goalMeetings), s.weightMeetings],
+    [reached(stats.soldSqft, s.goalSqft), s.weightSqft],
+  ];
+  const value = parts.reduce((a, [v, w]) => a + v * w, 0) / (parts.reduce((a, [, w]) => a + w, 0) || 1);
   const decided = stats.booked + stats.lost;
-  const sample = stats.followUpsDue + stats.leadsToTouch;
+  const sample = (s.followUpShare > 0 ? stats.followUpsDue : 0) + (s.followUpShare < 100 ? stats.leadsToTouch : 0);
   return {
     score: Math.round(value * 100),
     performance: Math.round(performance * 100),
     conversion: Math.round(conversion * 100),
     /** Not enough history yet: the score leans on the neutral starting value. */
-    provisional: decided < s.minDecidedLeads || sample < s.minPerformanceSample,
+    provisional: (s.weightConversion > 0 && decided < s.minDecidedLeads) || (s.weightPerformance > 0 && sample < s.minPerformanceSample),
   };
 }

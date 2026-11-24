@@ -33,6 +33,16 @@ describe("assignment scoring", () => {
     expect(conversionScore(80, 20, 10)).toBeGreaterThan(0.75);
   });
 
+  it("lets settings choose the parts, their goals and the starting score", () => {
+    expect(agentScore(stats(), { ...S, neutralScore: 30 }).score).toBe(30);
+    const callsOnly = { ...S, weightPerformance: 0, weightConversion: 0, weightCalls: 10, goalCalls: 20 };
+    expect(agentScore(stats({ calls: 5 }), callsOnly)).toMatchObject({ score: 25, provisional: false });
+    expect(agentScore(stats({ calls: 500 }), callsOnly).score).toBe(100);
+    const s = stats({ followUpsDue: 100, followUpsDone: 100, leadsToTouch: 100, touchedWithinDay: 0 });
+    expect(performanceScore(s, 1, NEUTRAL, 100)).toBeGreaterThan(0.99);
+    expect(performanceScore(s, 1, NEUTRAL, 0)).toBeLessThan(0.01);
+  });
+
   it("scores workload from empty to full", () => {
     expect(workloadScore(0, 80)).toBe(1);
     expect(workloadScore(40, 80)).toBe(0.5);
