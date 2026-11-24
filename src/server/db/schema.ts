@@ -298,7 +298,10 @@ export const leads = pgTable(
     priority: leadPriority("priority").notNull().default("none"),
     nextFollowUpAt: timestamp("next_follow_up_at", { withTimezone: true }),
     firstTouchAt: timestamp("first_touch_at", { withTimezone: true }),
+    /** Any work on the lead (notes, stage moves, follow-ups…). Not a sign the customer was reached: see lastContactAt. */
     lastActivityAt: timestamp("last_activity_at", { withTimezone: true }).notNull().defaultNow(),
+    /** When the agent last actually reached the customer (markContact, client 23 Nov 2026); null = never. */
+    lastContactAt: timestamp("last_contact_at", { withTimezone: true }),
     isRegenerated: boolean("is_regenerated").notNull().default(false),
     verification: leadVerification("verification").notNull().default("approved"),
     verificationNote: text("verification_note"),

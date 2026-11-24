@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
+import { and, eq, inArray, isNull, lt, or, sql, type SQL } from "drizzle-orm";
 import type { Database } from "@/server/db";
 import { auditLogs, bookings, followUps, leadActivities, leads, teamMembers } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
@@ -124,7 +124,19 @@ export async function hasOpenBooking(db: DbOrTx, leadId: string) {
 export const FOLLOW_UP_INACTIVE_STAGE = "lost_lead";
 export const followUpLeadActive = (): SQL => sql`${leads.stage} <> ${FOLLOW_UP_INACTIVE_STAGE}`;
 
-/** Marks a human interaction: first touch (once) and last activity. */
+/**
+ * Last Contact (client, 23 Nov 2026): the customer was actually reached. Counts a call marked Talked, an
+ * uploaded call recording, a WhatsApp call or chat screenshot, and a completed meeting. Unanswered calls,
+ * notes, stage moves and scheduled work don't count. It never moves back.
+ */
+export async function markContact(tx: DbOrTx, leadId: string, at: Date) {
+  await tx
+    .update(leads)
+    .set({ lastContactAt: at })
+    .where(and(eq(leads.id, leadId), or(isNull(leads.lastContactAt), lt(leads.lastContactAt, at))));
+}
+
+/** Marks work on the lead (not proof of contact): first touch (once) and last activity. */
 export function touchValues(lead: { firstTouchAt: Date | null }, now: Date) {
   return lead.firstTouchAt ? { lastActivityAt: now, updatedAt: now } : { firstTouchAt: now, lastActivityAt: now, updatedAt: now };
 }

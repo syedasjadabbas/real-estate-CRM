@@ -11,7 +11,7 @@ import { flattenParams, withParams } from "@/features/leads/url";
 import { cn } from "@/lib/cn";
 import { formatInt } from "@/lib/format";
 import { STAGE_LABELS } from "@/modules/leads/constants";
-import { canDo } from "@/modules/leads/policy";
+import { canDo, leadScope } from "@/modules/leads/policy";
 import { leadLookups, listLeads, pipelineBoard } from "@/modules/leads/queries";
 
 export const metadata: Metadata = { title: "Sales pipeline" };
@@ -100,7 +100,7 @@ export default function PipelinePage({ searchParams }: PageProps<"/dashboard/lea
           <KanbanBoard columns={visible} canEdit={canEdit} now={board.generatedAt} />
         ) : (
           <>
-            <LeadsTable rows={table!.rows} pathname={PATH} params={params} canEdit={canEdit} now={table!.generatedAt} />
+            <LeadsTable rows={table!.rows} pathname={PATH} params={params} showAgent={leadScope(actor.role) !== "own"} canEdit={canEdit} now={table!.generatedAt} />
             <Pagination page={table!.page} pageCount={table!.pageCount} total={table!.total} params={params} />
           </>
         )}

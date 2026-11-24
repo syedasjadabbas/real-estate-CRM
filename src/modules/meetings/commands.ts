@@ -5,7 +5,7 @@ import { auditLogs, leads, meetingHistory, meetings, users } from "@/server/db/s
 import type { Actor } from "@/server/auth/types";
 import { AppError, notFound } from "@/server/errors";
 import { STAGE_LABELS, type LeadStage } from "@/modules/leads/constants";
-import { hasOpenBooking, loadAccessibleLead, logActivity, teamMemberIds, touchValues, type DbOrTx, type Tx } from "@/modules/leads/support";
+import { hasOpenBooking, loadAccessibleLead, logActivity, teamMemberIds, markContact, touchValues, type DbOrTx, type Tx } from "@/modules/leads/support";
 import { parseTask as parse, taskFieldError as fieldError } from "@/modules/tasks/support";
 import { COMPLETE_MOVES_FROM, MEETING_STATUS_LABELS, SCHEDULE_MOVES_FROM } from "./constants";
 import { ORGANIZER_ROLES, assertCanMeeting, canAccessMeeting, canPickOrganizer } from "./policy";
@@ -162,6 +162,8 @@ export async function completeMeeting(db: Database, actor: Actor, meetingId: str
     const { meeting } = await loadAccessibleMeeting(tx, actor, meetingId, true);
     if (meeting.status !== "scheduled") throw new AppError("BUSINESS_RULE", `This meeting is already ${MEETING_STATUS_LABELS[meeting.status].toLowerCase()}.`);
     await close(tx, meeting.id, "completed");
+    // The customer was met at the meeting's time (or now, when it is completed early).
+    await markContact(tx, meeting.leadId, new Date(Math.min(meeting.startsAt.getTime(), Date.now())));
     // The lead may be outside the actor's lead scope (e.g. a manager's lead on a team meeting): then it is not moved.
     const [lead] = await tx.select().from(leads).where(eq(leads.id, meeting.leadId)).for("update");
     let movedLead = false;

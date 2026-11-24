@@ -70,6 +70,7 @@ export const SORTABLE_COLUMNS = [
   "inStage",
   "modified",
   "firstTouch",
+  "lastContact",
   "next",
   "inbound",
   "size",

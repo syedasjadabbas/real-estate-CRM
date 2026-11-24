@@ -19,13 +19,13 @@ test("Regenerated headers reorder the list, and no column claims the sort until 
   await expect.poll(() => order(page, prefix)).toEqual(["Bravo", "Alpha"]);
   await expect(page.getByRole("columnheader", { name: "Sort by Created", exact: true })).not.toHaveAttribute("aria-sort", /.+/);
 
-  await page.getByRole("link", { name: "Sort by Name", exact: true }).click();
+  await page.getByRole("link", { name: "Sort by Lead", exact: true }).click();
   await page.waitForURL(/sort=name/);
-  await expect(page.getByRole("columnheader", { name: "Sort by Name", exact: true })).toHaveAttribute("aria-sort", "descending");
+  await expect(page.getByRole("columnheader", { name: "Sort by Lead", exact: true })).toHaveAttribute("aria-sort", "descending");
   await expect.poll(() => order(page, prefix)).toEqual(["Bravo", "Alpha"]);
 
-  await page.getByRole("link", { name: "Sort by Name", exact: true }).click();
+  await page.getByRole("link", { name: "Sort by Lead", exact: true }).click();
   await page.waitForURL(/dir=asc/);
-  await expect(page.getByRole("columnheader", { name: "Sort by Name", exact: true })).toHaveAttribute("aria-sort", "ascending");
+  await expect(page.getByRole("columnheader", { name: "Sort by Lead", exact: true })).toHaveAttribute("aria-sort", "ascending");
   await expect.poll(() => order(page, prefix)).toEqual(["Alpha", "Bravo"]);
 });

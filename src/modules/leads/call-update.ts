@@ -9,7 +9,7 @@ import { MEETING_TYPES, MEETING_TYPE_LABELS } from "@/modules/meetings/constants
 import { addNote, changeStage, completeFollowUp, scheduleFollowUp } from "./commands";
 import { LEAD_STAGES } from "./constants";
 import { CALL_RESULTS, CALL_RESULT_LABELS } from "./call-results";
-import { loadAccessibleLead } from "./support";
+import { loadAccessibleLead, markContact } from "./support";
 
 const when = (message: string) =>
   z.iso.datetime({ offset: true, message }).transform((v) => new Date(v));
@@ -61,6 +61,7 @@ export async function logCallUpdate(db: Database, actor: Actor, leadId: string, 
     } else {
       const summary = [`Call · ${CALL_RESULT_LABELS[data.result]}`, data.minutes ? `${data.minutes} min` : null].filter(Boolean).join(" · ");
       await addNote(inTx, actor, leadId, { body: data.note ? `${summary}\n${data.note}` : summary });
+      if (data.result === "talked") await markContact(tx, leadId, now);
       done.push("call");
     }
     if (data.stage && data.stage !== lead.stage && !(data.meeting && data.stage === "meeting_scheduled")) {

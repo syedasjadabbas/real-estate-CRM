@@ -1,6 +1,6 @@
 import { OTHER_CITY } from "@/modules/cities/constants";
 import { canVerifyLeads } from "./verification";
-import { and, asc, count, desc, eq, gt, gte, ilike, inArray, isNotNull, isNull, lt, lte, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, gte, ilike, inArray, isNotNull, isNull, lt, lte, ne, or, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { Database } from "@/server/db";
 import {
@@ -156,6 +156,7 @@ const sortColumns = {
   inStage: sql`now() - ${leads.stageChangedAt}`,
   modified: leads.updatedAt,
   firstTouch: sql`${leads.firstTouchAt}`,
+  lastContact: leads.lastContactAt,
   next: leads.nextFollowUpAt,
   inbound: sql`${leads.inboundChannel}::text`,
   // Size is free text ("1,200 sq ft"), so it sorts by its number; text with no number goes last.
@@ -179,6 +180,7 @@ const listSelection = {
   createdAt: leads.createdAt,
   updatedAt: leads.updatedAt,
   firstTouchAt: leads.firstTouchAt,
+  lastContactAt: leads.lastContactAt,
   nextFollowUpAt: leads.nextFollowUpAt,
   priority: leads.priority,
   firstName: leads.firstName,
@@ -202,6 +204,25 @@ const listSelection = {
   originalCode: original.code,
   isFavorite: sql<boolean>`${leadFavorites.leadId} is not null`,
 };
+
+/**
+ * The other projects each listed lead's customer is interested in: their other enquiries that aren't
+ * lost, in any project (client, 24 Nov 2026). Project names only, so it doesn't open another agent's lead.
+ */
+async function otherProjects(db: Database, leadIds: string[]) {
+  const out = new Map<string, string[]>();
+  if (leadIds.length === 0) return out;
+  const other = alias(leads, "customer_other_lead");
+  const rows = await db
+    .selectDistinct({ leadId: leads.id, name: projects.name })
+    .from(leads)
+    .innerJoin(other, and(eq(other.clientId, leads.clientId), ne(other.projectId, leads.projectId), isNull(other.deletedAt), ne(other.stage, "lost_lead")))
+    .innerJoin(projects, eq(projects.id, other.projectId))
+    .where(inArray(leads.id, leadIds))
+    .orderBy(asc(projects.name));
+  for (const r of rows) out.set(r.leadId, [...(out.get(r.leadId) ?? []), r.name]);
+  return out;
+}
 
 export type LeadListRow = Awaited<ReturnType<typeof listLeads>>["rows"][number];
 
@@ -248,6 +269,7 @@ export async function listLeads(db: Database, actor: Actor, projectId: string | 
     .orderBy(...orderBy)
     .limit(PAGE_SIZE)
     .offset((page - 1) * PAGE_SIZE);
+  const others = await otherProjects(db, rows.map((r) => r.id));
 
   return {
     generatedAt: now.getTime(),
@@ -257,7 +279,7 @@ export async function listLeads(db: Database, actor: Actor, projectId: string | 
     page,
     pageCount,
     pageSize: PAGE_SIZE,
-    rows: rows.map((r) => ({ ...r, phone: formatPhone(r.phoneCountryCode, r.phoneNumber) })),
+    rows: rows.map((r) => ({ ...r, phone: formatPhone(r.phoneCountryCode, r.phoneNumber), otherProjects: others.get(r.id) ?? [] })),
   };
 }
 

@@ -8,7 +8,7 @@ import type { Actor } from "@/server/auth/types";
 import { AppError, forbidden, notFound } from "@/server/errors";
 import { putObject, removeObject } from "@/server/storage/local";
 import { canDo } from "@/modules/leads/policy";
-import { audit, loadAccessibleLead, logActivity, touchValues } from "@/modules/leads/support";
+import { audit, loadAccessibleLead, logActivity, markContact, touchValues } from "@/modules/leads/support";
 
 /**
  * Shared storage path for files on leads (FR-038): call recordings and documents.
@@ -61,6 +61,7 @@ export async function saveLeadFile(
         uploadedById: actor.id,
       });
       await tx.update(leads).set(touchValues(current, now)).where(eq(leads.id, lead.id));
+      if (file.kind !== "document") await markContact(tx, lead.id, now);
       await logActivity(tx, { leadId: lead.id, actorId: actor.id, type: "file_uploaded", body: file.name, data: { fileId: id, kind: file.kind, ...(file.kind === "call_recording" || file.kind === "whatsapp_call" ? { durationSec: file.durationSec ?? null } : {}) } });
       await audit(tx, actor, file.auditAction, lead.id, null, { fileId: id, name: file.name, sizeBytes: file.bytes.byteLength, sha256 });
       return { id, name: file.name, sizeBytes: file.bytes.byteLength, durationSec: file.durationSec ?? null };

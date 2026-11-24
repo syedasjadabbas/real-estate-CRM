@@ -109,6 +109,7 @@ export async function LeadsListView({
           pathname={pathname}
           params={params}
           showOriginal={view === "duplicates"}
+          showAgent={leadScope(actor.role) !== "own"}
           canEdit={canDo(actor, "edit")}
           now={result.generatedAt}
           emptyMessage={emptyMessage}
