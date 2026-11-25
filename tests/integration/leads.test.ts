@@ -222,7 +222,7 @@ describe.skipIf(!hasTestDb)("Leads module (PostgreSQL integration)", () => {
     it("persists edits and stage changes with history", async () => {
       const r = await createLead(db, f.actors.agent1, leadInput(f));
       if (r.outcome !== "created") throw new Error("setup");
-      await updateLead(db, f.actors.agent1, r.leadId, { name: "Renamed", priority: "high" });
+      await updateLead(db, f.actors.superAdmin, r.leadId, { name: "Renamed", priority: "high" });
       await changeStage(db, f.actors.agent1, r.leadId, { stage: "qualified_lead" });
       expect(await errorCode(changeStage(db, f.actors.agent1, r.leadId, { stage: "booked" }))).toBe("BUSINESS_RULE");
       expect(await errorCode(changeStage(db, f.actors.agent1, r.leadId, { stage: "lost_lead" }))).toBe("BUSINESS_RULE");
@@ -458,7 +458,7 @@ describe.skipIf(!hasTestDb)("Leads module (PostgreSQL integration)", () => {
       // Same number written differently: nothing to check, nothing changes.
       expect(await updateLead(db, f.actors.agent1, a.leadId, { phoneNumber: "+92 300 1234567" })).toEqual({ changed: [] });
       // The flagged duplicate keeps sharing the number while other fields are edited.
-      expect(await updateLead(db, f.actors.agent1, dup.leadId, { name: "Renamed duplicate", phoneNumber: "300 1234567" })).toEqual({ changed: ["name"] });
+      expect(await updateLead(db, f.actors.superAdmin, dup.leadId, { name: "Renamed duplicate", phoneNumber: "300 1234567" })).toEqual({ changed: ["name"] });
     });
 
     it("a new, unused number is saved, normalized, audited and on the timeline", async () => {

@@ -1,13 +1,16 @@
 "use client";
 
 import { cityOptions, OTHER_CITY } from "@/modules/cities/constants";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { ExtraPhonesFields } from "@/features/contacts/components/extra-phones";
 import type { ExtraPhoneInput } from "@/modules/contacts/constants";
 import { Field, Input } from "@/components/ui/input";
 import { PRIORITIES, PRIORITY_LABELS } from "@/modules/leads/constants";
 import type { LeadLookups } from "@/modules/leads/queries";
 import { DEFAULT_MARLA_SQFT, PROPERTY_TYPE_LABELS, PROPERTY_TYPES } from "@/modules/leads/size";
+import { NAME_PREFIXES, splitPrefix } from "@/modules/leads/input-rules";
+import { maskPhone } from "@/components/ui/masked-phone";
+import { maskEmail } from "./contact-facts";
 import { SizeField } from "./size-field";
 
 export const COUNTRY_CODES = [
@@ -75,6 +78,8 @@ type Props = {
   interestExtra?: ReactNode;
   /** The record's saved list city, kept as an option if it has since been deactivated. */
   currentCity?: { id: string; name: string | null } | null;
+  /** Phone and email start hidden, on a saved lead (client, 25 Nov 2026). */
+  hideContact?: boolean;
   /** The lead's project, for the Size dropdown's unit sizes. */
   projectId?: string;
 };
@@ -92,7 +97,9 @@ function withCurrent(options: { value: string; label: string }[], current: strin
 }
 
 /** Lead fields shared by the create form and the detail page's edit form. */
-export function LeadFields({ values, onChange, errors, lookups, disabled, lockPhones = false, requirementsExtra, interestExtra, currentCity, projectId }: Props) {
+export function LeadFields({ values, onChange, errors, lookups, disabled, lockPhones = false, requirementsExtra, interestExtra, currentCity, projectId, hideContact = false }: Props) {
+  const [shown, setShown] = useState(!hideContact);
+  const { prefix, rest } = splitPrefix(values.firstName);
   const sizeOptions = [...new Set(lookups.unitSizes.filter((u) => !projectId || u.projectId === projectId).map((u) => Number(u.areaSqft)))]
     .sort((a, b) => a - b)
     .map((a) => sizeLabel(a));
@@ -139,16 +146,48 @@ export function LeadFields({ values, onChange, errors, lookups, disabled, lockPh
   return (
     <div className="space-y-4">
       <FormSection title="Customer information" id="customer">
-        {text("firstName", "First name", { required: true, autoComplete: "off" })}
+        <div className="grid grid-cols-[96px_minmax(0,1fr)] gap-2">
+          <Field label="Title">
+            {(id) => (
+              <select id={id} value={prefix} disabled={disabled} onChange={(e) => onChange({ firstName: e.target.value ? `${e.target.value} ${rest}` : rest })} className={selectClass}>
+                <option value="">None</option>
+                {NAME_PREFIXES.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
+            )}
+          </Field>
+          <Field label="First name" required error={errors.firstName ?? errors.name}>
+            {(id, d) => (
+              <Input id={id} aria-describedby={d} invalid={Boolean(errors.firstName ?? errors.name)} value={rest} autoComplete="off" disabled={disabled} onChange={(e) => onChange({ firstName: prefix ? `${prefix} ${e.target.value}` : e.target.value })} />
+            )}
+          </Field>
+        </div>
         {text("lastName", "Last name", { autoComplete: "off" })}
         {select("phoneCountryCode", "Country code", COUNTRY_CODES, { required: true, lock: lockPhones })}
-        {text("phoneNumber", "Mobile number", { required: true, type: "tel", placeholder: "3001234567 or 0300 1234567", lock: lockPhones })}
-        {text("email", "Email", { type: "email", placeholder: "Optional" })}
+        {shown ? (
+          <>
+            {text("phoneNumber", "Mobile number", { required: true, type: "tel", placeholder: "3001234567 or 0300 1234567", lock: lockPhones })}
+            {text("email", "Email", { type: "email", placeholder: "Optional" })}
+          </>
+        ) : (
+          <>
+            <Field label="Mobile number">{(id) => <Input id={id} value={maskPhone(values.phoneNumber)} readOnly disabled />}</Field>
+            <Field label="Email">{(id) => <Input id={id} value={values.email ? maskEmail(values.email) : ""} placeholder="None saved" readOnly disabled />}</Field>
+          </>
+        )}
+        {hideContact ? (
+          <button type="button" aria-pressed={shown} onClick={() => setShown((s) => !s)} className="w-fit text-left text-xs font-bold text-brand hover:underline sm:col-span-2">
+            {shown ? "Hide phone and email" : "Show phone and email"}
+          </button>
+        ) : null}
         {select("gender", "Gender", withCurrent(GENDERS, values.gender), { empty: "Not specified" })}
         {select("cityId", "City", cityOptions(lookups.cities, currentCity), { empty: "Not specified" })}
         {values.cityId === OTHER_CITY ? text("cityOther", "City name", { required: true, placeholder: "e.g. Murree", autoComplete: "off" }) : null}
       </FormSection>
-      <ExtraPhonesFields phones={values.phones} onChange={(phones) => onChange({ phones })} errors={errors} disabled={disabled || lockPhones} />
+      {shown ? <ExtraPhonesFields phones={values.phones} onChange={(phones) => onChange({ phones })} errors={errors} disabled={disabled || lockPhones} /> : null}
       {lockPhones ? <p className="-mt-2 text-[11px] text-zinc-500">Phone numbers can only be changed by an Admin.</p> : null}
       <FormSection title="Property requirements" id="requirements">
         {select("budgetRangeId", "Budget", lookups.budgets.map((b) => ({ value: b.id, label: b.name })), { empty: "Not specified" })}

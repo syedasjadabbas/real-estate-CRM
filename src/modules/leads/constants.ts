@@ -26,6 +26,8 @@ export const STAGE_LABELS: Record<LeadStage, string> = {
   future_opportunity: "Future Opportunity",
 };
 
+/** In progress, in the client's groups (25 Nov 2026). */
+export const IN_PROGRESS_STAGES: LeadStage[] = ["qualified_lead", "meeting_scheduled", "meeting_done", "booking_in_process"];
 export const OPEN_STAGES: LeadStage[] = LEAD_STAGES.filter((s) => s !== "booked" && s !== "lost_lead");
 
 export const PRIORITIES = ["none", "low", "medium", "high"] as const;

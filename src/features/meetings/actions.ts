@@ -2,6 +2,7 @@
 
 import { refresh } from "next/cache";
 import { cancelMeeting, completeMeeting, createMeeting, updateMeeting } from "@/modules/meetings/commands";
+import { addMeetingReview } from "@/modules/meetings/reviews";
 import { requireActor } from "@/server/auth/current-user";
 import { getDb } from "@/server/db";
 import { toActionError, type ActionResult } from "@/server/errors";
@@ -16,6 +17,10 @@ async function run<T>(fn: (db: ReturnType<typeof getDb>, actor: Awaited<ReturnTy
   } catch (error) {
     return toActionError(error) as ActionResult<T>;
   }
+}
+
+export async function addMeetingReviewAction(meetingId: string, input: { rating: number; body: string }) {
+  return run((db, actor) => addMeetingReview(db, actor, meetingId, input));
 }
 
 export async function createMeetingAction(input: Record<string, unknown>) {

@@ -34,12 +34,15 @@ describe.skipIf(!hasTestDb)("Last contact is a real customer interaction (client
     await addNote(db, agent, id, { body: "Looks promising" });
     await changeStage(db, agent, id, { stage: "contact_attempted" });
     await scheduleFollowUp(db, agent, id, { dueAt: new Date(Date.now() + 86_400_000).toISOString() });
-    for (const result of ["no_answer", "busy", "switched_off", "wrong_number", "no_call"]) await logCallUpdate(db, agent, id, { result, note: "x" });
+    for (const result of ["no_answer", "busy", "switched_off", "no_call"]) await logCallUpdate(db, agent, id, { result, note: "x" });
+    const wrong = await lead();
+    await logCallUpdate(db, agent, wrong, { result: "wrong_number" });
+    expect(await contact(wrong)).toBeNull();
     await createMeeting(db, agent, { title: "Visit", type: "site_visit", startsAt: new Date(Date.now() + 3_600_000).toISOString(), leadId: id });
     expect(await contact(id)).toBeNull();
 
     const talkedAt = new Date();
-    await logCallUpdate(db, agent, id, { result: "talked" }, talkedAt);
+    await logCallUpdate(db, agent, id, { result: "talked", minutes: 2, note: "Spoke" }, talkedAt);
     expect(await contact(id)).toEqual(talkedAt);
     await logCallUpdate(db, agent, id, { result: "no_answer" });
     expect(await contact(id)).toEqual(talkedAt);
@@ -63,7 +66,7 @@ describe.skipIf(!hasTestDb)("Last contact is a real customer interaction (client
   it("New leads, Meetings scheduled and Booking in process list the right leads", async () => {
     const [fresh, talked, planned, held, booking] = [await lead(), await lead(), await lead(), await lead(), await lead()];
     const agent = f.actors.agent1;
-    await logCallUpdate(db, agent, talked, { result: "talked" });
+    await logCallUpdate(db, agent, talked, { result: "talked", minutes: 2, note: "Spoke" });
     await createMeeting(db, agent, { title: "Visit", type: "site_visit", startsAt: new Date(Date.now() + 3_600_000).toISOString(), leadId: planned, moveLead: false });
     await db.update(leads).set({ stage: "meeting_done", lastContactAt: new Date() }).where(eq(leads.id, held));
     await db.update(leads).set({ stage: "booking_in_process" }).where(eq(leads.id, booking));
@@ -91,8 +94,8 @@ describe.skipIf(!hasTestDb)("Last contact is a real customer interaction (client
 
   it("the list shows and sorts by it, with leads never contacted last", async () => {
     const [a, b, c] = [await lead(), await lead(), await lead()];
-    await logCallUpdate(db, f.actors.agent1, a, { result: "talked" }, new Date(Date.now() - 60_000));
-    await logCallUpdate(db, f.actors.agent1, c, { result: "talked" });
+    await logCallUpdate(db, f.actors.agent1, a, { result: "talked", minutes: 2, note: "Spoke" }, new Date(Date.now() - 60_000));
+    await logCallUpdate(db, f.actors.agent1, c, { result: "talked", minutes: 2, note: "Spoke" });
     const ids = async (dir: string) => (await listLeads(db, f.actors.agent1, f.projectId, { sort: "lastContact", dir })).rows.map((r) => r.id);
     expect(await ids("desc")).toEqual([c, a, b]);
     expect(await ids("asc")).toEqual([a, c, b]);

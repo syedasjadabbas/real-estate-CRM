@@ -147,10 +147,10 @@ async function add(n, name, { projectId = cedar, owner = agent, by = admin, sour
   return r.leadId;
 }
 let made = 0;
-const call = (hours, id, result, note, extra = {}, by = agent) => ago(hours, () => logCallUpdate(db, by, id, { result, note, ...extra }));
+const call = (hours, id, result, note, extra = {}, by = agent) => ago(hours, () => logCallUpdate(db, by, id, { result, note: note || (result === "talked" ? "Spoke about the project" : ""), ...(result === "talked" ? { minutes: 3 } : {}), ...extra }));
 const stage = (hours, id, to, remarks, by = agent) => ago(hours, () => changeStage(db, by, id, { stage: to, remarks }));
 const lose = (hours, id, reason, note) => ago(hours, () => markLost(db, admin, id, { lostReasonId: need(reasons, reason), note }));
-const repeat = (hours, id, source, note, by = agent) => ago(hours, () => recordRepeatEnquiry(db, by, id, { channel: need(sources, source), note }));
+const repeat = (hours, id, source, note, by = agent) => ago(hours, () => recordRepeatEnquiry(db, by, id, { channel: need(sources, source), note, reason: "Availability" }));
 const refreshNext = (id) => q("update leads set next_follow_up_at=(select min(due_at) from follow_ups where lead_id=$1 and status='pending') where id=$1", [id]);
 async function followUp(id, dueAt, note, by = agent) {
   await logCallUpdate(db, by, id, { result: "no_call", followUp: { dueAt: new Date(Math.max(dueAt.getTime(), Date.now() + 60_000)).toISOString(), note } });

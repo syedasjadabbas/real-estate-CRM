@@ -68,7 +68,7 @@ describe.skipIf(!hasTestDb)("Update after call (PostgreSQL integration)", () => 
       (await db.insert(followUps).values({ leadId: lead, assigneeId: f.actors.agent1.id, dueAt: new Date(Date.now() + ms), createdById: f.actors.agent1.id }).returning())[0];
     const [older, overdue, tomorrow] = [await add(leadId, -2 * 3_600_000), await add(leadId, -3_600_000), await add(leadId, 86_400_000)];
     const statuses = async () => (await db.select().from(followUps).where(eq(followUps.leadId, leadId)).orderBy(followUps.dueAt)).map((u) => u.status);
-    const log = (completeFollowUpIds?: string[], extra = {}) => logCallUpdate(db, f.actors.agent1, leadId, { result: "talked", completeFollowUpIds, ...extra });
+    const log = (completeFollowUpIds?: string[], extra = {}) => logCallUpdate(db, f.actors.agent1, leadId, { result: "talked", minutes: 2, note: "Spoke", completeFollowUpIds, ...extra });
 
     // Nothing is assumed: overdue follow-ups stay pending, even with a next one scheduled.
     await log();
@@ -111,11 +111,11 @@ describe.skipIf(!hasTestDb)("Update after call (PostgreSQL integration)", () => 
   it("a refused part saves nothing at all", async () => {
     const leadId = await newLead();
     const before = await db.select().from(leadActivities).where(eq(leadActivities.leadId, leadId));
-    const err = await logCallUpdate(db, f.actors.agent1, leadId, { result: "talked", note: "x", followUp: { dueAt: inDays(-2) } }).catch((e: unknown) => e);
+    const err = await logCallUpdate(db, f.actors.agent1, leadId, { result: "talked", minutes: 2, note: "x", followUp: { dueAt: inDays(-2) } }).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(AppError);
     expect((err as AppError).fields?.["followUp.dueAt"]).toBe("Pick a time in the future");
     // A failure inside the save (another agent's lead) rolls back the note too.
-    const theirs = await logCallUpdate(db, f.actors.agent2, leadId, { result: "talked", note: "sneaky" }).catch((e: unknown) => e);
+    const theirs = await logCallUpdate(db, f.actors.agent2, leadId, { result: "talked", minutes: 2, note: "sneaky" }).catch((e: unknown) => e);
     expect((theirs as AppError).code).toBe("NOT_FOUND");
     expect(await db.select().from(leadActivities).where(eq(leadActivities.leadId, leadId))).toHaveLength(before.length);
     expect(await db.select().from(followUps).where(and(eq(followUps.leadId, leadId), eq(followUps.status, "pending")))).toHaveLength(0);

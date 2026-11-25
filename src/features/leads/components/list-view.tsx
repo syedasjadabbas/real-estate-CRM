@@ -69,8 +69,10 @@ export async function LeadsListView({
     const title = isNew ? "New leads" : pageTitle;
     const description = isNew ? "Leads still waiting for a first conversation, newest first." : pageDescription;
     const allProjects = params.project === "all";
+    // A project picked on the Won chart, for this list only.
+    const picked = /^[0-9a-f-]{36}$/i.test(params.project ?? "") ? params.project : null;
     const [result, lookups, agents] = await Promise.all([
-      listLeads(db, actor, allProjects ? null : projectId, { ...params, view }),
+      listLeads(db, actor, allProjects ? null : (picked ?? projectId), { ...params, view }),
       leadLookups(db),
       // Admins and Super Admins filter the list by agent (15 Nov 2026); agents only see their own.
       leadScope(actor.role) === "all" ? assignableUsers(db, actor) : Promise.resolve([]),
@@ -101,9 +103,17 @@ export async function LeadsListView({
         ) : null}
         {allProjects ? (
           <p role="note" className="flex flex-wrap items-center gap-x-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-900">
-            Showing leads from all projects, as counted on the work profile.
+            Showing leads from all projects.
             <Link href={withParams(pathname, params, { project: null, page: null })} className="font-bold text-sky-800 underline">
               Show only the selected project
+            </Link>
+          </p>
+        ) : null}
+        {picked && picked !== projectId ? (
+          <p role="note" className="flex flex-wrap items-center gap-x-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-900">
+            Showing the project picked on the chart.
+            <Link href={withParams(pathname, params, { project: null, page: null })} className="font-bold text-sky-800 underline">
+              Back to the selected project
             </Link>
           </p>
         ) : null}
@@ -114,6 +124,8 @@ export async function LeadsListView({
           pathname={pathname}
           params={params}
           showOriginal={view === "duplicates"}
+          showMeeting={view === "meetings"}
+          showReason={view === "regenerated"}
           showAgent={leadScope(actor.role) !== "own"}
           canEdit={canDo(actor, "edit")}
           now={result.generatedAt}

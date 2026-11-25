@@ -1,7 +1,7 @@
 import { and, asc, count, eq, inArray, isNull } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { Database } from "@/server/db";
-import { leads, users } from "@/server/db/schema";
+import { leadRequests, leads, users } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
 import { AppError, forbidden } from "@/server/errors";
 import { leadLink, notify } from "@/modules/notifications/service";
@@ -23,6 +23,7 @@ export const canVerifyLeads = (actor: Pick<Actor, "role">) => actor.role === "ad
 export const initialVerification = (actor: Pick<Actor, "role">): Verification => (actor.role === "agent" ? "pending" : "approved");
 
 export const PENDING_MESSAGE = "This lead is waiting for verification by an Admin or Super Admin. You can work on it once it is approved.";
+export const WRONG_NUMBER_MESSAGE = "This lead's number was reported as wrong. An Admin is checking it; you can work on it once it is sorted out.";
 export const REJECTED_MESSAGE = "This lead was rejected in verification. Correct the details and resubmit it for verification.";
 
 /**
@@ -30,8 +31,10 @@ export const REJECTED_MESSAGE = "This lead was rejected in verification. Correct
  * approved, except for Admins and Super Admins, who verify it. Editing a rejected lead's details is
  * allowed so the agent can correct it (`allowRejectedEdit`).
  */
-export function assertWorkable(actor: Pick<Actor, "role">, lead: { verification: Verification }, opts: { allowRejectedEdit?: boolean } = {}) {
-  if (canVerifyLeads(actor) || lead.verification === "approved") return;
+export function assertWorkable(actor: Pick<Actor, "role">, lead: { verification: Verification; wrongNumberAt?: Date | null }, opts: { allowRejectedEdit?: boolean } = {}) {
+  if (canVerifyLeads(actor)) return;
+  if (lead.wrongNumberAt) throw new AppError("BUSINESS_RULE", WRONG_NUMBER_MESSAGE);
+  if (lead.verification === "approved") return;
   if (lead.verification === "rejected" && opts.allowRejectedEdit) return;
   throw new AppError("BUSINESS_RULE", lead.verification === "pending" ? PENDING_MESSAGE : REJECTED_MESSAGE);
 }
@@ -131,12 +134,17 @@ export async function pendingVerification(db: Database, actor: Actor, projectId:
   return rows.map((r) => ({ ...r, phone: formatPhone(r.phoneCountryCode, r.phoneNumber) }));
 }
 
-/** How many leads wait for verification in a project (for the Verify tab). */
+/** How many leads and requests wait for an Admin in a project (for the Verify tab). */
 export async function pendingVerificationCount(db: Database, actor: Actor, projectId: string | null) {
   if (!canVerifyLeads(actor) || !projectId) return 0;
   const [row] = await db
     .select({ n: count() })
     .from(leads)
     .where(and(eq(leads.projectId, projectId), eq(leads.verification, "pending"), isNull(leads.deletedAt)));
-  return row?.n ?? 0;
+  const [asked] = await db
+    .select({ n: count() })
+    .from(leadRequests)
+    .innerJoin(leads, eq(leads.id, leadRequests.leadId))
+    .where(and(eq(leads.projectId, projectId), eq(leadRequests.status, "pending"), isNull(leads.deletedAt)));
+  return (row?.n ?? 0) + (asked?.n ?? 0);
 }

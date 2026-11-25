@@ -265,6 +265,42 @@ export async function decideDiscount(db: Database, actor: Actor, bookingId: stri
  * Confirmed needs the confirm permission and sets unit → Booked, lead → Booked, and links or
  * creates the client (FR-050).
  */
+/** The win itself: money checked, unit and lead Booked, follow-ups closed, client linked. */
+async function winBooking(tx: Tx, actor: Actor, booking: typeof bookings.$inferSelect) {
+  // Closed Won needs the down payment posted by Accounts (owner, 19 Nov 2026): agents move the earlier
+  // stages on the amounts they report, but a sale is closed only on money Finance has recorded.
+  const [project] = await tx.select({ paymentPlan: projects.paymentPlan }).from(projects).where(eq(projects.id, booking.projectId)).limit(1);
+  const plan = resolvePaymentPlan(project?.paymentPlan, await getProposalSettings(tx));
+  const required = Math.round(booking.totalSale * plan.downPaymentPct) / 100;
+  const posted = await netPaid(tx, booking.id);
+  if (Math.round(posted * 100) < Math.round(required * 100)) {
+    const fmt = (n: number) => `PKR ${new Intl.NumberFormat("en-US").format(Math.round(n))}`;
+    throw new AppError(
+      "BUSINESS_RULE",
+      `Closed Won needs the down payment posted in Finance first: ${fmt(posted)} of ${fmt(required)} (${plan.downPaymentPct}% of the price) has been recorded.`,
+      { details: { posted, required } },
+    );
+  }
+  await transitionUnitStatus(tx, { unitId: booking.unitId, from: ["reserved"], to: "booked", actorId: actor.id, ip: actor.ip ?? null, source: "booking", reason: "Booking confirmed" });
+  const lead = await setLeadStage(tx, actor, booking.leadId, "booked", "Booking confirmed");
+  await closeFollowUps(tx, actor, booking.leadId);
+  const { clientId } = await ensureClientForLead(tx, actor, lead, booking.id);
+  await writeStage(tx, booking.id, booking.stage, "confirmed", { confirmedAt: new Date(), clientId });
+  return clientId;
+}
+
+/** Closes a sale an agent reported as Successfully Booked (client, 25 Nov 2026), from whatever stage it is in. */
+export async function confirmSale(tx: Tx, actor: Actor, bookingId: string, note: string) {
+  if (!canMoveTo(actor, "confirmed")) throw forbidden("Only an Admin or Super Admin can mark a booking Closed Won.");
+  const booking = await loadAccessibleBooking(tx, actor, bookingId, true);
+  if (booking.stage === "confirmed") return;
+  if (CLOSED_STAGES.includes(booking.stage)) throw new AppError("BUSINESS_RULE", `This booking is ${BOOKING_STAGE_LABELS[booking.stage].toLowerCase()}.`);
+  if (booking.discountStatus === "pending") throw new AppError("BUSINESS_RULE", "The discount is waiting for a decision. Decide it first.");
+  const clientId = await winBooking(tx, actor, booking);
+  await tx.insert(bookingStageHistory).values({ bookingId, fromStage: booking.stage, toStage: "confirmed", actorId: actor.id, note });
+  await auditBooking(tx, actor, "booking.confirm", bookingId, { stage: booking.stage }, { stage: "confirmed", note, clientId });
+}
+
 export async function advanceBooking(db: Database, actor: Actor, bookingId: string, input: unknown) {
   assertCanBooking(actor, "advance");
   const { toStage, note, proofFileId, amount } = parse(advanceSchema, input);
@@ -312,25 +348,7 @@ export async function advanceBooking(db: Database, actor: Actor, bookingId: stri
 
     let clientId = booking.clientId;
     if (toStage === "confirmed") {
-      // Closed Won needs the down payment posted by Accounts (owner, 19 Nov 2026): agents move the earlier
-      // stages on the amounts they report, but a sale is closed only on money Finance has recorded.
-      const [project] = await tx.select({ paymentPlan: projects.paymentPlan }).from(projects).where(eq(projects.id, booking.projectId)).limit(1);
-      const plan = resolvePaymentPlan(project?.paymentPlan, await getProposalSettings(tx));
-      const required = Math.round(booking.totalSale * plan.downPaymentPct) / 100;
-      const posted = await netPaid(tx, booking.id);
-      if (Math.round(posted * 100) < Math.round(required * 100)) {
-        const fmt = (n: number) => `PKR ${new Intl.NumberFormat("en-US").format(Math.round(n))}`;
-        throw new AppError(
-          "BUSINESS_RULE",
-          `Closed Won needs the down payment posted in Finance first: ${fmt(posted)} of ${fmt(required)} (${plan.downPaymentPct}% of the price) has been recorded.`,
-          { details: { posted, required } },
-        );
-      }
-      await transitionUnitStatus(tx, { unitId: booking.unitId, from: ["reserved"], to: "booked", actorId: actor.id, ip: actor.ip ?? null, source: "booking", reason: "Booking confirmed" });
-      const lead = await setLeadStage(tx, actor, booking.leadId, "booked", "Booking confirmed");
-      await closeFollowUps(tx, actor, booking.leadId);
-      clientId = (await ensureClientForLead(tx, actor, lead, booking.id)).clientId;
-      await writeStage(tx, booking.id, booking.stage, toStage, { confirmedAt: new Date(), clientId });
+      clientId = await winBooking(tx, actor, booking);
     } else {
       await writeStage(tx, booking.id, booking.stage, toStage);
     }

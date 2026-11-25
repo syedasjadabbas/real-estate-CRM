@@ -1,6 +1,6 @@
 import { and, eq, isNull, ne } from "drizzle-orm";
 import { nameFromParts } from "@/lib/person-name";
-import { assertPhoneEditable, notifyNameChange } from "@/modules/contacts/agent-edits";
+import { assertPhoneEditable } from "@/modules/contacts/agent-edits";
 import type { Database } from "@/server/db";
 import { bookings, clientFollowUps, clients, leads, users } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
@@ -220,6 +220,10 @@ export async function updateClient(db: Database, actor: Actor, clientId: string,
         data.phones !== undefined &&
         JSON.stringify(normalizeExtraPhones(client.phoneE164, data.phones).map((p) => p.e164)) !== JSON.stringify((await clientPhonesOf(tx, clientId)).map((p) => p.e164));
       assertPhoneEditable(actor, primaryChanged || extraChanged);
+      // An Admin approves an agent's name change, which is asked for on the lead (client, 25 Nov 2026).
+      if (data.name !== undefined && data.name !== client.name) {
+        throw new AppError("FORBIDDEN", "Change the name on the customer's lead. An Admin approves it.", { fields: { firstName: "Change it on the lead; an Admin approves it" } });
+      }
     }
     const changes: Partial<typeof clients.$inferInsert> = {};
     if (data.name !== undefined) Object.assign(changes, { name: data.name }, named.parts);
@@ -268,7 +272,6 @@ export async function updateClient(db: Database, actor: Actor, clientId: string,
     }
     const renamed = changed.includes("name") ? { nameFrom: client.name, nameTo: changes.name } : {};
     await logClientActivity(tx, { clientId, actorId: actor.id, type: "update", data: { fields: changed, ...renamed } });
-    if (changed.includes("name")) await notifyNameChange(tx, actor, { kind: "client", id: clientId, from: client.name, to: changes.name! });
     await auditClient(
       tx,
       actor,

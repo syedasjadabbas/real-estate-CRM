@@ -65,6 +65,7 @@ export const createLeadSchema = leadFieldsSchema.extend({
   onDuplicate: z.enum(["reject", "regenerate"], "Record it as a repeat enquiry on the existing lead").default("reject"),
   /** A repeat's channel when it isn't in the source list ("Other"); otherwise the source is the channel. */
   channelOther: optionalText(80),
+  repeatReason: optionalText(120),
 });
 export type CreateLeadInput = z.input<typeof createLeadSchema>;
 
@@ -149,6 +150,8 @@ export const leadListQuerySchema = z.object({
   /** Lost reason ids (dashboard "Lost leads by reason" click-through). */
   lostReason: csvIds.catch([]),
   priority: csv(PRIORITIES).catch([]),
+  /** "1": Open in the client's sense: opened New leads, Contact Attempted and Contacted; "0": New leads not opened yet. */
+  opened: z.enum(["0", "1"]).optional().catch(undefined),
   propertyType: csv(PROPERTY_TYPES).catch([]),
   campaign: z.string().trim().max(120).optional().catch(undefined),
   /** Square feet. */

@@ -4,7 +4,8 @@ import { z } from "zod";
 import type { Database } from "@/server/db";
 import { followUps, leadSources, leads, meetings, projects, teamMembers, teams, users } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
-import { INBOUND_LABELS } from "@/modules/leads/constants";
+import { INBOUND_LABELS, STAGNATING_DAYS, type LeadStage } from "@/modules/leads/constants";
+import { inProgressLeads, openLeads, unopenedLeads } from "@/modules/leads/groups";
 import { agentScores, teamScoreSummary, teamScores } from "@/modules/leads/assignment";
 import { leadScope } from "@/modules/leads/policy";
 import { followUpLeadActive, scopeFilter, teamMemberIds } from "@/modules/leads/support";
@@ -114,14 +115,17 @@ export async function dashboardData(db: Database, actor: Actor, projectId: strin
   const inRange = and(inProject, gte(leads.createdAt, start), lt(leads.createdAt, end));
   const open = notInArray(leads.stage, ["booked", "lost_lead"]);
 
+  const inStage = (stage: LeadStage) => sql<number>`count(*) filter (where ${leads.stage} = ${stage})::int`;
   const lostInRange = and(inRange, eq(leads.stage, "lost_lead"));
   const todayStart = new Date(`${businessDay(now)}T00:00:00${OFFSET}`);
-  const [[k], sources, channels, projectLeads, [activeProjects], [health], [meetingsDone], lostTeamRows, [due]] = await Promise.all([
+  const [[k], sources, channels, projectLeads, [activeProjects], [health], [meetingsDone], lostTeamRows, [due], [stuck]] = await Promise.all([
     db
       .select({
         total: count(),
         won: sql<number>`count(*) filter (where ${leads.stage} = 'booked')::int`,
         lost: sql<number>`count(*) filter (where ${leads.stage} = 'lost_lead')::int`,
+        open: sql<number>`count(*) filter (where ${openLeads()})::int`,
+        qualified: sql<number>`count(*) filter (where ${inProgressLeads()})::int`,
         regenerated: sql<number>`count(*) filter (where ${leads.isRegenerated})::int`,
         awaiting: sql<number>`count(*) filter (where ${leads.firstTouchAt} is null and ${leads.stage} not in ('booked', 'lost_lead'))::int`,
       })
@@ -141,8 +145,16 @@ export async function dashboardData(db: Database, actor: Actor, projectId: strin
         id: projects.id,
         label: projects.name,
         total: count(leads.id),
-        open: sql<number>`count(*) filter (where ${leads.stage} in ('new_lead', 'contact_attempted', 'future_opportunity'))::int`,
-        inProgress: sql<number>`count(*) filter (where ${leads.stage} in ('contacted', 'qualified_lead', 'meeting_scheduled', 'meeting_done', 'booking_in_process'))::int`,
+        fresh: sql<number>`count(*) filter (where ${unopenedLeads()})::int`,
+        open: sql<number>`count(*) filter (where ${openLeads()})::int`,
+        inProgress: sql<number>`count(*) filter (where ${inProgressLeads()})::int`,
+        future: inStage("future_opportunity"),
+        attempted: inStage("contact_attempted"),
+        contacted: inStage("contacted"),
+        qualified: inStage("qualified_lead"),
+        meetingScheduled: inStage("meeting_scheduled"),
+        meetingDone: inStage("meeting_done"),
+        booking: inStage("booking_in_process"),
         won: sql<number>`count(*) filter (where ${leads.stage} = 'booked')::int`,
         lost: sql<number>`count(*) filter (where ${leads.stage} = 'lost_lead')::int`,
       })
@@ -192,10 +204,12 @@ export async function dashboardData(db: Database, actor: Actor, projectId: strin
       .from(followUps)
       .innerJoin(leads, eq(leads.id, followUps.leadId))
       .where(and(scopeFilter(actor, members), isNull(leads.deletedAt), eq(leads.projectId, projectId), eq(followUps.status, "pending"), followUpLeadActive())),
+    // The same rule as the Stagnating list it opens.
+    db.select({ n: count() }).from(leads).where(and(inProject, notInArray(leads.stage, ["booked", "lost_lead", "future_opportunity"]), sql`${leads.stageChangedAt} <= now() - make_interval(days => ${STAGNATING_DAYS})`)),
   ]);
 
   const total = k.total;
-  const openCount = total - k.won - k.lost;
+  const openCount = k.open;
   // Agents see only their own work: their own score, never a team average built from other agents'
   // scores (decided 11 Nov 2026). Managers keep their teams; Admins and Super Admins see every team.
   const ownScore = actor.role === "agent" ? (await agentScores(db, [actor.id], now)).get(actor.id)! : null;
@@ -234,6 +248,8 @@ export async function dashboardData(db: Database, actor: Actor, projectId: strin
       winOnDecided: pct(k.won, k.won + k.lost),
       openPipeline: openCount,
       openPipelinePct: pct(openCount, total),
+      qualified: k.qualified,
+      qualifiedRate: pct(k.qualified, total),
       won: k.won,
       lost: k.lost,
       attritionPct: pct(k.lost, k.won + k.lost),
@@ -242,8 +258,12 @@ export async function dashboardData(db: Database, actor: Actor, projectId: strin
     },
     teams: options,
     activeProjects: activeProjects.n,
-    projectLeads,
+    projectLeads: projectLeads.map(({ attempted, contacted, qualified, meetingScheduled, meetingDone, booking, ...p }) => ({
+      ...p,
+      steps: { opened: p.open - attempted - contacted, attempted, contacted, qualified, meetingScheduled, meetingDone, booking },
+    })),
     followUps: due,
+    stagnating: stuck.n,
     insights: panels
       ? { teams: summary?.teams ?? 0, avgScore: summary?.avgScore ?? 0, meetings30d: panels.totals.d30, meetings6m: panels.totals.m6, teamMeetings: panels.totals.team, bookings: panels.output.reduce((n, t) => n + t.bookings, 0) }
       : null,

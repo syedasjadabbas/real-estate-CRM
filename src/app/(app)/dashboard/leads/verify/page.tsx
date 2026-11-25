@@ -8,6 +8,8 @@ import { withLeadsAccess } from "@/features/leads/components/list-view";
 import { VerifyActions } from "@/features/leads/components/verification";
 import { formatDateTime } from "@/features/leads/format";
 import { telHref } from "@/modules/leads/phone";
+import { LeadRequestCard } from "@/features/leads/components/lead-requests";
+import { pendingLeadRequests } from "@/modules/leads/requests";
 import { canVerifyLeads, pendingVerification } from "@/modules/leads/verification";
 import { MaskedPhone } from "@/components/ui/masked-phone";
 
@@ -17,14 +19,22 @@ export const metadata: Metadata = { title: "Verify leads" };
 export default function VerifyLeadsPage() {
   return withLeadsAccess(async ({ actor, db, projectId }) => {
     if (!canVerifyLeads(actor)) return <RestrictedState />;
-    const rows = await pendingVerification(db, actor, projectId);
+    const [rows, requests] = await Promise.all([pendingVerification(db, actor, projectId), pendingLeadRequests(db, projectId)]);
     return (
       <section className="space-y-6" aria-label="Verify leads">
         <PageHeader
           as="h2"
           title="Verify leads"
-          description="Leads agents added by hand. The agent can work on a lead once you approve it; a rejected lead goes back to the agent with your reason."
+          description="Leads agents added by hand, and what agents ask about their leads. The agent can work on a lead once you approve it; a rejected lead goes back to the agent with your reason."
         />
+        {requests.length ? (
+          <div className="space-y-3" aria-label="Requests from agents">
+            <h3 className="text-sm font-black">Requests from agents · {requests.length}</h3>
+            {requests.map((r) => (
+              <LeadRequestCard key={r.id} request={r} canDecide showLead />
+            ))}
+          </div>
+        ) : null}
         {rows.length === 0 ? (
           <EmptyState>No leads waiting for verification in this project.</EmptyState>
         ) : (

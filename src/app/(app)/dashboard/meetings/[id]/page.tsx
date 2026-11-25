@@ -17,6 +17,8 @@ import { requirePageUser } from "@/server/auth/current-user";
 import { getDb } from "@/server/db";
 import { AppError } from "@/server/errors";
 import { MEETING_TYPE_LABELS } from "@/modules/meetings/constants";
+import { MeetingReviews } from "@/features/meetings/components/meeting-reviews";
+import { meetingReviewsFor } from "@/modules/meetings/reviews";
 import { MeetingPhotos } from "@/features/meetings/components/meeting-photos";
 import { listMeetingPhotos, type MeetingPhoto } from "@/modules/meetings/photos";
 
@@ -56,6 +58,8 @@ function historyText(h: MeetingDetail["history"][number], names: Record<string, 
       return `Completed${d.movedLead ? " · lead moved to Meeting Done" : ""}${note}`;
     case "cancel":
       return `Cancelled${note}`;
+    case "review":
+      return `Reviewed · ${String(d.rating ?? "")}/5`;
     case "photo_upload":
       return `Added a photo · ${String(d.name ?? "")}`;
     case "photo_remove":
@@ -71,9 +75,11 @@ export default async function MeetingDetailPage({ params, searchParams }: PagePr
   const [{ id }, { saved }] = await Promise.all([params, searchParams]);
   let detail: MeetingDetail;
   let photos: MeetingPhoto[];
+  let reviews: Awaited<ReturnType<typeof meetingReviewsFor>>;
   try {
     detail = await getMeetingDetail(getDb(), actor, id);
     photos = await listMeetingPhotos(getDb(), actor, id);
+    reviews = await meetingReviewsFor(getDb(), actor, id);
   } catch (error) {
     if (error instanceof AppError && error.code === "NOT_FOUND") notFound();
     throw error;
@@ -164,6 +170,7 @@ export default async function MeetingDetailPage({ params, searchParams }: PagePr
         </div>
         <div className="min-w-0 space-y-6">
           <MeetingStatusPanel meetingId={meeting.id} status={meeting.status} leadStage={lead?.stage ?? null} canEdit={detail.canEdit} />
+          <MeetingReviews meetingId={meeting.id} reviews={reviews} canReview={detail.canEdit} held={meeting.status === "completed"} />
           <MeetingPhotos
             meetingId={meeting.id}
             photos={photos.map((p) => ({ id: p.id, name: p.name, createdAt: p.createdAt.toISOString(), uploadedBy: p.uploadedBy, canRemove: p.canRemove }))}

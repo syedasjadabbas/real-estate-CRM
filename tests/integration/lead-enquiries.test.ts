@@ -48,8 +48,8 @@ describe.skipIf(!hasTestDb)("Enquiry history and repeat enquiries (client, 24 No
     const before = await enquiriesFor(db, [id]);
     expect(before).toMatchObject([{ isRepeat: false, channel: "Facebook", agentName: f.actors.agent1.name, projectName: "Test Project" }]);
 
-    await recordRepeatEnquiry(db, f.actors.agent1, id, { channel: walkIn, note: "Came to the office" });
-    await recordRepeatEnquiry(db, f.actors.agent1, id, { channel: "other", channelOther: "Expo stall" });
+    await recordRepeatEnquiry(db, f.actors.agent1, id, { reason: "Availability", channel: walkIn, note: "Came to the office" });
+    await recordRepeatEnquiry(db, f.actors.agent1, id, { reason: "Availability", channel: "other", channelOther: "Expo stall" });
     const rows = (await getLeadDetail(db, f.actors.agent1, id)).lead.enquiries;
     expect(rows.map((r) => [r.isRepeat, r.channel, r.note])).toEqual([
       [true, "Expo stall", null],
@@ -63,13 +63,13 @@ describe.skipIf(!hasTestDb)("Enquiry history and repeat enquiries (client, 24 No
 
   it("needs a listed channel or a named Other, and a date between the lead's and now", async () => {
     const id = await lead("03006660002");
-    const bad = async (input: Record<string, unknown>) => Object.keys((await errorOf(recordRepeatEnquiry(db, f.actors.agent1, id, input)))?.fields ?? {});
+    const bad = async (input: Record<string, unknown>) => Object.keys((await errorOf(recordRepeatEnquiry(db, f.actors.agent1, id, { reason: "Availability", ...input })))?.fields ?? {});
     expect(await bad({ channel: "" })).toContain("channel");
     expect(await bad({ channel: "other", channelOther: " " })).toContain("channelOther");
     expect(await bad({ channel: "00000000-0000-4000-8000-000000000000" })).toContain("channel");
     expect(await bad({ channel: walkIn, at: new Date(Date.now() + 3_600_000).toISOString() })).toContain("at");
     expect(await bad({ channel: walkIn, at: new Date(Date.now() - 86_400_000).toISOString() })).toContain("at");
-    expect((await errorOf(recordRepeatEnquiry(db, f.actors.agent2, id, { channel: walkIn })))?.code).toBe("NOT_FOUND");
+    expect((await errorOf(recordRepeatEnquiry(db, f.actors.agent2, id, { reason: "Availability", channel: walkIn })))?.code).toBe("NOT_FOUND");
     expect(await enquiriesFor(db, [id])).toHaveLength(1);
   });
 
@@ -92,8 +92,8 @@ describe.skipIf(!hasTestDb)("Enquiry history and repeat enquiries (client, 24 No
     const booked = await lead("03006660005");
     await db.update(leads).set({ stage: "lost_lead" }).where(eq(leads.id, lost));
     await db.update(leads).set({ stage: "booked" }).where(eq(leads.id, booked));
-    await recordRepeatEnquiry(db, f.actors.superAdmin, lost, { channel: walkIn });
-    await recordRepeatEnquiry(db, f.actors.superAdmin, booked, { channel: walkIn });
+    await recordRepeatEnquiry(db, f.actors.superAdmin, lost, { reason: "Availability", channel: walkIn });
+    await recordRepeatEnquiry(db, f.actors.superAdmin, booked, { reason: "Availability", channel: walkIn });
     const notes = await told(f.actors.agent1.id);
     expect(notes.map((n) => n.body)).toEqual([expect.stringContaining("decide whether to reopen")]);
     expect((await db.select().from(leads).where(eq(leads.id, lost)))[0].stage).toBe("lost_lead");
@@ -104,7 +104,7 @@ describe.skipIf(!hasTestDb)("Enquiry history and repeat enquiries (client, 24 No
     const mine = await lead("03006660006");
     const theirs = await lead("03006660006", f.otherProjectId, f.actors.agent1.id);
     await db.update(leads).set({ ownerId: f.actors.agent2.id }).where(eq(leads.id, theirs));
-    await recordRepeatEnquiry(db, f.actors.agent2, theirs, { channel: walkIn, note: "Private note" });
+    await recordRepeatEnquiry(db, f.actors.agent2, theirs, { reason: "Availability", channel: walkIn, note: "Private note" });
     const [row] = await db.select().from(leads).where(eq(leads.id, mine));
     const all = (await getClientDetail(db, f.actors.superAdmin, row.clientId!)).enquiries;
     expect(all.map((e) => e.projectName).sort()).toEqual(["Other Project", "Other Project", "Test Project"]);

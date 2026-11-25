@@ -400,6 +400,15 @@ export async function personAttendance(db: Database, actor: Actor, userId: strin
 
 export type PersonAttendance = Awaited<ReturnType<typeof personAttendance>>;
 
+/** Today's check-in and check-out, for the top bar's button. */
+export async function todayAttendance(db: Database, actor: Pick<Actor, "id">, now = new Date()) {
+  const [row] = await db
+    .select({ checkInAt: attendanceRecords.checkInAt, checkOutAt: attendanceRecords.checkOutAt })
+    .from(attendanceRecords)
+    .where(and(eq(attendanceRecords.userId, actor.id), eq(attendanceRecords.date, localDate(now))));
+  return { checkIn: row ? localTime(row.checkInAt) : null, checkOut: row?.checkOutAt ? localTime(row.checkOutAt) : null };
+}
+
 /** My workplace: today's record and this month's tally for the signed-in person. */
 export async function myAttendance(db: Database, actor: Actor, now = new Date()) {
   const today = localDate(now);

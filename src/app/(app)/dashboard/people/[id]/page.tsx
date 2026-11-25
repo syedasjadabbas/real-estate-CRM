@@ -46,6 +46,7 @@ const ACTIVITY_LABELS: Record<string, string> = {
   file_deleted: "Deleted a file",
   client_linked: "Linked a client",
   verification: "Verification",
+  request: "Request to Admin",
 };
 
 /** ↑ / ↓ against the previous period. */

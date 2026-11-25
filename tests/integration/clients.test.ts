@@ -189,7 +189,7 @@ describe.skipIf(!hasTestDb)("Clients module (PostgreSQL integration)", () => {
       expect(await updateClient(db, f.actors.agent1, clientId, { relationship: "repeat_investor", cityId: f.cityId })).toEqual({
         changed: ["relationship"],
       });
-      await updateClient(db, f.actors.agent1, clientId, { name: "Renamed Client" });
+      await updateClient(db, f.actors.superAdmin, clientId, { name: "Renamed Client" });
       const detail = await getClientDetail(db, f.actors.agent1, clientId);
       expect(detail.client).toMatchObject({ name: "Renamed Client", relationship: "repeat_investor", cityName: "Islamabad" });
 

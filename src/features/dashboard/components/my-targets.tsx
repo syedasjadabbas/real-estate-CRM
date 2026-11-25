@@ -62,7 +62,6 @@ export function MyTargets({ targets }: { targets: TargetPeriods | null }) {
   return (
     <Card className="p-4">
       <Eyebrow className="text-xs leading-4">My Targets</Eyebrow>
-      <p className="mt-0.5 text-[11px] text-zinc-600">What your Admin asked you to achieve, and how much you have done so far.</p>
       {anyTarget ? null : (
         <EmptyState size="sm" className="mt-3">
           No targets are set for you yet. Your Admin sets them in Targets.

@@ -1,6 +1,8 @@
 "use client";
 
-import { ChannelFields } from "./enquiry-history";
+import { OTHER_REASON } from "@/modules/leads/enquiry-reasons";
+import { leadInputErrors } from "@/modules/leads/input-rules";
+import { ChannelFields, ReasonFields } from "./enquiry-history";
 import { AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -57,11 +59,15 @@ export function LeadCreateForm({
   const [notice, setNotice] = useState<string | null>(null);
 
   const [channel, setChannel] = useState({ channel: "", other: "" });
+  const [reason, setReason] = useState("");
+  const [reasonText, setReasonText] = useState("");
 
   const submit = (onDuplicate: "reject" | "regenerate" = "reject") =>
     startTransition(async () => {
       setFormError(null);
-      const early = phoneFormErrors(values.phoneNumber, values.phones);
+      const early = { ...phoneFormErrors(values.phoneNumber, values.phones), ...leadInputErrors({ ...values }) };
+      if (!values.sourceId) early.sourceId = "Source is required";
+      if (!projectId) early.projectId = "Project is required";
       if (Object.keys(early).length) {
         setErrors(early);
         setFormError("Check the highlighted fields.");
@@ -77,7 +83,12 @@ export function LeadCreateForm({
         setErrors({ channelOther: "Name the channel" });
         return;
       }
-      const result = await createLeadAction({ ...values, ...repeat, projectId, ownerId, note, onDuplicate });
+      const repeatReason = reason === OTHER_REASON ? reasonText.trim() : reason;
+      if (onDuplicate === "regenerate" && !repeatReason) {
+        setErrors({ repeatReason: "Choose the reason" });
+        return;
+      }
+      const result = await createLeadAction({ ...values, ...repeat, ...(onDuplicate === "regenerate" ? { repeatReason } : {}), projectId, ownerId, note, onDuplicate });
       if (result.ok) {
         setConflict(null);
         if (result.data.outcome === "created" && !result.data.visible) {
@@ -220,6 +231,7 @@ export function LeadCreateForm({
           </p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <ChannelFields sources={lookups.sources} channel={channel.channel} other={channel.other} errors={errors} disabled={pending} onChange={(p) => setChannel((c) => ({ ...c, ...p }))} />
+            <ReasonFields reason={reason} other={reasonText} error={errors.repeatReason} disabled={pending} onReason={setReason} onOther={setReasonText} />
           </div>
         </div>
       </Modal>

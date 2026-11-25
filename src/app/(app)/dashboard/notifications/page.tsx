@@ -25,6 +25,8 @@ const TYPE_LABELS: Record<NotificationType, string> = {
   meeting_missed: "Missed meeting",
   lost_requested: "Lost request",
   lost_rejected: "Lost rejected",
+  lead_request: "To decide",
+  lead_request_decided: "Decision",
   follow_up_soon: "Follow-up soon",
   lead_verification_requested: "To verify",
   lead_verified: "Verification",

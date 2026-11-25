@@ -451,7 +451,12 @@ export function EditDetailsForm({ detail, lookups }: { detail: LeadDetail; looku
           const result = await updateLeadAction(lead.id, values);
           if (result.ok) {
             setErrors({});
-            setMsg({ text: result.data.changed.length ? "Changes saved." : "Nothing changed.", ok: true });
+            setMsg({
+              text: [result.data.changed.length ? "Changes saved." : null, result.data.nameRequested ? "The new name is waiting for an Admin." : null].filter(Boolean).join(" ") || "Nothing changed.",
+              ok: true,
+            });
+            // The name stays as it was until an Admin approves the new one.
+            if (result.data.nameRequested) setValues((v) => ({ ...v, firstName: initial.firstName, lastName: initial.lastName }));
           } else {
             setErrors(result.fields ?? {});
             setMsg({ text: result.message, ok: false });
@@ -460,7 +465,7 @@ export function EditDetailsForm({ detail, lookups }: { detail: LeadDetail; looku
       }}
       className="space-y-4"
     >
-      <LeadFields values={values} onChange={(p) => setValues((v) => ({ ...v, ...p }))} errors={errors} lookups={lookups} lockPhones={!detail.permissions.editPhones} projectId={lead.projectId}
+      <LeadFields values={values} onChange={(p) => setValues((v) => ({ ...v, ...p }))} errors={errors} lookups={lookups} lockPhones={!detail.permissions.editPhones} hideContact projectId={lead.projectId}
         requirementsExtra={
           <ReadOnly label="Project interests">
             {lead.projectName}

@@ -66,13 +66,15 @@ describe.skipIf(!hasTestDb)("Dashboard analytics (PostgreSQL integration)", () =
     expect(r.allowed).toBe(true);
     expect(r.data!.kpis).toEqual({
       totalLeads: 6,
-      openPct: 50,
+      openPct: 0,
       wonPct: 16.7,
       lostPct: 33.3,
       conversionRate: 16.7,
       winOnDecided: 33.3,
-      openPipeline: 3,
-      openPipelinePct: 50,
+      openPipeline: 0,
+      openPipelinePct: 0,
+      qualified: 0,
+      qualifiedRate: 0,
       won: 1,
       lost: 2,
       attritionPct: 66.7,
@@ -82,7 +84,7 @@ describe.skipIf(!hasTestDb)("Dashboard analytics (PostgreSQL integration)", () =
     expect(r.data!.leadSources).toEqual([expect.objectContaining({ label: "Facebook", count: 6 })]);
     expect(r.data!.inboundChannels).toEqual([{ id: "manual", label: "Manual", count: 6 }]);
     // All time, every stage in exactly one group: the 60-day-old lead counts here but not in the 30-day KPIs.
-    expect(r.data!.projectLeads.map((p) => [p.label, p.total, p.open, p.inProgress, p.won, p.lost])).toEqual([
+    expect(r.data!.projectLeads.map((p) => [p.label, p.total, p.fresh, p.inProgress, p.won, p.lost])).toEqual([
       ["Test Project", 7, 4, 0, 1, 2],
       ["Other Project", 1, 1, 0, 0, 0],
     ]);

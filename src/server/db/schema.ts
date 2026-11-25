@@ -72,6 +72,8 @@ export const leadActivityType = pgEnum("lead_activity_type", [
   "file_deleted",
   "client_linked",
   "verification",
+  // A request for an Admin (name change, wrong number, successfully booked) and its decision (25 Nov 2026).
+  "request",
 ]);
 /**
  * Lead verification (owner's decision, 13 Nov 2026): a lead an agent adds by hand waits for an Admin
@@ -308,6 +310,10 @@ export const leads = pgTable(
     priority: leadPriority("priority").notNull().default("none"),
     nextFollowUpAt: timestamp("next_follow_up_at", { withTimezone: true }),
     firstTouchAt: timestamp("first_touch_at", { withTimezone: true }),
+    /** When its own agent first opened it (client, 25 Nov 2026): a New lead becomes Open. Cleared when it goes to another agent. */
+    openedAt: timestamp("opened_at", { withTimezone: true }),
+    /** The agent reported the number as wrong; nobody but an Admin works the lead until it is checked. */
+    wrongNumberAt: timestamp("wrong_number_at", { withTimezone: true }),
     /** Any work on the lead (notes, stage moves, follow-ups…). Not a sign the customer was reached: see lastContactAt. */
     lastActivityAt: timestamp("last_activity_at", { withTimezone: true }).notNull().defaultNow(),
     /** When the agent last actually reached the customer (markContact, client 23 Nov 2026); a booking is not contact (24 Nov 2026); null = never. */
@@ -374,6 +380,8 @@ export const leadEnquiries = pgTable(
     /** The agent responsible at that time. */
     agentId: uuid("agent_id").references(() => users.id, { onDelete: "set null" }),
     recordedById: uuid("recorded_by_id").references(() => users.id, { onDelete: "set null" }),
+    /** Why the customer asked again; required for repeats since 25 Nov 2026. */
+    reason: text("reason"),
     note: text("note"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -1294,6 +1302,53 @@ export const meetings = pgTable(
   ],
 );
 
+/** What people thought of a held meeting: the agent and the Admins, stars and a comment (client, 25 Nov 2026). */
+export const meetingReviews = pgTable(
+  "meeting_reviews",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    meetingId: uuid("meeting_id")
+      .notNull()
+      .references(() => meetings.id, { onDelete: "cascade" }),
+    reviewerId: uuid("reviewer_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    rating: smallint("rating").notNull(),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("meeting_reviews_meeting_idx").on(t.meetingId, t.createdAt), check("meeting_reviews_rating", sql`${t.rating} between 1 and 5`)],
+);
+
+/** Something about a lead that waits for an Admin: a name change, a wrong number, a sale reported as booked (client, 25 Nov 2026). */
+export const leadRequests = pgTable(
+  "lead_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    type: text("type").notNull(),
+    leadId: uuid("lead_id")
+      .notNull()
+      .references(() => leads.id, { onDelete: "cascade" }),
+    requestedById: uuid("requested_by_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    data: jsonb("data").$type<Record<string, unknown>>().notNull().default({}),
+    note: text("note"),
+    status: approvalStatus("status").notNull().default("pending"),
+    decidedById: uuid("decided_by_id").references(() => users.id, { onDelete: "set null" }),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    comment: text("comment"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("lead_requests_one_pending_uq")
+      .on(t.leadId, t.type)
+      .where(sql`${t.status} = 'pending'`),
+    index("lead_requests_status_idx").on(t.status, t.createdAt),
+    check("lead_requests_type", sql`${t.type} in ('name_change', 'wrong_number', 'booked')`),
+  ],
+);
+
 export const meetingHistory = pgTable(
   "meeting_history",
   {
@@ -1427,6 +1482,9 @@ export const notificationType = pgEnum("notification_type", [
   // Someone checked in or out on My workplace: every active HR member is told (owner, 18 Nov 2026).
   "attendance_check_in",
   "attendance_check_out",
+  // A lead request (name change, wrong number, successfully booked) waits for an Admin, and its decision (25 Nov 2026).
+  "lead_request",
+  "lead_request_decided",
   // A meeting still Scheduled the day after it was due: its organizer and their team Admin (owner, 18 Nov 2026).
   "meeting_missed",
 ]);

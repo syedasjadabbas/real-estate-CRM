@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { logoutAction, setActiveProjectAction } from "@/features/auth/actions";
 import { Avatar } from "@/components/ui/avatar";
+import { CheckInButton, type TodayAttendance } from "@/features/attendance/components/check-in-button";
 import { NotificationBell } from "@/features/notifications/components/notification-bell";
 import { buttonClasses, IconButton } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
@@ -60,12 +61,14 @@ export function Header({
   user,
   projects,
   activeProjectId,
+  today = null,
   sidebarOpen,
   onToggleSidebar,
 }: {
   user: SessionUser | null;
   projects: ProjectOption[];
   activeProjectId: string | null;
+  today?: TodayAttendance | null;
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
 }) {
@@ -114,6 +117,7 @@ export function Header({
               <p className="max-w-40 truncate text-[10px] leading-[13px] font-medium text-zinc-600">{user?.email ?? " "}</p>
             </div>
           </div>
+          {user && today ? <CheckInButton today={today} /> : null}
           {user ? (
             <form action={logoutAction}>
               <button

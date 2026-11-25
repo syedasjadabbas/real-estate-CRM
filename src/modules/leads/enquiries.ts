@@ -34,18 +34,18 @@ export async function recordRepeat(
   actor: Actor,
   lead: Pick<typeof leads.$inferSelect, "id" | "code" | "name" | "stage" | "ownerId" | "regeneratedAt">,
   channel: EnquiryChannel,
-  { at, note, now = new Date() }: { at: Date; note: string | null; now?: Date },
+  { at, note, reason = null, now = new Date() }: { at: Date; note: string | null; reason?: string | null; now?: Date },
 ) {
   const [row] = await tx
     .insert(leadEnquiries)
-    .values({ leadId: lead.id, isRepeat: true, enquiredAt: at, sourceId: channel.sourceId, channelOther: channel.channelOther, agentId: lead.ownerId, recordedById: actor.id, note })
+    .values({ leadId: lead.id, isRepeat: true, enquiredAt: at, sourceId: channel.sourceId, channelOther: channel.channelOther, agentId: lead.ownerId, recordedById: actor.id, note, reason })
     .returning({ id: leadEnquiries.id });
   const latest = lead.regeneratedAt && lead.regeneratedAt > at ? lead.regeneratedAt : at;
   await tx.update(leads).set({ isRegenerated: true, regeneratedAt: latest, updatedAt: now }).where(eq(leads.id, lead.id));
   const [source] = channel.sourceId ? await tx.select({ name: leadSources.name }).from(leadSources).where(eq(leadSources.id, channel.sourceId)) : [];
   const name = channel.channelOther ?? source?.name ?? null;
-  await logActivity(tx, { leadId: lead.id, actorId: actor.id, type: "regenerated", body: note, data: { channel: name, enquiredAt: at.toISOString(), by: actor.name } });
-  await audit(tx, actor, "lead.regenerated", lead.id, null, { enquiryId: row.id, channel: name, enquiredAt: at.toISOString() });
+  await logActivity(tx, { leadId: lead.id, actorId: actor.id, type: "regenerated", body: note, data: { channel: name, reason, enquiredAt: at.toISOString(), by: actor.name } });
+  await audit(tx, actor, "lead.regenerated", lead.id, null, { enquiryId: row.id, channel: name, reason, enquiredAt: at.toISOString() });
   if (lead.ownerId && lead.stage !== "booked") {
     await notify(
       tx,
@@ -83,6 +83,7 @@ const repeatSchema = z.object({
   channelOther: text(80),
   at: z.iso.datetime({ offset: true, message: "Pick the date and time" }).optional(),
   note: text(1000),
+  reason: z.string("Choose the reason").trim().min(1, "Choose the reason").max(120, "Use at most 120 characters"),
 });
 
 /** The agent (or an Admin) records that the customer asked again about this lead's project. */
@@ -96,7 +97,7 @@ export async function recordRepeatEnquiry(db: Database, actor: Actor, leadId: st
     if (at.getTime() > now.getTime() + 60_000) throw new AppError("VALIDATION_FAILED", "Check the highlighted fields.", { fields: { at: "The date can't be in the future" } });
     if (at < lead.createdAt) throw new AppError("VALIDATION_FAILED", "Check the highlighted fields.", { fields: { at: "That is before the lead was added" } });
     const channel = await resolveChannel(tx, data.channel, data.channelOther);
-    return { enquiryId: await recordRepeat(tx, actor, lead, channel, { at, note: data.note ?? null, now }) };
+    return { enquiryId: await recordRepeat(tx, actor, lead, channel, { at, note: data.note ?? null, reason: data.reason, now }) };
   });
 }
 
@@ -104,7 +105,7 @@ export async function recordRepeatEnquiry(db: Database, actor: Actor, leadId: st
  * A repeat found in an approved import. The same sheet uploaded twice must not record everyone again, so
  * one per lead, channel and Pakistan day. Returns whether it was recorded.
  */
-export async function recordImportedRepeat(db: Database, actor: Actor, leadId: string, sourceId: string, note: string | null, now = new Date()) {
+export async function recordImportedRepeat(db: Database, actor: Actor, leadId: string, sourceId: string, note: string | null, now = new Date(), reason = "Imported again") {
   return db.transaction(async (tx) => {
     const [lead] = await tx.select().from(leads).where(eq(leads.id, leadId)).for("update");
     if (!lead || lead.deletedAt) return false;
@@ -115,7 +116,7 @@ export async function recordImportedRepeat(db: Database, actor: Actor, leadId: s
       .where(and(eq(leadEnquiries.leadId, leadId), eq(leadEnquiries.sourceId, sourceId), gte(leadEnquiries.createdAt, today)))
       .limit(1);
     if (same) return false;
-    await recordRepeat(tx, actor, lead, { sourceId, channelOther: null }, { at: now, note, now });
+    await recordRepeat(tx, actor, lead, { sourceId, channelOther: null }, { at: now, note, reason, now });
     return true;
   });
 }
@@ -138,6 +139,7 @@ export async function enquiriesFor(db: Database, leadIds: string[]) {
       agentName: agent.name,
       recordedBy: recorder.name,
       note: leadEnquiries.note,
+      reason: leadEnquiries.reason,
     })
     .from(leadEnquiries)
     .innerJoin(leads, eq(leads.id, leadEnquiries.leadId))
@@ -147,5 +149,20 @@ export async function enquiriesFor(db: Database, leadIds: string[]) {
     .leftJoin(recorder, eq(recorder.id, leadEnquiries.recordedById))
     .where(inArray(leadEnquiries.leadId, leadIds))
     .orderBy(desc(leadEnquiries.enquiredAt), desc(leadEnquiries.createdAt));
+}
+/** The latest repeat on each lead, for the Repeat enquiries list: its reason, or the note of one recorded before reasons. */
+export async function latestRepeats(db: Database, leadIds: string[]) {
+  if (leadIds.length === 0) return new Map<string, { reason: string | null; channel: string | null }>();
+  const rows = await db
+    .selectDistinctOn([leadEnquiries.leadId], {
+      leadId: leadEnquiries.leadId,
+      reason: sql<string | null>`coalesce(${leadEnquiries.reason}, ${leadEnquiries.note})`,
+      channel: sql<string | null>`coalesce(${leadEnquiries.channelOther}, ${leadSources.name})`,
+    })
+    .from(leadEnquiries)
+    .leftJoin(leadSources, eq(leadSources.id, leadEnquiries.sourceId))
+    .where(and(inArray(leadEnquiries.leadId, leadIds), eq(leadEnquiries.isRepeat, true)))
+    .orderBy(leadEnquiries.leadId, desc(leadEnquiries.enquiredAt));
+  return new Map(rows.map((r) => [r.leadId, { reason: r.reason, channel: r.channel }]));
 }
 export type EnquiryRow = Awaited<ReturnType<typeof enquiriesFor>>[number];

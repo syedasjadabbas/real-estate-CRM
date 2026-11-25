@@ -12,6 +12,7 @@ import { MEETING_TYPES, MEETING_TYPE_LABELS, wouldMoveLead, type MeetingType } f
 import type { OpenMeeting } from "@/modules/meetings/open";
 import { logCallUpdateAction } from "../actions";
 import { followUpStatus, formatDateTime, fromLocalInputValue, toLocalInputValue } from "../format";
+import { BookedForm } from "./booked-form";
 import { FOLLOW_UP_SUGGESTIONS, textareaClass } from "./follow-up-dialog";
 import { selectClass } from "./lead-fields";
 
@@ -116,7 +117,11 @@ export function LogActivityForm({
   const [waSent, setWaSent] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [booked, setBooked] = useState(false);
+  const [meetingPlace, setMeetingPlace] = useState("");
   const [pending, startTransition] = useTransition();
+  const talked = kind === "call" && result === "talked";
+  const wrongNumber = kind === "call" && result === "wrong_number";
 
   // The first scheduled meeting unless the agent picked another that is still there.
   const picked = meetingPick === UNSCHEDULED || meetings.some((m) => m.id === meetingPick) ? meetingPick : (meetings[0]?.id ?? UNSCHEDULED);
@@ -209,14 +214,14 @@ export function LogActivityForm({
             : null,
         note,
         stage: stage === currentStage ? null : stage,
-        meeting: meetingOn && !(kind === "meeting" && happened === "rescheduled") ? { type: meetingType, startsAt: meetingAt ? fromLocalInputValue(meetingAt) : "" } : null,
+        meeting: meetingOn && !(kind === "meeting" && happened === "rescheduled") ? { type: meetingType, startsAt: meetingAt ? fromLocalInputValue(meetingAt) : "", location: meetingPlace } : null,
         completeFollowUpIds,
-        followUp: followOn ? { dueAt: followAt ? fromLocalInputValue(followAt) : "", note: followNote } : null,
+        followUp: followOn && !wrongNumber ? { dueAt: followAt ? fromLocalInputValue(followAt) : "", note: followNote } : null,
       });
       if (r.ok) {
         const changedStage = stage !== currentStage ? `moved to ${STAGE_LABELS[stage]}` : null;
         const what = { call: "call saved", meeting: { completed: "meeting completed", no_show: "no-show recorded", rescheduled: "meeting rescheduled", cancelled: "meeting cancelled" }[happened], whatsapp: "WhatsApp saved", note: note ? "note saved" : null }[kind];
-        const parts = [what, changedStage, meetingOn ? "meeting booked" : null, completeFollowUpIds.length ? (completeFollowUpIds.length > 1 ? `${completeFollowUpIds.length} follow-ups completed` : "follow-up completed") : null, followOn ? "next follow-up set" : null].filter(Boolean).join(", ");
+        const parts = [what, changedStage, meetingOn ? "meeting booked" : null, completeFollowUpIds.length ? (completeFollowUpIds.length > 1 ? `${completeFollowUpIds.length} follow-ups completed` : "follow-up completed") : null, followOn && !wrongNumber ? "next follow-up set" : null, wrongNumber ? "sent to an Admin to check the number" : null].filter(Boolean).join(", ");
         const text = parts ? `Done: ${parts}.` : "Nothing changed.";
         setMsg({ text, ok: true });
         setWaFiles([]);
@@ -231,6 +236,7 @@ export function LogActivityForm({
         setNote("");
         setMinutes("");
         setMeetingOn(false);
+        setMeetingPlace("");
         setTicked([]);
         // One is pending now, or the agent chose none: either way the next save starts without one.
         setFollowOn(false);
@@ -239,6 +245,8 @@ export function LogActivityForm({
         setMsg({ text: r.message, ok: false });
       }
     });
+
+  if (booked) return <BookedForm leadId={leadId} onBack={() => setBooked(false)} onSaved={onSaved} />;
 
   return (
     <form
@@ -388,24 +396,27 @@ export function LogActivityForm({
       ) : null}
 
       <div className={cn("grid grid-cols-1 gap-3", kind === "call" && "sm:grid-cols-[120px_minmax(0,1fr)]")}>
-        <Field label="Minutes" error={errors.minutes} className={kind === "call" ? undefined : "hidden"}>
+        <Field label="Minutes" required={talked} error={errors.minutes} className={kind === "call" ? undefined : "hidden"}>
           {(id, d) => <Input id={id} aria-describedby={d} inputMode="numeric" value={minutes} placeholder="e.g. 4" onChange={(e) => setMinutes(e.target.value.replace(/\D/g, "").slice(0, 3))} disabled={pending} />}
         </Field>
-        <Field label="What happened" error={errors.note}>
+        <Field label="What happened" required={talked} error={errors.note}>
           {(id, d) => (
             <textarea id={id} aria-describedby={d} rows={2} value={note} maxLength={4000} placeholder="e.g. Interested in 2-bed; will visit the site next week with family" onChange={(e) => setNote(e.target.value)} className={textareaClass} disabled={pending} />
           )}
         </Field>
       </div>
 
+      {wrongNumber ? <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">Saving sends this lead to an Admin to check the number. You can work on it again once it is sorted out.</p> : null}
+
       <Field label="Stage" error={errors.stage} hint={stage === currentStage ? "Unchanged" : `Moves from ${STAGE_LABELS[currentStage]}`}>
         {(id, d) => (
-          <select id={id} aria-describedby={d} value={stage} onChange={(e) => setStage(e.target.value as LeadStage)} className={selectClass} disabled={pending}>
+          <select id={id} aria-describedby={d} value={stage} onChange={(e) => (e.target.value === "booked" ? setBooked(true) : setStage(e.target.value as LeadStage))} className={selectClass} disabled={pending}>
             {STAGES.map((s) => (
               <option key={s} value={s}>
                 {STAGE_LABELS[s]}
               </option>
             ))}
+            <option value="booked">Successfully Booked</option>
           </select>
         )}
       </Field>
@@ -453,6 +464,9 @@ export function LogActivityForm({
                   }}
                 />
               )}
+            </Field>
+            <Field label="Location" error={errors["meeting.location"]} className="sm:col-span-2">
+              {(id, d) => <Input id={id} aria-describedby={d} maxLength={200} value={meetingPlace} placeholder="e.g. Site office, Block A" onChange={(e) => setMeetingPlace(e.target.value)} disabled={pending} />}
             </Field>
           </div>
         ) : null}

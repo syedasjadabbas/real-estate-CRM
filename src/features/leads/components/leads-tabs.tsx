@@ -1,16 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/cn";
 
 const TABS = [
   { label: "All", href: "/dashboard/leads" },
-  // Leads awaiting a first conversation; the tab bar follows the path only, so "All" stays selected there.
+  // Leads awaiting a first conversation: the one tab chosen by a query, not a path.
   { label: "New leads", href: "/dashboard/leads?view=new" },
-  // Order by daily priority: today's work, then queues to clear, then outcomes, then data checks.
-  { label: "To-dos", href: "/dashboard/leads/todos" },
-  { label: "Stagnating", href: "/dashboard/leads/stagnating" },
+  // To-dos are in the menu and Stagnating is a dashboard box (client, 25 Nov 2026).
   { label: "Meetings scheduled", href: "/dashboard/leads/meetings" },
   { label: "Booking in process", href: "/dashboard/leads/booking" },
   { label: "Pipeline", href: "/dashboard/leads/pipeline" },
@@ -18,8 +16,6 @@ const TABS = [
   { label: "Verify", href: "/dashboard/leads/verify" },
   { label: "Unassigned", href: "/dashboard/leads/unassigned" },
   { label: "Repeat enquiries", href: "/dashboard/leads/regenerated" },
-  // Leads saved as a duplicate of another (owner review, 16 Nov 2026; the page existed without a tab).
-  { label: "Duplicates", href: "/dashboard/leads/duplicates" },
   { label: "Won", href: "/dashboard/leads/won" },
   { label: "Lost", href: "/dashboard/leads/lost" },
   { label: "Call reviews & notes", href: "/dashboard/leads/reviews" },
@@ -39,14 +35,16 @@ export function LeadsTabs({
   verifyCount?: number | null;
 }) {
   const pathname = usePathname();
+  const isNew = useSearchParams().get("view") === "new" && pathname === "/dashboard/leads";
   const shown: Record<string, boolean> = {
     "/dashboard/leads/import": showImports,
     "/dashboard/leads/unassigned": showUnassigned,
     "/dashboard/leads/verify": verifyCount !== null,
   };
   const tabs = TABS.filter((t) => shown[t.href] ?? true);
-  const active =
-    TABS.slice(1).find((t) => pathname === t.href || pathname.startsWith(`${t.href}/`))?.href ?? "/dashboard/leads";
+  const active = isNew
+    ? "/dashboard/leads?view=new"
+    : (TABS.slice(1).find((t) => pathname === t.href || pathname.startsWith(`${t.href}/`))?.href ?? "/dashboard/leads");
 
   return (
     <nav

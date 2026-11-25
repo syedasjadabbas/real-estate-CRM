@@ -1,10 +1,10 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { updateClient } from "@/modules/clients/commands";
 import { getClientDetail } from "@/modules/clients/queries";
 import { createLead, updateLead } from "@/modules/leads/commands";
 import { getLeadDetail } from "@/modules/leads/queries";
-import { leads, notifications } from "@/server/db/schema";
+import { leads } from "@/server/db/schema";
 import type { Database } from "@/server/db";
 import { AppError } from "@/server/errors";
 import { connectTestDb, hasTestDb, leadInput, resetDb, seedFixture, type Fixture } from "../support/db";
@@ -54,18 +54,5 @@ describe.skipIf(!hasTestDb)("Agent edits to customers (PostgreSQL integration)",
     expect(await codeOf(updateLead(db, f.actors.superAdmin, leadId, { phoneNumber: "03009990004" }))).toBe("ok");
   });
 
-  it("an agent's rename shows old → new in the history and tells every Admin and Super Admin", async () => {
-    const leadId = await newLead();
-    await updateLead(db, f.actors.agent1, leadId, { name: "New Name" });
-    const { activities } = await getLeadDetail(db, f.actors.agent1, leadId);
-    expect(activities.find((a) => a.type === "update")?.data).toMatchObject({ fields: ["name"], nameFrom: "Old Name", nameTo: "New Name" });
-    const told = await db.select().from(notifications).where(eq(notifications.type, "name_changed"));
-    expect(told.map((n) => n.userId)).toContain(f.actors.superAdmin.id);
-    expect(told.some((n) => n.userId === f.actors.agent1.id)).toBe(false);
-    expect(told[0].title).toContain("Old Name → New Name");
-
-    // An Admin's own rename is recorded but not broadcast.
-    await updateLead(db, f.actors.superAdmin, leadId, { name: "Admin Name" });
-    expect(await db.select().from(notifications).where(and(eq(notifications.type, "name_changed")))).toHaveLength(told.length);
-  });
+  // An agent's rename waits for an Admin: lead-requests.test.ts (25 Nov 2026).
 });

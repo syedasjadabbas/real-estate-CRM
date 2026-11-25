@@ -13,6 +13,8 @@ export type ExecutiveKpis = {
   winOnDecided: number;
   openPipeline: number;
   openPipelinePct: number;
+  qualified: number;
+  qualifiedRate: number;
   won: number;
   lost: number;
   attritionPct: number;
@@ -20,8 +22,20 @@ export type ExecutiveKpis = {
   awaitingFirstTouch: number;
 };
 
-/** Leads per active project, all time. open + inProgress + won + lost = total. */
-export type ProjectLeads = { id: string; label: string; total: number; open: number; inProgress: number; won: number; lost: number };
+/** Leads per active project, all time. fresh + open + inProgress + future + won + lost = total (client's groups, 25 Nov 2026). */
+export type ProjectLeads = {
+  id: string;
+  label: string;
+  total: number;
+  fresh: number;
+  open: number;
+  inProgress: number;
+  future: number;
+  won: number;
+  lost: number;
+  /** Each stage on its own. `opened` is the opened part of New Lead. */
+  steps: { opened: number; attempted: number; contacted: number; qualified: number; meetingScheduled: number; meetingDone: number; booking: number };
+};
 
 export type NamedCount = { id: string; label: string; count: number };
 
@@ -80,6 +94,8 @@ export type DashboardData = {
   projectLeads: ProjectLeads[];
   /** Pending follow-ups now (not tied to the date range), as on To-dos. */
   followUps: { overdue: number; today: number } | null;
+  /** Leads 7 days or more in one stage, now. */
+  stagnating: number | null;
   insights: InsightTotals | null;
   insightsUpdatedAt: string | null;
   teamScores: (NamedCount & { provisional?: boolean })[];
@@ -108,6 +124,7 @@ export const emptyDashboardData: DashboardData = {
   activeProjects: null,
   projectLeads: [],
   followUps: null,
+  stagnating: null,
   insights: null,
   insightsUpdatedAt: null,
   teamScores: [],

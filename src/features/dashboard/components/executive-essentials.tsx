@@ -1,30 +1,26 @@
 "use client";
 
-import { AlarmClock, Building2, CircleCheck, Gauge, Inbox, TrendingUp } from "lucide-react";
+import { AlarmClock, Building2, CircleCheck, Gauge, Hourglass, Inbox, TrendingUp } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { ProgressBar, StackedBar } from "@/components/ui/progress";
 import { SegmentedControl } from "@/components/ui/segmented";
 import { KpiCard } from "@/components/ui/stat";
 import { formatCompact, formatInt, formatPct, formatTime, NO_VALUE } from "@/lib/format";
-import { LEAD_STAGES } from "@/modules/leads/constants";
+import { IN_PROGRESS_STAGES, STAGNATING_DAYS } from "@/modules/leads/constants";
 import type { DashboardData, DashboardFilters, RangeKey } from "../types";
 import { rangeOptions } from "./range-options";
 
-/** Stages the Open pipeline tile counts: everything but Booked and Lost. */
-const OPEN_STAGES = LEAD_STAGES.filter((s) => s !== "booked" && s !== "lost_lead").join(",");
-
-/** Won, lost and open as numbers, so the conversion rate reads with what it is made of. */
-function OutcomeLegend({ open, won, lost }: { open: number; won: number; lost: number }) {
+/** Won and lost as numbers, so the conversion rate reads with what it is made of. */
+function OutcomeLegend({ won, lost }: { won: number; lost: number }) {
   const items = [
     { label: "Won", value: won, className: "text-brand", bar: "bg-brand", align: "text-left" },
-    { label: "Lost", value: lost, className: "text-rose-600", bar: "bg-rose-500", align: "text-center" },
-    { label: "Open", value: open, className: "text-amber-600", bar: "bg-amber-400", align: "text-right" },
+    { label: "Lost", value: lost, className: "text-rose-600", bar: "bg-rose-500", align: "text-right" },
   ];
   return (
     <div>
       <StackedBar segments={items.map((i) => ({ label: i.label, value: i.value, className: i.bar }))} />
-      <dl className="mt-1.5 grid grid-cols-3 text-[11px] leading-[13.75px] font-black tabular-nums">
+      <dl className="mt-1.5 grid grid-cols-2 text-[11px] leading-[13.75px] font-black tabular-nums">
         {items.map((item) => (
           <div key={item.label} className={item.align}>
             <dd className={item.className}>{formatInt(item.value)}</dd>
@@ -84,7 +80,7 @@ export function ExecutiveEssentials({ data, filters = { range: "mtd" }, own = fa
       </div>
 
       <div className="mt-4 space-y-4">
-        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-5 [&>*:last-child]:sm:col-span-2 [&>*:last-child]:xl:col-span-1">
+        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-3">
           <KpiCard
             icon={Inbox}
             category="Pipeline"
@@ -93,6 +89,18 @@ export function ExecutiveEssentials({ data, filters = { range: "mtd" }, own = fa
             linkLabel="Open the leads list for these days"
             value={formatCompact(kpis?.totalLeads)}
             caption={`${kpis ? formatInt(kpis.awaitingFirstTouch) : NO_VALUE} awaiting first touch`}
+            footer={
+              kpis ? (
+                <div>
+                  <p className="flex items-baseline justify-between gap-2 text-[11px] font-bold text-zinc-700">
+                    Open pipeline
+                    <span data-kpi-open className="text-sm font-black text-amber-800 tabular-nums">{formatPct(kpis.openPipelinePct)}</span>
+                  </p>
+                  <ProgressBar value={kpis.openPipelinePct} max={100} label="Open pipeline" />
+                  <p className="mt-1 text-[10px] text-zinc-500">{formatInt(kpis.openPipeline)} opened, contact attempted or contacted</p>
+                </div>
+              ) : undefined
+            }
           />
           {/* Conversion and Outcomes are one box, with the numbers behind the rate (client, 23 Nov 2026). */}
           <KpiCard
@@ -103,17 +111,17 @@ export function ExecutiveEssentials({ data, filters = { range: "mtd" }, own = fa
             linkLabel="Open won leads for these days"
             value={<span className="text-brand">{formatPct(kpis?.conversionRate)}</span>}
             caption={kpis ? `${formatInt(kpis.won)} won of ${formatInt(kpis.totalLeads)} leads` : NO_VALUE}
-            footer={kpis ? <OutcomeLegend open={kpis.openPipeline} won={kpis.won} lost={kpis.lost} /> : undefined}
+            footer={kpis ? <OutcomeLegend won={kpis.won} lost={kpis.lost} /> : undefined}
           />
           <KpiCard
             icon={TrendingUp}
             tone="amber"
             category="In progress"
-            label="Open pipeline"
-            href={listHref("/dashboard/leads", { stage: OPEN_STAGES })}
-            linkLabel="Open the leads still in progress for these days"
-            value={<span className="text-amber-800">{formatCompact(kpis?.openPipeline)}</span>}
-            caption="Leads not yet won or lost"
+            label="Qualified rate"
+            href={listHref("/dashboard/leads", { stage: IN_PROGRESS_STAGES.join(",") })}
+            linkLabel="Open the leads from Qualified to Booking in Process"
+            value={<span className="text-amber-800">{formatPct(kpis?.qualifiedRate)}</span>}
+            caption={kpis ? `${formatInt(kpis.qualified)} from Qualified to Booking in Process` : NO_VALUE}
           />
           <KpiCard
             icon={AlarmClock}
@@ -124,6 +132,16 @@ export function ExecutiveEssentials({ data, filters = { range: "mtd" }, own = fa
             linkLabel="Open overdue follow-ups"
             value={<span className="text-rose-600">{formatInt(data.followUps?.overdue)}</span>}
             caption={`${data.followUps ? formatInt(data.followUps.today) : NO_VALUE} due today`}
+          />
+          <KpiCard
+            icon={Hourglass}
+            tone="rose"
+            category="Action now"
+            label="Stagnating"
+            href={data.isSample ? undefined : "/dashboard/leads/stagnating"}
+            linkLabel="Open stagnating leads"
+            value={<span className="text-rose-600">{formatInt(data.stagnating)}</span>}
+            caption={`${STAGNATING_DAYS} days or more in one stage`}
           />
           {own ? (
             <KpiCard

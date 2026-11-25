@@ -12,6 +12,7 @@ import {
   createLead,
   decideLostRequest,
   markLost,
+  markOpened,
   scheduleFollowUp,
   setFavorite,
   updateLead,
@@ -23,7 +24,10 @@ import { recordRepeatEnquiry } from "@/modules/leads/enquiries";
 import { logCallUpdate } from "@/modules/leads/call-update";
 import { requireActor } from "@/server/auth/current-user";
 import { getDb } from "@/server/db";
-import { toActionError, type ActionResult } from "@/server/errors";
+import { bookedFormOptions } from "@/modules/bookings/booked-request";
+import { decideLeadRequest } from "@/modules/leads/decide-request";
+import { leadInputErrors } from "@/modules/leads/input-rules";
+import { AppError, toActionError, type ActionResult } from "@/server/errors";
 
 /**
  * Server actions for the Leads UI. Each one re-reads the session (never trusts the client),
@@ -41,7 +45,35 @@ async function run<T>(fn: (db: ReturnType<typeof getDb>, actor: Awaited<ReturnTy
 }
 
 export async function createLeadAction(input: Record<string, unknown>): Promise<ActionResult<CreateLeadOutcome>> {
-  return run((db, actor) => createLead(db, actor, input));
+  return run((db, actor) => {
+    const fields = leadInputErrors(input);
+    if (input.onDuplicate === "regenerate" && !input.repeatReason) fields.repeatReason = "Choose the reason";
+    if (Object.keys(fields).length) throw new AppError("VALIDATION_FAILED", "Check the highlighted fields.", { fields });
+    return createLead(db, actor, input);
+  });
+}
+
+/** Its agent opened the lead. Nothing is refreshed: the page is already right. */
+export async function markOpenedAction(leadId: string) {
+  try {
+    await markOpened(getDb(), await requireActor(), leadId);
+  } catch {
+    // Only a first-opened mark: never worth an error on the page.
+  }
+}
+
+/** An Admin decides a name change, a wrong number or a reported sale. */
+export async function decideLeadRequestAction(requestId: string, input: Record<string, unknown>) {
+  return run((db, actor) => decideLeadRequest(db, actor, requestId, input));
+}
+
+/** Units or the open booking for "Successfully Booked". */
+export async function bookedFormOptionsAction(leadId: string) {
+  try {
+    return { ok: true as const, data: await bookedFormOptions(getDb(), await requireActor(), leadId) };
+  } catch (error) {
+    return toActionError(error);
+  }
 }
 
 /** Admin or Super Admin approves or rejects (with a reason) a lead an agent added. */

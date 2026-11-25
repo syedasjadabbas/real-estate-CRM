@@ -25,16 +25,7 @@ export function DashboardHero({ user, isSample, live }: { user: SessionUser | nu
           <h1 className="mt-2 text-3xl leading-none font-black tracking-[-0.025em] md:text-5xl">
             Analytics <span className="text-brand">Dashboard</span>
           </h1>
-          <p className="mt-2 font-medium text-zinc-700">
-            {user ? (
-              <>
-                Signed in as <span className="font-bold text-zinc-950">{user.email}</span> ·{" "}
-                <span className="font-semibold text-brand">{user.name}</span>
-              </>
-            ) : (
-              "Not signed in. Your workspace data appears here once authentication is connected."
-            )}
-          </p>
+          {user ? null : <p className="mt-2 font-medium text-zinc-700">Not signed in. Your workspace data appears here once authentication is connected.</p>}
         </div>
 
         <div className="flex shrink-0 items-center gap-3 self-start rounded-2xl border border-zinc-200/80 bg-white/80 p-3.5 shadow-hairline md:self-auto">

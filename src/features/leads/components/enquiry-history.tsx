@@ -6,6 +6,7 @@ import { DateTimeInput } from "@/components/ui/date-time-input";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Field, Input } from "@/components/ui/input";
 import { cn } from "@/lib/cn";
+import { ENQUIRY_REASONS, OTHER_REASON } from "@/modules/leads/enquiry-reasons";
 import { recordRepeatEnquiryAction } from "../actions";
 import { formatDateTime, fromLocalInputValue, toLocalInputValue } from "../format";
 import { textareaClass } from "./follow-up-dialog";
@@ -21,6 +22,7 @@ export type EnquiryItem = {
   agentName: string | null;
   recordedBy: string | null;
   note: string | null;
+  reason: string | null;
 };
 
 /** Every enquiry, newest first. `showLead` on the client page, where they span projects. */
@@ -47,6 +49,7 @@ export function EnquiryList({ rows, showLead = false }: { rows: EnquiryItem[]; s
               {r.recordedBy ? `recorded by ${r.recordedBy}` : ""}
             </p>
           ) : null}
+          {r.isRepeat ? <p className="mt-1 font-semibold text-zinc-800">Reason: {r.reason ?? "Not recorded"}</p> : null}
           {r.note ? <p className="mt-1 whitespace-pre-line text-zinc-600">{r.note}</p> : null}
         </li>
       ))}
@@ -94,24 +97,54 @@ export function ChannelFields({
   );
 }
 
+/** Why they asked again: a list, or typed. */
+export function ReasonFields({ reason, other, error, disabled, onReason, onOther }: { reason: string; other: string; error?: string; disabled?: boolean; onReason: (v: string) => void; onOther: (v: string) => void }) {
+  return (
+    <>
+      <Field label="Reason" required error={error}>
+        {(id, d) => (
+          <select id={id} aria-describedby={d} value={reason} onChange={(e) => onReason(e.target.value)} className={selectClass} disabled={disabled}>
+            <option value="">Select…</option>
+            {ENQUIRY_REASONS.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+            <option value={OTHER_REASON}>Other</option>
+          </select>
+        )}
+      </Field>
+      {reason === OTHER_REASON ? (
+        <Field label="Other reason" required>
+          {(id) => <Input id={id} maxLength={120} value={other} disabled={disabled} onChange={(e) => onOther(e.target.value)} />}
+        </Field>
+      ) : null}
+    </>
+  );
+}
+
 export function RecordEnquiryForm({ leadId, sources }: { leadId: string; sources: { id: string; name: string }[] }) {
   const [open, setOpen] = useState(false);
   const [channel, setChannel] = useState("");
   const [other, setOther] = useState("");
   const [at, setAt] = useState("");
   const [note, setNote] = useState("");
+  const [reason, setReason] = useState("");
+  const [reasonText, setReasonText] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [pending, startTransition] = useTransition();
 
   const submit = () =>
     startTransition(async () => {
-      const result = await recordRepeatEnquiryAction(leadId, { channel, channelOther: other, at: at ? fromLocalInputValue(at) : "", note });
+      const result = await recordRepeatEnquiryAction(leadId, { channel, channelOther: other, at: at ? fromLocalInputValue(at) : "", note, reason: reason === OTHER_REASON ? reasonText : reason });
       if (result.ok) {
         setOpen(false);
         setChannel("");
         setOther("");
         setNote("");
+        setReason("");
+        setReasonText("");
         setErrors({});
         setMsg({ text: "Repeat enquiry recorded.", ok: true });
       } else {
@@ -143,6 +176,7 @@ export function RecordEnquiryForm({ leadId, sources }: { leadId: string; sources
               if (p.other !== undefined) setOther(p.other);
             }}
           />
+          <ReasonFields reason={reason} other={reasonText} error={errors.reason} disabled={pending} onReason={setReason} onOther={setReasonText} />
           <Field label="When (Pakistan time)" required error={errors.at}>
             {(id, d) => <DateTimeInput id={id} describedBy={d} invalid={Boolean(errors.at)} value={at} quick={false} disabled={pending} onChange={setAt} />}
           </Field>

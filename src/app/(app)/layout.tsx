@@ -3,6 +3,8 @@ import { AppShell } from "@/components/shell/app-shell";
 import { DashboardSkeleton } from "@/features/dashboard/components/dashboard-skeleton";
 import { requirePageUser } from "@/server/auth/current-user";
 import { ROLE_LABELS } from "@/server/auth/types";
+import { todayAttendance } from "@/modules/attendance/service";
+import { getDb } from "@/server/db";
 import { getProjectScope } from "@/server/project-scope";
 
 /** Static shell shown while the session is read (Cache Components: request data streams in). */
@@ -16,12 +18,13 @@ function ShellFallback() {
 
 async function AuthenticatedShell({ children }: { children: React.ReactNode }) {
   const actor = await requirePageUser();
-  const { projects, activeProjectId } = await getProjectScope();
+  const [{ projects, activeProjectId }, today] = await Promise.all([getProjectScope(), todayAttendance(getDb(), actor)]);
   return (
     <AppShell
       user={{ id: actor.id, name: actor.name, email: actor.email, role: actor.role, roleLabel: ROLE_LABELS[actor.role], isTeamLead: Boolean(actor.ledTeamIds?.length) }}
       projects={projects}
       activeProjectId={activeProjectId}
+      today={today}
     >
       {children}
     </AppShell>

@@ -9,6 +9,7 @@ import type { LeadListRow } from "@/modules/leads/queries";
 import { formatSqft, PROPERTY_TYPE_LABELS, type PropertyType } from "@/modules/leads/size";
 import { followUpStatus, formatDate, formatDateTime, noContactLabel, since, type FollowUpStatus } from "../format";
 import { withParams } from "../url";
+import { MEETING_TYPE_LABELS, type MeetingType } from "@/modules/meetings/constants";
 import { SourcePill, StagePill } from "./chips";
 import { ViewContact } from "./lead-contact";
 import { LogActivityButton } from "./log-activity-button";
@@ -32,6 +33,10 @@ const MAIN: Column[] = [
   { key: "lastContact", label: "Last contact", sort: "lastContact" },
   { key: "next", label: "Next follow-up", sort: "next" },
 ];
+/** Meetings scheduled: when, what kind and where (client, 25 Nov 2026). */
+const MEETING: Column = { key: "meeting", label: "Meeting" };
+/** Repeat enquiries: why they asked again. */
+const REASON: Column = { key: "reason", label: "Reason" };
 const ACTIONS: Column = { key: "actions", label: "Actions" };
 const AGENT: Column = { key: "agent", label: "Agent", sort: "owner" };
 const MORE: Column[] = [
@@ -83,6 +88,8 @@ export function LeadsTable({
   params,
   showOriginal = false,
   showAgent = false,
+  showMeeting = false,
+  showReason = false,
   canEdit,
   now,
   emptyMessage = "No leads match these filters.",
@@ -92,6 +99,8 @@ export function LeadsTable({
   pathname: string;
   params: Record<string, string>;
   showOriginal?: boolean;
+  showMeeting?: boolean;
+  showReason?: boolean;
   /** Admins see whose lead it is; an agent's list is all their own. */
   showAgent?: boolean;
   canEdit: boolean;
@@ -108,6 +117,8 @@ export function LeadsTable({
     ...MAIN.slice(0, 2),
     ...(showOriginal ? [{ key: "original", label: "Original" }] : []),
     ...MAIN.slice(2),
+    ...(showMeeting ? [MEETING] : []),
+    ...(showReason ? [REASON] : []),
     ...(showAgent ? [AGENT] : []),
     ACTIONS,
     ...(all ? MORE : []),
@@ -129,7 +140,7 @@ export function LeadsTable({
           <thead className="sticky top-0 z-10 bg-zinc-100">
             <tr className="border-b border-zinc-200 text-[10px] font-black tracking-[0.05em] text-zinc-600 uppercase">
               {columns.map((c) => (
-                <th key={c.key} scope="col" aria-sort={sortDir(c.sort)} className={cn("px-3 py-3.5 whitespace-nowrap", c.className)}>
+                <th key={c.key} scope="col" aria-sort={sortDir(c.sort)} className={cn("px-2 py-3.5 whitespace-nowrap", c.className, c.key === "actions" && "sticky right-0 border-l border-zinc-200 bg-zinc-100")}>
                   <SortHeader column={c} pathname={pathname} params={params} defaultSort={defaultSort} />
                 </th>
               ))}
@@ -139,7 +150,7 @@ export function LeadsTable({
             {rows.map((r) => {
               const closed = r.stage === "lost_lead" || r.stage === "booked";
               const text = (key: string, value: ReactNode, className = "whitespace-nowrap text-zinc-700") => (
-                <td key={key} className={cn("px-3 py-2.5", className)}>
+                <td key={key} className={cn("px-2 py-2.5", className)}>
                   {value ?? "—"}
                 </td>
               );
@@ -151,7 +162,7 @@ export function LeadsTable({
                   </td>
                 ),
                 lead: (
-                  <td key="lead" className="px-3 py-2.5">
+                  <td key="lead" className="px-2 py-2.5">
                     <Link href={`/dashboard/leads/${r.id}`} className="text-[13px] font-bold hover:text-brand hover:underline">
                       {r.name}
                     </Link>
@@ -179,6 +190,7 @@ export function LeadsTable({
                   <span className="inline-flex flex-wrap items-center gap-1">
                     <StagePill stage={r.stage} />
                     <VerificationBadge status={r.verification} />
+                    {r.wrongNumberAt ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black tracking-[0.04em] text-amber-800 uppercase">Number being checked</span> : null}
                   </span>,
                 ),
                 inStage: text("inStage", since(r.stageChangedAt, now), "whitespace-nowrap font-semibold text-zinc-900"),
@@ -207,21 +219,41 @@ export function LeadsTable({
                 ),
                 agent: text("agent", r.ownerName ?? "Unassigned", "whitespace-nowrap text-zinc-800"),
                 actions: (
-                  <td key="actions" className="px-3 py-2.5">
+                  <td key="actions" className="sticky right-0 border-l border-zinc-100 bg-white px-2 py-2.5">
                     <div className="flex w-fit flex-col gap-1.5">
-                      <Link
-                        href={`/dashboard/leads/${r.id}`}
-                        aria-label={`Open lead ${r.name}`}
-                        className="inline-flex h-8 items-center justify-center rounded-lg bg-brand px-3 text-[11px] font-black whitespace-nowrap text-white shadow-hairline hover:bg-brand-700"
-                      >
-                        Open
-                      </Link>
                       {/* An agent works a lead only once it is verified (the server refuses it before), so no logging until then. */}
-                      {canEdit && !closed && (showAgent || r.verification === "approved") ? (
+                      {canEdit && !closed && (showAgent || (r.verification === "approved" && !r.wrongNumberAt)) ? (
                         <LogActivityButton leadId={r.id} leadName={r.name} stage={r.stage} pendingFollowUps={r.pendingFollowUps} meetings={r.openMeetings} />
-                      ) : null}
+                      ) : (
+                        <span className="text-zinc-400">—</span>
+                      )}
                     </div>
                   </td>
+                ),
+                meeting: text(
+                  "meeting",
+                  r.openMeetings.length ? (
+                    <ul className="space-y-1">
+                      {r.openMeetings.slice(0, 3).map((m) => (
+                        <li key={m.id}>
+                          <Link href={`/dashboard/meetings/${m.id}`} className="font-bold text-zinc-900 hover:text-brand hover:underline">
+                            {formatDateTime(m.startsAt)}
+                          </Link>
+                          <span className="block text-[11px] text-zinc-600">
+                            {[m.type ? MEETING_TYPE_LABELS[m.type as MeetingType] : null, m.location ?? "No location"].filter(Boolean).join(" · ")}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null,
+                ),
+                reason: text(
+                  "reason",
+                  <>
+                    <span className="block font-semibold text-zinc-900">{r.repeat?.reason ?? "Not recorded"}</span>
+                    {r.repeat?.channel ? <span className="block text-[11px] text-zinc-500">{r.repeat.channel}</span> : null}
+                  </>,
+                  "max-w-[220px] text-zinc-700",
                 ),
                 city: text("city", r.cityName),
                 source: text(

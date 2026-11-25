@@ -44,8 +44,9 @@ import { Dialer } from "@/features/voip/components/dialer";
 import { getVoipStatus } from "@/modules/voip/service";
 import { assignableUsers, getLeadDetail, leadLookups } from "@/modules/leads/queries";
 import { AppError } from "@/server/errors";
-import { MaskedPhone } from "@/components/ui/masked-phone";
-import { EmailWithGmail } from "@/components/ui/gmail-button";
+import { ContactFacts } from "@/features/leads/components/contact-facts";
+import { LeadRequestCard, MarkOpened } from "@/features/leads/components/lead-requests";
+import { canVerifyLeads } from "@/modules/leads/verification";
 import { WhatsappPanel } from "@/features/whatsapp/components/whatsapp-panel";
 import { listWhatsapp } from "@/modules/whatsapp/service";
 
@@ -115,6 +116,10 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
           }
         />
 
+        {detail.unopened ? <MarkOpened leadId={lead.id} /> : null}
+        {detail.requests.map((r) => (
+          <LeadRequestCard key={r.id} request={r} canDecide={canVerifyLeads(actor)} />
+        ))}
         <VerificationBanner leadId={lead.id} verification={detail.verification} canVerify={detail.permissions.verify} canResubmit={detail.permissions.resubmit} />
 
         <Card className="p-5">
@@ -122,12 +127,7 @@ export default function LeadDetailPage({ params }: PageProps<"/dashboard/leads/[
             <Fact label="Code">
               <span className="tracking-[0.05em]">{lead.code}</span>
             </Fact>
-            <Fact label="Phone">
-              <MaskedPhone phone={lead.phone} name={lead.name} />
-            </Fact>
-            <Fact label="Email">
-              <EmailWithGmail email={lead.email} name={lead.name} />
-            </Fact>
+            <ContactFacts phone={lead.phone} email={lead.email} name={lead.name} />
             <Fact label="Stage">
               <StagePill stage={lead.stage} />
             </Fact>

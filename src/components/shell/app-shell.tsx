@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import type { ProjectOption, SessionUser } from "@/lib/session";
+import type { TodayAttendance } from "@/features/attendance/components/check-in-button";
 import { Header } from "./header";
 import { Sidebar } from "./sidebar";
 
@@ -50,11 +51,13 @@ export function AppShell({
   user,
   projects,
   activeProjectId,
+  today = null,
   children,
 }: {
   user: SessionUser | null;
   projects: ProjectOption[];
   activeProjectId: string | null;
+  today?: TodayAttendance | null;
   children: ReactNode;
 }) {
   const isDesktop = useIsDesktop();
@@ -132,6 +135,7 @@ export function AppShell({
           user={user}
           projects={projects}
           activeProjectId={activeProjectId}
+          today={today}
           sidebarOpen={isDesktop ? desktopOpen : drawerOpen}
           onToggleSidebar={toggle}
         />

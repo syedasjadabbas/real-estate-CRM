@@ -9,6 +9,7 @@ import { MEETING_TYPES, MEETING_TYPE_LABELS } from "@/modules/meetings/constants
 import { addNote, changeStage, completeFollowUp, scheduleFollowUp } from "./commands";
 import { LEAD_STAGES } from "./constants";
 import { CALL_RESULTS, CALL_RESULT_LABELS } from "./call-results";
+import { reportWrongNumber } from "./requests";
 import { loadAccessibleLead, logActivity, markContact } from "./support";
 
 const when = (message: string) =>
@@ -31,7 +32,7 @@ const callUpdateSchema = z.object({
   minutes: z.coerce.number("Enter whole minutes").int("Enter whole minutes").min(0, "Enter whole minutes").max(600, "At most 600 minutes").optional().nullable(),
   note: z.string().trim().max(4000, "Use at most 4,000 characters").optional().default(""),
   stage: z.enum(LEAD_STAGES).optional().nullable(),
-  meeting: z.object({ type: z.enum(MEETING_TYPES, "Choose the meeting type"), startsAt: when("Pick the meeting date and time") }).optional().nullable(),
+  meeting: z.object({ type: z.enum(MEETING_TYPES, "Choose the meeting type"), startsAt: when("Pick the meeting date and time"), location: z.string().trim().max(200, "Use at most 200 characters").optional().default("") }).optional().nullable(),
   /** The follow-ups the agent confirms this activity fulfils; never assumed, overdue or not (client, 24 Nov 2026). */
   completeFollowUpIds: z.array(z.uuid()).max(50).optional().default([]),
   meetingResult: meetingResult.optional().nullable(),
@@ -62,6 +63,13 @@ export async function logCallUpdate(db: Database, actor: Actor, leadId: string, 
     throw new AppError("VALIDATION_FAILED", "Check the highlighted fields.", { fields: { "followUp.dueAt": "Pick a time in the future" } });
   }
 
+  // A call that was answered says how long and what was said (client, 25 Nov 2026).
+  if (data.result === "talked") {
+    const missing: Record<string, string> = {};
+    if (!data.minutes) missing.minutes = "Enter the minutes";
+    if (!data.note) missing.note = "Write what happened";
+    if (Object.keys(missing).length) throw new AppError("VALIDATION_FAILED", "Check the highlighted fields.", { fields: missing });
+  }
   const result = data.meetingResult;
   if (result) {
     const bad = (field: string, message: string) => new AppError("VALIDATION_FAILED", "Check the highlighted fields.", { fields: { [field]: message } });
@@ -109,6 +117,7 @@ export async function logCallUpdate(db: Database, actor: Actor, leadId: string, 
         type: data.meeting.type,
         startsAt: data.meeting.startsAt.toISOString(),
         leadId,
+        location: data.meeting.location || null,
         notes: data.note || null,
         moveLead: true,
       });
@@ -129,6 +138,11 @@ export async function logCallUpdate(db: Database, actor: Actor, leadId: string, 
     if (data.followUp) {
       await scheduleFollowUp(inTx, actor, leadId, { dueAt: data.followUp.dueAt.toISOString(), note: data.followUp.note || undefined }, now);
       done.push("followUp");
+    }
+    // Last, because the agent can't work the lead once the number is being checked.
+    if (data.result === "wrong_number" && actor.role === "agent") {
+      await reportWrongNumber(tx, actor, lead, data.note || null, now);
+      done.push("wrongNumber");
     }
     return { done };
   });

@@ -2,7 +2,6 @@ import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { dashboardData } from "@/modules/dashboard/queries";
 import { createLead, markLost } from "@/modules/leads/commands";
-import { LEAD_STAGES } from "@/modules/leads/constants";
 import { listLeads } from "@/modules/leads/queries";
 import { loadActor } from "@/server/auth/session-store";
 import { leads, teams, users } from "@/server/db/schema";
@@ -15,7 +14,6 @@ import { connectTestDb, hasTestDb, leadInput, resetDb, seedFixture, type Fixture
 const NOW = new Date("2026-11-20T10:00:00Z");
 const HOUR = 3_600_000;
 const ago = (hours: number) => new Date(NOW.getTime() - hours * HOUR);
-const OPEN = LEAD_STAGES.filter((s) => s !== "booked" && s !== "lost_lead").join(",");
 const RANGES: Record<string, string>[] = [{ range: "24h" }, { range: "7d" }, { range: "30d" }, { range: "mtd" }, { range: "6m" }, { range: "custom", from: "2026-11-01", to: "2026-11-18" }];
 
 describe.skipIf(!hasTestDb)("FR-010: dashboard tiles open the leads they count (PostgreSQL integration)", () => {
@@ -77,7 +75,7 @@ describe.skipIf(!hasTestDb)("FR-010: dashboard tiles open the leads they count (
       const { data, total } = await tiles(f.actors.superAdmin, query);
       const label = JSON.stringify(query);
       expect(await total("all"), `total ${label}`).toBe(data.kpis!.totalLeads);
-      expect(await total("all", { stage: OPEN }), `open ${label}`).toBe(data.kpis!.openPipeline);
+      expect(await total("all", { opened: "1" }), `open ${label}`).toBe(data.kpis!.openPipeline);
       expect(await total("won"), `won ${label}`).toBe(data.kpis!.won);
       expect(await total("regenerated"), `regenerated ${label}`).toBe(data.kpis!.regenerated);
       expect(await total("lost"), `lost ${label}`).toBe(data.kpis!.lost);
@@ -104,7 +102,7 @@ describe.skipIf(!hasTestDb)("FR-010: dashboard tiles open the leads they count (
         expect(data.listParams?.team).toBe(team);
         expect(await total("all"), `${team} ${JSON.stringify(query)}`).toBe(data.kpis!.totalLeads);
         expect(await total("won")).toBe(data.kpis!.won);
-        expect(await total("all", { stage: OPEN })).toBe(data.kpis!.openPipeline);
+        expect(await total("all", { opened: "1" })).toBe(data.kpis!.openPipeline);
       }
     }
     const list = await listLeads(db, f.actors.superAdmin, f.projectId, { team: team2 }, NOW);

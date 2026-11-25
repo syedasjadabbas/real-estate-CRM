@@ -12,6 +12,7 @@ import { createLead } from "./commands";
 import { recordImportedRepeat } from "./enquiries";
 import { PRIORITIES } from "./constants";
 import { normalizePhone } from "./phone";
+import { leadInputErrors } from "./input-rules";
 import { parsePropertyType, parseSize } from "./size";
 import { leadFieldsSchema } from "./validation";
 
@@ -100,6 +101,10 @@ function validateRow(
     note: get("note"),
     ...city,
   };
+  // The form's own rules: names without digits, numbers that fit their country.
+  const rules = leadInputErrors({ ...(data.firstName ? { firstName: data.firstName, lastName: data.lastName } : { name: data.name }), phoneCountryCode: countryCode, phoneNumber: get("phone"), email: get("email") });
+  if (primary && rules.phoneNumber) errors.push(`Phone: ${rules.phoneNumber}`);
+  for (const k of ["firstName", "lastName", "name"]) if (data.name && rules[k]) errors.push(rules[k]);
   const parsed = leadFieldsSchema.safeParse(data);
   if (!parsed.success) {
     for (const issue of parsed.error.issues) {
@@ -296,7 +301,7 @@ export async function decideImportBatch(db: Database, actor: Actor, batchId: str
   const repeat = async (r: typeof leadImportRows.$inferSelect, leadId: string) => {
     const data = r.data as { sourceId: string; note?: string; campaign?: string };
     const note = [data.campaign ? `Campaign: ${data.campaign}` : null, data.note?.trim() || null].filter(Boolean).join(". ");
-    const recorded = await recordImportedRepeat(db, actor, leadId, data.sourceId, note || null);
+    const recorded = await recordImportedRepeat(db, actor, leadId, data.sourceId, note || null, new Date(), data.campaign ? `Campaign: ${data.campaign}`.slice(0, 120) : undefined);
     if (recorded) repeats += 1;
     return recorded ? "Recorded as a repeat enquiry on the existing lead" : "Already recorded as an enquiry today";
   };

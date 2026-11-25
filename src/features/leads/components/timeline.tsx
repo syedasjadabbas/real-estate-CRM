@@ -165,6 +165,14 @@ function describeLead(a: TimelineActivity, { people }: Context): TimelineDescrip
       return { title: "Follow-up cancelled", tag: "Follow-up", details: [{ label: "Was due", value: formatDateTime(String(d.dueAt)) }, ...(str(d.note) ? [{ label: "For", value: String(d.note) }] : [])] };
     case "follow_up_missed":
       return { title: "Follow-up missed", tag: "Missed", details: [{ label: "Was due", value: formatDateTime(String(d.dueAt)) }] };
+    case "request": {
+      const what = { name_change: "Name change", wrong_number: "Wrong number", booked: "Successfully booked" }[String(d.request)] ?? "Request";
+      const details: TimelineDetail[] = [];
+      if (d.request === "name_change") details.push({ label: "Name", value: `${String(d.from)} → ${String(d.to)}` });
+      if (d.request === "booked" && str(d.unitNo)) details.push({ label: "Unit", value: String(d.unitNo) });
+      const how = d.outcome === "corrected" ? "number corrected" : d.outcome === "lost" ? "number wrong, lead lost" : d.state === "approved" ? "approved" : d.state === "rejected" ? "rejected" : "sent to an Admin";
+      return { title: `${what}: ${how}`, tag: "Request", details };
+    }
     case "record_change":
       return describeRecord(d, person);
     case "assignment": {
@@ -201,7 +209,7 @@ function describeLead(a: TimelineActivity, { people }: Context): TimelineDescrip
       return {
         title: "Customer enquired again",
         tag: "Repeat enquiry",
-        details: [...(str(d.channel) ? [{ label: "Channel", value: String(d.channel) }] : []), ...(str(d.by) ? [{ label: "Recorded by", value: String(d.by) }] : [])],
+        details: [...(str(d.reason) ? [{ label: "Reason", value: String(d.reason) }] : []), ...(str(d.channel) ? [{ label: "Channel", value: String(d.channel) }] : []), ...(str(d.by) ? [{ label: "Recorded by", value: String(d.by) }] : [])],
       };
     case "lost_requested":
       return { title: "Asked to mark the lead as lost", tag: "Lost request", details: str(d.reason) ? [{ label: "Lost reason", value: String(d.reason) }] : [] };

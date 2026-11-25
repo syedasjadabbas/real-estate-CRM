@@ -28,7 +28,7 @@ test("a rolling range tile opens exactly its window, shows why, and can be clear
   await expect(page.getByRole("link", { name: outside }).first()).toBeVisible();
 });
 
-test("the team filter carries through to the list; Open pipeline now links", async ({ page }) => {
+test("the team filter carries through to the list; Qualified rate links", async ({ page }) => {
   const { today } = seed();
   await selectTestProject(page.context());
   await login(page, "superAdmin");
@@ -37,7 +37,7 @@ test("the team filter carries through to the list; Open pipeline now links", asy
   await page.waitForURL(/[?&]team=/);
   const team = new URL(page.url()).searchParams.get("team")!;
 
-  await page.locator('[data-kpi="Open pipeline"]').click();
+  await page.locator('[data-kpi="Qualified rate"]').click();
   await page.waitForURL(/\/dashboard\/leads\?.*stage=/);
   await expect(page).toHaveURL(new RegExp(`team=${team}`));
   await expect(page).toHaveURL(new RegExp(`from=${today}`));

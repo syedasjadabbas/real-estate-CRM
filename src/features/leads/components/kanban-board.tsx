@@ -11,8 +11,8 @@ import { changeStageAction } from "../actions";
 import { formatDateTime } from "../format";
 import { MaskedPhone } from "@/components/ui/masked-phone";
 
-type Column = { stage: LeadStage; total: number; cards: Omit<LeadListRow, "otherProjects" | "pendingFollowUps" | "openMeetings">[] };
-type Drag = { card: Omit<LeadListRow, "otherProjects" | "pendingFollowUps" | "openMeetings">; x: number; y: number; over: LeadStage | null };
+type Column = { stage: LeadStage; total: number; cards: Omit<LeadListRow, "otherProjects" | "pendingFollowUps" | "openMeetings" | "repeat">[] };
+type Drag = { card: Omit<LeadListRow, "otherProjects" | "pendingFollowUps" | "openMeetings" | "repeat">; x: number; y: number; over: LeadStage | null };
 
 /** Stages a card can be moved to from the board (Lost/Booked use their own flows). */
 const MOVABLE: LeadStage[] = LEAD_STAGES.filter((s) => s !== "lost_lead" && s !== "booked");
@@ -30,13 +30,13 @@ function KanbanCard({
   onDragStart,
   dragging,
 }: {
-  card: Omit<LeadListRow, "otherProjects" | "pendingFollowUps" | "openMeetings">;
+  card: Omit<LeadListRow, "otherProjects" | "pendingFollowUps" | "openMeetings" | "repeat">;
   canEdit: boolean;
   now: number;
   pending: boolean;
   error: string | null;
-  onMove: (card: Omit<LeadListRow, "otherProjects" | "pendingFollowUps" | "openMeetings">, to: LeadStage) => void;
-  onDragStart: (card: Omit<LeadListRow, "otherProjects" | "pendingFollowUps" | "openMeetings">, e: ReactPointerEvent<HTMLButtonElement>) => void;
+  onMove: (card: Omit<LeadListRow, "otherProjects" | "pendingFollowUps" | "openMeetings" | "repeat">, to: LeadStage) => void;
+  onDragStart: (card: Omit<LeadListRow, "otherProjects" | "pendingFollowUps" | "openMeetings" | "repeat">, e: ReactPointerEvent<HTMLButtonElement>) => void;
   dragging: boolean;
 }) {
   const overdue = card.nextFollowUpAt && new Date(card.nextFollowUpAt).getTime() < now;
@@ -134,7 +134,7 @@ export function KanbanBoard({ columns, canEdit, now }: { columns: Column[]; canE
   const [announce, setAnnounce] = useState("");
   const [, startTransition] = useTransition();
 
-  const move = (card: Omit<LeadListRow, "otherProjects" | "pendingFollowUps" | "openMeetings">, to: LeadStage) => {
+  const move = (card: Omit<LeadListRow, "otherProjects" | "pendingFollowUps" | "openMeetings" | "repeat">, to: LeadStage) => {
     if (to === card.stage) return;
     if (!MOVABLE.includes(to)) {
       setErrors((e) => ({
@@ -153,7 +153,7 @@ export function KanbanBoard({ columns, canEdit, now }: { columns: Column[]; canE
   };
 
   // Pointer tracking for the active drag (document-level so the pointer can leave the handle).
-  const press = useRef<{ card: Omit<LeadListRow, "otherProjects" | "pendingFollowUps" | "openMeetings">; x: number; y: number; started: boolean } | null>(null);
+  const press = useRef<{ card: Omit<LeadListRow, "otherProjects" | "pendingFollowUps" | "openMeetings" | "repeat">; x: number; y: number; started: boolean } | null>(null);
   useEffect(() => {
     const stageAt = (x: number, y: number) => (document.elementFromPoint(x, y)?.closest("[data-stage]") as HTMLElement | null)?.dataset.stage as LeadStage | undefined;
     const onMoveEvt = (e: PointerEvent) => {
@@ -195,7 +195,7 @@ export function KanbanBoard({ columns, canEdit, now }: { columns: Column[]; canE
     // `move` only uses state setters and the server action, which never change between renders.
   }, []);
 
-  const onDragStart = (card: Omit<LeadListRow, "otherProjects" | "pendingFollowUps" | "openMeetings">, e: ReactPointerEvent<HTMLButtonElement>) => {
+  const onDragStart = (card: Omit<LeadListRow, "otherProjects" | "pendingFollowUps" | "openMeetings" | "repeat">, e: ReactPointerEvent<HTMLButtonElement>) => {
     if (e.button !== 0) return;
     e.preventDefault();
     press.current = { card, x: e.clientX, y: e.clientY, started: false };

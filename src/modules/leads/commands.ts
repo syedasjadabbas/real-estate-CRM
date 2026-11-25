@@ -1,6 +1,6 @@
 import { leadLink, notify, teamManagersOf } from "@/modules/notifications/service";
 import { nameFromParts } from "@/lib/person-name";
-import { assertPhoneEditable, notifyNameChange } from "@/modules/contacts/agent-edits";
+import { assertPhoneEditable } from "@/modules/contacts/agent-edits";
 import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { auditClient, logClientActivity } from "@/modules/clients/support";
 import { copyLeadPhonesToClient, findCustomer, leadsWithAnyNumber, lockNumbers, normalizeExtraPhones, replaceLeadPhones, leadPhonesOf } from "@/modules/contacts/phones";
@@ -26,6 +26,8 @@ import { generateLeadCode } from "./code";
 import { OTHER_CHANNEL, recordFirstEnquiry, recordRepeat, resolveChannel } from "./enquiries";
 import { recordMissed } from "./missed-follow-ups";
 import { sizeFields } from "./size";
+import { nameProblem, phoneProblem } from "./input-rules";
+import { createRequest } from "./requests";
 import { creationSummary, describeChanges, lostReasonName } from "./history";
 import { STAGE_LABELS } from "./constants";
 import { normalizePhone } from "./phone";
@@ -158,7 +160,7 @@ export async function createLead(db: Database, actor: Actor, input: unknown, { c
 
     if (existing && data.onDuplicate === "regenerate") {
       const channel = await resolveChannel(tx, data.channelOther ? OTHER_CHANNEL : data.sourceId, data.channelOther);
-      await recordRepeat(tx, actor, existing, channel, { at: now, note: data.note ?? null, now });
+      await recordRepeat(tx, actor, existing, channel, { at: now, note: data.note ?? null, reason: data.repeatReason ?? null, now });
       return {
         outcome: "regenerated",
         leadId: existingVisible ? existing.id : null,
@@ -340,10 +342,19 @@ export async function updateLead(db: Database, actor: Actor, leadId: string, inp
     const { lead, members } = await loadAccessibleLead(tx, actor, leadId, true);
     assertWorkable(actor, lead, { allowRejectedEdit: true });
     const changes: Partial<typeof leads.$inferInsert> = {};
-    if (data.name !== undefined) Object.assign(changes, { name: data.name }, named.parts);
+    // An agent's new name waits for an Admin (client, 25 Nov 2026), except while correcting a lead in verification.
+    const askName = actor.role === "agent" && lead.verification === "approved" && data.name !== undefined && data.name !== lead.name;
+    if (data.name !== undefined && data.name !== lead.name) {
+      const problem = nameProblem(data.name);
+      if (problem) throw new AppError("VALIDATION_FAILED", "Check the highlighted fields.", { fields: { firstName: problem } });
+    }
+    if (askName) await createRequest(tx, actor, lead, "name_change", { from: lead.name, to: data.name, firstName: named.parts?.firstName ?? null, lastName: named.parts?.lastName ?? null }, null);
+    else if (data.name !== undefined) Object.assign(changes, { name: data.name }, named.parts);
     if (phoneEdited) {
       const phone = phoneOf(lead);
       if (phone.e164 !== lead.phoneE164) {
+        const problem = phoneProblem(phone.countryCode, phone.national);
+        if (problem) throw new AppError("VALIDATION_FAILED", "Check the highlighted fields.", { fields: { phoneNumber: problem } });
         const existing = await findPhoneMatch(tx, lead.projectId, [phone.e164], lead.id);
         if (existing) throw duplicatePhoneError(existing, canAccessLead(actor, existing.ownerId, members), "phoneNumber");
       }
@@ -392,7 +403,7 @@ export async function updateLead(db: Database, actor: Actor, leadId: string, inp
         changed.push("phones");
       }
     }
-    if (changed.length === 0) return { changed: [] as string[] };
+    if (changed.length === 0) return { changed: [] as string[], ...(askName ? { nameRequested: true } : {}) };
 
     const now = new Date();
     const rowChanges = Object.keys(changes).length > 0;
@@ -403,7 +414,6 @@ export async function updateLead(db: Database, actor: Actor, leadId: string, inp
     // Old and new values in words (owner, 15 Nov 2026), so the entry still reads after list values change.
     const fieldChanges = await describeChanges(tx, lead, { ...lead, ...changes } as typeof lead, extraPhones ? { phonesBefore, phonesAfter: extraPhones.map((p) => p.e164) } : undefined);
     await logActivity(tx, { leadId, actorId: actor.id, type: "update", data: { fields: changed, ...renamed, changes: fieldChanges } });
-    if (changed.includes("name")) await notifyNameChange(tx, actor, { kind: "lead", id: leadId, code: lead.code, from: lead.name, to: changes.name! });
     await audit(
       tx,
       actor,
@@ -412,7 +422,7 @@ export async function updateLead(db: Database, actor: Actor, leadId: string, inp
       Object.fromEntries(changed.map((k) => [k, k === "phones" ? phonesBefore : lead[k as keyof typeof lead]])),
       Object.fromEntries(changed.map((k) => [k, k === "phones" ? extraPhones?.map((p) => p.e164) : changes[k as keyof typeof changes]])),
     );
-    return { changed };
+    return { changed, ...(askName ? { nameRequested: true } : {}) };
   });
 }
 
@@ -448,7 +458,8 @@ export async function assignLead(db: Database, actor: Actor, leadId: string, inp
     if (lead.ownerId === ownerId) throw new AppError("BUSINESS_RULE", "The lead is already assigned to that user.");
     await assertAssignable(tx, actor, ownerId);
     const now = new Date();
-    await tx.update(leads).set({ ownerId, updatedAt: now }).where(eq(leads.id, leadId));
+    // The new agent hasn't opened it yet.
+    await tx.update(leads).set({ ownerId, openedAt: null, updatedAt: now }).where(eq(leads.id, leadId));
     await adoptLeadClient(tx, leadId, ownerId);
     await tx
       .update(followUps)
@@ -591,6 +602,12 @@ export async function cancelFollowUp(db: Database, actor: Actor, followUpId: str
     await logActivity(tx, { leadId: lead.id, actorId: actor.id, type: "follow_up_cancelled", body: reason, data: { followUpId, dueAt, note: followUp.note } });
     await audit(tx, actor, "lead.follow_up_cancel", lead.id, { followUpId, status: "pending", dueAt }, { followUpId, status: "cancelled", reason });
   });
+}
+
+/** Its own agent opened the lead for the first time. Viewing only: not a touch, and not on the timeline. */
+export async function markOpened(db: Database, actor: Actor, leadId: string, now = new Date()) {
+  if (!/^[0-9a-f-]{36}$/i.test(leadId)) throw notFound("Lead");
+  await db.update(leads).set({ openedAt: now }).where(and(eq(leads.id, leadId), eq(leads.ownerId, actor.id), isNull(leads.openedAt)));
 }
 
 export async function setFavorite(db: Database, actor: Actor, leadId: string, favorite: boolean) {

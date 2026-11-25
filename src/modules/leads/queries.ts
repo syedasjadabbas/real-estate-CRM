@@ -1,5 +1,8 @@
+import { z } from "zod";
 import { openMeetings } from "@/modules/meetings/open";
 import { recordHistory } from "./record-history";
+import { openLeads, unopenedLeads } from "./groups";
+import { leadRequestsFor } from "./requests";
 import { OTHER_CITY } from "@/modules/cities/constants";
 import { canVerifyLeads } from "./verification";
 import { and, asc, count, desc, eq, gt, gte, ilike, inArray, isNotNull, isNull, lt, lte, ne, notInArray, or, sql, type SQL } from "drizzle-orm";
@@ -27,7 +30,7 @@ import {
 import type { Actor } from "@/server/auth/types";
 import { forbidden } from "@/server/errors";
 import { BUSINESS_TIME_ZONE, LEAD_STAGES, OPEN_STAGES, PAGE_SIZE, STAGNATING_DAYS, UNATTENDED_HOURS, type LeadStage } from "./constants";
-import { enquiriesFor } from "./enquiries";
+import { enquiriesFor, latestRepeats } from "./enquiries";
 import { formatPhone } from "./phone";
 import { leadPhonesOf } from "@/modules/contacts/phones";
 import { canAccessLead, canDo, canRateCalls, leadScope } from "./policy";
@@ -75,6 +78,8 @@ function filterConditions(query: LeadListQuery, now: Date): SQL[] {
   if (query.lostReason.length) out.push(inArray(leads.lostReasonId, query.lostReason));
   if (query.priority.length) out.push(inArray(leads.priority, query.priority));
   if (query.owner) out.push(eq(leads.ownerId, query.owner));
+  if (query.opened === "1") out.push(openLeads());
+  if (query.opened === "0") out.push(unopenedLeads());
   if (query.propertyType.length) out.push(inArray(leads.propertyType, query.propertyType));
   if (query.campaign) out.push(eq(leads.campaign, query.campaign));
   if (query.sizeMin) out.push(gte(leads.sizeSqft, query.sizeMin));
@@ -197,6 +202,7 @@ const listSelection = {
   email: leads.email,
   stage: leads.stage,
   verification: leads.verification,
+  wrongNumberAt: leads.wrongNumberAt,
   stageChangedAt: leads.stageChangedAt,
   createdAt: leads.createdAt,
   updatedAt: leads.updatedAt,
@@ -296,7 +302,7 @@ export async function listLeads(db: Database, actor: Actor, projectId: string | 
     .limit(PAGE_SIZE)
     .offset((page - 1) * PAGE_SIZE);
   const ids = rows.map((r) => r.id);
-  const [others, pending, open] = await Promise.all([otherProjects(db, ids), pendingFollowUps(db, ids), openMeetings(db, actor, ids)]);
+  const [others, pending, open, repeats] = await Promise.all([otherProjects(db, ids), pendingFollowUps(db, ids), openMeetings(db, actor, ids), latestRepeats(db, query.view === "regenerated" ? ids : [])]);
 
   return {
     generatedAt: now.getTime(),
@@ -306,7 +312,7 @@ export async function listLeads(db: Database, actor: Actor, projectId: string | 
     page,
     pageCount,
     pageSize: PAGE_SIZE,
-    rows: rows.map((r) => ({ ...r, phone: formatPhone(r.phoneCountryCode, r.phoneNumber), otherProjects: others.get(r.id) ?? [], pendingFollowUps: pending.get(r.id) ?? [], openMeetings: open.get(r.id) ?? [] })),
+    rows: rows.map((r) => ({ ...r, phone: formatPhone(r.phoneCountryCode, r.phoneNumber), otherProjects: others.get(r.id) ?? [], pendingFollowUps: pending.get(r.id) ?? [], openMeetings: open.get(r.id) ?? [], repeat: repeats.get(r.id) ?? null })),
   };
 }
 
@@ -463,7 +469,7 @@ export async function getLeadDetail(db: Database, actor: Actor, leadId: string) 
   // Lead verification: until an Admin or Super Admin approves an agent's lead, only they work on it;
   // a rejected lead's details stay editable so the agent can correct and resubmit it.
   const verifier = canVerifyLeads(actor);
-  const workable = verifier || lead.verification === "approved";
+  const workable = verifier || (lead.verification === "approved" && !lead.wrongNumberAt);
   const [verifiedBy] = lead.verifiedById ? await db.select({ name: users.name }).from(users).where(eq(users.id, lead.verifiedById)) : [];
   return {
     generatedAt: Date.now(),
@@ -485,6 +491,10 @@ export async function getLeadDetail(db: Database, actor: Actor, leadId: string) 
       lostReason: lostReason[0]?.name ?? null,
       timeToFirstTouchMs: lead.firstTouchAt ? lead.firstTouchAt.getTime() - lead.createdAt.getTime() : null,
     },
+    /** Waiting for an Admin: a name change, a wrong number, a reported sale. */
+    requests: await leadRequestsFor(db, lead.id),
+    /** Its own agent hasn't opened it yet. */
+    unopened: lead.openedAt === null && lead.ownerId === actor.id,
     /** The stage a lost lead goes back to when it is reopened. */
     stageBeforeLost: stageBeforeLost(activities),
     activities: timeline,
@@ -735,13 +745,42 @@ export async function sharedPhoneGroups(db: Database, actor: Actor, projectId: s
 }
 
 /** Manager reviews on leads in the actor's scope (agents: their own leads), newest first, 50 per page. */
-export async function reviewsFeed(db: Database, actor: Actor, projectId: string, rawPage?: unknown) {
+const reviewQuery = z.object({
+  q: z.string().trim().max(100).optional().catch(undefined),
+  rating: z.coerce.number().int().min(1).max(5).optional().catch(undefined),
+  /** "call": reviews with a score or a recording; "note": the rest. */
+  kind: z.enum(["call", "note"]).optional().catch(undefined),
+  agent: z.uuid().optional().catch(undefined),
+});
+
+export async function reviewsFeed(db: Database, actor: Actor, projectId: string, params: Record<string, string> = {}) {
   if (!canDo(actor, "view")) throw forbidden();
   const members = await teamMemberIds(db, actor);
+  const query = reviewQuery.parse(params);
+  const agentUser = alias(users, "review_agent");
   const scope = and(...baseConditions(actor, members, projectId));
-  const [{ total }] = await db.select({ total: count() }).from(leadReviews).innerJoin(leads, eq(leads.id, leadReviews.leadId)).where(scope);
+  const isCall = sql`(${leadReviews.rating} is not null or ${leadReviews.recordingId} is not null)`;
+  const like = query.q ? `%${query.q.replace(/[%_\\]/g, (c) => `\\${c}`)}%` : null;
+  const where = and(
+    scope,
+    query.rating ? eq(leadReviews.rating, query.rating) : undefined,
+    query.kind ? (query.kind === "call" ? isCall : sql`not ${isCall}`) : undefined,
+    query.agent ? eq(leadReviews.agentId, query.agent) : undefined,
+    like ? or(ilike(leadReviews.body, like), ilike(leads.name, like), ilike(leads.code, like), ilike(users.name, like)) : undefined,
+  );
+  const base = () => db.select({ total: count() }).from(leadReviews).innerJoin(leads, eq(leads.id, leadReviews.leadId)).innerJoin(users, eq(users.id, leadReviews.reviewerId));
+  const [[{ total }], [stats], byStar, agents] = await Promise.all([
+    base().where(where),
+    db
+      .select({ all: count(), calls: sql<number>`count(*) filter (where ${isCall})::int`, scored: count(leadReviews.rating), average: sql<string | null>`round(avg(${leadReviews.rating}), 1)` })
+      .from(leadReviews)
+      .innerJoin(leads, eq(leads.id, leadReviews.leadId))
+      .where(scope),
+    db.select({ rating: leadReviews.rating, n: count() }).from(leadReviews).innerJoin(leads, eq(leads.id, leadReviews.leadId)).where(and(scope, isNotNull(leadReviews.rating))).groupBy(leadReviews.rating),
+    db.selectDistinct({ id: agentUser.id, name: agentUser.name }).from(leadReviews).innerJoin(leads, eq(leads.id, leadReviews.leadId)).innerJoin(agentUser, eq(agentUser.id, leadReviews.agentId)).where(scope).orderBy(agentUser.name),
+  ]);
   const pageCount = Math.max(1, Math.ceil(total / SIDE_LIST_PAGE_SIZE));
-  const page = Math.min(pageOf(rawPage), pageCount);
+  const page = Math.min(pageOf(params.page), pageCount);
   const rows = await db
     .select({
       id: leadReviews.id,
@@ -750,6 +789,10 @@ export async function reviewsFeed(db: Database, actor: Actor, projectId: string,
       createdAt: leadReviews.createdAt,
       reviewerName: users.name,
       reviewerRole: users.role,
+      agentName: agentUser.name,
+      recordingId: files.id,
+      recordingSec: files.durationSec,
+      recordingAt: files.createdAt,
       leadId: leads.id,
       leadName: leads.name,
       leadCode: leads.code,
@@ -758,11 +801,27 @@ export async function reviewsFeed(db: Database, actor: Actor, projectId: string,
     .from(leadReviews)
     .innerJoin(leads, eq(leads.id, leadReviews.leadId))
     .innerJoin(users, eq(users.id, leadReviews.reviewerId))
-    .where(scope)
+    .leftJoin(agentUser, eq(agentUser.id, leadReviews.agentId))
+    .leftJoin(files, and(eq(files.id, leadReviews.recordingId), isNull(files.deletedAt)))
+    .where(where)
     .orderBy(desc(leadReviews.createdAt), desc(leadReviews.id))
     .limit(SIDE_LIST_PAGE_SIZE)
     .offset((page - 1) * SIDE_LIST_PAGE_SIZE);
-  return { rows, page, pageCount, total };
+  return { rows, page, pageCount, total, query, agents, stats: { ...stats, average: stats.average === null ? null : Number(stats.average) }, byStar: Object.fromEntries(byStar.map((b) => [b.rating, b.n])) as Record<number, number> };
+}
+
+/** Won leads as a picture: by project (all the actor can see), and by agent and month in the chosen scope. Each links to its list. */
+export async function wonSummary(db: Database, actor: Actor, projectId: string | null) {
+  if (!canDo(actor, "view")) throw forbidden();
+  const members = await teamMemberIds(db, actor);
+  const won = eq(leads.stage, "booked");
+  const month = sql<string>`to_char(${leads.stageChangedAt} at time zone ${BUSINESS_TIME_ZONE}, 'YYYY-MM')`;
+  const [byProject, byAgent, byMonth] = await Promise.all([
+    db.select({ id: projects.id, label: projects.name, n: count() }).from(leads).innerJoin(projects, eq(projects.id, leads.projectId)).where(and(...baseConditions(actor, members, null), won, isNull(projects.archivedAt))).groupBy(projects.id, projects.name).orderBy(desc(count()), asc(projects.name)),
+    db.select({ id: owner.id, label: owner.name, n: count() }).from(leads).innerJoin(owner, eq(owner.id, leads.ownerId)).where(and(...baseConditions(actor, members, projectId), won)).groupBy(owner.id, owner.name).orderBy(desc(count()), asc(owner.name)).limit(12),
+    db.select({ id: month, n: count() }).from(leads).where(and(...baseConditions(actor, members, projectId), won)).groupBy(sql`1`).orderBy(sql`1 desc`).limit(12),
+  ]);
+  return { byProject, byAgent, byMonth: byMonth.reverse() };
 }
 
 /** Pending lost requests the actor can decide (managers: their teams; admins: all). */
