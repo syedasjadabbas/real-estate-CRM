@@ -677,8 +677,11 @@ async function assertLostReason(tx: Tx, lostReasonId: string) {
   return reason;
 }
 
-/** Managers/admins mark lost directly; agents create a pending approval (FR-035). */
-export async function markLost(db: Database, actor: Actor, leadId: string, input: unknown) {
+/**
+ * Managers/admins mark lost directly; agents create a pending approval (FR-035). `direct`: a call that ended
+ * "Not interested", which needs no approval (client meeting, 24 Nov 2026); only the server sets it.
+ */
+export async function markLost(db: Database, actor: Actor, leadId: string, input: unknown, { direct = false } = {}) {
   if (!canDo(actor, "markLostDirect") && !canDo(actor, "requestLost")) throw forbidden();
   const { lostReasonId, note } = parse(lostSchema, input);
   return db.transaction(async (tx) => {
@@ -691,7 +694,7 @@ export async function markLost(db: Database, actor: Actor, leadId: string, input
     const reason = await assertLostReason(tx, lostReasonId);
     const now = new Date();
 
-    if (canDo(actor, "markLostDirect")) {
+    if (direct || canDo(actor, "markLostDirect")) {
       await tx
         .update(leads)
         .set({ stage: "lost_lead", stageChangedAt: now, lostReasonId, ...touchValues(lead, now) })

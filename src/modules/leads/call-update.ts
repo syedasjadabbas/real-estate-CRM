@@ -1,12 +1,12 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import type { Database } from "@/server/db";
-import { followUps, leads, meetings } from "@/server/db/schema";
+import { followUps, leads, lostReasons, meetings } from "@/server/db/schema";
 import type { Actor } from "@/server/auth/types";
 import { AppError } from "@/server/errors";
 import { cancelMeeting, completeMeeting, createMeeting, updateMeeting } from "@/modules/meetings/commands";
 import { MEETING_TYPES, MEETING_TYPE_LABELS } from "@/modules/meetings/constants";
-import { addNote, changeStage, completeFollowUp, scheduleFollowUp } from "./commands";
+import { addNote, changeStage, completeFollowUp, markLost, scheduleFollowUp } from "./commands";
 import { LEAD_STAGES } from "./constants";
 import { CALL_RESULTS, CALL_RESULT_LABELS } from "./call-results";
 import { reportWrongNumber } from "./requests";
@@ -55,6 +55,9 @@ export async function logCallUpdate(db: Database, actor: Actor, leadId: string, 
   const parsed = callUpdateSchema.safeParse(input);
   if (!parsed.success) throw new AppError("VALIDATION_FAILED", "Check the highlighted fields.", { fields: fieldsOf(parsed.error) });
   const data = parsed.data;
+  const notInterested = data.result === "not_interested";
+  // Not interested ends the lead, so there is nothing to plan.
+  if (notInterested) Object.assign(data, { stage: null, meeting: null, followUp: null });
   const soon = now.getTime() - 60_000;
   if (data.meeting && data.meeting.startsAt.getTime() < soon) {
     throw new AppError("VALIDATION_FAILED", "Check the highlighted fields.", { fields: { "meeting.startsAt": "Pick a time in the future" } });
@@ -64,7 +67,7 @@ export async function logCallUpdate(db: Database, actor: Actor, leadId: string, 
   }
 
   // A call that was answered says how long and what was said (client, 25 Nov 2026).
-  if (data.result === "talked") {
+  if (data.result === "talked" || notInterested) {
     const missing: Record<string, string> = {};
     if (!data.minutes) missing.minutes = "Enter the minutes";
     if (!data.note) missing.note = "Write what happened";
@@ -102,7 +105,7 @@ export async function logCallUpdate(db: Database, actor: Actor, leadId: string, 
     } else {
       const summary = [`Call · ${CALL_RESULT_LABELS[data.result]}`, data.minutes ? `${data.minutes} min` : null].filter(Boolean).join(" · ");
       await addNote(inTx, actor, leadId, { body: data.note ? `${summary}\n${data.note}` : summary });
-      if (data.result === "talked") await markContact(tx, leadId, now);
+      if (data.result === "talked" || notInterested) await markContact(tx, leadId, now);
       done.push("call");
     }
     // A completed meeting has already moved the lead, so the stage asked for may be done.
@@ -138,6 +141,12 @@ export async function logCallUpdate(db: Database, actor: Actor, leadId: string, 
     if (data.followUp) {
       await scheduleFollowUp(inTx, actor, leadId, { dueAt: data.followUp.dueAt.toISOString(), note: data.followUp.note || undefined }, now);
       done.push("followUp");
+    }
+    if (notInterested) {
+      const [reason] = await tx.select({ id: lostReasons.id }).from(lostReasons).where(eq(lostReasons.name, "Not interested"));
+      if (!reason) throw new AppError("BUSINESS_RULE", "Add “Not interested” to the lost reasons first.");
+      await markLost(inTx, actor, leadId, { lostReasonId: reason.id, note: data.note.slice(0, 1000) }, { direct: true });
+      done.push("lost");
     }
     // Last, because the agent can't work the lead once the number is being checked.
     if (data.result === "wrong_number" && actor.role === "agent") {

@@ -120,7 +120,8 @@ export function LogActivityForm({
   const [booked, setBooked] = useState(false);
   const [meetingPlace, setMeetingPlace] = useState("");
   const [pending, startTransition] = useTransition();
-  const talked = kind === "call" && result === "talked";
+  const notInterested = kind === "call" && result === "not_interested";
+  const talked = kind === "call" && (result === "talked" || result === "not_interested");
   const wrongNumber = kind === "call" && result === "wrong_number";
 
   // The first scheduled meeting unless the agent picked another that is still there.
@@ -213,15 +214,15 @@ export function LogActivityForm({
               }
             : null,
         note,
-        stage: stage === currentStage ? null : stage,
-        meeting: meetingOn && !(kind === "meeting" && happened === "rescheduled") ? { type: meetingType, startsAt: meetingAt ? fromLocalInputValue(meetingAt) : "", location: meetingPlace } : null,
+        stage: stage === currentStage || notInterested ? null : stage,
+        meeting: meetingOn && !notInterested && !(kind === "meeting" && happened === "rescheduled") ? { type: meetingType, startsAt: meetingAt ? fromLocalInputValue(meetingAt) : "", location: meetingPlace } : null,
         completeFollowUpIds,
-        followUp: followOn && !wrongNumber ? { dueAt: followAt ? fromLocalInputValue(followAt) : "", note: followNote } : null,
+        followUp: followOn && !wrongNumber && !notInterested ? { dueAt: followAt ? fromLocalInputValue(followAt) : "", note: followNote } : null,
       });
       if (r.ok) {
-        const changedStage = stage !== currentStage ? `moved to ${STAGE_LABELS[stage]}` : null;
+        const changedStage = notInterested ? "lead marked Lost" : stage !== currentStage ? `moved to ${STAGE_LABELS[stage]}` : null;
         const what = { call: "call saved", meeting: { completed: "meeting completed", no_show: "no-show recorded", rescheduled: "meeting rescheduled", cancelled: "meeting cancelled" }[happened], whatsapp: "WhatsApp saved", note: note ? "note saved" : null }[kind];
-        const parts = [what, changedStage, meetingOn ? "meeting booked" : null, completeFollowUpIds.length ? (completeFollowUpIds.length > 1 ? `${completeFollowUpIds.length} follow-ups completed` : "follow-up completed") : null, followOn && !wrongNumber ? "next follow-up set" : null, wrongNumber ? "sent to an Admin to check the number" : null].filter(Boolean).join(", ");
+        const parts = [what, changedStage, meetingOn && !notInterested ? "meeting booked" : null, completeFollowUpIds.length ? (completeFollowUpIds.length > 1 ? `${completeFollowUpIds.length} follow-ups completed` : "follow-up completed") : null, followOn && !wrongNumber && !notInterested ? "next follow-up set" : null, wrongNumber ? "sent to an Admin to check the number" : null].filter(Boolean).join(", ");
         const text = parts ? `Done: ${parts}.` : "Nothing changed.";
         setMsg({ text, ok: true });
         setWaFiles([]);
@@ -408,7 +409,9 @@ export function LogActivityForm({
 
       {wrongNumber ? <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">Saving sends this lead to an Admin to check the number. You can work on it again once it is sorted out.</p> : null}
 
-      <Field label="Stage" error={errors.stage} hint={stage === currentStage ? "Unchanged" : `Moves from ${STAGE_LABELS[currentStage]}`}>
+      {notInterested ? <p className="rounded-xl bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-800">Saving marks this lead Lost (Not interested).</p> : null}
+
+      <Field label="Stage" className={notInterested ? "hidden" : undefined} error={errors.stage} hint={stage === currentStage ? "Unchanged" : `Moves from ${STAGE_LABELS[currentStage]}`}>
         {(id, d) => (
           <select id={id} aria-describedby={d} value={stage} onChange={(e) => (e.target.value === "booked" ? setBooked(true) : setStage(e.target.value as LeadStage))} className={selectClass} disabled={pending}>
             {STAGES.map((s) => (
@@ -421,7 +424,7 @@ export function LogActivityForm({
         )}
       </Field>
 
-      <div className={cn("space-y-3 rounded-xl border border-zinc-200/80 p-3", kind === "meeting" && happened === "rescheduled" && "hidden")}>
+      <div className={cn("space-y-3 rounded-xl border border-zinc-200/80 p-3", (notInterested || (kind === "meeting" && happened === "rescheduled")) && "hidden")}>
         <label className="flex items-center gap-2 text-sm font-bold">
           <input
             type="checkbox"
@@ -501,7 +504,7 @@ export function LogActivityForm({
         </fieldset>
       ) : null}
 
-      <div className="space-y-3 rounded-xl border border-zinc-200/80 p-3">
+      <div className={cn("space-y-3 rounded-xl border border-zinc-200/80 p-3", notInterested && "hidden")}>
         <label className="flex items-center gap-2 text-sm font-bold">
           <input type="checkbox" className="size-4 accent-[#bb8c08]" checked={followOn} disabled={pending} onChange={(e) => setFollowOn(e.target.checked)} />
           Schedule the next follow-up

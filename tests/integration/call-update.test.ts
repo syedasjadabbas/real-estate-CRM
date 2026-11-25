@@ -62,6 +62,20 @@ describe.skipIf(!hasTestDb)("Update after call (PostgreSQL integration)", () => 
     expect(ups.find((u) => u.status === "pending")?.note).toBe("Confirm the meeting");
   });
 
+  it("Not interested needs minutes and what happened, then the lead is Lost at once, planning nothing", async () => {
+    const leadId = await newLead();
+    const missing = await logCallUpdate(db, f.actors.agent1, leadId, { result: "not_interested" }).catch((e: AppError) => e.fields);
+    expect(Object.keys(missing as object).sort()).toEqual(["minutes", "note"]);
+    const out = await logCallUpdate(db, f.actors.agent1, leadId, { result: "not_interested", minutes: 2, note: "Not looking", stage: "contacted", followUp: { dueAt: inDays(2) }, meeting: { type: "site_visit", startsAt: inDays(3) } });
+    expect(out.done).toEqual(["call", "lost"]);
+    const [lead] = await db.select().from(leads).where(eq(leads.id, leadId));
+    expect(lead).toMatchObject({ stage: "lost_lead", lostReasonId: f.lostReasonId, lastContactAt: expect.any(Date) });
+    expect(await db.select().from(followUps).where(eq(followUps.leadId, leadId))).toHaveLength(0);
+    expect(await db.select().from(meetings).where(eq(meetings.leadId, leadId))).toHaveLength(0);
+    const again = await logCallUpdate(db, f.actors.agent1, leadId, { result: "not_interested", minutes: 1, note: "Again" }).catch((e: AppError) => e.code);
+    expect(again).toBe("BUSINESS_RULE");
+  });
+
   it("completes only the follow-ups the agent picked, overdue or not, with or without a next one", async () => {
     const leadId = await newLead();
     const add = async (lead: string, ms: number) =>
