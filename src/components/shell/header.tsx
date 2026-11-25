@@ -86,6 +86,8 @@ export function Header({
           <Menu aria-hidden="true" className="size-5" />
         </IconButton>
 
+        {user && today ? <CheckInButton today={today} /> : null}
+
         {/* Center: project scope (moves to its own row on phones) */}
         <div className="order-last flex w-full justify-center px-1 sm:order-none sm:w-auto sm:flex-1">
           <ProjectSelector projects={projects} activeProjectId={activeProjectId} loading={!user} />
@@ -117,7 +119,6 @@ export function Header({
               <p className="max-w-40 truncate text-[10px] leading-[13px] font-medium text-zinc-600">{user?.email ?? " "}</p>
             </div>
           </div>
-          {user && today ? <CheckInButton today={today} /> : null}
           {user ? (
             <form action={logoutAction}>
               <button

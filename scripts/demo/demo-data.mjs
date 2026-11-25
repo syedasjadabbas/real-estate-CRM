@@ -46,6 +46,7 @@ const { createBooking, advanceBooking, cancelBooking } = await imp("modules/book
 const { recordPayment } = await imp("modules/finance/commands.ts");
 const { listPaymentMethods } = await imp("modules/finance/queries.ts");
 const { businessToday } = await imp("modules/bookings/today.ts");
+const { addReview } = await imp("modules/leads/commands.ts");
 const { saveLeadFile } = await imp("modules/files/lead-files.ts");
 const { uploadBookingProof } = await imp("modules/bookings/proofs.ts");
 const { uploadSignedBookingForm } = await imp("modules/bookings/signed-forms.ts");
@@ -76,7 +77,7 @@ const STAMPS = {
   audit_logs: ["created_at"],
   leads: ["created_at", "stage_changed_at", "first_touch_at", "last_activity_at", "last_contact_at", "regenerated_at", "updated_at"],
   lead_activities: ["created_at"], lead_enquiries: ["created_at", "enquired_at"], lead_assignments: ["created_at"], follow_ups: ["created_at", "done_at"],
-  meetings: ["created_at", "completed_at"], files: ["created_at"], clients: ["created_at", "last_activity_at"], client_activities: ["created_at"],
+  meetings: ["created_at", "completed_at"], files: ["created_at"], lead_reviews: ["created_at"], clients: ["created_at", "last_activity_at"], client_activities: ["created_at"],
   bookings: ["created_at", "stage_changed_at", "confirmed_at"], booking_stage_history: ["created_at"], approvals: ["created_at"], notifications: ["created_at"],
 };
 /** Append-only tables (migration 0067). Made-up history on a local database only: the checks above refuse any other. */
@@ -178,9 +179,9 @@ const chat = async (hours, id, title, lines, by = agent) => {
   const bytes = await screenshot(title, lines);
   await ago(hours, () => saveLeadFile(db, by, id, { kind: "whatsapp_chat", bytes, name: "chat-screenshot.png", ext: "png", mime: "image/png", auditAction: "lead.whatsapp_chat_upload" }));
 };
-const recording = async (hours, id) => {
-  const bytes = execFileSync("ffmpeg", ["-v", "error", "-f", "lavfi", "-i", "sine=frequency=330:duration=20", "-af", "volume=0.1", "-b:a", "32k", "-f", "mp3", "-"], { maxBuffer: 1e7 });
-  await ago(hours, () => saveLeadFile(db, agent, id, { kind: "call_recording", bytes, name: "call-sample.mp3", ext: "mp3", mime: "audio/mpeg", durationSec: 20, auditAction: "lead.recording_upload" }));
+const recording = async (hours, id, by = agent, seconds = 20) => {
+  const bytes = execFileSync("ffmpeg", ["-v", "error", "-f", "lavfi", "-i", `sine=frequency=330:duration=${seconds}`, "-af", "volume=0.1", "-b:a", "32k", "-f", "mp3", "-"], { maxBuffer: 1e7 });
+  await ago(hours, () => saveLeadFile(db, by, id, { kind: "call_recording", bytes, name: "call-sample.mp3", ext: "mp3", mime: "audio/mpeg", durationSec: seconds, auditAction: "lead.recording_upload" }));
 };
 async function book(hours, id, projectId, unitNo, by = agent) {
   const unit = await one("select id,base_price from units where project_id=$1 and unit_no=$2", [projectId, unitNo]);
@@ -535,6 +536,36 @@ if (Number((await one("select count(*) n from tasks where title like 'Proposal f
     const lead = await one("select project_id, name from leads where id=$1", [l.id]);
     const u = await one("select id from units where project_id=$1 and status='available' and archived_at is null order by unit_no offset $2 limit 1", [lead.project_id, i]);
     if (u) await createTask(db, await ownerActor(l.owner_id), { title: `Proposal for ${lead.name}`, type: "proposal", proposal: { customerName: lead.name, projectId: lead.project_id, unitId: u.id, firstInstallmentMonth: month } });
+  }
+}
+
+// ---- Call reviews (with a recording on two in three) and notes, in every demo project ----
+const REVIEWS = [
+  [5, "Excellent call. Asked about budget and family size first, then offered two units and fixed a site visit before hanging up."],
+  [4, "Good pitch and clear about the payment plan. Could have asked for the visit day on the same call."],
+  [2, "Talked too fast and did not answer the question about possession. Please call again with the correct date."],
+  [null, "Customer prefers a call after 6 PM. Wife will also join the site visit."],
+  [4, "Polite, listened well and handled the price objection. Follow-up set for the next day."],
+  [3, "Information was correct, but the customer had to ask for everything. Lead the conversation more."],
+  [5, "Very confident on location and rental income. Keep this script for investor calls."],
+  [null, "Brochure sent on WhatsApp. Customer is comparing with one other project."],
+  [1, "Customer was kept on hold for two minutes and the call ended without a next step. Must be called back today."],
+  [4, "Good opening, good knowledge of the sizes. Mention the down payment options next time."],
+];
+for (const [p, projectId] of [cedar, palm, garden, plots].entries()) {
+  if (await one("select 1 from lead_reviews r join leads l on l.id=r.lead_id where l.project_id=$1 limit 1", [projectId])) continue;
+  // One lead per agent in turn, so every agent has some.
+  const called = await q("select id, owner_id from (select l.id, l.owner_id, l.name, row_number() over (partition by l.owner_id order by l.phone_e164) n from leads l join users u on u.id=l.owner_id and u.role='agent' and u.status='active' where l.project_id=$1 and l.phone_e164 like '+92300000%' and l.verification='approved' and l.wrong_number_at is null and l.stage in ('contacted','qualified_lead','meeting_scheduled','meeting_done','booking_in_process')) x order by n, name limit 10", [projectId]);
+  for (const [i, l] of called.entries()) {
+    const [rating, body] = REVIEWS[(i + p * 3) % REVIEWS.length];
+    const hours = 2 + i * 13 + p * 5;
+    const owner = await ownerActor(l.owner_id);
+    let recordingId;
+    if (rating !== null && i % 3 !== 2) {
+      await recording(hours + 4, l.id, owner, 25 + ((i * 17 + p * 11) % 60));
+      recordingId = (await one("select id from files where lead_id=$1 and kind='call_recording' order by created_at desc limit 1", [l.id])).id;
+    }
+    await ago(hours, () => addReview(db, rating === null ? owner : admin, l.id, { body, ...(rating === null ? {} : { rating, recordingId }) }));
   }
 }
 

@@ -769,15 +769,23 @@ export async function reviewsFeed(db: Database, actor: Actor, projectId: string,
     like ? or(ilike(leadReviews.body, like), ilike(leads.name, like), ilike(leads.code, like), ilike(users.name, like)) : undefined,
   );
   const base = () => db.select({ total: count() }).from(leadReviews).innerJoin(leads, eq(leads.id, leadReviews.leadId)).innerJoin(users, eq(users.id, leadReviews.reviewerId));
-  const [[{ total }], [stats], byStar, agents] = await Promise.all([
+  const [[{ total }], [stats], byStar, agents, agentScores] = await Promise.all([
     base().where(where),
     db
-      .select({ all: count(), calls: sql<number>`count(*) filter (where ${isCall})::int`, scored: count(leadReviews.rating), average: sql<string | null>`round(avg(${leadReviews.rating}), 1)` })
+      .select({ all: count(), calls: sql<number>`count(*) filter (where ${isCall})::int`, scored: count(leadReviews.rating), recorded: count(leadReviews.recordingId), low: sql<number>`count(*) filter (where ${leadReviews.rating} <= 2)::int`, average: sql<string | null>`round(avg(${leadReviews.rating}), 1)` })
       .from(leadReviews)
       .innerJoin(leads, eq(leads.id, leadReviews.leadId))
       .where(scope),
     db.select({ rating: leadReviews.rating, n: count() }).from(leadReviews).innerJoin(leads, eq(leads.id, leadReviews.leadId)).where(and(scope, isNotNull(leadReviews.rating))).groupBy(leadReviews.rating),
     db.selectDistinct({ id: agentUser.id, name: agentUser.name }).from(leadReviews).innerJoin(leads, eq(leads.id, leadReviews.leadId)).innerJoin(agentUser, eq(agentUser.id, leadReviews.agentId)).where(scope).orderBy(agentUser.name),
+    db
+      .select({ id: agentUser.id, name: agentUser.name, n: count(), average: sql<string>`round(avg(${leadReviews.rating}), 1)` })
+      .from(leadReviews)
+      .innerJoin(leads, eq(leads.id, leadReviews.leadId))
+      .innerJoin(agentUser, eq(agentUser.id, leadReviews.agentId))
+      .where(and(scope, isNotNull(leadReviews.rating)))
+      .groupBy(agentUser.id, agentUser.name)
+      .orderBy(desc(sql`avg(${leadReviews.rating})`), desc(count()), asc(agentUser.name)),
   ]);
   const pageCount = Math.max(1, Math.ceil(total / SIDE_LIST_PAGE_SIZE));
   const page = Math.min(pageOf(params.page), pageCount);
@@ -807,7 +815,7 @@ export async function reviewsFeed(db: Database, actor: Actor, projectId: string,
     .orderBy(desc(leadReviews.createdAt), desc(leadReviews.id))
     .limit(SIDE_LIST_PAGE_SIZE)
     .offset((page - 1) * SIDE_LIST_PAGE_SIZE);
-  return { rows, page, pageCount, total, query, agents, stats: { ...stats, average: stats.average === null ? null : Number(stats.average) }, byStar: Object.fromEntries(byStar.map((b) => [b.rating, b.n])) as Record<number, number> };
+  return { rows, page, pageCount, total, query, agents, agentScores: agentScores.map((a) => ({ ...a, average: Number(a.average) })), stats: { ...stats, average: stats.average === null ? null : Number(stats.average) }, byStar: Object.fromEntries(byStar.map((b) => [b.rating, b.n])) as Record<number, number> };
 }
 
 /** Won leads as a picture: by project (all the actor can see), and by agent and month in the chosen scope. Each links to its list. */

@@ -7,7 +7,7 @@ import { checkInAction, checkOutAction } from "../actions";
 
 export type TodayAttendance = { checkIn: string | null; checkOut: string | null };
 
-/** Check in, then Check out, beside Log out (client, 25 Nov 2026). */
+/** Check in, then Check out, at the left of the top bar (client, 25 Nov 2026). */
 export function CheckInButton({ today }: { today: TodayAttendance }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
