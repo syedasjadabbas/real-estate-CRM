@@ -2,8 +2,9 @@
 
 import { ChevronDown } from "lucide-react";
 import { useId, useState } from "react";
-import { Field, Input } from "@/components/ui/input";
+import { Field } from "@/components/ui/input";
 import { cn } from "@/lib/cn";
+import { PhoneInput } from "./phone-input";
 import { COUNTRY_CODES, FormSection, selectClass } from "@/features/leads/components/lead-fields";
 import type { ExtraPhoneInput } from "@/modules/contacts/constants";
 
@@ -73,21 +74,7 @@ export function ExtraPhonesFields({
               </select>
             )}
           </Field>
-          <Field label={`Phone ${i + 2}`} error={errors[`phones.${i}`]}>
-            {(id, describedBy) => (
-              <Input
-                id={id}
-                aria-describedby={describedBy}
-                invalid={Boolean(errors[`phones.${i}`])}
-                type="tel"
-                value={p.number}
-                placeholder="Optional"
-                autoComplete="off"
-                disabled={disabled}
-                onChange={(e) => set(i, { number: e.target.value })}
-              />
-            )}
-          </Field>
+          <PhoneInput extra label={`Phone ${i + 2}`} countryCode={p.countryCode} value={p.number} onChange={(number) => set(i, { number })} error={errors[`phones.${i}`]} disabled={disabled} />
         </div>
       ))}
       <p className="text-[11px] text-zinc-500 sm:col-span-2">

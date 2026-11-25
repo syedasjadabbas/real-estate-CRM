@@ -7,6 +7,7 @@ import type { Actor } from "@/server/auth/types";
 import { resolveCity } from "@/modules/cities/resolve";
 import { clientPhonesOf, clientWithAnyNumber, copyLeadPhonesToClient, leadPhonesOf, lockNumbers, normalizeExtraPhones, replaceClientPhones } from "@/modules/contacts/phones";
 import { AppError, forbidden, notFound } from "@/server/errors";
+import { phoneProblem } from "@/modules/leads/input-rules";
 import { normalizePhone } from "@/modules/leads/phone";
 import { canAssignTo } from "@/modules/leads/policy";
 import { isUniqueViolation, loadAccessibleLead, logActivity, type Tx } from "@/modules/leads/support";
@@ -229,6 +230,8 @@ export async function updateClient(db: Database, actor: Actor, clientId: string,
     if (data.name !== undefined) Object.assign(changes, { name: data.name }, named.parts);
     if (data.phoneNumber !== undefined || data.phoneCountryCode !== undefined) {
       const phone = phoneOrThrow(data.phoneCountryCode ?? client.phoneCountryCode, data.phoneNumber ?? client.phoneNumber);
+      const problem = phone.e164 === client.phoneE164 ? null : phoneProblem(phone.countryCode, phone.national);
+      if (problem) throw new AppError("VALIDATION_FAILED", "Check the highlighted fields.", { fields: { phoneNumber: problem } });
       changes.phoneCountryCode = phone.countryCode;
       changes.phoneNumber = phone.national;
       changes.phoneE164 = phone.e164;

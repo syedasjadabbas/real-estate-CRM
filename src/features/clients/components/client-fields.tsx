@@ -5,6 +5,7 @@ import { Field, Input } from "@/components/ui/input";
 import { COUNTRY_CODES, FormSection, selectClass } from "@/features/leads/components/lead-fields";
 import { cityOptions, OTHER_CITY } from "@/modules/cities/constants";
 import { ExtraPhonesFields } from "@/features/contacts/components/extra-phones";
+import { PhoneInput } from "@/features/contacts/components/phone-input";
 import type { ExtraPhoneInput } from "@/modules/contacts/constants";
 import { RELATIONSHIPS, RELATIONSHIP_LABELS } from "@/modules/clients/constants";
 
@@ -91,7 +92,7 @@ export function ClientFields({ values, onChange, errors, cities, disabled, lockP
         {text("lastName", "Last name")}
         {text("email", "Email", { type: "email", placeholder: "Optional" })}
         {select("phoneCountryCode", "Country code", COUNTRY_CODES, { required: true, lock: lockPhones })}
-        {text("phoneNumber", "Mobile number", { required: true, type: "tel", placeholder: "3001234567 or 0300 1234567", lock: lockPhones })}
+        <PhoneInput label="Mobile number" countryCode={values.phoneCountryCode} value={values.phoneNumber} onChange={(phoneNumber) => onChange({ phoneNumber })} error={errors.phoneNumber} disabled={disabled || lockPhones} />
       </FormSection>
       <ExtraPhonesFields phones={values.phones} onChange={(phones) => onChange({ phones })} errors={errors} disabled={disabled || lockPhones} />
       {lockPhones ? <p className="-mt-2 text-[11px] text-zinc-500">Phone numbers can only be changed by an Admin.</p> : null}

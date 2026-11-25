@@ -3,6 +3,7 @@
 import { cityOptions, OTHER_CITY } from "@/modules/cities/constants";
 import { useState, type ReactNode } from "react";
 import { ExtraPhonesFields } from "@/features/contacts/components/extra-phones";
+import { PhoneInput } from "@/features/contacts/components/phone-input";
 import type { ExtraPhoneInput } from "@/modules/contacts/constants";
 import { Field, Input } from "@/components/ui/input";
 import { PRIORITIES, PRIORITY_LABELS } from "@/modules/leads/constants";
@@ -169,7 +170,7 @@ export function LeadFields({ values, onChange, errors, lookups, disabled, lockPh
         {select("phoneCountryCode", "Country code", COUNTRY_CODES, { required: true, lock: lockPhones })}
         {shown ? (
           <>
-            {text("phoneNumber", "Mobile number", { required: true, type: "tel", placeholder: "3001234567 or 0300 1234567", lock: lockPhones })}
+            <PhoneInput label="Mobile number" countryCode={values.phoneCountryCode} value={values.phoneNumber} onChange={(phoneNumber) => onChange({ phoneNumber })} error={errors.phoneNumber} disabled={disabled || lockPhones} />
             {text("email", "Email", { type: "email", placeholder: "Optional" })}
           </>
         ) : (

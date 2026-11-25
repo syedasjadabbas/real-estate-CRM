@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
-import { Field, Input } from "@/components/ui/input";
+import { Field } from "@/components/ui/input";
+import { PhoneInput } from "@/features/contacts/components/phone-input";
 import type { LeadRequestRow } from "@/modules/leads/requests";
 import { decideLeadRequestAction, markOpenedAction } from "../actions";
 import { formatDateTime } from "../format";
@@ -80,9 +81,7 @@ export function LeadRequestCard({ request: r, canDecide, showLead = false }: { r
                   </select>
                 )}
               </Field>
-              <Field label="Correct number" error={errors.phoneNumber}>
-                {(id, d) => <Input id={id} aria-describedby={d} invalid={Boolean(errors.phoneNumber)} value={number} placeholder="0300 1234567" onChange={(e) => setNumber(e.target.value)} disabled={pending} />}
-              </Field>
+              <PhoneInput label="Correct number" countryCode={cc} value={number} onChange={setNumber} error={errors.phoneNumber} disabled={pending} />
               <Button variant="primary" size="lg" disabled={pending || !number.trim()} onClick={() => decide({ approve: true, phoneCountryCode: cc, phoneNumber: number })}>
                 Correct it
               </Button>

@@ -27,26 +27,49 @@ const MOBILE: Record<string, { lengths: number[]; starts?: RegExp; example: stri
   "92": { lengths: [10], starts: /^3/, example: "0300 1234567" },
   "971": { lengths: [9], starts: /^5/, example: "50 123 4567" },
   "966": { lengths: [9], starts: /^5/, example: "50 123 4567" },
-  "974": { lengths: [8], example: "3312 3456" },
-  "968": { lengths: [8], example: "9212 3456" },
-  "965": { lengths: [8], example: "5012 3456" },
-  "973": { lengths: [8], example: "3612 3456" },
+  "974": { lengths: [8], starts: /^[3567]/, example: "3312 3456" },
+  "968": { lengths: [8], starts: /^[79]/, example: "9212 3456" },
+  "965": { lengths: [8], starts: /^[4569]/, example: "5012 3456" },
+  "973": { lengths: [8], starts: /^[36]/, example: "3612 3456" },
   "44": { lengths: [10], starts: /^7/, example: "7400 123456" },
-  "1": { lengths: [10], starts: /^[2-9]/, example: "201 555 0123" },
+  "1": { lengths: [10], starts: /^[2-9][0-9]{2}[2-9]/, example: "201 555 0123" },
   "61": { lengths: [9], starts: /^4/, example: "412 345 678" },
   "49": { lengths: [10, 11], starts: /^1/, example: "1512 3456789" },
 };
+
+/** The digits after the country code, however the number was typed. */
+function nationalDigits(cc: string, number: string) {
+  let digits = number.replace(/\D/g, "");
+  if (number.trim().startsWith("+") && digits.startsWith(cc)) digits = digits.slice(cc.length);
+  else if (digits.startsWith(`00${cc}`)) digits = digits.slice(cc.length + 2);
+  else if (cc === "92" && /^920?3\d{9}$/.test(digits)) digits = digits.slice(2);
+  else if (cc === "1" && /^1[0-9]{10}$/.test(digits)) digits = digits.slice(1);
+  return digits.replace(/^0+/, "");
+}
+
+/** What a mobile number of that country looks like. */
+export const phoneExample = (countryCode: string) => MOBILE[countryCode.replace(/\D/g, "")]?.example ?? "300 1234567";
+
+/** More digits than any number of that country has. */
+export function isPhoneTooLong(countryCode: string, number: string) {
+  const cc = countryCode.replace(/\D/g, "");
+  return nationalDigits(cc, number).length > Math.max(...(MOBILE[cc]?.lengths ?? [15 - cc.length]));
+}
+
+/** A further number may be a landline, so only its length is checked. */
+export function extraPhoneProblem(countryCode: string, number: string) {
+  if (/[a-z]/i.test(number)) return "A phone number has digits only";
+  const digits = nationalDigits(countryCode.replace(/\D/g, ""), number);
+  if (digits.length < 7) return "The number is too short";
+  return isPhoneTooLong(countryCode, number) ? `The number is too long for ${countryCode}` : null;
+}
 
 /** Why a number can't be a mobile in that country, or null when it can. `national` may be as typed. */
 export function phoneProblem(countryCode: string, number: string) {
   const cc = countryCode.replace(/\D/g, "");
   if (/[a-z]/i.test(number)) return "A phone number has digits only";
-  let digits = number.replace(/\D/g, "");
-  if (!digits) return "Phone number is required";
-  if (number.trim().startsWith("+") && digits.startsWith(cc)) digits = digits.slice(cc.length);
-  else if (digits.startsWith(`00${cc}`)) digits = digits.slice(cc.length + 2);
-  else if (cc === "92" && /^920?3\d{9}$/.test(digits)) digits = digits.slice(2);
-  digits = digits.replace(/^0+/, "");
+  if (!/\d/.test(number)) return "Phone number is required";
+  const digits = nationalDigits(cc, number);
   const rule = MOBILE[cc];
   if (!rule) return digits.length >= 6 && cc.length + digits.length <= 15 ? null : "Enter a valid phone number";
   if (!rule.lengths.includes(digits.length)) return `+${cc} numbers have ${rule.lengths.join(" or ")} digits after the code, e.g. ${rule.example}`;
@@ -67,6 +90,12 @@ export function leadInputErrors(input: Record<string, unknown>) {
   else if (str("name")) put("name", nameProblem(str("name")!));
   if (str("lastName")) put("lastName", nameProblem(str("lastName")!, "Last name"));
   if (str("phoneNumber") !== undefined) put("phoneNumber", phoneProblem(str("phoneCountryCode") ?? "+92", str("phoneNumber")!));
+  if (Array.isArray(input.phones)) {
+    (input.phones as { countryCode?: unknown; number?: unknown }[]).forEach((p, i) => {
+      const number = typeof p?.number === "string" ? p.number.trim() : "";
+      if (number) put(`phones.${i}`, extraPhoneProblem(String(p.countryCode ?? "+92"), number));
+    });
+  }
   const email = str("email");
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) errors.email = "Enter a valid email, e.g. name@example.com";
   return errors;
